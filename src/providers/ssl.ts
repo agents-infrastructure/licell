@@ -287,7 +287,12 @@ export async function issueAndBindSSL(domain: string, spinner: Spinner, options?
       for (const recordId of recordIds) {
         try {
           await dnsClient.deleteDomainRecord(new $Alidns.DeleteDomainRecordRequest({ recordId }));
-        } catch { /* best-effort cleanup after ACME challenge */ }
+        } catch (cleanupErr: unknown) {
+          const msg = cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr);
+          if (!msg.toLowerCase().includes('notfound') && !msg.toLowerCase().includes('not found')) {
+            spinner.message(`⚠️ DNS TXT 记录清理失败 (recordId=${recordId}): ${msg}`);
+          }
+        }
       }
     }
   });

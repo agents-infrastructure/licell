@@ -1,6 +1,6 @@
 import { homedir } from 'os';
 import { join } from 'path';
-import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'fs';
 
 const GLOBAL_DIR = join(homedir(), '.licell-cli');
 const LEGACY_GLOBAL_DIR = join(homedir(), '.ali-cli');
@@ -53,7 +53,9 @@ interface SetProjectOptions {
 
 function ensureSecureDir(path: string) {
   if (!existsSync(path)) mkdirSync(path, { recursive: true, mode: SECURE_DIR_MODE });
-  try { chmodSync(path, SECURE_DIR_MODE); } catch { /* chmod may fail on some filesystems, non-critical */ }
+  try { chmodSync(path, SECURE_DIR_MODE); } catch {
+    console.error(`⚠️ 无法设置目录权限 ${path}，请手动确认权限为 0700`);
+  }
 }
 
 function readJsonSafely<T>(filePath: string, fallback: T): T {
@@ -65,9 +67,18 @@ function readJsonSafely<T>(filePath: string, fallback: T): T {
 }
 
 function writeJsonSafely(filePath: string, data: unknown, secure = false) {
-  writeFileSync(filePath, JSON.stringify(data, null, 2), secure ? { mode: SECURE_FILE_MODE } : undefined);
-  if (secure) {
-    try { chmodSync(filePath, SECURE_FILE_MODE); } catch { /* chmod may fail on some filesystems, non-critical */ }
+  const tmpPath = `${filePath}.${process.pid}.tmp`;
+  try {
+    writeFileSync(tmpPath, JSON.stringify(data, null, 2), secure ? { mode: SECURE_FILE_MODE } : undefined);
+    if (secure) {
+      try { chmodSync(tmpPath, SECURE_FILE_MODE); } catch {
+        throw new Error(`无法设置安全文件权限 ${filePath}，凭证未写入`);
+      }
+    }
+    renameSync(tmpPath, filePath);
+  } catch (err) {
+    rmSync(tmpPath, { force: true });
+    throw err;
   }
 }
 

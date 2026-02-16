@@ -1,10 +1,10 @@
 {
-  "name": "aero-cli",
+  "name": "licell",
   "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "bun run src/cli.ts",
-    "build": "BUN_DISABLE_TRANSPILE_CACHE=1 bun build ./src/cli.ts --target node --packages external --minify --outfile dist/ali.js",
+    "build": "BUN_DISABLE_TRANSPILE_CACHE=1 bun build ./src/cli.ts --target node --packages external --minify --outfile dist/licell.js",
     "build:bin": "./scripts/build-bin-wrapper.sh",
     "typecheck": "bun x tsc --noEmit",
     "test": "vitest run",

@@ -56,7 +56,8 @@ Options:
   -h, --help                      Show this help
 
 Env overrides:
-  ALI_BIN=/path/to/ali            Use compiled ali binary instead of bun run
+  LICELL_BIN=/path/to/licell      Use compiled licell binary instead of bun run
+  ALI_BIN=/path/to/ali            Legacy alias for LICELL_BIN
 
 Examples:
   scripts/smoke.sh --target preview --expect-key TEST_FLAG --expect-value from-cloud
@@ -81,9 +82,14 @@ require_cmd() {
   command -v "$1" >/dev/null 2>&1 || fail "missing required command: $1"
 }
 
-run_ali() {
-  if [[ -n "${ALI_BIN:-}" ]]; then
-    "$ALI_BIN" "$@"
+run_cli() {
+  local cli_bin="${LICELL_BIN:-${ALI_BIN:-}}"
+  if [[ -n "$cli_bin" ]]; then
+    "$cli_bin" "$@"
+    return
+  fi
+  if [[ -x "./licell" ]]; then
+    ./licell "$@"
     return
   fi
   if [[ -x "./ali" ]]; then
@@ -94,15 +100,15 @@ run_ali() {
 }
 
 get_project_app_name() {
-  node -e "const fs=require('fs');try{const p=JSON.parse(fs.readFileSync('.ali/project.json','utf8'));if(p.appName)process.stdout.write(String(p.appName));}catch{}"
+  node -e "const fs=require('fs');for(const path of ['.licell/project.json','.ali/project.json']){try{const p=JSON.parse(fs.readFileSync(path,'utf8'));if(p.appName){process.stdout.write(String(p.appName));break;}}catch{}}"
 }
 
 get_auth_fc_endpoint() {
-  node -e "const fs=require('fs');const os=require('os');const path=require('path');try{const p=JSON.parse(fs.readFileSync(path.join(os.homedir(),'.ali-cli','auth.json'),'utf8'));if(p.accountId&&p.region)process.stdout.write(String(p.accountId)+'.'+String(p.region)+'.fc.aliyuncs.com');}catch{}"
+  node -e "const fs=require('fs');const os=require('os');const path=require('path');for(const dir of ['.licell-cli','.ali-cli']){try{const p=JSON.parse(fs.readFileSync(path.join(os.homedir(),dir,'auth.json'),'utf8'));if(p.accountId&&p.region){process.stdout.write(String(p.accountId)+'.'+String(p.region)+'.fc.aliyuncs.com');break;}}catch{}}"
 }
 
 get_project_redis_instance() {
-  node -e "const fs=require('fs');try{const p=JSON.parse(fs.readFileSync('.ali/project.json','utf8'));if(p.cache&&p.cache.instanceId)process.stdout.write(String(p.cache.instanceId));}catch{}"
+  node -e "const fs=require('fs');for(const path of ['.licell/project.json','.ali/project.json']){try{const p=JSON.parse(fs.readFileSync(path,'utf8'));if(p.cache&&p.cache.instanceId){process.stdout.write(String(p.cache.instanceId));break;}}catch{}}"
 }
 
 wait_for_cname() {
@@ -127,7 +133,7 @@ check_env_pull() {
     return
   fi
 
-  run_ali "env pull" --target "$TARGET"
+  run_cli "env pull" --target "$TARGET"
 
   [[ -f .env ]] || fail ".env not generated"
   local expected_line="${EXPECT_KEY}=\"${EXPECT_VALUE}\""
@@ -148,7 +154,7 @@ check_env_clear() {
     return
   fi
 
-  run_ali "env pull" --target "$TARGET"
+  run_cli "env pull" --target "$TARGET"
   [[ -f .env ]] || fail ".env should exist even when cloud env is empty"
   if [[ ! -s .env ]]; then
     pass "empty cloud env clears local .env"
@@ -163,12 +169,12 @@ check_env_clear() {
 check_path_guard() {
   log "Step 3/6: deploy entry path guard"
 
-  if [[ ! -f "$HOME/.ali-cli/auth.json" ]]; then
-    skip "path guard requires ali login first"
+  if [[ ! -f "$HOME/.licell-cli/auth.json" && ! -f "$HOME/.ali-cli/auth.json" ]]; then
+    skip "path guard requires licell login first"
     return
   fi
 
-  local outside_file="/tmp/aero-smoke-outside-entry.ts"
+  local outside_file="/tmp/licell-smoke-outside-entry.ts"
   cat >"$outside_file" <<'EOF'
 export default {};
 EOF
@@ -178,7 +184,7 @@ EOF
 import { deployFC } from './src/providers/fc.ts';
 const outside = process.env.OUTSIDE_FILE;
 try {
-  await deployFC('aero-smoke-app', outside);
+  await deployFC('licell-smoke-app', outside);
   console.log('UNEXPECTED_SUCCESS');
 } catch (error) {
   console.log(String(error && error.message ? error.message : error));
@@ -206,11 +212,11 @@ check_domain_upsert() {
     return
   fi
 
-  run_ali "domain add" "$DOMAIN" --target "$TARGET"
+  run_cli "domain add" "$DOMAIN" --target "$TARGET"
 
   local app_name expected
   app_name="$(get_project_app_name)"
-  [[ -n "$app_name" ]] || fail "missing appName in .ali/project.json"
+  [[ -n "$app_name" ]] || fail "missing appName in .licell/project.json"
   expected="$(get_auth_fc_endpoint)"
   [[ -n "$expected" ]] || fail "missing FC account endpoint"
 
@@ -233,7 +239,7 @@ check_ssl() {
   [[ -n "$DOMAIN" ]] || fail "--with-ssl requires --domain"
   log "Step 5/6: SSL issuance and HTTPS probe"
 
-  run_ali "domain add" "$DOMAIN" --ssl --target "$TARGET"
+  run_cli "domain add" "$DOMAIN" --ssl --target "$TARGET"
 
   local headers
   headers="$(curl -sS -I --max-time 30 "https://${DOMAIN}")"
@@ -258,10 +264,10 @@ check_redis_rotate_masking() {
   if [[ -z "$instance_id" ]]; then
     instance_id="$(get_project_redis_instance)"
   fi
-  [[ -n "$instance_id" ]] || fail "missing redis instance id (set --redis-instance or run ali cache add first)"
+  [[ -n "$instance_id" ]] || fail "missing redis instance id (set --redis-instance or run licell cache add first)"
 
   local output
-  output="$(run_ali "cache rotate-password" --instance "$instance_id" 2>&1)"
+  output="$(run_cli "cache rotate-password" --instance "$instance_id" 2>&1)"
   echo "$output"
 
   if grep -Fq '******@' <<<"$output"; then
@@ -282,7 +288,7 @@ check_oss_public() {
 
   local app_name
   app_name="$(get_project_app_name)"
-  [[ -n "$app_name" ]] || fail "missing appName in .ali/project.json"
+  [[ -n "$app_name" ]] || fail "missing appName in .licell/project.json"
 
   local deploy_output url
   deploy_output="$(APP_NAME="$app_name" DIST_DIR="$DIST_DIR" bun --eval "

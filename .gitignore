@@ -6,8 +6,10 @@ dist/
 ali
 
 # Local project configs (may contain credentials)
+.licell/
 .ali/
 examples/**/.ali/
+examples/**/.licell/
 
 # Environment files
 .env

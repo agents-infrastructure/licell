@@ -3,6 +3,7 @@ import { intro, outro, spinner, select, text, isCancel } from '@clack/prompts';
 import pc from 'picocolors';
 import { Config } from '../utils/config';
 import { formatErrorMessage } from '../utils/errors';
+import { getRuntime } from '../providers/fc/runtime-handler';
 import { normalizeReleaseTarget } from '../utils/cli-helpers';
 import { buildDeployProjectPatch } from '../utils/deploy-config';
 import {
@@ -24,7 +25,8 @@ import {
   normalizeDeployType,
   normalizeDomainSuffix,
   tryNormalizeDomainSuffix,
-  tryNormalizeFcRuntime
+  tryNormalizeFcRuntime,
+  withSpinner
 } from '../utils/cli-shared';
 
 export function registerDeployCommand(cli: CAC) {
@@ -52,6 +54,7 @@ export function registerDeployCommand(cli: CAC) {
         placeholder: 'my-awesome-app'
       }), '应用名');
       if (!/^[a-z0-9-]+$/.test(appName)) throw new Error('应用名仅允许小写字母、数字和短横线');
+      if (appName.length > 128) throw new Error('应用名长度不能超过 128 个字符');
       Config.setProject({ appName });
       project = Config.getProject();
     }
@@ -64,11 +67,11 @@ export function registerDeployCommand(cli: CAC) {
     const projectRuntime = tryNormalizeFcRuntime(project.runtime);
     const envRuntime = tryNormalizeFcRuntime(readLicellEnv(process.env, 'FC_RUNTIME'));
     const runtime = cliRuntime || projectRuntime || envRuntime || DEFAULT_FC_RUNTIME;
-    const defaultApiEntry = runtime.startsWith('python') ? 'src/main.py' : 'src/index.ts';
+    const defaultApiEntry = getRuntime(runtime).defaultEntry;
 
     let type: 'api' | 'static';
     if (options.type) {
-      type = normalizeDeployType(options.type) as 'api' | 'static';
+      type = normalizeDeployType(options.type);
     } else if (interactiveTTY) {
       const selectedType = await select({ message: '选择部署环境:', options: [
         { value: 'api', label: '🚀 Node/Bun 服务端 API (直推 FC 3.0 Serverless)' },
@@ -91,6 +94,11 @@ export function registerDeployCommand(cli: CAC) {
       throw new Error('--ssl 需要固定域名，请提供 --domain-suffix，或在 .licell/project.json 配置 domainSuffix');
     }
 
+    const appName = project.appName;
+    if (!appName) {
+      throw new Error('appName 未设置，请检查项目配置');
+    }
+
     const s = spinner();
     try {
       let url = '';
@@ -107,46 +115,67 @@ export function registerDeployCommand(cli: CAC) {
               initialValue: defaultApiEntry
             }), '入口文件路径')
             : defaultApiEntry;
-        s.start(
+        const apiDeployResult = await withSpinner(
+          s,
           runtime.startsWith('python')
             ? '🐍 正在打包 Python 源码并推送至云端...'
-            : '🔨 正在使用 Bun 极速剥离依赖打包，并推送至云端...'
-        );
-        url = await deployFC(project.appName!, entry, runtime);
-        if (releaseTarget) {
-          s.message(`函数部署完成，正在发布版本并切流到 ${releaseTarget}...`);
-          promotedVersion = await publishFunctionVersion(
-            project.appName!,
-            `deploy ${releaseTarget} at ${new Date().toISOString()}`
-          );
-          await promoteFunctionAlias(
-            project.appName!,
-            releaseTarget,
-            promotedVersion,
-            `deployed by licell at ${new Date().toISOString()}`
-          );
-        }
-        if (domainSuffix) {
-          fixedDomain = `${project.appName!}.${domainSuffix}`;
-          s.message(`函数部署完成，正在按固定规则绑定域名 ${fixedDomain}...`);
-          await bindCustomDomain(
-            fixedDomain,
-            `${auth.accountId}.${auth.region}.fc.aliyuncs.com`,
-            releaseTarget
-          );
-          if (enableSSL) {
-            s.message(`固定域名绑定完成，正在签发并挂载 HTTPS 证书 (${fixedDomain})...`);
-            await issueAndBindSSL(fixedDomain, s, { forceRenew: forceSslRenew });
+            : '🔨 正在使用 Bun 极速剥离依赖打包，并推送至云端...',
+          '❌ 部署失败',
+          async () => {
+            const deployedUrl = await deployFC(appName, entry, runtime);
+            let nextPromotedVersion: string | undefined;
+            let nextFixedDomain: string | undefined;
+            if (releaseTarget) {
+              s.message(`函数部署完成，正在发布版本并切流到 ${releaseTarget}...`);
+              nextPromotedVersion = await publishFunctionVersion(
+                appName,
+                `deploy ${releaseTarget} at ${new Date().toISOString()}`
+              );
+              await promoteFunctionAlias(
+                appName,
+                releaseTarget,
+                nextPromotedVersion,
+                `deployed by licell at ${new Date().toISOString()}`
+              );
+            }
+            if (domainSuffix) {
+              nextFixedDomain = `${appName}.${domainSuffix}`;
+              s.message(`函数部署完成，正在按固定规则绑定域名 ${nextFixedDomain}...`);
+              await bindCustomDomain(
+                nextFixedDomain,
+                `${auth.accountId}.${auth.region}.fc.aliyuncs.com`,
+                releaseTarget
+              );
+              if (enableSSL) {
+                s.message(`固定域名绑定完成，正在签发并挂载 HTTPS 证书 (${nextFixedDomain})...`);
+                await issueAndBindSSL(nextFixedDomain, s, { forceRenew: forceSslRenew });
+              }
+            }
+            return {
+              url: deployedUrl,
+              promotedVersion: nextPromotedVersion,
+              fixedDomain: nextFixedDomain
+            };
           }
-        }
+        );
+        if (!apiDeployResult) return;
+        url = apiDeployResult.url;
+        promotedVersion = apiDeployResult.promotedVersion;
+        fixedDomain = apiDeployResult.fixedDomain;
       } else {
         const dist = options.dist
           ? toPromptValue(options.dist, '构建产物目录')
           : interactiveTTY
             ? toPromptValue(await text({ message: '前端构建产物目录:', initialValue: 'dist' }), '构建产物目录')
             : 'dist';
-        s.start('☁️ 正在递归上传静态资源到 OSS 边缘节点...');
-        url = await deployOSS(project.appName!, dist);
+        const staticDeployResult = await withSpinner(
+          s,
+          '☁️ 正在递归上传静态资源到 OSS 边缘节点...',
+          '❌ 部署失败',
+          async () => ({ url: await deployOSS(appName, dist) })
+        );
+        if (!staticDeployResult) return;
+        url = staticDeployResult.url;
       }
       s.stop(pc.green('✅ 部署成功!'));
       console.log(`\n🎉 Production URL: ${pc.cyan(pc.underline(url))}\n`);

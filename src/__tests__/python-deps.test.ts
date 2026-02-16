@@ -10,7 +10,7 @@ function createTmpDir(prefix: string) {
 
 describe('resolvePythonRequirementsPath', () => {
   it('picks requirements.txt when present', () => {
-    const root = createTmpDir('aero-pyreq-');
+    const root = createTmpDir('licell-pyreq-');
     try {
       writeFileSync(join(root, 'requirements.txt'), 'requests==2.32.3\n');
       const resolved = resolvePythonRequirementsPath(root, {});
@@ -20,8 +20,22 @@ describe('resolvePythonRequirementsPath', () => {
     }
   });
 
-  it('respects ALI_PYTHON_REQUIREMENTS override', () => {
-    const root = createTmpDir('aero-pyreq-');
+  it('respects LICELL_PYTHON_REQUIREMENTS override', () => {
+    const root = createTmpDir('licell-pyreq-');
+    try {
+      mkdirSync(join(root, 'deps'), { recursive: true });
+      writeFileSync(join(root, 'deps', 'prod.txt'), 'httpx==0.28.1\n');
+      const resolved = resolvePythonRequirementsPath(root, {
+        LICELL_PYTHON_REQUIREMENTS: 'deps/prod.txt'
+      });
+      expect(resolved).toBe(join(root, 'deps', 'prod.txt'));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps compatibility for ALI_PYTHON_REQUIREMENTS override', () => {
+    const root = createTmpDir('licell-pyreq-');
     try {
       mkdirSync(join(root, 'deps'), { recursive: true });
       writeFileSync(join(root, 'deps', 'prod.txt'), 'httpx==0.28.1\n');
@@ -34,14 +48,14 @@ describe('resolvePythonRequirementsPath', () => {
     }
   });
 
-  it('throws when ALI_PYTHON_REQUIREMENTS points to missing file', () => {
-    const root = createTmpDir('aero-pyreq-');
+  it('throws when LICELL_PYTHON_REQUIREMENTS points to missing file', () => {
+    const root = createTmpDir('licell-pyreq-');
     try {
       expect(() =>
         resolvePythonRequirementsPath(root, {
-          ALI_PYTHON_REQUIREMENTS: 'missing.txt'
+          LICELL_PYTHON_REQUIREMENTS: 'missing.txt'
         })
-      ).toThrow('ALI_PYTHON_REQUIREMENTS 指定文件不存在');
+      ).toThrow('LICELL_PYTHON_REQUIREMENTS 指定文件不存在');
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -50,7 +64,7 @@ describe('resolvePythonRequirementsPath', () => {
 
 describe('vendorPythonDependencies', () => {
   it('does nothing when no requirements file exists', async () => {
-    const root = createTmpDir('aero-pydeps-');
+    const root = createTmpDir('licell-pydeps-');
     const outdir = join(root, 'out');
     mkdirSync(outdir, { recursive: true });
     let called = false;
@@ -72,7 +86,7 @@ describe('vendorPythonDependencies', () => {
   });
 
   it('uses manylinux wheel download/install flow by default', async () => {
-    const root = createTmpDir('aero-pydeps-');
+    const root = createTmpDir('licell-pydeps-');
     const outdir = join(root, 'out');
     mkdirSync(outdir, { recursive: true });
     writeFileSync(join(root, 'requirements.txt'), 'requests==2.32.3\n');
@@ -107,8 +121,8 @@ describe('vendorPythonDependencies', () => {
     }
   });
 
-  it('falls back to source install when wheel download fails and ALI_PYTHON_ALLOW_SOURCE=1', async () => {
-    const root = createTmpDir('aero-pydeps-');
+  it('falls back to source install when wheel download fails and LICELL_PYTHON_ALLOW_SOURCE=1', async () => {
+    const root = createTmpDir('licell-pydeps-');
     const outdir = join(root, 'out');
     mkdirSync(outdir, { recursive: true });
     writeFileSync(join(root, 'requirements.txt'), 'example==1.0.0\n');
@@ -120,7 +134,7 @@ describe('vendorPythonDependencies', () => {
         runtime: 'python3.12',
         sourceRoot: root,
         outdir,
-        env: { ALI_PYTHON_ALLOW_SOURCE: '1' },
+        env: { LICELL_PYTHON_ALLOW_SOURCE: '1' },
         runCommand: (command, args) => {
           calls.push({ command, args });
           index += 1;
@@ -140,7 +154,7 @@ describe('vendorPythonDependencies', () => {
   });
 
   it('throws clear error when wheel download fails without fallback', async () => {
-    const root = createTmpDir('aero-pydeps-');
+    const root = createTmpDir('licell-pydeps-');
     const outdir = join(root, 'out');
     mkdirSync(outdir, { recursive: true });
     writeFileSync(join(root, 'requirements.txt'), 'example==1.0.0\n');

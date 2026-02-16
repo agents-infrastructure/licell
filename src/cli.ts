@@ -12,7 +12,7 @@ import { registerDnsCommands } from './commands/dns';
 import { registerEnvCommands } from './commands/env';
 import { registerLogsCommand } from './commands/logs';
 
-const cli = cac('ali');
+const cli = cac('licell');
 
 registerAuthCommands(cli);
 registerDeployCommand(cli);

@@ -1,7 +1,6 @@
 import type { CAC } from 'cac';
 import { intro, outro, spinner, select, isCancel } from '@clack/prompts';
 import pc from 'picocolors';
-import { formatErrorMessage } from '../utils/errors';
 import { maskConnectionString } from '../utils/cli-helpers';
 import {
   getCacheInstanceDetail,
@@ -16,7 +15,8 @@ import {
   toPromptValue,
   toOptionalString,
   parseListLimit,
-  parseOptionalPositiveInt
+  parseOptionalPositiveInt,
+  withSpinner
 } from '../utils/cli-shared';
 
 export function registerCacheCommands(cli: CAC) {
@@ -70,9 +70,11 @@ export function registerCacheCommands(cli: CAC) {
     const computeUnitNum = parseOptionalPositiveInt(options.computeUnit, 'compute-unit');
 
     const s = spinner();
-    s.start('正在初始化缓存资源编排...');
-    try {
-      const redisUrl = await provisionRedis(s, {
+    const redisUrl = await withSpinner(
+      s,
+      '正在初始化缓存资源编排...',
+      '❌ 缓存拉起失败',
+      () => provisionRedis(s, {
         instanceId: toOptionalString(options.instance),
         existingPassword: toOptionalString(options.password),
         accountName: toOptionalString(options.username),
@@ -86,15 +88,12 @@ export function registerCacheCommands(cli: CAC) {
         vpcId: toOptionalString(options.vpc),
         vSwitchId: toOptionalString(options.vsw),
         securityIpList: toOptionalString(options.securityIpList)
-      });
-      s.stop(pc.green('✅ Redis 缓存已就绪并绑定到本工程内网！'));
-      console.log(`\n🔑 缓存连接串已生成: ${pc.cyan(maskConnectionString(redisUrl))}\n`);
-      outro('下次执行 ali deploy 时，将自动作为 process.env.REDIS_URL 注入！');
-    } catch (err: unknown) {
-      s.stop(pc.red('❌ 缓存拉起失败'));
-      console.error(formatErrorMessage(err));
-      process.exitCode = 1;
-    }
+      })
+    );
+    if (!redisUrl) return;
+    s.stop(pc.green('✅ Redis 缓存已就绪并绑定到本工程内网！'));
+    console.log(`\n🔑 缓存连接串已生成: ${pc.cyan(maskConnectionString(redisUrl))}\n`);
+    outro('下次执行 licell deploy 时，将自动作为 process.env.REDIS_URL 注入！');
   });
 
   cli.command('cache list', '查看缓存实例列表')
@@ -103,26 +102,25 @@ export function registerCacheCommands(cli: CAC) {
       ensureAuthOrExit();
       const limit = parseListLimit(options.limit, 20, 200);
       const s = spinner();
-      s.start('正在拉取缓存实例列表...');
-      try {
-        const instances = await listCacheInstances(limit);
-        s.stop(pc.green(`✅ 共获取 ${instances.length} 个实例`));
-        if (instances.length === 0) {
-          outro('当前地域没有缓存实例');
-          return;
-        }
-        for (const item of instances) {
-          console.log(
-            `${pc.cyan(item.instanceId)}  mode=${pc.gray(item.mode)}  status=${pc.gray(item.status || '-')}  class=${pc.gray(item.instanceClass || '-')}`
-          );
-        }
-        console.log('');
-        outro('Done.');
-      } catch (err: unknown) {
-        s.stop(pc.red('❌ 获取缓存实例列表失败'));
-        console.error(formatErrorMessage(err));
-        process.exitCode = 1;
+      const instances = await withSpinner(
+        s,
+        '正在拉取缓存实例列表...',
+        '❌ 获取缓存实例列表失败',
+        () => listCacheInstances(limit)
+      );
+      if (!instances) return;
+      s.stop(pc.green(`✅ 共获取 ${instances.length} 个实例`));
+      if (instances.length === 0) {
+        outro('当前地域没有缓存实例');
+        return;
       }
+      for (const item of instances) {
+        console.log(
+          `${pc.cyan(item.instanceId)}  mode=${pc.gray(item.mode)}  status=${pc.gray(item.status || '-')}  class=${pc.gray(item.instanceClass || '-')}`
+        );
+      }
+      console.log('');
+      outro('Done.');
     });
 
   cli.command('cache info <instanceId>', '查看缓存实例详情')
@@ -130,26 +128,25 @@ export function registerCacheCommands(cli: CAC) {
       ensureAuthOrExit();
       const normalizedId = toPromptValue(instanceId, 'instanceId');
       const s = spinner();
-      s.start(`正在拉取实例 ${normalizedId} 详情...`);
-      try {
-        const detail = await getCacheInstanceDetail(normalizedId);
-        const summary = detail.summary;
-        s.stop(pc.green('✅ 获取成功'));
-        console.log(`\ninstanceId: ${pc.cyan(summary.instanceId)}`);
-        console.log(`mode:       ${pc.cyan(summary.mode)}`);
-        console.log(`status:     ${pc.cyan(summary.status || '-')}`);
-        console.log(`class:      ${pc.cyan(summary.instanceClass || '-')}`);
-        if (summary.engineVersion) console.log(`engine:     ${pc.cyan(summary.engineVersion)}`);
-        if (summary.host) console.log(`endpoint:   ${pc.cyan(`${summary.host}:${summary.port || 6379}`)}`);
-        console.log(`network:    ${pc.cyan(`${summary.vpcId || '-'} / ${summary.vSwitchId || '-'} / ${summary.zoneId || '-'}`)}`);
-        if (detail.accountNames.length > 0) console.log(`accounts:   ${pc.cyan(detail.accountNames.join(', '))}`);
-        console.log('');
-        outro('Done.');
-      } catch (err: unknown) {
-        s.stop(pc.red('❌ 获取缓存实例详情失败'));
-        console.error(formatErrorMessage(err));
-        process.exitCode = 1;
-      }
+      const detail = await withSpinner(
+        s,
+        `正在拉取实例 ${normalizedId} 详情...`,
+        '❌ 获取缓存实例详情失败',
+        () => getCacheInstanceDetail(normalizedId)
+      );
+      if (!detail) return;
+      const summary = detail.summary;
+      s.stop(pc.green('✅ 获取成功'));
+      console.log(`\ninstanceId: ${pc.cyan(summary.instanceId)}`);
+      console.log(`mode:       ${pc.cyan(summary.mode)}`);
+      console.log(`status:     ${pc.cyan(summary.status || '-')}`);
+      console.log(`class:      ${pc.cyan(summary.instanceClass || '-')}`);
+      if (summary.engineVersion) console.log(`engine:     ${pc.cyan(summary.engineVersion)}`);
+      if (summary.host) console.log(`endpoint:   ${pc.cyan(`${summary.host}:${summary.port || 6379}`)}`);
+      console.log(`network:    ${pc.cyan(`${summary.vpcId || '-'} / ${summary.vSwitchId || '-'} / ${summary.zoneId || '-'}`)}`);
+      if (detail.accountNames.length > 0) console.log(`accounts:   ${pc.cyan(detail.accountNames.join(', '))}`);
+      console.log('');
+      outro('Done.');
     });
 
   cli.command('cache connect [instanceId]', '输出缓存连接信息')
@@ -157,24 +154,23 @@ export function registerCacheCommands(cli: CAC) {
       ensureAuthOrExit();
       const normalizedId = toOptionalString(instanceId);
       const s = spinner();
-      s.start('正在解析缓存连接信息...');
-      try {
-        const info = await resolveCacheConnectInfo(normalizedId);
-        s.stop(pc.green('✅ 连接信息已生成'));
-        console.log(`\ninstanceId: ${pc.cyan(info.instanceId)}`);
-        console.log(`mode:       ${pc.cyan(info.mode)}`);
-        console.log(`host:       ${pc.cyan(info.host)}`);
-        console.log(`port:       ${pc.cyan(String(info.port))}`);
-        console.log(`username:   ${pc.cyan(info.username || '<none>')}`);
-        console.log(`password:   ${pc.cyan(info.passwordKnown ? '<known in project>' : '<unknown, please provide manually>')}`);
-        console.log(`url:        ${pc.cyan(info.connectionString)}`);
-        console.log('');
-        outro('Done.');
-      } catch (err: unknown) {
-        s.stop(pc.red('❌ 连接信息解析失败'));
-        console.error(formatErrorMessage(err));
-        process.exitCode = 1;
-      }
+      const info = await withSpinner(
+        s,
+        '正在解析缓存连接信息...',
+        '❌ 连接信息解析失败',
+        () => resolveCacheConnectInfo(normalizedId)
+      );
+      if (!info) return;
+      s.stop(pc.green('✅ 连接信息已生成'));
+      console.log(`\ninstanceId: ${pc.cyan(info.instanceId)}`);
+      console.log(`mode:       ${pc.cyan(info.mode)}`);
+      console.log(`host:       ${pc.cyan(info.host)}`);
+      console.log(`port:       ${pc.cyan(String(info.port))}`);
+      console.log(`username:   ${pc.cyan(info.username || '<none>')}`);
+      console.log(`password:   ${pc.cyan(info.passwordKnown ? '<known in project>' : '<unknown, please provide manually>')}`);
+      console.log(`url:        ${pc.cyan(info.connectionString)}`);
+      console.log('');
+      outro('Done.');
     });
 
   cli.command('cache rotate-password', '轮换 Redis 密码')
@@ -185,16 +181,15 @@ export function registerCacheCommands(cli: CAC) {
       const instanceId = options.instance ? toPromptValue(options.instance, '实例 ID') : undefined;
 
       const s = spinner();
-      s.start('正在执行 Redis 密钥轮换...');
-      try {
-        const redisUrl = await rotateRedisPassword(s, instanceId);
-        s.stop(pc.green('✅ Redis 密钥轮换完成'));
-        console.log(`\n🔑 新连接串: ${pc.cyan(maskConnectionString(redisUrl))}\n`);
-        outro('已同步更新 .ali/project.json 的 REDIS_* 环境变量');
-      } catch (err: unknown) {
-        s.stop(pc.red('❌ Redis 密钥轮换失败'));
-        console.error(formatErrorMessage(err));
-        process.exitCode = 1;
-      }
+      const redisUrl = await withSpinner(
+        s,
+        '正在执行 Redis 密钥轮换...',
+        '❌ Redis 密钥轮换失败',
+        () => rotateRedisPassword(s, instanceId)
+      );
+      if (!redisUrl) return;
+      s.stop(pc.green('✅ Redis 密钥轮换完成'));
+      console.log(`\n🔑 新连接串: ${pc.cyan(maskConnectionString(redisUrl))}\n`);
+      outro('已同步更新 .licell/project.json 的 REDIS_* 环境变量');
     });
 }

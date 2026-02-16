@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "aero-cli",
+      "name": "licell",
       "dependencies": {
         "@alicloud/alidns20150109": "^3.0.1",
         "@alicloud/ecs20140526": "^4.0.0",

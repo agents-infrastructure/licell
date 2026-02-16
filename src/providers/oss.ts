@@ -45,7 +45,7 @@ export async function deployOSS(appName: string, distDir: string) {
   if (!existsSync(distDir) || !statSync(distDir).isDirectory()) {
     throw new Error(`静态产物目录不存在或不可读: ${distDir}`);
   }
-  const bucket = `aero-${appName}-${auth.accountId.substring(0, 4)}`.toLowerCase();
+  const bucket = `licell-${appName}-${auth.accountId.substring(0, 4)}`.toLowerCase();
 
   try {
     await client.putBucket(bucket);

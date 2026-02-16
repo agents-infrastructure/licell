@@ -14,7 +14,7 @@ export function maskConnectionString(url: string): string {
     if (parsed.password) parsed.password = '******';
     return parsed.toString();
   } catch {
-    return url;
+    return url.replace(/:([^@/:]+)@/g, ':******@');
   }
 }
 

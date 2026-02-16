@@ -1,94 +1,94 @@
-# Hello World API (for Aero CLI smoke test)
+# Hello World API (for Licell CLI smoke test)
 
-This is a minimal API app for validating `ali deploy`, `env pull`, `domain add`, and SSL flow.
+This is a minimal API app for validating `licell deploy`, `env pull`, `domain add`, and SSL flow.
 
 ## 1) Enter this project
 
 ```bash
-cd /path/to/aero-cli/examples/hello-world-api
+cd /path/to/licell/examples/hello-world-api
 ```
 
 ## 2) Login in this directory
 
-Run login here so Aero CLI writes local project binding to:
+Run login here so Licell CLI writes local project binding to:
 
-- `.ali/project.json`
+- `.licell/project.json`
 - 默认 Region 使用 `cn-hangzhou`（回车直接使用默认值）
 
 ```bash
-ali login
+licell login
 ```
 
-If your `ali` is not installed globally yet, from repo root you can use:
+If your `licell` is not installed globally yet, from repo root you can use:
 
 ```bash
-cd /path/to/aero-cli/examples/hello-world-api
-../../scripts/ali-tsx.sh login
+cd /path/to/licell/examples/hello-world-api
+../../scripts/licell-tsx.sh login
 ```
 
 ## 3) First deploy (API)
 
 ```bash
-ali deploy
+licell deploy
 ```
 
 Use fixed domain rule (auto bind `${appName}.your-domain.xyz`) with:
 
 ```bash
-ali deploy --target preview --domain-suffix your-domain.xyz
+licell deploy --target preview --domain-suffix your-domain.xyz
 ```
 
 Enable HTTPS in the same deploy:
 
 ```bash
-ali deploy --target preview --domain-suffix your-domain.xyz --ssl
+licell deploy --target preview --domain-suffix your-domain.xyz --ssl
 ```
 
 Force renew certificate (ignore expiry threshold):
 
 ```bash
-ali deploy --target preview --domain-suffix your-domain.xyz --ssl --ssl-force-renew
+licell deploy --target preview --domain-suffix your-domain.xyz --ssl --ssl-force-renew
 ```
 
 Default SSL behavior:
 
 - If HTTPS is not enabled: issue a new certificate.
 - If HTTPS is enabled: auto-renew only when cert is near expiry (default threshold `30` days).
-- You can override threshold via env: `ALI_SSL_RENEW_BEFORE_DAYS=45`.
-- DNS challenge now waits by polling TXT propagation (instead of fixed 45s sleep). You can tune timeout via `ALI_SSL_DNS_READY_TIMEOUT_MS` (default `180000`).
-- By default challenge verification is enabled; set `ALI_SSL_SKIP_CHALLENGE_VERIFY=1` only when debugging compatibility issues.
+- You can override threshold via env: `LICELL_SSL_RENEW_BEFORE_DAYS=45`.
+- DNS challenge now waits by polling TXT propagation (instead of fixed 45s sleep). You can tune timeout via `LICELL_SSL_DNS_READY_TIMEOUT_MS` (default `180000`).
+- By default challenge verification is enabled; set `LICELL_SSL_SKIP_CHALLENGE_VERIFY=1` only when debugging compatibility issues.
 
 CI/non-interactive deploy (no TTY) example:
 
 ```bash
-ali deploy --type api --entry src/index.ts --target preview --domain-suffix your-domain.xyz --ssl
+licell deploy --type api --entry src/index.ts --target preview --domain-suffix your-domain.xyz --ssl
 ```
 
 Specify FC runtime explicitly:
 
 ```bash
-ali deploy --type api --entry src/index.ts --runtime nodejs20 --target preview
+licell deploy --type api --entry src/index.ts --runtime nodejs20 --target preview
 ```
 
 Use Node 22 custom runtime mode:
 
 ```bash
-ali deploy --type api --entry src/index.ts --runtime nodejs22 --target preview
+licell deploy --type api --entry src/index.ts --runtime nodejs22 --target preview
 ```
 
 `nodejs22` here maps to FC `custom.debian12` and starts your handler via a generated bootstrap.
-The first deploy may download Linux Node 22 runtime and cache it under `~/.ali-cli/runtimes/node22`.
+The first deploy may download Linux Node 22 runtime and cache it under `~/.licell-cli/runtimes/node22`.
 
 ## 3.1) Provision Serverless DB (optional)
 
 ```bash
-ali db add
+licell db add
 ```
 
 Non-interactive / CI style example:
 
 ```bash
-ali db add \
+licell db add \
   --type mysql \
   --engine-version 8.0 \
   --category serverless_basic \
@@ -104,7 +104,7 @@ ali db add \
 PostgreSQL 18 basic series example:
 
 ```bash
-ali db add \
+licell db add \
   --type postgres \
   --engine-version 18.0 \
   --category serverless_basic \
@@ -130,13 +130,13 @@ Switch region and retry.
 ## 3.2) Provision Redis (optional)
 
 ```bash
-ali cache add --type redis
+licell cache add --type redis
 ```
 
 Non-interactive / CI style example:
 
 ```bash
-ali cache add \
+licell cache add \
   --type redis \
   --class kvcache.cu.g4b.2 \
   --zone cn-hangzhou-b
@@ -148,7 +148,7 @@ ali cache add \
 - 若你已经在控制台创建好实例，可直接绑定（不走创建流程）：
 
 ```bash
-ali cache add \
+licell cache add \
   --type redis \
   --instance tt-xxxxxxxx \
   --password 'your-password'
@@ -161,7 +161,7 @@ When prompted:
 
 - Deploy type: `api`
 - Entry file: `src/index.ts` (需要导出 `handler`)
-- App name: e.g. `aero-hello-smoke`
+- App name: e.g. `licell-hello-smoke`
 
 ## 4) Verify endpoint
 
@@ -176,12 +176,12 @@ curl -sS "https://<your-app>-<random>.cn-hangzhou.fcapp.run" | jq .
 From repo root:
 
 ```bash
-cd /path/to/aero-cli
-ALI_BIN=./scripts/ali-tsx.sh ./scripts/smoke.sh --target preview --expect-key TEST_FLAG --expect-value from-cloud
+cd /path/to/licell
+LICELL_BIN=./scripts/licell-tsx.sh ./scripts/smoke.sh --target preview --expect-key TEST_FLAG --expect-value from-cloud
 ```
 
 Optional:
 
 ```bash
-ALI_BIN=./scripts/ali-tsx.sh ./scripts/smoke.sh --target preview --domain api.example.com --with-ssl
+LICELL_BIN=./scripts/licell-tsx.sh ./scripts/smoke.sh --target preview --domain api.example.com --with-ssl
 ```

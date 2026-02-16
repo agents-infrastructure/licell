@@ -125,7 +125,7 @@ export async function vendorPythonDependencies(options: VendorPythonDependencies
   const runCommand = options.runCommand || runCommandSync;
   const allowSourceInstall = isTruthy(readLicellEnv(env, 'PYTHON_ALLOW_SOURCE'));
   const { pythonVersion } = resolveRuntimeWheelTarget(options.runtime);
-  const wheelTmpDir = mkdtempSync(join(tmpdir(), 'aero-pydeps-'));
+  const wheelTmpDir = mkdtempSync(join(tmpdir(), 'licell-pydeps-'));
   const wheelhouse = join(wheelTmpDir, 'wheelhouse');
   mkdirSync(wheelhouse, { recursive: true });
 

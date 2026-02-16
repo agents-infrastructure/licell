@@ -137,7 +137,7 @@ export async function bindCustomDomain(
   aliasName?: string
 ) {
   const project = Config.getProject();
-  if (!project.appName) throw new Error('未找到应用名，请先执行 ali deploy');
+  if (!project.appName) throw new Error('未找到应用名，请先执行 licell deploy');
   const { rootDomain, subDomain } = parseRootAndSubdomain(domainName);
 
   const dnsClient = createDnsClient();

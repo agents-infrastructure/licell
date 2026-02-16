@@ -41,7 +41,7 @@ export async function withRetry<T>(
     } catch (err: unknown) {
       lastError = err;
       if (attempt === maxAttempts || !shouldRetry(err)) throw err;
-      await sleep(baseDelayMs * attempt);
+      await sleep(baseDelayMs * attempt * (0.5 + Math.random() * 0.5));
     }
   }
   throw lastError;

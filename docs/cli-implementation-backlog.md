@@ -1,6 +1,6 @@
-# Aero CLI Command Backlog
+# Licell CLI Command Backlog
 
-本文件记录 `ali` CLI 的命令实现进度与推荐优先级。  
+本文件记录 `licell` CLI 的命令实现进度与推荐优先级。  
 目标：先覆盖生产部署闭环，再补齐运维与资源管理能力。
 
 ## 已实现（可用）

@@ -8,7 +8,7 @@ import { resolveSdkCtor } from '../utils/sdk';
 const VpcClientCtor = resolveSdkCtor<Vpc>(Vpc, '@alicloud/vpc20160428');
 const EcsClientCtor = resolveSdkCtor<Ecs>(Ecs, '@alicloud/ecs20140526');
 const DEFAULT_VPC_CIDR = '10.0.0.0/8';
-const DEFAULT_VSW_NAME = 'aero-vsw';
+const DEFAULT_VSW_NAME = 'licell-vsw';
 const VSW_PAGE_SIZE = 50;
 
 interface EnsureDefaultNetworkOptions {
@@ -150,7 +150,7 @@ async function ensureSecurityGroupForVpc(
   const named = await ecsClient.describeSecurityGroups(new $Ecs.DescribeSecurityGroupsRequest({
     regionId,
     vpcId,
-    securityGroupName: 'aero-sg'
+    securityGroupName: 'licell-sg'
   }));
   const namedGroup = named.body?.securityGroups?.securityGroup?.[0];
   if (namedGroup?.securityGroupId) return namedGroup.securityGroupId;
@@ -165,7 +165,7 @@ async function ensureSecurityGroupForVpc(
   const createSg = await ecsClient.createSecurityGroup(new $Ecs.CreateSecurityGroupRequest({
     regionId,
     vpcId,
-    securityGroupName: 'aero-sg',
+    securityGroupName: 'licell-sg',
     securityGroupType: 'normal'
   }));
   if (!createSg.body?.securityGroupId) throw new Error('安全组创建失败：未返回 SecurityGroupId');
@@ -192,7 +192,7 @@ export async function ensureDefaultNetwork(options?: EnsureDefaultNetworkOptions
   const client = new VpcClientCtor(vpcConfig);
   const ecsClient = new EcsClientCtor(ecsConfig);
 
-  const vpcName = 'aero-vercel-vpc';
+  const vpcName = 'licell-vpc';
   let vpcId = '', vswId = '', sgId = '', zoneId = '', cidrBlock = DEFAULT_VPC_CIDR;
 
   const vpcRes = await client.describeVpcs(new $Vpc.DescribeVpcsRequest({ regionId, vpcName }));

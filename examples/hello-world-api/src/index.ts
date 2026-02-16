@@ -44,10 +44,10 @@ export async function handler(event: unknown): Promise<HttpResponse> {
   const payload = path === '/healthz'
     ? { ok: true }
     : {
-      message: 'Hello from Aero CLI smoke app',
+      message: 'Hello from Licell CLI smoke app',
       method,
       path,
-      region: process.env.ALI_REGION || process.env.REGION || process.env.FC_REGION || 'unknown'
+      region: process.env.LICELL_REGION || process.env.ALI_REGION || process.env.REGION || process.env.FC_REGION || 'unknown'
     };
 
   return {

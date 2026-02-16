@@ -32,9 +32,11 @@ function getShasumsSources() {
   return fromEnv ? [fromEnv, ...defaults] : defaults;
 }
 
+const HTTP_REQUEST_TIMEOUT_MS = 60_000;
+
 function requestUrl(url: string, redirects = 5): Promise<IncomingMessage> {
   return new Promise((resolve, reject) => {
-    const req = https.get(url, (res) => {
+    const req = https.get(url, { timeout: HTTP_REQUEST_TIMEOUT_MS }, (res) => {
       const status = res.statusCode || 0;
       const location = res.headers.location;
       if ([301, 302, 307, 308].includes(status) && location && redirects > 0) {
@@ -51,6 +53,7 @@ function requestUrl(url: string, redirects = 5): Promise<IncomingMessage> {
       }
       resolve(res);
     });
+    req.on('timeout', () => { req.destroy(new Error(`请求超时: ${url}`)); });
     req.on('error', reject);
   });
 }

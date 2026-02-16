@@ -1,7 +1,6 @@
 import type { CAC } from 'cac';
 import { intro, outro, spinner, select, isCancel } from '@clack/prompts';
 import pc from 'picocolors';
-import { formatErrorMessage } from '../utils/errors';
 import { maskConnectionString } from '../utils/cli-helpers';
 import {
   getDatabaseInstanceDetail,
@@ -18,7 +17,8 @@ import {
   normalizeDbType,
   parseOptionalNumber,
   parseOptionalPositiveInt,
-  normalizeAutoPause
+  normalizeAutoPause,
+  withSpinner
 } from '../utils/cli-shared';
 
 export function registerDbCommands(cli: CAC) {
@@ -86,9 +86,12 @@ export function registerDbCommands(cli: CAC) {
     }
     const autoPause = toOptionalString(options.autoPause) ? normalizeAutoPause(options.autoPause) : undefined;
 
-    const s = spinner(); s.start('正在初始化基础设施编排引擎...');
-    try {
-      const dbUrl = await provisionDatabase(type, s, {
+    const s = spinner();
+    const dbUrl = await withSpinner(
+      s,
+      '正在初始化基础设施编排引擎...',
+      '❌ 拉起失败',
+      () => provisionDatabase(type, s, {
         engineVersion: toOptionalString(options.engineVersion),
         category: toOptionalString(options.category),
         instanceClass: toOptionalString(options.class),
@@ -104,15 +107,12 @@ export function registerDbCommands(cli: CAC) {
         vSwitchId: toOptionalString(options.vsw),
         securityIpList: toOptionalString(options.securityIpList),
         description: toOptionalString(options.description)
-      });
-      s.stop(pc.green('✅ 数据库实例已就绪并绑定到本工程内网！'));
-      console.log(`\n🔑 内网直连凭证已生成: ${pc.cyan(maskConnectionString(dbUrl))}\n`);
-      outro(`下次执行 ali deploy 时，将自动作为 process.env.DATABASE_URL 注入！`);
-    } catch (err: unknown) {
-      s.stop(pc.red('❌ 拉起失败'));
-      console.error(formatErrorMessage(err));
-      process.exitCode = 1;
-    }
+      })
+    );
+    if (!dbUrl) return;
+    s.stop(pc.green('✅ 数据库实例已就绪并绑定到本工程内网！'));
+    console.log(`\n🔑 内网直连凭证已生成: ${pc.cyan(maskConnectionString(dbUrl))}\n`);
+    outro(`下次执行 licell deploy 时，将自动作为 process.env.DATABASE_URL 注入！`);
   });
 
   cli.command('db list', '查看数据库实例列表')
@@ -122,26 +122,25 @@ export function registerDbCommands(cli: CAC) {
       const limit = parseListLimit(options.limit, 20, 200);
 
       const s = spinner();
-      s.start('正在拉取数据库实例列表...');
-      try {
-        const instances = await listDatabaseInstances(limit);
-        s.stop(pc.green(`✅ 共获取 ${instances.length} 个实例`));
-        if (instances.length === 0) {
-          outro('当前地域没有数据库实例');
-          return;
-        }
-        for (const item of instances) {
-          console.log(
-            `${pc.cyan(item.instanceId)}  engine=${pc.gray(`${item.engine || '-'} ${item.engineVersion || ''}`.trim())}  status=${pc.gray(item.status || '-')}  class=${pc.gray(item.instanceClass || '-')}`
-          );
-        }
-        console.log('');
-        outro('Done.');
-      } catch (err: unknown) {
-        s.stop(pc.red('❌ 获取数据库实例列表失败'));
-        console.error(formatErrorMessage(err));
-        process.exitCode = 1;
+      const instances = await withSpinner(
+        s,
+        '正在拉取数据库实例列表...',
+        '❌ 获取数据库实例列表失败',
+        () => listDatabaseInstances(limit)
+      );
+      if (!instances) return;
+      s.stop(pc.green(`✅ 共获取 ${instances.length} 个实例`));
+      if (instances.length === 0) {
+        outro('当前地域没有数据库实例');
+        return;
       }
+      for (const item of instances) {
+        console.log(
+          `${pc.cyan(item.instanceId)}  engine=${pc.gray(`${item.engine || '-'} ${item.engineVersion || ''}`.trim())}  status=${pc.gray(item.status || '-')}  class=${pc.gray(item.instanceClass || '-')}`
+        );
+      }
+      console.log('');
+      outro('Done.');
     });
 
   cli.command('db info <instanceId>', '查看数据库实例详情')
@@ -149,30 +148,29 @@ export function registerDbCommands(cli: CAC) {
       ensureAuthOrExit();
       const normalizedId = toPromptValue(instanceId, 'instanceId');
       const s = spinner();
-      s.start(`正在拉取实例 ${normalizedId} 详情...`);
-      try {
-        const detail = await getDatabaseInstanceDetail(normalizedId);
-        const summary = detail.summary;
-        s.stop(pc.green('✅ 获取成功'));
-        console.log(`\ninstanceId: ${pc.cyan(summary.instanceId)}`);
-        console.log(`engine:     ${pc.cyan(`${summary.engine || '-'} ${summary.engineVersion || ''}`.trim())}`);
-        console.log(`status:     ${pc.cyan(summary.status || '-')}`);
-        console.log(`class:      ${pc.cyan(summary.instanceClass || '-')}`);
-        console.log(`payType:    ${pc.cyan(summary.payType || '-')}`);
-        console.log(`vpc/vsw:    ${pc.cyan(`${summary.vpcId || '-'} / ${summary.vSwitchId || '-'}`)}`);
-        console.log(`zone:       ${pc.cyan(summary.zoneId || '-')}`);
-        if (detail.endpoints.length > 0) {
-          console.log(`endpoints:  ${pc.cyan(detail.endpoints.map((item) => `${item.ipType || item.type || '-'}:${item.host || '-'}:${item.port || '-'}`).join(', '))}`);
-        }
-        if (detail.databases.length > 0) console.log(`databases:  ${pc.cyan(detail.databases.join(', '))}`);
-        if (detail.accounts.length > 0) console.log(`accounts:   ${pc.cyan(detail.accounts.join(', '))}`);
-        console.log('');
-        outro('Done.');
-      } catch (err: unknown) {
-        s.stop(pc.red('❌ 获取数据库实例详情失败'));
-        console.error(formatErrorMessage(err));
-        process.exitCode = 1;
+      const detail = await withSpinner(
+        s,
+        `正在拉取实例 ${normalizedId} 详情...`,
+        '❌ 获取数据库实例详情失败',
+        () => getDatabaseInstanceDetail(normalizedId)
+      );
+      if (!detail) return;
+      const summary = detail.summary;
+      s.stop(pc.green('✅ 获取成功'));
+      console.log(`\ninstanceId: ${pc.cyan(summary.instanceId)}`);
+      console.log(`engine:     ${pc.cyan(`${summary.engine || '-'} ${summary.engineVersion || ''}`.trim())}`);
+      console.log(`status:     ${pc.cyan(summary.status || '-')}`);
+      console.log(`class:      ${pc.cyan(summary.instanceClass || '-')}`);
+      console.log(`payType:    ${pc.cyan(summary.payType || '-')}`);
+      console.log(`vpc/vsw:    ${pc.cyan(`${summary.vpcId || '-'} / ${summary.vSwitchId || '-'}`)}`);
+      console.log(`zone:       ${pc.cyan(summary.zoneId || '-')}`);
+      if (detail.endpoints.length > 0) {
+        console.log(`endpoints:  ${pc.cyan(detail.endpoints.map((item) => `${item.ipType || item.type || '-'}:${item.host || '-'}:${item.port || '-'}`).join(', '))}`);
       }
+      if (detail.databases.length > 0) console.log(`databases:  ${pc.cyan(detail.databases.join(', '))}`);
+      if (detail.accounts.length > 0) console.log(`accounts:   ${pc.cyan(detail.accounts.join(', '))}`);
+      console.log('');
+      outro('Done.');
     });
 
   cli.command('db connect [instanceId]', '输出数据库连接信息')
@@ -180,24 +178,23 @@ export function registerDbCommands(cli: CAC) {
       ensureAuthOrExit();
       const normalizedId = toOptionalString(instanceId);
       const s = spinner();
-      s.start('正在解析数据库连接信息...');
-      try {
-        const info = await resolveDatabaseConnectInfo(normalizedId);
-        s.stop(pc.green('✅ 连接信息已生成'));
-        console.log(`\ninstanceId: ${pc.cyan(info.instanceId)}`);
-        console.log(`engine:     ${pc.cyan(info.engine)}`);
-        console.log(`host:       ${pc.cyan(info.host)}`);
-        console.log(`port:       ${pc.cyan(String(info.port))}`);
-        console.log(`database:   ${pc.cyan(info.database)}`);
-        console.log(`username:   ${pc.cyan(info.username)}`);
-        console.log(`password:   ${pc.cyan(info.passwordKnown ? '<known in project>' : '<unknown, please provide manually>')}`);
-        console.log(`url:        ${pc.cyan(info.connectionString)}`);
-        console.log('');
-        outro('Done.');
-      } catch (err: unknown) {
-        s.stop(pc.red('❌ 连接信息解析失败'));
-        console.error(formatErrorMessage(err));
-        process.exitCode = 1;
-      }
+      const info = await withSpinner(
+        s,
+        '正在解析数据库连接信息...',
+        '❌ 连接信息解析失败',
+        () => resolveDatabaseConnectInfo(normalizedId)
+      );
+      if (!info) return;
+      s.stop(pc.green('✅ 连接信息已生成'));
+      console.log(`\ninstanceId: ${pc.cyan(info.instanceId)}`);
+      console.log(`engine:     ${pc.cyan(info.engine)}`);
+      console.log(`host:       ${pc.cyan(info.host)}`);
+      console.log(`port:       ${pc.cyan(String(info.port))}`);
+      console.log(`database:   ${pc.cyan(info.database)}`);
+      console.log(`username:   ${pc.cyan(info.username)}`);
+      console.log(`password:   ${pc.cyan(info.passwordKnown ? '<known in project>' : '<unknown, please provide manually>')}`);
+      console.log(`url:        ${pc.cyan(info.connectionString)}`);
+      console.log('');
+      outro('Done.');
     });
 }

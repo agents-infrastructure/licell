@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_FC_RUNTIME, SUPPORTED_FC_RUNTIMES, normalizeFcRuntime } from '../providers/fc';
+import { DEFAULT_FC_RUNTIME, getSupportedFcRuntimes, normalizeFcRuntime } from '../providers/fc';
 
 describe('fc runtime normalize', () => {
   it('supports all configured runtimes', () => {
-    for (const runtime of SUPPORTED_FC_RUNTIMES) {
+    for (const runtime of getSupportedFcRuntimes()) {
       expect(normalizeFcRuntime(runtime)).toBe(runtime);
     }
   });

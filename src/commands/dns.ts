@@ -1,14 +1,14 @@
 import type { CAC } from 'cac';
 import { outro, spinner } from '@clack/prompts';
 import pc from 'picocolors';
-import { formatErrorMessage } from '../utils/errors';
 import { addDnsRecord, listDnsRecords, removeDnsRecord } from '../providers/domain';
 import {
   ensureAuthOrExit,
   toPromptValue,
   toOptionalString,
   parseListLimit,
-  parseOptionalPositiveInt
+  parseOptionalPositiveInt,
+  withSpinner
 } from '../utils/cli-shared';
 
 export function registerDnsCommands(cli: CAC) {
@@ -19,26 +19,25 @@ export function registerDnsCommands(cli: CAC) {
       const normalizedDomain = toPromptValue(domain, '域名').toLowerCase();
       const limit = parseListLimit(options.limit, 100, 500);
       const s = spinner();
-      s.start(`正在拉取 ${normalizedDomain} 的解析记录...`);
-      try {
-        const records = await listDnsRecords(normalizedDomain, limit);
-        s.stop(pc.green(`✅ 共获取 ${records.length} 条记录`));
-        if (records.length === 0) {
-          outro('当前域名无解析记录');
-          return;
-        }
-        for (const record of records) {
-          console.log(
-            `${pc.cyan(record.recordId)}  ${pc.gray(record.rr)} ${pc.gray(record.type)} ${pc.gray(record.value)} ttl=${pc.gray(String(record.ttl || '-'))}`
-          );
-        }
-        console.log('');
-        outro('Done.');
-      } catch (err: unknown) {
-        s.stop(pc.red('❌ 获取 DNS 记录失败'));
-        console.error(formatErrorMessage(err));
-        process.exitCode = 1;
+      const records = await withSpinner(
+        s,
+        `正在拉取 ${normalizedDomain} 的解析记录...`,
+        '❌ 获取 DNS 记录失败',
+        () => listDnsRecords(normalizedDomain, limit)
+      );
+      if (!records) return;
+      s.stop(pc.green(`✅ 共获取 ${records.length} 条记录`));
+      if (records.length === 0) {
+        outro('当前域名无解析记录');
+        return;
       }
+      for (const record of records) {
+        console.log(
+          `${pc.cyan(record.recordId)}  ${pc.gray(record.rr)} ${pc.gray(record.type)} ${pc.gray(record.value)} ttl=${pc.gray(String(record.ttl || '-'))}`
+        );
+      }
+      console.log('');
+      outro('Done.');
     });
 
   cli.command('dns records add <domain>', '添加域名解析记录')
@@ -60,17 +59,16 @@ export function registerDnsCommands(cli: CAC) {
       const line = toOptionalString(options.line) || 'default';
 
       const s = spinner();
-      s.start('正在添加 DNS 记录...');
-      try {
-        const recordId = await addDnsRecord(normalizedDomain, { rr, type, value, ttl, line });
-        s.stop(pc.green('✅ DNS 记录已创建'));
-        console.log(`\nrecordId: ${pc.cyan(recordId)}\n`);
-        outro('Done.');
-      } catch (err: unknown) {
-        s.stop(pc.red('❌ DNS 记录创建失败'));
-        console.error(formatErrorMessage(err));
-        process.exitCode = 1;
-      }
+      const recordId = await withSpinner(
+        s,
+        '正在添加 DNS 记录...',
+        '❌ DNS 记录创建失败',
+        () => addDnsRecord(normalizedDomain, { rr, type, value, ttl, line })
+      );
+      if (!recordId) return;
+      s.stop(pc.green('✅ DNS 记录已创建'));
+      console.log(`\nrecordId: ${pc.cyan(recordId)}\n`);
+      outro('Done.');
     });
 
   cli.command('dns records rm <recordId>', '删除域名解析记录')
@@ -78,15 +76,17 @@ export function registerDnsCommands(cli: CAC) {
       ensureAuthOrExit();
       const normalizedRecordId = toPromptValue(recordId, 'recordId');
       const s = spinner();
-      s.start(`正在删除记录 ${normalizedRecordId}...`);
-      try {
-        await removeDnsRecord(normalizedRecordId);
-        s.stop(pc.green('✅ DNS 记录已删除'));
-        outro('Done.');
-      } catch (err: unknown) {
-        s.stop(pc.red('❌ DNS 记录删除失败'));
-        console.error(formatErrorMessage(err));
-        process.exitCode = 1;
-      }
+      const removed = await withSpinner(
+        s,
+        `正在删除记录 ${normalizedRecordId}...`,
+        '❌ DNS 记录删除失败',
+        async () => {
+          await removeDnsRecord(normalizedRecordId);
+          return true;
+        }
+      );
+      if (!removed) return;
+      s.stop(pc.green('✅ DNS 记录已删除'));
+      outro('Done.');
     });
 }

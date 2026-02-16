@@ -30,12 +30,12 @@ describe('normalizeDbUser', () => {
     expect(normalizeDbUser('a-very-long-application-name')).toBe('a_very_long_appl');
   });
 
-  it('returns aero_user for empty string', () => {
-    // empty -> lowercased -> replace non-alnum -> '' -> length < 2 -> 'aero_user'
-    expect(normalizeDbUser('')).toBe('aero_user');
+  it('returns licell_user for empty string', () => {
+    // empty -> lowercased -> replace non-alnum -> '' -> length < 2 -> 'licell_user'
+    expect(normalizeDbUser('')).toBe('licell_user');
   });
 
-  it('returns aero_user for single char that becomes underscore', () => {
+  it('returns licell_user for single char that becomes underscore', () => {
     // '-' -> '_' -> prepend 'a_' -> 'a__' -> collapse -> 'a_' -> length 2, ok
     const result = normalizeDbUser('-');
     expect(result.length).toBeGreaterThanOrEqual(2);
