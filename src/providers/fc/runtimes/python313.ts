@@ -1,7 +1,7 @@
 import * as $FC from '@alicloud/fc20230330';
 import { mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
-import { preparePythonEntrypoint } from '../runtime';
+import { preparePythonEntrypoint } from '../runtime-utils';
 import { preparePython313RuntimeInCode } from '../../../utils/python313-runtime';
 import type { RuntimeHandler, ResolvedRuntimeConfig } from '../runtime-handler';
 
@@ -99,9 +99,11 @@ class RequestHandler(BaseHTTPRequestHandler):
         result = asyncio.run(result)
       status, out_headers, out_body = _normalize_response(result)
     except Exception as error:
+      import sys
+      print(f"[licell] handler error: {error}", file=sys.stderr)
       status = 500
       out_headers = {"content-type": "application/json; charset=utf-8"}
-      out_body = _json_bytes({"error": str(error)})
+      out_body = _json_bytes({"error": "Internal Server Error"})
 
     self.send_response(status)
     for key, value in out_headers.items():

@@ -107,12 +107,16 @@ export function registerEnvCommands(cli: CAC) {
       Config.setProject({ envs }, { replaceEnvs: true });
       const entries = Object.entries(envs);
       if (entries.length === 0) {
-        writeFileSync('.env', '', { mode: 0o600 });
+        try { writeFileSync('.env', '', { mode: 0o600 }); } catch (e) {
+          throw new Error(`写入 .env 文件失败: ${e instanceof Error ? e.message : String(e)}`);
+        }
         s.stop(pc.yellow('云端无环境变量，已清空本地 .env'));
         return;
       }
       const envContent = entries.map(([k, v]) => `${k}="${escapeEnvValue(String(v))}"`).join('\n');
-      writeFileSync('.env', envContent, { mode: 0o600 });
+      try { writeFileSync('.env', envContent, { mode: 0o600 }); } catch (e) {
+        throw new Error(`写入 .env 文件失败: ${e instanceof Error ? e.message : String(e)}`);
+      }
       ensureEnvIgnored();
       s.stop(pc.green(`✅ 已拉取 ${entries.length} 个环境变量并写入 .env`));
     });

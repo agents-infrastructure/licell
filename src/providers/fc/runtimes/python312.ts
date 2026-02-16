@@ -1,4 +1,4 @@
-import { preparePythonEntrypoint } from '../runtime';
+import { preparePythonEntrypoint } from '../runtime-utils';
 import type { RuntimeHandler, ResolvedRuntimeConfig } from '../runtime-handler';
 
 export const python312Handler: RuntimeHandler = {

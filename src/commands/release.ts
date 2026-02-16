@@ -14,6 +14,8 @@ import {
   toPromptValue,
   isNoChangesPublishError,
   getLatestPublishedVersionId,
+  parseListLimit,
+  parseOptionalPositiveInt,
   withSpinner
 } from '../utils/cli-shared';
 import { Config } from '../utils/config';
@@ -27,8 +29,7 @@ export function registerReleaseCommands(cli: CAC) {
       const project = Config.getProject();
       requireAppName(project);
 
-      const requestedLimit = options.limit ? Number(options.limit) : 20;
-      const limit = Number.isFinite(requestedLimit) && requestedLimit > 0 ? Math.min(Math.floor(requestedLimit), 100) : 20;
+      const limit = parseListLimit(options.limit, 20, 100);
 
       const s = spinner();
       const versions = await withSpinner(
@@ -136,8 +137,7 @@ export function registerReleaseCommands(cli: CAC) {
       const project = Config.getProject();
       requireAppName(project);
 
-      const requestedKeep = options.keep ? Number(options.keep) : 10;
-      const keep = Number.isFinite(requestedKeep) && requestedKeep > 0 ? Math.floor(requestedKeep) : 10;
+      const keep = parseOptionalPositiveInt(options.keep, 'keep') || 10;
       const apply = Boolean(options.apply);
       const s = spinner();
       const result = await withSpinner(

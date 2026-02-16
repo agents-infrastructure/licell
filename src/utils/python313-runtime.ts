@@ -65,7 +65,11 @@ async function fetchJson(url: string): Promise<unknown> {
   for await (const chunk of response) {
     data += chunk;
   }
-  return JSON.parse(data);
+  try {
+    return JSON.parse(data);
+  } catch {
+    throw new Error('GitHub API 返回了非 JSON 响应，请检查网络或稍后重试');
+  }
 }
 
 function getEnvOverrideSpec(): Python313DownloadSpec | null {

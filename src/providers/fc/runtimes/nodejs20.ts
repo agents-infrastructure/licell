@@ -1,6 +1,6 @@
 import { relative } from 'path';
 import { buildEntrypointWithBun } from '../../../utils/runtime';
-import { findFirstJsOutput } from '../runtime';
+import { findFirstJsOutput } from '../runtime-utils';
 import type { RuntimeHandler, ResolvedRuntimeConfig } from '../runtime-handler';
 
 export const nodejs20Handler: RuntimeHandler = {

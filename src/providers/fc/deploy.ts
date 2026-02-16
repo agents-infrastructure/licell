@@ -40,7 +40,13 @@ export async function deployFC(appName: string, entryFile: string, runtime: FcRu
   const zip = new AdmZip();
   zip.addLocalFolder(outdir);
   const zipBase64 = zip.toBuffer().toString('base64');
-  const environmentVariables = { NODE_ENV: 'production', ...project.envs };
+  const environmentVariables: Record<string, string> = { NODE_ENV: 'production' };
+  for (const [key, value] of Object.entries(project.envs)) {
+    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key)) {
+      throw new Error(`环境变量键名不合法: "${key}"（仅允许字母、数字、下划线，且不能以数字开头）`);
+    }
+    environmentVariables[key] = value;
+  }
   const vpcConfig = await resolveFunctionVpcConfig(project.network);
 
   const req = new $FC.CreateFunctionRequest({

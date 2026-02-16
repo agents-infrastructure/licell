@@ -3,14 +3,12 @@ import { mkdirSync, writeFileSync } from 'fs';
 import { dirname, join, relative } from 'path';
 import { buildEntrypointWithBun } from '../../../utils/runtime';
 import { prepareNode22RuntimeInCode } from '../../../utils/node22-runtime';
-import { findFirstJsOutput } from '../runtime';
+import { findFirstJsOutput } from '../runtime-utils';
 import type { RuntimeHandler, ResolvedRuntimeConfig } from '../runtime-handler';
 
 const CUSTOM_FC_RUNTIME = 'custom.debian12';
 const BOOTSTRAP_PATH = '.licell/node22-bootstrap.cjs';
 const PORT = 9000;
-
-/* PLACEHOLDER_NODEJS22_BOOTSTRAP */
 
 function createBootstrap(outdir: string, bootFile: string) {
   const bootstrapPath = join(outdir, BOOTSTRAP_PATH);
@@ -73,7 +71,6 @@ async function toEvent(req) {
     }
   };
 }
-/* PLACEHOLDER_NODEJS22_BOOTSTRAP_2 */
 
 function writeResult(res, result) {
   if (result && typeof result === 'object' && Object.prototype.hasOwnProperty.call(result, 'statusCode')) {
@@ -106,9 +103,10 @@ const server = http.createServer(async (req, res) => {
     writeResult(res, result);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    process.stderr.write('[licell] handler error: ' + message + '\\n');
     res.statusCode = 500;
     res.setHeader('content-type', 'application/json; charset=utf-8');
-    res.end(JSON.stringify({ error: message }));
+    res.end(JSON.stringify({ error: 'Internal Server Error' }));
   }
 });
 

@@ -6,10 +6,10 @@ const GLOBAL_DIR = join(homedir(), '.licell-cli');
 const LEGACY_GLOBAL_DIR = join(homedir(), '.ali-cli');
 const GLOBAL_FILE = join(GLOBAL_DIR, 'auth.json');
 const LEGACY_GLOBAL_FILE = join(LEGACY_GLOBAL_DIR, 'auth.json');
-const LOCAL_DIR = join(process.cwd(), '.licell');
-const LEGACY_LOCAL_DIR = join(process.cwd(), '.ali');
-const LOCAL_FILE = join(LOCAL_DIR, 'project.json');
-const LEGACY_LOCAL_FILE = join(LEGACY_LOCAL_DIR, 'project.json');
+function getLocalDir() { return join(process.cwd(), '.licell'); }
+function getLegacyLocalDir() { return join(process.cwd(), '.ali'); }
+function getLocalFile() { return join(getLocalDir(), 'project.json'); }
+function getLegacyLocalFile() { return join(getLegacyLocalDir(), 'project.json'); }
 const SECURE_DIR_MODE = 0o700;
 const SECURE_FILE_MODE = 0o600;
 export const DEFAULT_ALI_REGION = 'cn-hangzhou';
@@ -77,7 +77,7 @@ function writeJsonSafely(filePath: string, data: unknown, secure = false) {
     }
     renameSync(tmpPath, filePath);
   } catch (err) {
-    rmSync(tmpPath, { force: true });
+    try { rmSync(tmpPath, { force: true }); } catch { /* 清理失败不覆盖原始错误 */ }
     throw err;
   }
 }
@@ -188,8 +188,10 @@ function getReadableAuthFile() {
 }
 
 function getReadableProjectFile() {
-  if (existsSync(LOCAL_FILE)) return LOCAL_FILE;
-  if (existsSync(LEGACY_LOCAL_FILE)) return LEGACY_LOCAL_FILE;
+  const localFile = getLocalFile();
+  if (existsSync(localFile)) return localFile;
+  const legacyFile = getLegacyLocalFile();
+  if (existsSync(legacyFile)) return legacyFile;
   return null;
 }
 
@@ -222,7 +224,7 @@ export const Config = {
     return normalizeProject(readJsonSafely<unknown>(projectFile, { envs: {} }));
   },
   setProject(data: Partial<ProjectConfig>, options?: SetProjectOptions) {
-    ensureSecureDir(LOCAL_DIR);
+    ensureSecureDir(getLocalDir());
     ensureProjectConfigIgnored();
     const current = this.getProject();
     const mergedEnvs = options?.replaceEnvs
@@ -233,6 +235,6 @@ export const Config = {
       ...data,
       envs: mergedEnvs
     });
-    writeJsonSafely(LOCAL_FILE, next, true);
+    writeJsonSafely(getLocalFile(), next, true);
   }
 };
