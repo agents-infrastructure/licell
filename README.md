@@ -12,6 +12,7 @@ TypeScript + Bun 实现的阿里云部署 CLI，目标是把阿里云上的部�
 ## 当前已实现能力
 
 - 认证与地域：`login` `logout` `whoami` `switch`
+- 项目初始化：`init --template node|python --runtime --app --force`
 - 部署：`deploy --type api|static --runtime nodejs20|nodejs22|python3.12|python3.13 --target --domain-suffix --ssl --ssl-force-renew`
 - 函数：`fn list|info|invoke|rm`
 - 发布：`release list|promote|rollback|prune`
@@ -68,6 +69,16 @@ bun run build:bin
 
 ```bash
 cd examples/hello-world-api
+```
+
+初始化脚手架（可选，Node/Python 二选一）：
+
+```bash
+# Node TypeScript
+../../scripts/licell-tsx.sh init --template node
+
+# Python
+../../scripts/licell-tsx.sh init --template python --runtime python3.12
 ```
 
 登录（默认地域杭州）：

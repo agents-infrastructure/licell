@@ -1,6 +1,7 @@
 import { cac } from 'cac';
 import { normalizeMultiWordCommandArgv } from './utils/argv';
 import { registerAuthCommands } from './commands/auth';
+import { registerInitCommand } from './commands/init';
 import { registerDeployCommand } from './commands/deploy';
 import { registerFnCommands } from './commands/fn';
 import { registerOssCommands } from './commands/oss';
@@ -15,6 +16,7 @@ import { registerLogsCommand } from './commands/logs';
 const cli = cac('licell');
 
 registerAuthCommands(cli);
+registerInitCommand(cli);
 registerDeployCommand(cli);
 registerFnCommands(cli);
 registerOssCommands(cli);
