@@ -4,6 +4,8 @@ export interface ResolvedRuntimeConfig {
   runtime: string;
   handler: string;
   customRuntimeConfig?: $FC.CustomRuntimeConfig;
+  customContainerConfig?: $FC.CustomContainerConfig;
+  skipCodePackaging?: boolean;
 }
 
 export interface RuntimeHandler {

@@ -25,21 +25,22 @@ export async function deployFC(appName: string, entryFile: string, runtime: FcRu
   rmSync(outdir, { recursive: true, force: true });
   mkdirSync(outdir, { recursive: true });
 
-  const resolvedEntry = resolve(entryFile);
-  const entryRelativeToCwd = relative(process.cwd(), resolvedEntry);
-  if (entryRelativeToCwd.startsWith('..') || isAbsolute(entryRelativeToCwd)) {
-    throw new Error(`入口文件必须在项目目录内: ${entryFile}`);
-  }
-  if (!existsSync(resolvedEntry)) throw new Error(`入口文件不存在: ${entryFile}`);
-  if (!statSync(resolvedEntry).isFile()) throw new Error(`入口文件不是有效文件: ${entryFile}`);
+  const isDocker = runtime === 'docker';
 
-  const entryRelative = entryRelativeToCwd.replace(/\\/g, '/');
+  if (!isDocker) {
+    const resolvedEntry = resolve(entryFile);
+    const entryRelativeToCwd = relative(process.cwd(), resolvedEntry);
+    if (entryRelativeToCwd.startsWith('..') || isAbsolute(entryRelativeToCwd)) {
+      throw new Error(`入口文件必须在项目目录内: ${entryFile}`);
+    }
+    if (!existsSync(resolvedEntry)) throw new Error(`入口文件不存在: ${entryFile}`);
+    if (!statSync(resolvedEntry).isFile()) throw new Error(`入口文件不是有效文件: ${entryFile}`);
+  }
+
+  const entryRelative = isDocker ? entryFile : relative(process.cwd(), resolve(entryFile)).replace(/\\/g, '/');
   const bootFile = await prepareBootFile(entryRelative, outdir, runtime);
   const runtimeConfig = await resolveRuntimeConfig(runtime, outdir, bootFile);
 
-  const zip = new AdmZip();
-  zip.addLocalFolder(outdir);
-  const zipBase64 = zip.toBuffer().toString('base64');
   const environmentVariables: Record<string, string> = { NODE_ENV: 'production' };
   for (const [key, value] of Object.entries(project.envs)) {
     if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key)) {
@@ -49,34 +50,47 @@ export async function deployFC(appName: string, entryFile: string, runtime: FcRu
   }
   const vpcConfig = await resolveFunctionVpcConfig(project.network);
 
+  let code: { zipFile: string } | undefined;
+  if (!runtimeConfig.skipCodePackaging) {
+    const zip = new AdmZip();
+    zip.addLocalFolder(outdir);
+    code = { zipFile: zip.toBuffer().toString('base64') };
+  }
+
+  const createBody: Record<string, unknown> = {
+    functionName: appName,
+    runtime: runtimeConfig.runtime,
+    handler: runtimeConfig.handler,
+    memorySize: 256,
+    timeout: 30,
+    environmentVariables,
+    vpcConfig
+  };
+  if (code) createBody.code = code;
+  if (runtimeConfig.customRuntimeConfig) createBody.customRuntimeConfig = runtimeConfig.customRuntimeConfig;
+  if (runtimeConfig.customContainerConfig) createBody.customContainerConfig = runtimeConfig.customContainerConfig;
+
   const req = new $FC.CreateFunctionRequest({
-    body: new $FC.CreateFunctionInput({
-      functionName: appName,
-      runtime: runtimeConfig.runtime,
-      handler: runtimeConfig.handler,
-      memorySize: 256,
-      timeout: 30,
-      code: { zipFile: zipBase64 },
-      environmentVariables,
-      vpcConfig,
-      customRuntimeConfig: runtimeConfig.customRuntimeConfig
-    })
+    body: new $FC.CreateFunctionInput(createBody)
   });
 
   try {
     await withRetry(() => client.createFunction(req));
   } catch (err: unknown) {
     if (isConflictError(err)) {
+      const updateBody: Record<string, unknown> = {
+        runtime: runtimeConfig.runtime,
+        handler: runtimeConfig.handler,
+        environmentVariables,
+        vpcConfig
+      };
+      if (code) updateBody.code = code;
+      if (runtimeConfig.customRuntimeConfig) updateBody.customRuntimeConfig = runtimeConfig.customRuntimeConfig;
+      if (runtimeConfig.customContainerConfig) updateBody.customContainerConfig = runtimeConfig.customContainerConfig;
+
       try {
         await withRetry(() => client.updateFunction(appName, new $FC.UpdateFunctionRequest({
-          body: new $FC.UpdateFunctionInput({
-            code: { zipFile: zipBase64 },
-            runtime: runtimeConfig.runtime,
-            handler: runtimeConfig.handler,
-            environmentVariables,
-            vpcConfig,
-            customRuntimeConfig: runtimeConfig.customRuntimeConfig
-          })
+          body: new $FC.UpdateFunctionInput(updateBody)
         })));
       } catch (updateErr: unknown) {
         if (isInvalidRuntimeValueError(updateErr)) {

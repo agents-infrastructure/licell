@@ -1,6 +1,7 @@
 import type { CAC } from 'cac';
-import { intro, outro, spinner, select, text, isCancel } from '@clack/prompts';
+import { intro, outro, spinner, select, text, isCancel, confirm } from '@clack/prompts';
 import pc from 'picocolors';
+import { existsSync } from 'fs';
 import { Config } from '../utils/config';
 import { formatErrorMessage } from '../utils/errors';
 import { getRuntime } from '../providers/fc/runtime-handler';
@@ -34,7 +35,7 @@ export function registerDeployCommand(cli: CAC) {
     .option('--type <type>', '部署类型：api 或 static（适配 CI 非交互场景）')
     .option('--entry <entry>', 'API 入口文件（Node 默认 src/index.ts；Python 默认 src/main.py）')
     .option('--dist <dist>', '静态站点目录（默认 dist）')
-    .option('--runtime <runtime>', 'API Runtime（nodejs20、nodejs22=custom.debian12、python3.12，或 python3.13=custom.debian12；默认 nodejs20）')
+    .option('--runtime <runtime>', 'API Runtime（nodejs20、nodejs22、python3.12、python3.13、docker；默认 nodejs20）')
     .option('--target <target>', 'API 部署后自动发布并切流到该 alias（如 prod/preview）')
     .option('--domain-suffix <suffix>', '自动绑定固定子域名后缀（如 your-domain.xyz）')
     .option('--ssl', '配合固定域名自动签发/续签并绑定 HTTPS（需配置 domainSuffix）')
@@ -66,7 +67,14 @@ export function registerDeployCommand(cli: CAC) {
     const cliRuntime = options.runtime ? normalizeFcRuntime(options.runtime) : undefined;
     const projectRuntime = tryNormalizeFcRuntime(project.runtime);
     const envRuntime = tryNormalizeFcRuntime(readLicellEnv(process.env, 'FC_RUNTIME'));
-    const runtime = cliRuntime || projectRuntime || envRuntime || DEFAULT_FC_RUNTIME;
+    let runtime = cliRuntime || projectRuntime || envRuntime || DEFAULT_FC_RUNTIME;
+
+    if (runtime !== 'docker' && !cliRuntime && existsSync('Dockerfile') && interactiveTTY) {
+      const useDocker = await confirm({ message: '检测到 Dockerfile，是否使用 Docker 容器部署？' });
+      if (isCancel(useDocker)) process.exit(0);
+      if (useDocker) runtime = 'docker';
+    }
+
     const defaultApiEntry = getRuntime(runtime).defaultEntry;
 
     let type: 'api' | 'static';
@@ -105,21 +113,32 @@ export function registerDeployCommand(cli: CAC) {
       let promotedVersion: string | undefined;
       let fixedDomain: string | undefined;
       if (type === 'api') {
-        const entry = options.entry
-          ? toPromptValue(options.entry, '入口文件路径')
-          : interactiveTTY
-            ? toPromptValue(await text({
-              message: runtime.startsWith('python')
-                ? '入口文件路径 (Python 需包含 handler 函数):'
-                : '入口文件路径 (需导出 handler):',
-              initialValue: defaultApiEntry
-            }), '入口文件路径')
-            : defaultApiEntry;
+        let entry: string;
+        if (runtime === 'docker') {
+          entry = options.entry || '';
+        } else if (options.entry) {
+          entry = toPromptValue(options.entry, '入口文件路径');
+        } else if (interactiveTTY) {
+          entry = toPromptValue(await text({
+            message: runtime.startsWith('python')
+              ? '入口文件路径 (Python 需包含 handler 函数):'
+              : '入口文件路径 (需导出 handler):',
+            initialValue: defaultApiEntry
+          }), '入口文件路径');
+        } else {
+          entry = defaultApiEntry;
+        }
+
+        let spinnerMsg = '🔨 正在使用 Bun 极速剥离依赖打包，并推送至云端...';
+        if (runtime === 'docker') {
+          spinnerMsg = '🐳 正在构建 Docker 镜像并推送至 ACR...';
+        } else if (runtime.startsWith('python')) {
+          spinnerMsg = '🐍 正在打包 Python 源码并推送至云端...';
+        }
+
         const apiDeployResult = await withSpinner(
           s,
-          runtime.startsWith('python')
-            ? '🐍 正在打包 Python 源码并推送至云端...'
-            : '🔨 正在使用 Bun 极速剥离依赖打包，并推送至云端...',
+          spinnerMsg,
           '❌ 部署失败',
           async () => {
             const deployedUrl = await deployFC(appName, entry, runtime);
