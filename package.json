@@ -1,0 +1,41 @@
+{
+  "name": "aero-cli",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run src/cli.ts",
+    "build": "BUN_DISABLE_TRANSPILE_CACHE=1 bun build ./src/cli.ts --target node --packages external --minify --outfile dist/ali.js",
+    "build:bin": "./scripts/build-bin-wrapper.sh",
+    "typecheck": "bun x tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@alicloud/alidns20150109": "^3.0.1",
+    "@alicloud/ecs20140526": "^4.0.0",
+    "@alicloud/fc20230330": "^4.0.0",
+    "@alicloud/openapi-client": "^0.4.15",
+    "@alicloud/r-kvstore20150101": "^6.0.0",
+    "@alicloud/rds20140815": "^3.0.0",
+    "@alicloud/sls20201230": "^3.0.0",
+    "@alicloud/vpc20160428": "^3.0.0",
+    "@clack/prompts": "^0.7.0",
+    "acme-client": "^5.3.0",
+    "adm-zip": "^0.5.10",
+    "ali-oss": "^6.20.0",
+    "cac": "^6.7.14",
+    "mime-types": "^2.1.35",
+    "picocolors": "^1.0.0",
+    "tldts": "^7.0.17"
+  },
+  "devDependencies": {
+    "@types/adm-zip": "^0.5.5",
+    "@types/ali-oss": "^6.16.11",
+    "@types/bun": "^1.3.9",
+    "@types/mime-types": "^2.1.4",
+    "@types/node": "^20.0.0",
+    "@vitest/coverage-v8": "^4.0.18",
+    "vitest": "^4.0.18"
+  }
+}

@@ -1,0 +1,32 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+ali
+
+# Local project configs (may contain credentials)
+.ali/
+examples/**/.ali/
+
+# Environment files
+.env
+.env.*
+!.env.example
+examples/**/.env
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# Lock files (bun.lock is committed intentionally)
+# bun.lock
