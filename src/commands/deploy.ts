@@ -40,7 +40,8 @@ export function registerDeployCommand(cli: CAC) {
     .option('--domain-suffix <suffix>', '自动绑定固定子域名后缀（如 your-domain.xyz）')
     .option('--ssl', '配合固定域名自动签发/续签并绑定 HTTPS（需配置 domainSuffix）')
     .option('--ssl-force-renew', '启用 HTTPS 时强制续签证书（忽略到期阈值）')
-    .action(async (options: { target?: string; domainSuffix?: string; ssl?: boolean; sslForceRenew?: boolean; type?: string; entry?: string; dist?: string; runtime?: string }) => {
+    .option('--acr-namespace <ns>', 'Docker 部署时使用的 ACR 命名空间（默认 licell）')
+    .action(async (options: { target?: string; domainSuffix?: string; ssl?: boolean; sslForceRenew?: boolean; type?: string; entry?: string; dist?: string; runtime?: string; acrNamespace?: string }) => {
     intro(pc.bgBlue(pc.white(' ▲ Deploying to Aliyun ')));
     const auth = ensureAuthOrExit();
     const interactiveTTY = isInteractiveTTY();
@@ -73,6 +74,11 @@ export function registerDeployCommand(cli: CAC) {
       const useDocker = await confirm({ message: '检测到 Dockerfile，是否使用 Docker 容器部署？' });
       if (isCancel(useDocker)) process.exit(0);
       if (useDocker) runtime = 'docker';
+    }
+
+    if (runtime === 'docker' && options.acrNamespace) {
+      Config.setProject({ acrNamespace: options.acrNamespace.trim() });
+      project = Config.getProject();
     }
 
     const defaultApiEntry = getRuntime(runtime).defaultEntry;

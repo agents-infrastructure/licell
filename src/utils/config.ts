@@ -41,6 +41,7 @@ export interface ProjectCacheConfig {
 export interface ProjectConfig {
   appName?: string;
   runtime?: string;
+  acrNamespace?: string;
   envs: Record<string, string>;
   network?: ProjectNetworkConfig;
   cache?: ProjectCacheConfig;
@@ -101,6 +102,9 @@ export function normalizeProject(raw: unknown): ProjectConfig {
   if (typeof projectRaw.runtime === 'string' && projectRaw.runtime.trim().length > 0) {
     normalized.runtime = projectRaw.runtime.trim();
   }
+  if (typeof projectRaw.acrNamespace === 'string' && projectRaw.acrNamespace.trim().length > 0) {
+    normalized.acrNamespace = projectRaw.acrNamespace.trim();
+  }
 
   const networkRaw = isRecord(projectRaw.network) ? projectRaw.network : null;
   if (
@@ -134,7 +138,7 @@ export function normalizeProject(raw: unknown): ProjectConfig {
     normalized.cache = cache;
   }
 
-  const { appName: _a, runtime: _r, envs: _e, network: _n, cache: _c, ...extra } = projectRaw;
+  const { appName: _a, runtime: _r, acrNamespace: _an, envs: _e, network: _n, cache: _c, ...extra } = projectRaw;
   return { ...extra, ...normalized, envs };
 }
 

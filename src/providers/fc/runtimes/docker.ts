@@ -37,7 +37,7 @@ export const dockerHandler: RuntimeHandler = {
     const appName = project.appName;
     if (!appName) throw new Error('appName 未设置，请检查项目配置');
 
-    const acrInfo = await ensureAcrReady(appName, auth.region, auth);
+    const acrInfo = await ensureAcrReady(appName, auth.region, auth, project.acrNamespace);
     const tag = formatTimestampTag();
     const pushUri = buildImageUri(acrInfo, tag, false);
 

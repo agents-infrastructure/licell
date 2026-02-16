@@ -86,6 +86,20 @@ async function listPersonalNamespaces(client: CR): Promise<string[]> {
   return (resp.body?.data?.namespaces || []).map(ns => ns.namespace || '').filter(Boolean);
 }
 
+const DEFAULT_ACR_NAMESPACE = 'licell';
+
+export class NamespaceLimitError extends Error {
+  existing: string[];
+  constructor(existing: string[], desired: string) {
+    super(
+      `ACR 个人版命名空间数量已达上限（当前: ${existing.join(', ')}）。\n` +
+      `请前往阿里云控制台删除不需要的命名空间，或手动创建 "${desired}"。\n` +
+      `也可以使用已有命名空间：licell deploy --runtime docker --acr-namespace <name>`
+    );
+    this.existing = existing;
+  }
+}
+
 async function ensurePersonalNamespace(client: CR, namespaceName: string) {
   const existing = await listPersonalNamespaces(client);
   if (existing.includes(namespaceName)) return;
@@ -98,7 +112,7 @@ async function ensurePersonalNamespace(client: CR, namespaceName: string) {
   } catch (err) {
     if (isConflictError(err) || isNamespaceExistsError(err)) return;
     if (isCodeError(err, 'NAMESPACE_LIMIT_EXCEED')) {
-      throw new Error(`ACR 个人版命名空间数量已达上限（当前: ${existing.join(', ')}）。请前往阿里云控制台删除不需要的命名空间，或创建名为 "${namespaceName}" 的命名空间`);
+      throw new NamespaceLimitError(existing, namespaceName);
     }
     throw err;
   }
@@ -118,9 +132,9 @@ async function ensurePersonalRepository(client: CR, namespaceName: string, repoN
   }
 }
 
-export async function ensureAcrReady(appName: string, region: string, auth?: AuthConfig): Promise<AcrInfo> {
+export async function ensureAcrReady(appName: string, region: string, auth?: AuthConfig, acrNamespace?: string): Promise<AcrInfo> {
   const client = createCrClient(auth);
-  const namespace = 'licell';
+  const namespace = acrNamespace || DEFAULT_ACR_NAMESPACE;
   const repoName = appName;
 
   const enterprise = await findEnterpriseInstance(client);
