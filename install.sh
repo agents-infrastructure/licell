@@ -69,6 +69,20 @@ show_path_hint() {
   fi
 }
 
+adhoc_codesign_if_needed() {
+  local binary_path="$1"
+  local os="$2"
+  if [[ "$os" != "darwin" ]]; then
+    return 0
+  fi
+  if ! command -v codesign >/dev/null 2>&1; then
+    return 0
+  fi
+  if ! codesign --force --deep --sign - "$binary_path" >/dev/null 2>&1; then
+    log "warning: ad-hoc codesign failed for ${binary_path}, will rely on run check"
+  fi
+}
+
 download_with_optional_auth() {
   local url="$1"
   local output="$2"
@@ -157,6 +171,7 @@ install_from_binary_archive() {
 
   mkdir -p "$BIN_DIR"
   install -m 0755 "$src_bin" "${BIN_DIR}/licell"
+  adhoc_codesign_if_needed "${BIN_DIR}/licell" "$os"
   write_legacy_shim
 
   if ! "${BIN_DIR}/licell" --help >/dev/null 2>&1; then

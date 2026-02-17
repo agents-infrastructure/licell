@@ -41,7 +41,9 @@ curl -fsSL https://raw.githubusercontent.com/dafang/licell/main/install.sh | bas
 安装逻辑：
 
 - 优先下载 `releases/latest` 的 `licell-<os>-<arch>.tar.gz` 预构建资产
-- 资产如果是单文件可执行，直接安装；若是 Node 运行包，则使用内置依赖运行（需 Node `>= 20`，无需 npm/pnpm/yarn）
+- 资产默认是单文件可执行（内置 Node 运行时，无需本机安装 Node/npm）
+- macOS 下安装时会自动尝试做一次 ad-hoc `codesign`，避免未签名二进制被系统拦截
+- 兼容历史资产：若资产是旧版 Node 运行包，安装器仍可识别并安装
 - 如果当前平台暂无预构建资产，则自动回退到源码安装
 
 如果你的 shell 里还没有 `~/.local/bin`，先加 PATH：
@@ -80,7 +82,7 @@ bun run build:bin
 
 ## 发布资产构建（维护者）
 
-构建当前平台发布资产（优先单文件可执行，失败自动回退 Node 运行包）：
+构建当前平台发布资产（单文件可执行）：
 
 ```bash
 bun run build:standalone
@@ -88,8 +90,13 @@ bun run build:standalone
 
 产物：
 
-- `dist/licell-<os>-<arch>`（仅当 Bun `--compile` 成功时输出）
+- `dist/licell-<os>-<arch>`（单文件可执行）
 - `dist/licell-<os>-<arch>.tar.gz`（发布到 GitHub Release 的资产名）
+
+说明：
+
+- 构建链路使用 `esbuild + pkg`，不依赖 Bun 的 `--compile`
+- 默认内置 Node 18 运行时（可通过 `LICELL_STANDALONE_NODE_TARGET` 覆盖）
 
 ## 自动 Release 流程（GitHub Actions）
 

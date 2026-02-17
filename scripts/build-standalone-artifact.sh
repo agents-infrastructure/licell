@@ -6,6 +6,7 @@ OUT_DIR="${ROOT_DIR}/dist"
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/licell-standalone.XXXXXX")"
 TARGET_OS="${LICELL_TARGET_OS:-}"
 TARGET_ARCH="${LICELL_TARGET_ARCH:-}"
+NODE_TARGET_VERSION="${LICELL_STANDALONE_NODE_TARGET:-18}"
 
 cleanup() {
   rm -rf "$TMP_DIR"
@@ -69,55 +70,33 @@ normalize_target() {
   echo "${os}" "${arch}"
 }
 
-build_runtime_package() {
-  local archive_path="$1"
-  local bundle_dir="${TMP_DIR}/runtime"
+pkg_target_for() {
+  local os="$1"
+  local arch="$2"
+
+  case "${os}-${arch}" in
+    linux-x64) echo "node${NODE_TARGET_VERSION}-linux-x64" ;;
+    linux-arm64) echo "node${NODE_TARGET_VERSION}-linux-arm64" ;;
+    darwin-x64) echo "node${NODE_TARGET_VERSION}-macos-x64" ;;
+    darwin-arm64) echo "node${NODE_TARGET_VERSION}-macos-arm64" ;;
+    *)
+      echo "[build-standalone] unsupported pkg target: ${os}-${arch}" >&2
+      exit 1
+      ;;
+  esac
+}
+
+main() {
+  require_cmd tar
+  require_cmd mktemp
+  require_cmd npm
 
   [[ -d "${ROOT_DIR}/node_modules" ]] || {
     echo "[build-standalone] missing node_modules, run bun install first" >&2
     exit 1
   }
 
-  mkdir -p "${bundle_dir}/dist"
-
-  cat > "${bundle_dir}/licell" <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-exec node "${ROOT_DIR}/dist/licell.js" "$@"
-EOF
-
-  cat > "${bundle_dir}/ali" <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-exec "${ROOT_DIR}/licell" "$@"
-EOF
-
-  chmod +x "${bundle_dir}/licell" "${bundle_dir}/ali"
-
-  echo "[build-standalone] building JS runtime bundle"
-  BUN_DISABLE_TRANSPILE_CACHE=1 bun build "${ROOT_DIR}/src/cli.ts" \
-    --target node \
-    --packages external \
-    --minify \
-    --outfile "${bundle_dir}/dist/licell.js"
-
-  cp -R "${ROOT_DIR}/node_modules" "${bundle_dir}/node_modules"
-  cp "${ROOT_DIR}/package.json" "${bundle_dir}/package.json"
-  if [[ -f "${ROOT_DIR}/bun.lock" ]]; then
-    cp "${ROOT_DIR}/bun.lock" "${bundle_dir}/bun.lock"
-  fi
-
-  tar -czf "$archive_path" -C "$bundle_dir" .
-}
-
-main() {
-  require_cmd bun
-  require_cmd tar
-  require_cmd mktemp
-
-  local host_os host_arch os arch bun_target bin_path archive_path mode
+  local host_os host_arch os arch pkg_target bundle_path bin_path archive_path
   read -r host_os host_arch < <(detect_os_arch)
 
   if [[ -n "$TARGET_OS" || -n "$TARGET_ARCH" ]]; then
@@ -133,34 +112,38 @@ main() {
 
   mkdir -p "$OUT_DIR"
 
-  bun_target="bun-${os}-${arch}"
+  pkg_target="$(pkg_target_for "$os" "$arch")"
+  bundle_path="${TMP_DIR}/licell-bundle.cjs"
   bin_path="${OUT_DIR}/licell-${os}-${arch}"
   archive_path="${OUT_DIR}/licell-${os}-${arch}.tar.gz"
 
-  echo "[build-standalone] building executable: ${bin_path} (target=${bun_target})"
-  if BUN_DISABLE_TRANSPILE_CACHE=1 bun build "${ROOT_DIR}/src/cli.ts" \
-    --compile \
-    --target "${bun_target}" \
-    --minify \
-    --outfile "$bin_path"; then
-    chmod +x "$bin_path"
-    cp "$bin_path" "${TMP_DIR}/licell"
-    chmod +x "${TMP_DIR}/licell"
-    tar -czf "$archive_path" -C "$TMP_DIR" licell
-    mode="standalone-binary"
-  else
-    echo "[build-standalone] compile failed for ${bun_target}, fallback to runtime package" >&2
-    build_runtime_package "$archive_path"
-    mode="node-runtime-package"
-  fi
+  echo "[build-standalone] bundling entry with esbuild: target=node${NODE_TARGET_VERSION}"
+  npm exec --yes --package=esbuild -- \
+    esbuild "${ROOT_DIR}/src/cli.ts" \
+      --bundle \
+      --platform=node \
+      --target="node${NODE_TARGET_VERSION}" \
+      --format=cjs \
+      --outfile="${bundle_path}"
+
+  echo "[build-standalone] building standalone binary with pkg: ${pkg_target}"
+  npm exec --yes --package=pkg -- \
+    pkg "${bundle_path}" \
+      --targets "${pkg_target}" \
+      --compress GZip \
+      --output "${bin_path}"
+  chmod +x "${bin_path}"
+
+  cp "${bin_path}" "${TMP_DIR}/licell"
+  chmod +x "${TMP_DIR}/licell"
+  tar -czf "${archive_path}" -C "${TMP_DIR}" licell
 
   echo "[build-standalone] done"
-  echo "[build-standalone] mode:    ${mode}"
-  if [[ "$mode" == "standalone-binary" ]]; then
-    echo "[build-standalone] binary:  ${bin_path}"
-  fi
+  echo "[build-standalone] binary:  ${bin_path}"
   echo "[build-standalone] archive: ${archive_path}"
-  echo "[build-standalone] upload archive to GitHub Release asset with same file name"
+  if [[ "$os" == "darwin" ]]; then
+    echo "[build-standalone] note: darwin binaries may need ad-hoc codesign on the target machine"
+  fi
 }
 
 main "$@"
