@@ -133,7 +133,8 @@ export function registerFnCommands(cli: CAC) {
     });
 
   cli.command('fn rm [name]', '删除函数')
-    .action(async (name: string | undefined) => {
+    .option('--force', '级联删除触发器、alias、已发布版本后再删除函数')
+    .action(async (name: string | undefined, options: { force?: boolean }) => {
       ensureAuthOrExit();
       const project = Config.getProject();
       const functionName = toOptionalString(name) || project.appName;
@@ -144,15 +145,17 @@ export function registerFnCommands(cli: CAC) {
       const s = spinner();
       const deleted = await withSpinner(
         s,
-        `正在删除函数 ${functionName}...`,
+        options.force
+          ? `正在级联清理并删除函数 ${functionName}...`
+          : `正在删除函数 ${functionName}...`,
         '❌ 删除函数失败',
-        async () => {
-          await removeFunction(functionName);
-          return true;
-        }
+        () => removeFunction(functionName, { force: Boolean(options.force) })
       );
       if (!deleted) return;
       s.stop(pc.green('✅ 函数已删除'));
+      if (deleted.forced) {
+        console.log(`\ncleanup: triggers=${deleted.deletedTriggers.length} aliases=${deleted.deletedAliases.length} versions=${deleted.deletedVersions.length}`);
+      }
       outro('Done.');
     });
 }

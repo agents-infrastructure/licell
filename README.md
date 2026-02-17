@@ -282,6 +282,7 @@ licell env pull --target preview
 licell fn info [name] --target preview
 licell fn invoke [name] --target preview --payload '{"ping":"pong"}'
 licell fn rm [name]
+licell fn rm [name] --force
 ```
 
 日志：

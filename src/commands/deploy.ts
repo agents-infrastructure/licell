@@ -17,6 +17,7 @@ import {
 import { deployOSS } from '../providers/oss';
 import { bindCustomDomain } from '../providers/domain';
 import { issueAndBindSSL } from '../providers/ssl';
+import { normalizeAcrNamespace } from '../providers/cr';
 import { readLicellEnv } from '../utils/env';
 import {
   toPromptValue,
@@ -69,6 +70,7 @@ export function registerDeployCommand(cli: CAC) {
     const projectRuntime = tryNormalizeFcRuntime(project.runtime);
     const envRuntime = tryNormalizeFcRuntime(readLicellEnv(process.env, 'FC_RUNTIME'));
     let runtime = cliRuntime || projectRuntime || envRuntime || DEFAULT_FC_RUNTIME;
+    const cliAcrNamespace = options.acrNamespace ? normalizeAcrNamespace(options.acrNamespace) : undefined;
 
     if (runtime !== 'docker' && !cliRuntime && existsSync('Dockerfile') && interactiveTTY) {
       const useDocker = await confirm({ message: '检测到 Dockerfile，是否使用 Docker 容器部署？' });
@@ -76,8 +78,11 @@ export function registerDeployCommand(cli: CAC) {
       if (useDocker) runtime = 'docker';
     }
 
-    if (runtime === 'docker' && options.acrNamespace) {
-      Config.setProject({ acrNamespace: options.acrNamespace.trim() });
+    if (cliAcrNamespace && runtime !== 'docker') {
+      throw new Error('--acr-namespace 仅适用于 --runtime docker');
+    }
+    if (runtime === 'docker' && cliAcrNamespace) {
+      Config.setProject({ acrNamespace: cliAcrNamespace });
       project = Config.getProject();
     }
 

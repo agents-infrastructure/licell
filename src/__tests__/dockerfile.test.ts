@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'fs';
+import { mkdtempSync, writeFileSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
@@ -54,7 +54,7 @@ describe('dockerfile generation', () => {
       writeFileSync(join(projectRoot, 'package.json'), JSON.stringify({ name: 'test' }));
       const df = generateDockerfile(projectRoot);
       expect(df).toContain('FROM node:22-slim');
-      expect(df).toContain('npm ci --omit=dev');
+      expect(df).toContain('npm install');
       expect(df).toContain('EXPOSE 9000');
       expect(df).toContain('CMD ["node", "src/index.js"]');
     });
@@ -66,6 +66,14 @@ describe('dockerfile generation', () => {
       expect(df).toContain('FROM oven/bun:1-slim');
       expect(df).toContain('bun install');
       expect(df).toContain('CMD ["bun", "run"');
+    });
+
+    it('uses bun image when bun.lock exists', () => {
+      writeFileSync(join(projectRoot, 'package.json'), JSON.stringify({ name: 'test' }));
+      writeFileSync(join(projectRoot, 'bun.lock'), '');
+      const df = generateDockerfile(projectRoot);
+      expect(df).toContain('FROM oven/bun:1-slim');
+      expect(df).toContain('COPY package.json bun.lock ./');
     });
 
     it('uses pnpm when pnpm-lock.yaml exists', () => {
@@ -91,10 +99,16 @@ describe('dockerfile generation', () => {
     });
 
     it('uses dist/index.js entry when tsconfig exists', () => {
-      writeFileSync(join(projectRoot, 'package.json'), JSON.stringify({ name: 'test' }));
+      writeFileSync(join(projectRoot, 'package.json'), JSON.stringify({ name: 'test', scripts: { build: 'tsc' } }));
       writeFileSync(join(projectRoot, 'tsconfig.json'), '{}');
       const df = generateDockerfile(projectRoot);
       expect(df).toContain('CMD ["node", "dist/index.js"]');
+    });
+
+    it('throws when tsconfig exists but no build script and no explicit entry', () => {
+      writeFileSync(join(projectRoot, 'package.json'), JSON.stringify({ name: 'test' }));
+      writeFileSync(join(projectRoot, 'tsconfig.json'), '{}');
+      expect(() => generateDockerfile(projectRoot)).toThrow('缺少 build 脚本');
     });
 
     it('uses custom entry file when provided', () => {
@@ -117,6 +131,7 @@ describe('dockerfile generation', () => {
     it('generates pyproject.toml-based Dockerfile', () => {
       writeFileSync(join(projectRoot, 'pyproject.toml'), '[project]\nname="test"\n');
       const df = generateDockerfile(projectRoot);
+      expect(df.indexOf('COPY . .')).toBeLessThan(df.indexOf('RUN pip install --no-cache-dir .'));
       expect(df).toContain('pip install --no-cache-dir .');
     });
 

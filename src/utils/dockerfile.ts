@@ -42,30 +42,35 @@ registerDetector({
     return existsSync(join(projectRoot, 'package.json'));
   },
   generate(projectRoot, entryFile) {
-    const hasBunLock = existsSync(join(projectRoot, 'bun.lockb'));
+    const hasBunLockBinary = existsSync(join(projectRoot, 'bun.lockb'));
+    const hasBunLockText = existsSync(join(projectRoot, 'bun.lock'));
     const hasPnpmLock = existsSync(join(projectRoot, 'pnpm-lock.yaml'));
     const hasYarnLock = existsSync(join(projectRoot, 'yarn.lock'));
+    const hasNpmLock = existsSync(join(projectRoot, 'package-lock.json')) || existsSync(join(projectRoot, 'npm-shrinkwrap.json'));
     const pkg = readJsonFile(join(projectRoot, 'package.json'));
     const hasTs = existsSync(join(projectRoot, 'tsconfig.json'));
     const scripts = (pkg?.scripts ?? {}) as Record<string, string>;
     const hasBuildScript = 'build' in scripts;
-
     const entry = entryFile || (hasTs ? 'dist/index.js' : 'src/index.js');
 
-    if (hasBunLock) {
+    if (!entryFile && hasTs && !hasBuildScript) {
+      throw new Error(
+        '检测到 tsconfig.json 但缺少 build 脚本，无法自动推断容器启动入口。\n' +
+        '请在 package.json 中添加 build 脚本，或通过 --entry 指定可运行的 JS 入口，或手动维护 Dockerfile。'
+      );
+    }
+
+    if (hasBunLockBinary || hasBunLockText) {
+      const bunLockFile = hasBunLockBinary ? 'bun.lockb' : 'bun.lock';
       const lines = [
-        'FROM oven/bun:1-slim AS builder',
+        'FROM oven/bun:1-slim',
         'WORKDIR /app',
-        'COPY package.json bun.lockb ./',
-        'RUN bun install --frozen-lockfile --production',
+        `COPY package.json ${bunLockFile} ./`,
+        'RUN bun install --frozen-lockfile',
         'COPY . .',
       ];
       if (hasBuildScript) lines.push('RUN bun run build');
       lines.push(
-        '',
-        'FROM oven/bun:1-slim',
-        'WORKDIR /app',
-        'COPY --from=builder /app .',
         'ENV PORT=9000',
         'EXPOSE 9000',
         `CMD ["bun", "run", "${entry}"]`,
@@ -74,18 +79,18 @@ registerDetector({
       return lines.join('\n');
     }
 
-    let installCmd = 'npm ci --omit=dev';
+    let installCmd = hasNpmLock ? 'npm ci' : 'npm install';
     let copyLock = 'COPY package*.json ./';
     if (hasPnpmLock) {
-      installCmd = 'corepack enable && pnpm install --frozen-lockfile --prod';
+      installCmd = 'corepack enable && pnpm install --frozen-lockfile';
       copyLock = 'COPY package.json pnpm-lock.yaml ./';
     } else if (hasYarnLock) {
-      installCmd = 'yarn install --frozen-lockfile --production';
+      installCmd = 'corepack enable && yarn install --frozen-lockfile';
       copyLock = 'COPY package.json yarn.lock ./';
     }
 
     const lines = [
-      'FROM node:22-slim AS builder',
+      'FROM node:22-slim',
       'WORKDIR /app',
       copyLock,
       `RUN ${installCmd}`,
@@ -93,10 +98,6 @@ registerDetector({
     ];
     if (hasBuildScript) lines.push('RUN npm run build');
     lines.push(
-      '',
-      'FROM node:22-slim',
-      'WORKDIR /app',
-      'COPY --from=builder /app .',
       'ENV PORT=9000',
       'EXPOSE 9000',
       `CMD ["node", "${entry}"]`,
@@ -119,13 +120,14 @@ registerDetector({
     const lines = ['FROM python:3.13-slim', 'WORKDIR /app'];
 
     if (hasRequirements) {
-      lines.push('COPY requirements.txt ./', 'RUN pip install --no-cache-dir -r requirements.txt');
+      lines.push('COPY requirements.txt ./', 'RUN pip install --no-cache-dir -r requirements.txt', 'COPY . .');
     } else if (hasPyproject) {
-      lines.push('COPY pyproject.toml ./', 'RUN pip install --no-cache-dir .');
+      lines.push('COPY . .', 'RUN pip install --no-cache-dir .');
+    } else {
+      lines.push('COPY . .');
     }
 
     lines.push(
-      'COPY . .',
       'ENV PORT=9000',
       'EXPOSE 9000',
       `CMD ["python", "${entry}"]`,

@@ -11,8 +11,12 @@ export function checkDockerAvailable() {
   }
 }
 
-export function dockerBuild(imageTag: string, contextDir: string) {
-  const result = spawnSync('docker', ['build', '--platform', 'linux/amd64', '-t', imageTag, contextDir], {
+export function dockerBuild(imageTag: string, contextDir: string, dockerfilePath?: string) {
+  const args = ['build', '--platform', 'linux/amd64'];
+  if (dockerfilePath) args.push('-f', dockerfilePath);
+  args.push('-t', imageTag, contextDir);
+
+  const result = spawnSync('docker', args, {
     stdio: 'inherit',
     timeout: 600_000
   });

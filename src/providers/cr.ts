@@ -21,6 +21,22 @@ export interface DockerCredentials {
   password: string;
 }
 
+const DEFAULT_ACR_NAMESPACE = 'licell';
+const ACR_NAMESPACE_MAX_LENGTH = 120;
+const ACR_NAMESPACE_PATTERN = /^[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?$/;
+
+export function normalizeAcrNamespace(input: string): string {
+  const value = input.trim().toLowerCase();
+  if (!value) throw new Error('ACR namespace 不能为空');
+  if (value.length < 2 || value.length > ACR_NAMESPACE_MAX_LENGTH) {
+    throw new Error(`ACR namespace 长度需在 2-${ACR_NAMESPACE_MAX_LENGTH} 之间`);
+  }
+  if (!ACR_NAMESPACE_PATTERN.test(value)) {
+    throw new Error('ACR namespace 仅支持小写字母、数字、点、短横线、下划线，且分隔符不能在首尾');
+  }
+  return value;
+}
+
 function createCrClient(auth?: AuthConfig) {
   const resolved = auth ?? Config.requireAuth();
   return new CRClientCtor(new $OpenApi.Config({
@@ -86,8 +102,6 @@ async function listPersonalNamespaces(client: CR): Promise<string[]> {
   return (resp.body?.data?.namespaces || []).map(ns => ns.namespace || '').filter(Boolean);
 }
 
-const DEFAULT_ACR_NAMESPACE = 'licell';
-
 export class NamespaceLimitError extends Error {
   existing: string[];
   constructor(existing: string[], desired: string) {
@@ -134,7 +148,7 @@ async function ensurePersonalRepository(client: CR, namespaceName: string, repoN
 
 export async function ensureAcrReady(appName: string, region: string, auth?: AuthConfig, acrNamespace?: string): Promise<AcrInfo> {
   const client = createCrClient(auth);
-  const namespace = acrNamespace || DEFAULT_ACR_NAMESPACE;
+  const namespace = normalizeAcrNamespace(acrNamespace || DEFAULT_ACR_NAMESPACE);
   const repoName = appName;
 
   const enterprise = await findEnterpriseInstance(client);

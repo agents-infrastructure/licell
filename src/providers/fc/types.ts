@@ -23,6 +23,13 @@ export interface FunctionInvokeResult {
   body: string;
 }
 
+export interface RemoveFunctionResult {
+  forced: boolean;
+  deletedTriggers: string[];
+  deletedAliases: string[];
+  deletedVersions: string[];
+}
+
 export interface PruneFunctionVersionsResult {
   apply: boolean;
   keep: number;

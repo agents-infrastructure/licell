@@ -1,7 +1,7 @@
 import * as $FC from '@alicloud/fc20230330';
 import { Readable } from 'stream';
 import { createFcClient } from './client';
-import type { FunctionInvokeResult, FunctionSummary } from './types';
+import type { FunctionInvokeResult, FunctionSummary, RemoveFunctionResult } from './types';
 
 export async function pullFunctionEnvs(appName: string, qualifier?: string) {
   const { client } = createFcClient();
@@ -58,11 +58,135 @@ export async function getFunctionInfo(functionName: string, qualifier?: string) 
   return fn;
 }
 
-export async function removeFunction(functionName: string) {
+function isNotFoundError(err: unknown) {
+  if (typeof err !== 'object' || err === null) return false;
+  const error = err as { code?: string; message?: string };
+  const text = `${error.code || ''} ${error.message || ''}`;
+  return /NotFound|404|ResourceNotFound/i.test(text);
+}
+
+async function listAllTriggers(functionName: string, client: ReturnType<typeof createFcClient>['client']) {
+  const triggers: $FC.Trigger[] = [];
+  let nextToken: string | undefined;
+  const MAX_PAGES = 50;
+
+  for (let page = 0; page < MAX_PAGES; page += 1) {
+    const response = await client.listTriggers(functionName, new $FC.ListTriggersRequest({
+      limit: 100,
+      nextToken
+    }));
+    const rows = response.body?.triggers || [];
+    triggers.push(...rows);
+    nextToken = response.body?.nextToken;
+    if (!nextToken || rows.length === 0) break;
+  }
+
+  return triggers;
+}
+
+async function listAllAliases(functionName: string, client: ReturnType<typeof createFcClient>['client']) {
+  const aliases: $FC.Alias[] = [];
+  let nextToken: string | undefined;
+  const MAX_PAGES = 50;
+
+  for (let page = 0; page < MAX_PAGES; page += 1) {
+    const response = await client.listAliases(functionName, new $FC.ListAliasesRequest({
+      limit: 100,
+      nextToken
+    }));
+    const rows = response.body?.aliases || [];
+    aliases.push(...rows);
+    nextToken = response.body?.nextToken;
+    if (!nextToken || rows.length === 0) break;
+  }
+
+  return aliases;
+}
+
+async function listAllFunctionVersions(functionName: string, client: ReturnType<typeof createFcClient>['client']) {
+  const versions: $FC.Version[] = [];
+  let nextToken: string | undefined;
+  const MAX_PAGES = 50;
+
+  for (let page = 0; page < MAX_PAGES; page += 1) {
+    const response = await client.listFunctionVersions(functionName, new $FC.ListFunctionVersionsRequest({
+      direction: 'BACKWARD',
+      limit: 100,
+      nextToken
+    }));
+    const rows = response.body?.versions || [];
+    versions.push(...rows);
+    nextToken = response.body?.nextToken;
+    if (!nextToken || rows.length === 0) break;
+  }
+
+  return versions;
+}
+
+export async function removeFunction(
+  functionName: string,
+  options: { force?: boolean } = {}
+): Promise<RemoveFunctionResult> {
   const normalizedName = functionName.trim();
   if (!normalizedName) throw new Error('functionName 不能为空');
   const { client } = createFcClient();
+  if (!options.force) {
+    await client.deleteFunction(normalizedName);
+    return {
+      forced: false,
+      deletedTriggers: [],
+      deletedAliases: [],
+      deletedVersions: []
+    };
+  }
+
+  const deletedTriggers: string[] = [];
+  const deletedAliases: string[] = [];
+  const deletedVersions: string[] = [];
+
+  const triggers = await listAllTriggers(normalizedName, client);
+  for (const trigger of triggers) {
+    const triggerName = trigger.triggerName;
+    if (!triggerName) continue;
+    try {
+      await client.deleteTrigger(normalizedName, triggerName);
+      deletedTriggers.push(triggerName);
+    } catch (err: unknown) {
+      if (!isNotFoundError(err)) throw err;
+    }
+  }
+
+  const aliases = await listAllAliases(normalizedName, client);
+  for (const alias of aliases) {
+    const aliasName = alias.aliasName;
+    if (!aliasName) continue;
+    try {
+      await client.deleteAlias(normalizedName, aliasName);
+      deletedAliases.push(aliasName);
+    } catch (err: unknown) {
+      if (!isNotFoundError(err)) throw err;
+    }
+  }
+
+  const versions = await listAllFunctionVersions(normalizedName, client);
+  for (const version of versions) {
+    const versionId = version.versionId || '';
+    if (!/^\d+$/.test(versionId)) continue;
+    try {
+      await client.deleteFunctionVersion(normalizedName, versionId);
+      deletedVersions.push(versionId);
+    } catch (err: unknown) {
+      if (!isNotFoundError(err)) throw err;
+    }
+  }
+
   await client.deleteFunction(normalizedName);
+  return {
+    forced: true,
+    deletedTriggers,
+    deletedAliases,
+    deletedVersions
+  };
 }
 
 async function readInvokeBody(readable?: Readable) {

@@ -3,6 +3,7 @@ export {
   DEFAULT_FC_RUNTIME,
   type FunctionSummary,
   type FunctionInvokeResult,
+  type RemoveFunctionResult,
   type PruneFunctionVersionsResult
 } from './fc/types';
 
