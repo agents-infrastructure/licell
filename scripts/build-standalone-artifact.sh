@@ -117,21 +117,30 @@ main() {
   bin_path="${OUT_DIR}/licell-${os}-${arch}"
   archive_path="${OUT_DIR}/licell-${os}-${arch}.tar.gz"
 
+  mkdir -p "${TMP_DIR}/tooling"
+
   echo "[build-standalone] bundling entry with esbuild: target=node${NODE_TARGET_VERSION}"
-  npm exec --yes --package=esbuild -- \
-    esbuild "${ROOT_DIR}/src/cli.ts" \
-      --bundle \
-      --platform=node \
-      --target="node${NODE_TARGET_VERSION}" \
-      --format=cjs \
-      --outfile="${bundle_path}"
+  (
+    cd "${TMP_DIR}/tooling"
+    npm exec --yes --package=esbuild -- \
+      esbuild "${ROOT_DIR}/src/cli.ts" \
+        --bundle \
+        --platform=node \
+        --target="node${NODE_TARGET_VERSION}" \
+        --format=cjs \
+        --external:proxy-agent \
+        --outfile="${bundle_path}"
+  )
 
   echo "[build-standalone] building standalone binary with pkg: ${pkg_target}"
-  npm exec --yes --package=pkg -- \
-    pkg "${bundle_path}" \
-      --targets "${pkg_target}" \
-      --compress GZip \
-      --output "${bin_path}"
+  (
+    cd "${TMP_DIR}/tooling"
+    npm exec --yes --package=pkg -- \
+      pkg "${bundle_path}" \
+        --targets "${pkg_target}" \
+        --compress GZip \
+        --output "${bin_path}"
+  )
   chmod +x "${bin_path}"
 
   cp "${bin_path}" "${TMP_DIR}/licell"

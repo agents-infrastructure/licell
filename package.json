@@ -29,7 +29,6 @@
     "cac": "^6.7.14",
     "mime-types": "^2.1.35",
     "picocolors": "^1.0.0",
-    "proxy-agent": "^6.5.0",
     "tldts": "^7.0.17"
   },
   "devDependencies": {
