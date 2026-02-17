@@ -19,11 +19,11 @@ Run login here so Licell CLI writes local project binding to:
 licell login
 ```
 
-If your `licell` is not installed globally yet, from repo root you can use:
+If your `licell` command is missing, install it first:
 
 ```bash
-cd /path/to/licell/examples/hello-world-api
-../../scripts/licell-tsx.sh login
+curl -fsSL https://raw.githubusercontent.com/dafang/licell/main/install.sh | bash
+export PATH="$HOME/.local/bin:$PATH"
 ```
 
 ## 3) First deploy (API)
@@ -177,11 +177,11 @@ From repo root:
 
 ```bash
 cd /path/to/licell
-LICELL_BIN=./scripts/licell-tsx.sh ./scripts/smoke.sh --target preview --expect-key TEST_FLAG --expect-value from-cloud
+LICELL_BIN=./licell ./scripts/smoke.sh --target preview --expect-key TEST_FLAG --expect-value from-cloud
 ```
 
 Optional:
 
 ```bash
-LICELL_BIN=./scripts/licell-tsx.sh ./scripts/smoke.sh --target preview --domain api.example.com --with-ssl
+LICELL_BIN=./licell ./scripts/smoke.sh --target preview --domain api.example.com --with-ssl
 ```

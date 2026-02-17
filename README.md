@@ -25,29 +25,91 @@ TypeScript + Bun 实现的阿里云部署 CLI，目标是把阿里云上的部�
 
 ## 前置要求
 
-- Bun `>= 1.3`
-- Node.js `>= 20`（用于开发/脚本）
+- 推荐：使用 GitHub Release 预编译二进制（无需 Node/npm）
+- 若回退源码安装：Node.js `>= 20` + Bun `>= 1.3` + npm/pnpm/yarn（默认 npm）
 - 阿里云 AK/SK，权限至少覆盖 FC、RDS、Tair(KVStore)、OSS、AliDNS、SLS、VPC
 - 如果要自动签发 HTTPS，域名必须托管在阿里云 DNS（AliDNS）
 
-## 安装与运行
+## 安装与升级
+
+一键安装（默认安装到 `~/.local/bin/licell`）：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/dafang/licell/main/install.sh | bash
+```
+
+安装逻辑：
+
+- 优先下载 `releases/latest` 的 `licell-<os>-<arch>.tar.gz` 预编译二进制（不依赖 Node/npm）
+- 如果当前平台暂无预编译资产，则自动回退到源码安装
+
+如果你的 shell 里还没有 `~/.local/bin`，先加 PATH：
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+licell --help
+```
+
+升级到最新 main：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/dafang/licell/main/install.sh | bash
+```
+
+指定分支 / commit 安装：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/dafang/licell/main/install.sh | LICELL_REF=<ref> bash
+```
+
+指定预编译二进制地址安装：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/dafang/licell/main/install.sh | LICELL_BINARY_URL=https://example.com/licell-darwin-arm64.tar.gz bash
+```
+
+## 从源码开发（可选）
 
 ```bash
 cd <licell-repo-dir>
 bun install
-```
-
-开发态直接运行 CLI：
-
-```bash
-./scripts/licell-tsx.sh --help
-```
-
-构建二进制：
-
-```bash
 bun run build:bin
 ./licell --help
+```
+
+## 预编译发布（维护者）
+
+构建当前平台可执行文件与发布资产：
+
+```bash
+bun run build:standalone
+```
+
+产物：
+
+- `dist/licell-<os>-<arch>`（可执行文件）
+- `dist/licell-<os>-<arch>.tar.gz`（发布到 GitHub Release 的资产名）
+
+## 自动 Release 流程（GitHub Actions）
+
+仓库内置 `release` workflow（`.github/workflows/release.yml`）：
+
+- `push v*` tag：自动跑 `typecheck + test`，构建 4 平台资产并发布 Release
+- `workflow_dispatch`：手动输入 `tag` 与 `ref` 发布
+
+自动发布的资产名与安装脚本匹配：
+
+- `licell-darwin-arm64.tar.gz`
+- `licell-darwin-x64.tar.gz`
+- `licell-linux-arm64.tar.gz`
+- `licell-linux-x64.tar.gz`
+- `SHA256SUMS.txt`
+
+发布一个新版本（推荐）：
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
 ```
 
 ## 在哪个目录执行命令
@@ -75,22 +137,22 @@ cd examples/hello-world-api
 
 ```bash
 # Node TypeScript
-../../scripts/licell-tsx.sh init --template node
+licell init --template node
 
 # Python
-../../scripts/licell-tsx.sh init --template python --runtime python3.12
+licell init --template python --runtime python3.12
 ```
 
 登录（默认地域杭州）：
 
 ```bash
-../../scripts/licell-tsx.sh login --region cn-hangzhou
+licell login --region cn-hangzhou
 ```
 
 首次部署（Node 22 + preview + 固定域名 + HTTPS）：
 
 ```bash
-../../scripts/licell-tsx.sh deploy \
+licell deploy \
   --type api \
   --entry src/index.ts \
   --runtime nodejs22 \
@@ -312,17 +374,16 @@ export LICELL_ACCOUNT_ID=xxxxxxxxxxxx
 export LICELL_ACCESS_KEY_ID=xxxxxxxxxxxx
 export LICELL_ACCESS_KEY_SECRET=xxxxxxxxxxxx
 export LICELL_REGION=cn-hangzhou
-export LICELL_BIN=./scripts/licell-tsx.sh
 
 cd /path/to/your-app
 
-"$LICELL_BIN" login \
+licell login \
   --account-id "$LICELL_ACCOUNT_ID" \
   --ak "$LICELL_ACCESS_KEY_ID" \
   --sk "$LICELL_ACCESS_KEY_SECRET" \
   --region "$LICELL_REGION"
 
-"$LICELL_BIN" deploy \
+licell deploy \
   --type api \
   --entry src/index.ts \
   --runtime nodejs22 \
@@ -331,7 +392,7 @@ cd /path/to/your-app
   --ssl
 ```
 
-## 测试与验证
+## 开发测试与验证
 
 本地质量检查：
 
@@ -345,7 +406,7 @@ E2E 冒烟（脚本）：
 
 ```bash
 cd <licell-repo-dir>
-LICELL_BIN=./scripts/licell-tsx.sh ./scripts/smoke.sh \
+LICELL_BIN=./licell ./scripts/smoke.sh \
   --target preview \
   --expect-key TEST_FLAG \
   --expect-value from-cloud \
@@ -361,6 +422,9 @@ LICELL_BIN=./scripts/licell-tsx.sh ./scripts/smoke.sh \
 | `LICELL_ACCESS_KEY_ID` | 非交互登录 AK | - |
 | `LICELL_ACCESS_KEY_SECRET` | 非交互登录 SK | - |
 | `LICELL_REGION` | 默认地域 | `cn-hangzhou` |
+| `LICELL_BINARY_URL` | 安装脚本指定预编译二进制地址 | `releases/latest/download/licell-<os>-<arch>.tar.gz` |
+| `LICELL_ARCHIVE_URL` | 安装脚本源码回退下载地址 | `https://api.github.com/repos/dafang/licell/tarball/main` |
+| `LICELL_GITHUB_TOKEN` | 安装脚本访问私有下载源时的 GitHub Token | - |
 | `LICELL_DOMAIN_SUFFIX` | 默认固定域名后缀 | - |
 | `LICELL_FC_RUNTIME` | 默认运行时 | `nodejs20` |
 | `LICELL_FC_CONNECT_TIMEOUT_MS` | FC OpenAPI 连接超时（毫秒） | `60000` |
@@ -384,7 +448,9 @@ LICELL_BIN=./scripts/licell-tsx.sh ./scripts/smoke.sh \
 
 `zsh: command not found: licell`
 
-- 你当前没装全局命令。直接用 `./scripts/licell-tsx.sh` 或 `./licell` 执行。
+- 先执行安装脚本：
+  `curl -fsSL https://raw.githubusercontent.com/dafang/licell/main/install.sh | bash`
+- 然后确认 `~/.local/bin` 已加入 PATH。
 
 `licell login` 应该在哪执行？
 
@@ -400,11 +466,10 @@ Node 运行时只支持 20 吗？
 
 `--help` 看不到 `fn list`/`db list` 等命令？
 
-- 通常是 `./licell` 二进制过期（未重新编译）。
-- 重新编译后再看帮助：
+- 通常是本地安装版本过旧。
+- 重新安装最新版本后再看帮助：
 
 ```bash
-cd <licell-repo-dir>
-bun run build:bin
-./licell --help
+curl -fsSL https://raw.githubusercontent.com/dafang/licell/main/install.sh | bash
+licell --help
 ```
