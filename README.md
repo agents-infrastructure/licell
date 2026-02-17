@@ -14,7 +14,7 @@ TypeScript + Bun 实现的阿里云部署 CLI，目标是把阿里云上的部�
 - 认证与地域：`login` `logout` `whoami` `switch`
 - 版本查看：`--version`
 - 项目初始化：`init --runtime --app --force`
-- 部署：`deploy --type api|static --runtime nodejs20|nodejs22|python3.12|python3.13 --target --domain-suffix --ssl --ssl-force-renew`
+- 部署：`deploy --type api|static --runtime nodejs20|nodejs22|python3.12|python3.13|docker|static --target --domain-suffix --ssl --ssl-force-renew`
 - 函数：`fn list|info|invoke|rm`
 - 发布：`release list|promote|rollback|prune`
 - 自升级：`upgrade [--version <tag>]`
@@ -214,7 +214,15 @@ licell deploy --type api --entry src/main.py --runtime python3.13
 
 ```bash
 licell deploy --type static --dist dist
+# 或（等价）：
+licell deploy --runtime static --dist dist
 ```
+
+不传 `--dist` 时会自动探测：
+
+- 当前目录存在 `index.html` -> 使用当前目录（`.`）
+- 否则按常见目录探测：`dist`/`build`/`out`/`public`/`www`/`site`/`.output/public`
+- 若都未命中，回退 `dist`
 
 `--target` 仅用于 API 部署：
 

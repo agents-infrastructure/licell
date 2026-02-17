@@ -10,7 +10,6 @@ import { buildDeployProjectPatch } from '../utils/deploy-config';
 import {
   DEFAULT_FC_RUNTIME,
   deployFC,
-  normalizeFcRuntime,
   publishFunctionVersion,
   promoteFunctionAlias
 } from '../providers/fc';
@@ -19,6 +18,8 @@ import { bindCustomDomain } from '../providers/domain';
 import { issueAndBindSSL } from '../providers/ssl';
 import { normalizeAcrNamespace } from '../providers/cr';
 import { readLicellEnv } from '../utils/env';
+import { parseDeployRuntimeOption } from '../utils/deploy-runtime';
+import { detectStaticDistDir } from '../utils/static-dist';
 import {
   toPromptValue,
   ensureAuthOrExit,
@@ -36,7 +37,7 @@ export function registerDeployCommand(cli: CAC) {
     .option('--type <type>', '部署类型：api 或 static（适配 CI 非交互场景）')
     .option('--entry <entry>', 'API 入口文件（Node 默认 src/index.ts；Python 默认 src/main.py）')
     .option('--dist <dist>', '静态站点目录（默认 dist）')
-    .option('--runtime <runtime>', 'API Runtime（nodejs20、nodejs22、python3.12、python3.13、docker；默认 nodejs20）')
+    .option('--runtime <runtime>', '运行时（API: nodejs20/nodejs22/python3.12/python3.13/docker；静态站: static/statis）')
     .option('--target <target>', 'API 部署后自动发布并切流到该 alias（如 prod/preview）')
     .option('--domain-suffix <suffix>', '自动绑定固定子域名后缀（如 your-domain.xyz）')
     .option('--ssl', '配合固定域名自动签发/续签并绑定 HTTPS（需配置 domainSuffix）')
@@ -66,34 +67,25 @@ export function registerDeployCommand(cli: CAC) {
     const projectDomainSuffix = tryNormalizeDomainSuffix(project.domainSuffix);
     const envDomainSuffix = tryNormalizeDomainSuffix(readLicellEnv(process.env, 'DOMAIN_SUFFIX'));
     const domainSuffix = cliDomainSuffix || projectDomainSuffix || envDomainSuffix;
-    const cliRuntime = options.runtime ? normalizeFcRuntime(options.runtime) : undefined;
+    const runtimeSelection = parseDeployRuntimeOption(options.runtime);
+    const cliRuntime = runtimeSelection.runtime;
     const projectRuntime = tryNormalizeFcRuntime(project.runtime);
     const envRuntime = tryNormalizeFcRuntime(readLicellEnv(process.env, 'FC_RUNTIME'));
-    let runtime = cliRuntime || projectRuntime || envRuntime || DEFAULT_FC_RUNTIME;
     const cliAcrNamespace = options.acrNamespace ? normalizeAcrNamespace(options.acrNamespace) : undefined;
-
-    if (runtime !== 'docker' && !cliRuntime && existsSync('Dockerfile') && interactiveTTY) {
-      const useDocker = await confirm({ message: '检测到 Dockerfile，是否使用 Docker 容器部署？' });
-      if (isCancel(useDocker)) process.exit(0);
-      if (useDocker) runtime = 'docker';
-    }
-
-    if (cliAcrNamespace && runtime !== 'docker') {
-      throw new Error('--acr-namespace 仅适用于 --runtime docker');
-    }
-    if (runtime === 'docker' && cliAcrNamespace) {
-      Config.setProject({ acrNamespace: cliAcrNamespace });
-      project = Config.getProject();
-    }
-
-    const defaultApiEntry = getRuntime(runtime).defaultEntry;
-
+    const cliType = options.type ? normalizeDeployType(options.type) : undefined;
     let type: 'api' | 'static';
-    if (options.type) {
-      type = normalizeDeployType(options.type);
+    if (cliType && runtimeSelection.deployTypeHint && cliType !== runtimeSelection.deployTypeHint) {
+      throw new Error(`--type ${cliType} 与 --runtime ${options.runtime} 冲突`);
+    }
+    if (cliType) {
+      type = cliType;
+    } else if (runtimeSelection.deployTypeHint === 'api') {
+      type = 'api';
+    } else if (runtimeSelection.deployTypeHint === 'static') {
+      type = 'static';
     } else if (interactiveTTY) {
       const selectedType = await select({ message: '选择部署环境:', options: [
-        { value: 'api', label: '🚀 Node/Bun 服务端 API (直推 FC 3.0 Serverless)' },
+        { value: 'api', label: '🚀 API 服务 (Node/Python/Docker -> FC 3.0)' },
         { value: 'static', label: '📦 前端静态网站 (直推 OSS 托管)' }
       ]});
       if (isCancel(selectedType)) process.exit(0);
@@ -106,7 +98,8 @@ export function registerDeployCommand(cli: CAC) {
     const enableSSL = Boolean(options.ssl);
     const forceSslRenew = Boolean(options.sslForceRenew);
     if (releaseTarget && type !== 'api') throw new Error('--target 仅适用于 API 部署');
-    if (options.runtime && type !== 'api') throw new Error('--runtime 仅适用于 API 部署');
+    if (type !== 'api' && cliRuntime) throw new Error('--runtime 的 API 运行时仅适用于 API 部署；静态站请使用 --runtime static');
+    if (type !== 'api' && cliAcrNamespace) throw new Error('--acr-namespace 仅适用于 API Docker 部署');
     if (enableSSL && type !== 'api') throw new Error('--ssl 仅适用于 API 部署');
     if (forceSslRenew && !enableSSL) throw new Error('--ssl-force-renew 需要与 --ssl 一起使用');
     if (enableSSL && !domainSuffix) {
@@ -124,6 +117,21 @@ export function registerDeployCommand(cli: CAC) {
       let promotedVersion: string | undefined;
       let fixedDomain: string | undefined;
       if (type === 'api') {
+        let runtime = cliRuntime || projectRuntime || envRuntime || DEFAULT_FC_RUNTIME;
+        if (runtime !== 'docker' && !cliRuntime && existsSync('Dockerfile') && interactiveTTY) {
+          const useDocker = await confirm({ message: '检测到 Dockerfile，是否使用 Docker 容器部署？' });
+          if (isCancel(useDocker)) process.exit(0);
+          if (useDocker) runtime = 'docker';
+        }
+        if (cliAcrNamespace && runtime !== 'docker') {
+          throw new Error('--acr-namespace 仅适用于 --runtime docker');
+        }
+        if (runtime === 'docker' && cliAcrNamespace) {
+          Config.setProject({ acrNamespace: cliAcrNamespace });
+          project = Config.getProject();
+        }
+
+        const defaultApiEntry = getRuntime(runtime).defaultEntry;
         let entry: string;
         if (runtime === 'docker') {
           entry = options.entry || '';
@@ -193,11 +201,12 @@ export function registerDeployCommand(cli: CAC) {
         promotedVersion = apiDeployResult.promotedVersion;
         fixedDomain = apiDeployResult.fixedDomain;
       } else {
+        const detectedDist = detectStaticDistDir();
         const dist = options.dist
           ? toPromptValue(options.dist, '构建产物目录')
           : interactiveTTY
-            ? toPromptValue(await text({ message: '前端构建产物目录:', initialValue: 'dist' }), '构建产物目录')
-            : 'dist';
+            ? toPromptValue(await text({ message: '前端构建产物目录:', initialValue: detectedDist }), '构建产物目录')
+            : detectedDist;
         const staticDeployResult = await withSpinner(
           s,
           '☁️ 正在递归上传静态资源到 OSS 边缘节点...',
