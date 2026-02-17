@@ -40,7 +40,7 @@ async function createRedisInstance(client: Client, regionId: string, vpcId: stri
     engineVersion: '7.0',
     instanceClass: 'redis.master.small.default',
     chargeType: 'PostPaid',
-    password: 'MyP@ssw0rd!',
+    password: process.env.REDIS_PASSWORD!,
     instanceName: 'my-redis',
     vpcId, vSwitchId,
   }));

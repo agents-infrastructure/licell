@@ -23,7 +23,7 @@ const { body: inst } = await client.createDBInstance(new models.CreateDBInstance
   DBInstanceStorage: 20,
   DBInstanceNetType: 'Intranet',
   payType: 'Postpaid',
-  securityIPList: '0.0.0.0/0',
+  securityIPList: '10.0.0.0/8', // WARNING: never use 0.0.0.0/0 in production
   DBInstanceStorageType: 'cloud_essd',
 }));
 const dbInstanceId = inst.DBInstanceId!;
@@ -41,7 +41,7 @@ while (true) {
 await client.createAccount(new models.CreateAccountRequest({
   DBInstanceId: dbInstanceId,
   accountName: 'admin',
-  accountPassword: 'MyP@ssw0rd!',
+  accountPassword: process.env.DB_PASSWORD!, // Never hardcode passwords
   accountType: 'Super',
 }));
 

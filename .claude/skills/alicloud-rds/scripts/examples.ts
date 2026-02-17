@@ -41,7 +41,7 @@ async function createMySQLInstance(client: Client, regionId: string, zoneId: str
     DBInstanceStorage: 20,
     DBInstanceNetType: 'Intranet',
     payType: 'Postpaid',
-    securityIPList: '0.0.0.0/0',
+    securityIPList: '10.0.0.0/8', // WARNING: never use 0.0.0.0/0 in production
     DBInstanceStorageType: 'cloud_essd',
   }));
   return body.DBInstanceId!;

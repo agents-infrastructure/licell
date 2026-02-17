@@ -108,14 +108,14 @@ R-KVStore supports Redis Community and Tair (DRAM/Persistent Memory/ESSD):
 const { body: redis } = await client.createInstance(new models.CreateInstanceRequest({
   regionId: 'cn-hangzhou', instanceType: 'Redis', engineVersion: '7.0',
   instanceClass: 'redis.master.small.default', chargeType: 'PostPaid',
-  password: 'MyP@ssw0rd!', vpcId: 'vpc-xxx', vSwitchId: 'vsw-xxx',
+  password: process.env.REDIS_PASSWORD!, vpcId: 'vpc-xxx', vSwitchId: 'vsw-xxx',
 }));
 
 // Tair (Enhanced Redis)
 const { body: tair } = await client.createTairInstance(new models.CreateTairInstanceRequest({
   regionId: 'cn-hangzhou', instanceType: 'tair_rdb',
   instanceClass: 'tair.rdb.2g', chargeType: 'PostPaid',
-  password: 'MyP@ssw0rd!', vpcId: 'vpc-xxx', vSwitchId: 'vsw-xxx',
+  password: process.env.REDIS_PASSWORD!, vpcId: 'vpc-xxx', vSwitchId: 'vsw-xxx',
 }));
 ```
 

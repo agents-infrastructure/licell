@@ -78,7 +78,8 @@ async function createSecurityGroup(client: Client, vpcId: string, name: string) 
   return body.securityGroupId;
 }
 
-async function allowInbound(client: Client, sgId: string, port: string, cidr = '0.0.0.0/0') {
+async function allowInbound(client: Client, sgId: string, port: string, cidr: string) {
+  // WARNING: never use '0.0.0.0/0' in production — restrict to your VPC CIDR
   await client.authorizeSecurityGroup(new models.AuthorizeSecurityGroupRequest({
     regionId: REGION, securityGroupId: sgId,
     ipProtocol: 'tcp', portRange: port, sourceCidrIp: cidr,

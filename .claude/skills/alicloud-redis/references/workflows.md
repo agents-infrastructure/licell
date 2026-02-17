@@ -19,7 +19,7 @@ const { body: inst } = await client.createInstance(new models.CreateInstanceRequ
   engineVersion: '7.0',
   instanceClass: 'redis.master.small.default',
   chargeType: 'PostPaid',
-  password: 'MyP@ssw0rd!',
+  password: process.env.REDIS_PASSWORD!, // Never hardcode passwords
   instanceName: 'my-redis',
   vpcId: 'vpc-bp1xxxxxxxxxxxxx',
   vSwitchId: 'vsw-bp1xxxxxxxxxxxxx',
@@ -58,7 +58,7 @@ const { body: tair } = await client.createTairInstance(new models.CreateTairInst
   instanceClass: 'tair.rdb.2g',
   shardCount: 4,
   chargeType: 'PostPaid',
-  password: 'MyP@ssw0rd!',
+  password: process.env.REDIS_PASSWORD!, // Never hardcode passwords
   instanceName: 'my-tair-cluster',
   vpcId: 'vpc-bp1xxxxxxxxxxxxx',
   vSwitchId: 'vsw-bp1xxxxxxxxxxxxx',
