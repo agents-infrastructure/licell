@@ -83,6 +83,43 @@ download_with_optional_auth() {
   curl -fsSL "$url" -o "$output"
 }
 
+install_prebuilt_runtime_package() {
+  local src_dir="$1"
+  local os="$2"
+  local arch="$3"
+  local prebuilt_dir="${INSTALL_ROOT}/prebuilt-${os}-${arch}"
+
+  check_node_version
+
+  mkdir -p "$INSTALL_ROOT" "$BIN_DIR"
+  rm -rf "$prebuilt_dir"
+  mkdir -p "$prebuilt_dir"
+  cp -R "${src_dir}/." "$prebuilt_dir/"
+
+  chmod +x "${prebuilt_dir}/licell"
+  if [[ -f "${prebuilt_dir}/ali" ]]; then
+    chmod +x "${prebuilt_dir}/ali"
+  fi
+
+  cat > "${BIN_DIR}/licell" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+exec "${prebuilt_dir}/licell" "\$@"
+EOF
+  chmod +x "${BIN_DIR}/licell"
+  write_legacy_shim
+
+  if ! "${BIN_DIR}/licell" --help >/dev/null 2>&1; then
+    log "installed prebuilt runtime package failed to run, fallback to source install"
+    return 1
+  fi
+
+  log "installed prebuilt runtime package to ${prebuilt_dir}"
+  show_path_hint
+  log "run: licell --help"
+  return 0
+}
+
 install_from_binary_archive() {
   local os="$1"
   local arch="$2"
@@ -103,10 +140,18 @@ install_from_binary_archive() {
     return 1
   fi
 
-  local src_bin
+  local src_bin src_dir
   src_bin="$(find "${TMP_DIR}/bin" -type f -name licell | head -n 1 || true)"
   if [[ -z "$src_bin" ]]; then
     log "prebuilt archive does not contain licell executable, fallback to source install"
+    return 1
+  fi
+  src_dir="$(dirname "$src_bin")"
+
+  if [[ -f "${src_dir}/dist/licell.js" ]]; then
+    if install_prebuilt_runtime_package "$src_dir" "$os" "$arch"; then
+      return 0
+    fi
     return 1
   fi
 
@@ -119,7 +164,7 @@ install_from_binary_archive() {
     return 1
   fi
 
-  log "installed prebuilt binary to ${BIN_DIR}/licell"
+  log "installed prebuilt standalone binary to ${BIN_DIR}/licell"
   show_path_hint
   log "run: licell --help"
   return 0
@@ -130,7 +175,7 @@ check_node_version() {
   local major
   major="$(node -p "process.versions.node.split('.')[0]")"
   if [[ -z "$major" || "$major" -lt 20 ]]; then
-    die "Node.js >= 20 is required for source fallback install (current: $(node -v))"
+    die "Node.js >= 20 is required for runtime install (current: $(node -v))"
   fi
 }
 

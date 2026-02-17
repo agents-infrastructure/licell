@@ -25,7 +25,7 @@ TypeScript + Bun 实现的阿里云部署 CLI，目标是把阿里云上的部�
 
 ## 前置要求
 
-- 推荐：使用 GitHub Release 预编译二进制（无需 Node/npm）
+- 推荐：使用 GitHub Release 预构建安装包（无需 npm/pnpm/yarn）
 - 若回退源码安装：Node.js `>= 20` + Bun `>= 1.3` + npm/pnpm/yarn（默认 npm）
 - 阿里云 AK/SK，权限至少覆盖 FC、RDS、Tair(KVStore)、OSS、AliDNS、SLS、VPC
 - 如果要自动签发 HTTPS，域名必须托管在阿里云 DNS（AliDNS）
@@ -40,8 +40,9 @@ curl -fsSL https://raw.githubusercontent.com/dafang/licell/main/install.sh | bas
 
 安装逻辑：
 
-- 优先下载 `releases/latest` 的 `licell-<os>-<arch>.tar.gz` 预编译二进制（不依赖 Node/npm）
-- 如果当前平台暂无预编译资产，则自动回退到源码安装
+- 优先下载 `releases/latest` 的 `licell-<os>-<arch>.tar.gz` 预构建资产
+- 资产如果是单文件可执行，直接安装；若是 Node 运行包，则使用内置依赖运行（需 Node `>= 20`，无需 npm/pnpm/yarn）
+- 如果当前平台暂无预构建资产，则自动回退到源码安装
 
 如果你的 shell 里还没有 `~/.local/bin`，先加 PATH：
 
@@ -62,7 +63,7 @@ curl -fsSL https://raw.githubusercontent.com/dafang/licell/main/install.sh | bas
 curl -fsSL https://raw.githubusercontent.com/dafang/licell/main/install.sh | LICELL_REF=<ref> bash
 ```
 
-指定预编译二进制地址安装：
+指定 release 资产地址安装：
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/dafang/licell/main/install.sh | LICELL_BINARY_URL=https://example.com/licell-darwin-arm64.tar.gz bash
@@ -77,9 +78,9 @@ bun run build:bin
 ./licell --help
 ```
 
-## 预编译发布（维护者）
+## 发布资产构建（维护者）
 
-构建当前平台可执行文件与发布资产：
+构建当前平台发布资产（优先单文件可执行，失败自动回退 Node 运行包）：
 
 ```bash
 bun run build:standalone
@@ -87,7 +88,7 @@ bun run build:standalone
 
 产物：
 
-- `dist/licell-<os>-<arch>`（可执行文件）
+- `dist/licell-<os>-<arch>`（仅当 Bun `--compile` 成功时输出）
 - `dist/licell-<os>-<arch>.tar.gz`（发布到 GitHub Release 的资产名）
 
 ## 自动 Release 流程（GitHub Actions）

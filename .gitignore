@@ -20,6 +20,8 @@ examples/**/.env
 # OS files
 .DS_Store
 Thumbs.db
+core
+*.bun-build
 
 # IDE
 .idea/
