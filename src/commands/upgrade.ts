@@ -66,7 +66,7 @@ export function registerUpgradeCommand(cli: CAC) {
 
         const install = spawnSync('bash', [tempScriptPath], {
           stdio: 'inherit',
-          env: { ...process.env }
+          env: { ...process.env, LICELL_SKIP_RUN_CHECK: '1' }
         });
 
         if (install.status !== 0) {

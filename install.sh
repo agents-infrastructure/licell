@@ -69,6 +69,10 @@ show_path_hint() {
   fi
 }
 
+should_skip_run_check() {
+  [[ "${LICELL_SKIP_RUN_CHECK:-0}" == "1" ]]
+}
+
 adhoc_codesign_if_needed() {
   local binary_path="$1"
   local os="$2"
@@ -123,9 +127,11 @@ EOF
   chmod +x "${BIN_DIR}/licell"
   write_legacy_shim
 
-  if ! "${BIN_DIR}/licell" --help >/dev/null 2>&1; then
-    log "installed prebuilt runtime package failed to run, fallback to source install"
-    return 1
+  if ! should_skip_run_check; then
+    if ! "${BIN_DIR}/licell" --help >/dev/null 2>&1; then
+      log "installed prebuilt runtime package failed to run, fallback to source install"
+      return 1
+    fi
   fi
 
   log "installed prebuilt runtime package to ${prebuilt_dir}"
@@ -174,9 +180,11 @@ install_from_binary_archive() {
   adhoc_codesign_if_needed "${BIN_DIR}/licell" "$os"
   write_legacy_shim
 
-  if ! "${BIN_DIR}/licell" --help >/dev/null 2>&1; then
-    log "installed prebuilt binary failed to run, fallback to source install"
-    return 1
+  if ! should_skip_run_check; then
+    if ! "${BIN_DIR}/licell" --help >/dev/null 2>&1; then
+      log "installed prebuilt binary failed to run, fallback to source install"
+      return 1
+    fi
   fi
 
   log "installed prebuilt standalone binary to ${BIN_DIR}/licell"
@@ -265,8 +273,10 @@ EOF
   chmod +x "${BIN_DIR}/licell"
   write_legacy_shim
 
-  if ! "${BIN_DIR}/licell" --help >/dev/null 2>&1; then
-    die "installed source fallback launcher failed to run"
+  if ! should_skip_run_check; then
+    if ! "${BIN_DIR}/licell" --help >/dev/null 2>&1; then
+      die "installed source fallback launcher failed to run"
+    fi
   fi
 
   log "installed source fallback to ${BIN_DIR}/licell"
