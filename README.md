@@ -53,7 +53,7 @@ licell --version
 ```bash
 licell upgrade
 # 或指定版本
-licell upgrade --version v0.9.10
+licell upgrade --version v0.9.11
 ```
 
 安装逻辑说明：
