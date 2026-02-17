@@ -171,10 +171,20 @@ export async function getDockerLoginCredentials(acrInfo: AcrInfo, auth?: AuthCon
     };
   }
 
+  const client = createCrClient(resolved);
+  const resp = await client.doROARequest(
+    'GetAuthorizationToken', '2016-06-07', 'HTTPS', 'GET', 'AK', '/tokens', 'json',
+    new $OpenApi.OpenApiRequest({}),
+    new $Util.RuntimeOptions({})
+  ) as { body?: { data?: { tempUserName?: string; authorizationToken?: string } } };
+  const token = resp.body?.data;
+  if (!token?.tempUserName || !token?.authorizationToken) {
+    throw new Error('获取 ACR 个人版临时凭证失败');
+  }
   return {
     endpoint: acrInfo.registryEndpoint,
-    userName: resolved.ak,
-    password: resolved.sk
+    userName: token.tempUserName,
+    password: token.authorizationToken
   };
 }
 
