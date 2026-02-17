@@ -32,6 +32,12 @@ describe('init scaffold', () => {
     expect(resolveInitRuntime('docker')).toEqual({ template: 'docker', runtime: 'docker' });
   });
 
+  it('injects runtime default into generated scaffold', () => {
+    expect(getScaffoldFiles('node', 'nodejs22').find((f) => f.path === 'src/app.ts')?.content).toContain("'nodejs22'");
+    expect(getScaffoldFiles('python', 'python3.13').find((f) => f.path === 'src/main.py')?.content).toContain('or "python3.13"');
+    expect(getScaffoldFiles('python', 'python3.12').find((f) => f.path === 'README.md')?.content).toContain('--runtime python3.12');
+  });
+
   it('rejects unsupported runtime values', () => {
     expect(() => resolveInitRuntime('python')).toThrow('函数运行时仅支持');
     expect(() => templateForRuntime('node')).toThrow('不支持的 runtime');
@@ -49,10 +55,12 @@ describe('init scaffold', () => {
   it('writes node scaffold files', () => {
     const root = mkdtempSync(join(tmpdir(), 'licell-init-node-'));
     try {
-      const files = getScaffoldFiles('node');
+      const files = getScaffoldFiles('node', 'nodejs22');
       const result = writeScaffoldFiles(root, files, false);
+      expect(result.written).toContain('src/app.ts');
       expect(result.written).toContain('src/index.ts');
-      expect(readFileSync(join(root, 'src/index.ts'), 'utf-8')).toContain('Hello from Licell Node Scaffold');
+      expect(readFileSync(join(root, 'src/app.ts'), 'utf-8')).toContain("framework: 'express'");
+      expect(readFileSync(join(root, 'src/index.ts'), 'utf-8')).toContain('ensureBaseUrl');
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -66,7 +74,8 @@ describe('init scaffold', () => {
       expect(result.written).toContain('Dockerfile');
       expect(result.written).toContain('src/index.ts');
       expect(readFileSync(join(root, 'src/index.ts'), 'utf-8')).toContain('from \'hono\'');
-      expect(readFileSync(join(root, 'package.json'), 'utf-8')).toContain('"hono"');
+      expect(readFileSync(join(root, 'src/index.ts'), 'utf-8')).toContain('GET /healthz');
+      expect(readFileSync(join(root, 'package.json'), 'utf-8')).toContain('"@hono/node-server"');
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -126,7 +135,7 @@ describe('init scaffold', () => {
       writeFileSync(target, 'print("old")\n');
       const result = writeScaffoldFiles(root, getScaffoldFiles('python'), true);
       expect(result.written).toContain('src/main.py');
-      expect(readFileSync(target, 'utf-8')).toContain('Hello from Licell Python Scaffold');
+      expect(readFileSync(target, 'utf-8')).toContain('from flask import Flask, jsonify, request');
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

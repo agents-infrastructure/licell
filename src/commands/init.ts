@@ -75,7 +75,7 @@ export function registerInitCommand(cli: CAC) {
         const s = spinner();
         s.start(shouldWriteScaffold ? '正在生成项目脚手架...' : '正在写入 licell 项目配置...');
         const { written, skipped } = shouldWriteScaffold
-          ? writeScaffoldFiles(process.cwd(), getScaffoldFiles(template), Boolean(options.force))
+          ? writeScaffoldFiles(process.cwd(), getScaffoldFiles(template, runtime), Boolean(options.force))
           : { written: [] as string[], skipped: [] as string[] };
         Config.setProject({ appName, runtime });
         s.stop(pc.green(shouldWriteScaffold ? '✅ 脚手架创建完成' : '✅ 配置写入完成'));
