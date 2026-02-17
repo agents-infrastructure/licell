@@ -2,6 +2,8 @@
 
 TypeScript + Bun 实现的阿里云部署 CLI，目标是把阿里云上的部署体验做成接近 Vercel CLI 的一键化流程，并可用于生产环境。
 
+本项目由人类指挥，Codex、Claude Code 和 Manus 协同实现。
+
 ## 目标与边界
 
 - 一条主线命令：`deploy`（API/静态站点）。
@@ -134,7 +136,7 @@ git push origin v1.0.0
 ## 在哪个目录执行命令
 
 `licell` 会把项目绑定信息写到“当前目录”的 `.licell/project.json`。
-因此必须在你的业务项目目录执行（例如 `examples/hello-world-api`），不是在 CLI 仓库根目录执行。
+因此必须在你的业务项目目录执行（例如 `examples/node22-express-api`），不是在 CLI 仓库根目录执行。
 
 全局登录凭证写在：
 
@@ -144,13 +146,19 @@ git push origin v1.0.0
 
 - `<your-app>/.licell/project.json`
 
-## 快速开始（Hello World）
+## 快速开始（Examples）
 
-进入示例项目：
+进入任一示例项目：
 
 ```bash
-cd examples/hello-world-api
+cd examples/node22-express-api
+# 或
+cd examples/python313-flask-api
+# 或
+cd examples/docker-bun-hono-api
 ```
+
+更多示例说明见：`examples/README.md`
 
 初始化脚手架（可选，按 runtime 选择）：
 

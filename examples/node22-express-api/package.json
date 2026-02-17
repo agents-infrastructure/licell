@@ -1,0 +1,16 @@
+{
+  "name": "@licell/example-node22-express-api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --watch src/dev.ts"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.17.57",
+    "typescript": "^5.6.3"
+  }
+}

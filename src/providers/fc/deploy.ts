@@ -1,7 +1,9 @@
 import * as $FC from '@alicloud/fc20230330';
 import AdmZip from 'adm-zip';
-import { existsSync, mkdirSync, rmSync, statSync } from 'fs';
-import { isAbsolute, relative, resolve } from 'path';
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync } from 'fs';
+import { tmpdir } from 'os';
+import { isAbsolute, join, relative, resolve } from 'path';
+import { spawnSync } from 'child_process';
 import { Config } from '../../utils/config';
 import { isConflictError } from '../../utils/errors';
 import { withRetry } from '../../utils/retry';
@@ -16,6 +18,29 @@ import {
   resolveRuntimeConfig
 } from './runtime';
 import { DEFAULT_FC_RUNTIME, type FcRuntime } from './types';
+
+export function packageCodeAsBase64(outdir: string) {
+  const zipPath = join(tmpdir(), `licell-code-${Date.now()}-${process.pid}.zip`);
+  try {
+    const result = spawnSync('zip', ['-q', '-r', '-y', zipPath, '.'], {
+      cwd: outdir,
+      encoding: 'utf8'
+    });
+    if (result.status === 0) {
+      return readFileSync(zipPath).toString('base64');
+    }
+    const stderr = result.stderr?.trim();
+    const stdout = result.stdout?.trim();
+    if (result.error && (result.error as NodeJS.ErrnoException).code === 'ENOENT') {
+      const zip = new AdmZip();
+      zip.addLocalFolder(outdir);
+      return zip.toBuffer().toString('base64');
+    }
+    throw new Error(stderr || stdout || result.error?.message || 'unknown zip error');
+  } finally {
+    rmSync(zipPath, { force: true });
+  }
+}
 
 export async function deployFC(appName: string, entryFile: string, runtime: FcRuntime = DEFAULT_FC_RUNTIME) {
   const { client } = createFcClient();
@@ -52,9 +77,7 @@ export async function deployFC(appName: string, entryFile: string, runtime: FcRu
 
   let code: { zipFile: string } | undefined;
   if (!runtimeConfig.skipCodePackaging) {
-    const zip = new AdmZip();
-    zip.addLocalFolder(outdir);
-    code = { zipFile: zip.toBuffer().toString('base64') };
+    code = { zipFile: packageCodeAsBase64(outdir) };
   }
 
   const createBody: Record<string, unknown> = {

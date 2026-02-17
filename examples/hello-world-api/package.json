@@ -1,8 +1,0 @@
-{
-  "name": "hello-world-api",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "dev": "bun run src/index.ts"
-  }
-}

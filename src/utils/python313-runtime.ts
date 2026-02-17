@@ -1,4 +1,4 @@
-import { cpSync, createReadStream, createWriteStream, existsSync, mkdirSync, rmSync } from 'fs';
+import { chmodSync, cpSync, createReadStream, createWriteStream, existsSync, mkdirSync, readdirSync, rmSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
 import https from 'https';
@@ -22,6 +22,16 @@ interface Python313DownloadSpec {
 
 interface PreparedPython313Runtime {
   pythonBinaryInCode: string;
+}
+
+export function ensurePython313RuntimeExecutables(targetDir: string) {
+  const binDir = join(targetDir, 'python', 'bin');
+  if (!existsSync(binDir)) return;
+  for (const item of readdirSync(binDir, { withFileTypes: true })) {
+    if (!item.isFile()) continue;
+    // Python 启动脚本和解释器都应具备执行位，避免云端解压后权限不一致导致启动失败。
+    chmodSync(join(binDir, item.name), 0o755);
+  }
 }
 
 const HTTP_REQUEST_TIMEOUT_MS = 60_000;
@@ -176,6 +186,7 @@ export async function preparePython313RuntimeInCode(outdir: string): Promise<Pre
   const targetDir = join(runtimeRoot, folderName);
   rmSync(targetDir, { recursive: true, force: true });
   cpSync(extractedDir, targetDir, { recursive: true });
+  ensurePython313RuntimeExecutables(targetDir);
   return {
     pythonBinaryInCode: `/code/.licell-runtime/${folderName}/python/bin/python3.13`
   };

@@ -1,4 +1,4 @@
-import { cpSync, createReadStream, createWriteStream, existsSync, mkdirSync, rmSync } from 'fs';
+import { chmodSync, cpSync, createReadStream, createWriteStream, existsSync, mkdirSync, rmSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
 import https from 'https';
@@ -21,6 +21,13 @@ interface Node22DownloadSpec {
 
 interface PreparedNode22Runtime {
   nodeBinaryInCode: string;
+}
+
+export function ensureNode22RuntimeExecutable(targetDir: string) {
+  const nodeBinary = join(targetDir, 'bin', 'node');
+  if (!existsSync(nodeBinary)) return;
+  // FC 自定义运行时需要直接执行该二进制，显式修复执行位避免打包后丢失。
+  chmodSync(nodeBinary, 0o755);
 }
 
 function getShasumsSources() {
@@ -161,6 +168,7 @@ export async function prepareNode22RuntimeInCode(outdir: string): Promise<Prepar
   const targetDir = join(runtimeRoot, folderName);
   rmSync(targetDir, { recursive: true, force: true });
   cpSync(extractedDir, targetDir, { recursive: true });
+  ensureNode22RuntimeExecutable(targetDir);
   return {
     nodeBinaryInCode: `/code/.licell-runtime/${folderName}/bin/node`
   };
