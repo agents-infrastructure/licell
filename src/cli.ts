@@ -13,8 +13,10 @@ import { registerDnsCommands } from './commands/dns';
 import { registerEnvCommands } from './commands/env';
 import { registerLogsCommand } from './commands/logs';
 import { registerUpgradeCommand } from './commands/upgrade';
+import { resolveCliVersion } from './utils/version';
 
 const cli = cac('licell');
+cli.version(resolveCliVersion());
 
 registerAuthCommands(cli);
 registerInitCommand(cli);

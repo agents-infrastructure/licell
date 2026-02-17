@@ -81,7 +81,7 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Build standalone artifact
-        run: LICELL_TARGET_OS=${{ matrix.os }} LICELL_TARGET_ARCH=${{ matrix.arch }} bun run build:standalone
+        run: LICELL_VERSION=${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }} LICELL_TARGET_OS=${{ matrix.os }} LICELL_TARGET_ARCH=${{ matrix.arch }} bun run build:standalone
 
       - name: Verify artifact exists
         run: |

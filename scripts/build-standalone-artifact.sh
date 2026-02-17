@@ -7,6 +7,11 @@ TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/licell-standalone.XXXXXX")"
 TARGET_OS="${LICELL_TARGET_OS:-}"
 TARGET_ARCH="${LICELL_TARGET_ARCH:-}"
 NODE_TARGET_VERSION="${LICELL_STANDALONE_NODE_TARGET:-18}"
+DEFINE_VERSION_ARGS=()
+
+if [[ -n "${LICELL_VERSION:-}" ]]; then
+  DEFINE_VERSION_ARGS+=(--define:process.env.LICELL_VERSION=\"${LICELL_VERSION}\")
+fi
 
 cleanup() {
   rm -rf "$TMP_DIR"
@@ -129,6 +134,7 @@ main() {
         --target="node${NODE_TARGET_VERSION}" \
         --format=cjs \
         --external:proxy-agent \
+        "${DEFINE_VERSION_ARGS[@]}" \
         --outfile="${bundle_path}"
   )
 

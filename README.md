@@ -12,6 +12,7 @@ TypeScript + Bun 实现的阿里云部署 CLI，目标是把阿里云上的部�
 ## 当前已实现能力
 
 - 认证与地域：`login` `logout` `whoami` `switch`
+- 版本查看：`--version`
 - 项目初始化：`init --runtime --app --force`
 - 部署：`deploy --type api|static --runtime nodejs20|nodejs22|python3.12|python3.13 --target --domain-suffix --ssl --ssl-force-renew`
 - 函数：`fn list|info|invoke|rm`
@@ -53,6 +54,7 @@ curl -fsSL https://github.com/dafang/licell/releases/latest/download/install.sh 
 ```bash
 export PATH="$HOME/.local/bin:$PATH"
 licell --help
+licell --version
 ```
 
 升级到最新 release：
