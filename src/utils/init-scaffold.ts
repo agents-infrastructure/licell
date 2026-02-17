@@ -1,8 +1,8 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'fs';
 import { basename, dirname, join } from 'path';
 import { normalizeFcRuntime } from '../providers/fc';
 
-export type InitTemplate = 'node' | 'python';
+export type InitTemplate = 'node' | 'python' | 'docker';
 
 export interface ScaffoldFile {
   path: string;
@@ -11,13 +11,8 @@ export interface ScaffoldFile {
 
 const NODE_RUNTIMES = new Set(['nodejs20', 'nodejs22']);
 const PYTHON_RUNTIMES = new Set(['python3.12', 'python3.13']);
-
-export function normalizeInitTemplate(input: string): InitTemplate {
-  const value = input.trim().toLowerCase();
-  if (value === 'node' || value === 'nodejs' || value === 'typescript' || value === 'ts') return 'node';
-  if (value === 'python' || value === 'py') return 'python';
-  throw new Error('--template 仅支持 node 或 python');
-}
+const DOCKER_RUNTIMES = new Set(['docker']);
+const WORKSPACE_IGNORE_ENTRIES = new Set(['.licell', '.ali', '.git', '.DS_Store', '.vscode', '.idea', 'node_modules']);
 
 export function deriveDefaultAppName(cwd = process.cwd()) {
   const raw = basename(cwd).toLowerCase();
@@ -35,27 +30,106 @@ export function validateAppName(input: string) {
   return appName;
 }
 
-export function resolveInitTemplateAndRuntime(
-  templateInput?: string,
-  runtimeInput?: string
-): { template: InitTemplate; runtime: string } {
-  const runtime = runtimeInput ? normalizeFcRuntime(runtimeInput) : undefined;
+export function templateForRuntime(runtime: string): InitTemplate {
+  if (PYTHON_RUNTIMES.has(runtime)) return 'python';
+  if (DOCKER_RUNTIMES.has(runtime)) return 'docker';
+  if (NODE_RUNTIMES.has(runtime)) return 'node';
+  throw new Error(`不支持的 runtime: ${runtime}`);
+}
 
-  let template: InitTemplate | undefined;
-  if (templateInput) template = normalizeInitTemplate(templateInput);
-  else if (runtime) template = PYTHON_RUNTIMES.has(runtime) ? 'python' : 'node';
-  else template = 'node';
-
-  const finalRuntime = runtime || (template === 'python' ? 'python3.12' : 'nodejs20');
-  const allowed = template === 'python' ? PYTHON_RUNTIMES : NODE_RUNTIMES;
-  if (!allowed.has(finalRuntime)) {
-    throw new Error(`template=${template} 与 runtime=${finalRuntime} 不匹配`);
-  }
-
-  return { template, runtime: finalRuntime };
+export function resolveInitRuntime(runtimeInput?: string): { template: InitTemplate; runtime: string } {
+  const runtime = runtimeInput ? normalizeFcRuntime(runtimeInput) : 'nodejs20';
+  const template = templateForRuntime(runtime);
+  return { template, runtime };
 }
 
 export function getScaffoldFiles(template: InitTemplate): ScaffoldFile[] {
+  if (template === 'docker') {
+    return [
+      {
+        path: 'package.json',
+        content: `{
+  "name": "licell-docker-hono",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --watch src/index.ts",
+    "build": "bun build ./src/index.ts --target bun --outfile dist/index.js",
+    "start": "bun run dist/index.js"
+  },
+  "dependencies": {
+    "hono": "^4.10.0"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.9"
+  }
+}
+`
+      },
+      {
+        path: 'tsconfig.json',
+        content: `{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "types": ["bun"]
+  }
+}
+`
+      },
+      {
+        path: 'src/index.ts',
+        content: `import { Hono } from 'hono';
+
+const app = new Hono();
+
+app.get('/', (c) => {
+  return c.json({
+    ok: true,
+    message: 'Hello from Licell Docker + Bun + Hono',
+    runtime: 'docker'
+  });
+});
+
+const port = Number(process.env.PORT || 9000);
+
+export default {
+  port,
+  fetch: app.fetch
+};
+`
+      },
+      {
+        path: 'Dockerfile',
+        content: `FROM oven/bun:1-slim
+WORKDIR /app
+
+COPY package.json ./
+RUN bun install
+
+COPY . .
+RUN bun run build
+
+ENV PORT=9000
+EXPOSE 9000
+
+CMD ["bun", "run", "start"]
+`
+      },
+      {
+        path: '.dockerignore',
+        content: `node_modules
+dist
+.git
+.licell
+.ali
+`
+      }
+    ];
+  }
+
   if (template === 'python') {
     return [
       {
@@ -117,6 +191,67 @@ export async function handler(event: unknown): Promise<HttpResponse> {
 }
 `
   }];
+}
+
+export function isWorkspaceEffectivelyEmpty(rootDir: string = process.cwd()) {
+  const entriesInDir = readdirSync(rootDir, { withFileTypes: true })
+    .map((entry) => entry.name)
+    .filter((name) => !WORKSPACE_IGNORE_ENTRIES.has(name));
+  if (entriesInDir.length > 0) return false;
+
+  const entries = [
+    '.gitignore',
+    'package.json',
+    'pyproject.toml',
+    'requirements.txt',
+    'Dockerfile',
+    'bun.lock',
+    'bun.lockb',
+    'pnpm-lock.yaml',
+    'yarn.lock',
+    'package-lock.json',
+    'npm-shrinkwrap.json',
+    'tsconfig.json',
+    'src',
+    'app'
+  ];
+
+  for (const entry of entries) {
+    if (existsSync(join(rootDir, entry))) return false;
+  }
+
+  const probableEntries = ['.env', 'README.md'];
+  for (const entry of probableEntries) {
+    if (existsSync(join(rootDir, entry))) return false;
+  }
+
+  return true;
+}
+
+export function detectWorkspaceTemplateAndRuntime(rootDir: string = process.cwd()): { template: InitTemplate; runtime: string } {
+  if (existsSync(join(rootDir, 'Dockerfile'))) return { template: 'docker', runtime: 'docker' };
+  if (
+    existsSync(join(rootDir, 'requirements.txt'))
+    || existsSync(join(rootDir, 'pyproject.toml'))
+    || existsSync(join(rootDir, 'src', 'main.py'))
+  ) {
+    return { template: 'python', runtime: 'python3.12' };
+  }
+  if (
+    existsSync(join(rootDir, 'package.json'))
+    || existsSync(join(rootDir, 'bun.lock'))
+    || existsSync(join(rootDir, 'bun.lockb'))
+    || existsSync(join(rootDir, 'pnpm-lock.yaml'))
+    || existsSync(join(rootDir, 'yarn.lock'))
+    || existsSync(join(rootDir, 'package-lock.json'))
+    || existsSync(join(rootDir, 'npm-shrinkwrap.json'))
+    || existsSync(join(rootDir, 'tsconfig.json'))
+    || existsSync(join(rootDir, 'src', 'index.ts'))
+    || existsSync(join(rootDir, 'src', 'index.js'))
+  ) {
+    return { template: 'node', runtime: 'nodejs20' };
+  }
+  return { template: 'node', runtime: 'nodejs20' };
 }
 
 export function writeScaffoldFiles(rootDir: string, files: ScaffoldFile[], force = false) {

@@ -1,34 +1,40 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { describe, expect, it } from 'vitest';
 import {
   deriveDefaultAppName,
+  detectWorkspaceTemplateAndRuntime,
   getScaffoldFiles,
-  normalizeInitTemplate,
-  resolveInitTemplateAndRuntime,
+  isWorkspaceEffectivelyEmpty,
+  resolveInitRuntime,
+  templateForRuntime,
   validateAppName,
   writeScaffoldFiles
 } from '../utils/init-scaffold';
 
 describe('init scaffold', () => {
-  it('normalizes template aliases', () => {
-    expect(normalizeInitTemplate('nodejs')).toBe('node');
-    expect(normalizeInitTemplate('PY')).toBe('python');
+  it('maps runtime to scaffold template', () => {
+    expect(templateForRuntime('nodejs20')).toBe('node');
+    expect(templateForRuntime('nodejs22')).toBe('node');
+    expect(templateForRuntime('python3.12')).toBe('python');
+    expect(templateForRuntime('python3.13')).toBe('python');
+    expect(templateForRuntime('docker')).toBe('docker');
   });
 
-  it('resolves default template/runtime', () => {
-    expect(resolveInitTemplateAndRuntime()).toEqual({ template: 'node', runtime: 'nodejs20' });
-    expect(resolveInitTemplateAndRuntime('python')).toEqual({ template: 'python', runtime: 'python3.12' });
+  it('resolves default runtime', () => {
+    expect(resolveInitRuntime()).toEqual({ template: 'node', runtime: 'nodejs20' });
   });
 
-  it('deduces template by runtime when template omitted', () => {
-    expect(resolveInitTemplateAndRuntime(undefined, 'nodejs22')).toEqual({ template: 'node', runtime: 'nodejs22' });
-    expect(resolveInitTemplateAndRuntime(undefined, 'python3.13')).toEqual({ template: 'python', runtime: 'python3.13' });
+  it('resolves explicit runtime values', () => {
+    expect(resolveInitRuntime('nodejs22')).toEqual({ template: 'node', runtime: 'nodejs22' });
+    expect(resolveInitRuntime('python3.13')).toEqual({ template: 'python', runtime: 'python3.13' });
+    expect(resolveInitRuntime('docker')).toEqual({ template: 'docker', runtime: 'docker' });
   });
 
-  it('rejects mismatched template/runtime', () => {
-    expect(() => resolveInitTemplateAndRuntime('node', 'python3.12')).toThrow('不匹配');
+  it('rejects unsupported runtime values', () => {
+    expect(() => resolveInitRuntime('python')).toThrow('函数运行时仅支持');
+    expect(() => templateForRuntime('node')).toThrow('不支持的 runtime');
   });
 
   it('derives default app name from cwd', () => {
@@ -47,6 +53,54 @@ describe('init scaffold', () => {
       const result = writeScaffoldFiles(root, files, false);
       expect(result.written).toContain('src/index.ts');
       expect(readFileSync(join(root, 'src/index.ts'), 'utf-8')).toContain('Hello from Licell Node Scaffold');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('writes docker scaffold files with hono entry', () => {
+    const root = mkdtempSync(join(tmpdir(), 'licell-init-docker-'));
+    try {
+      const files = getScaffoldFiles('docker');
+      const result = writeScaffoldFiles(root, files, false);
+      expect(result.written).toContain('Dockerfile');
+      expect(result.written).toContain('src/index.ts');
+      expect(readFileSync(join(root, 'src/index.ts'), 'utf-8')).toContain('from \'hono\'');
+      expect(readFileSync(join(root, 'package.json'), 'utf-8')).toContain('"hono"');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('detects empty workspace accurately', () => {
+    const root = mkdtempSync(join(tmpdir(), 'licell-init-empty-'));
+    try {
+      expect(isWorkspaceEffectivelyEmpty(root)).toBe(true);
+      writeFileSync(join(root, 'README.md'), '# demo\n');
+      expect(isWorkspaceEffectivelyEmpty(root)).toBe(false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('detects template/runtime from existing workspace files', () => {
+    const root = mkdtempSync(join(tmpdir(), 'licell-init-detect-'));
+    try {
+      writeFileSync(join(root, 'Dockerfile'), 'FROM node:20\n');
+      expect(detectWorkspaceTemplateAndRuntime(root)).toEqual({ template: 'docker', runtime: 'docker' });
+
+      rmSync(join(root, 'Dockerfile'));
+      writeFileSync(join(root, 'requirements.txt'), 'requests\n');
+      expect(detectWorkspaceTemplateAndRuntime(root)).toEqual({ template: 'python', runtime: 'python3.12' });
+
+      rmSync(join(root, 'requirements.txt'));
+      writeFileSync(join(root, 'package.json'), '{"name":"demo"}\n');
+      expect(detectWorkspaceTemplateAndRuntime(root)).toEqual({ template: 'node', runtime: 'nodejs20' });
+
+      rmSync(join(root, 'package.json'));
+      mkdirSync(join(root, '.licell'), { recursive: true });
+      writeFileSync(join(root, '.licell', 'project.json'), '{}\n');
+      expect(detectWorkspaceTemplateAndRuntime(root)).toEqual({ template: 'node', runtime: 'nodejs20' });
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

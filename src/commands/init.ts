@@ -5,15 +5,16 @@ import { Config } from '../utils/config';
 import { formatErrorMessage } from '../utils/errors';
 import { isInteractiveTTY, toPromptValue } from '../utils/cli-shared';
 import {
+  detectWorkspaceTemplateAndRuntime,
   deriveDefaultAppName,
   getScaffoldFiles,
-  resolveInitTemplateAndRuntime,
+  isWorkspaceEffectivelyEmpty,
+  resolveInitRuntime,
   validateAppName,
   writeScaffoldFiles
 } from '../utils/init-scaffold';
 
 interface InitOptions {
-  template?: string;
   runtime?: string;
   app?: string;
   force?: boolean;
@@ -21,33 +22,45 @@ interface InitOptions {
 }
 
 export function registerInitCommand(cli: CAC) {
-  cli.command('init', '初始化 FC 项目脚手架（Node 或 Python）')
-    .option('--template <template>', '脚手架类型：node 或 python')
-    .option('--runtime <runtime>', '默认 runtime：nodejs20/nodejs22/python3.12/python3.13')
+  cli.command('init', '初始化 FC 项目（空目录生成脚手架，已有项目写入 licell 配置）')
+    .option('--runtime <runtime>', '默认 runtime：nodejs20/nodejs22/python3.12/python3.13/docker')
     .option('--app <name>', '应用名（用于 FC functionName）')
-    .option('--force', '覆盖已存在且内容不同的脚手架文件')
+    .option('--force', '在已有项目目录生成/覆盖脚手架文件')
     .option('--yes', '使用默认值，不进入交互')
     .action(async (options: InitOptions) => {
       intro(pc.bgBlue(pc.white(' ⚡ Licell Project Init ')));
 
       const interactiveTTY = isInteractiveTTY();
       const nonInteractive = options.yes || !interactiveTTY;
+      const workspaceEmpty = isWorkspaceEffectivelyEmpty(process.cwd());
+      const hasExplicitRuntime = typeof options.runtime === 'string' && options.runtime.trim().length > 0;
+      const shouldPromptRuntime = workspaceEmpty && !hasExplicitRuntime && !nonInteractive;
 
       try {
-        let templateInput = options.template;
-        if (!templateInput && !nonInteractive) {
+        let runtimeInput = options.runtime;
+        if (!runtimeInput && shouldPromptRuntime) {
           const selected = await select({
-            message: '选择项目模板:',
+            message: '选择默认 runtime:',
             options: [
-              { value: 'node', label: 'Node (TypeScript) FC API' },
-              { value: 'python', label: 'Python FC API' }
+              { value: 'nodejs20', label: 'nodejs20 (Node TypeScript)' },
+              { value: 'nodejs22', label: 'nodejs22 (Node 22 Custom Runtime)' },
+              { value: 'python3.12', label: 'python3.12 (Python Built-in Runtime)' },
+              { value: 'python3.13', label: 'python3.13 (Python 3.13 Custom Runtime)' },
+              { value: 'docker', label: 'docker (Bun + TypeScript + Hono)' }
             ]
           });
           if (isCancel(selected)) process.exit(0);
-          templateInput = String(selected);
+          runtimeInput = String(selected);
         }
 
-        const { template, runtime } = resolveInitTemplateAndRuntime(templateInput, options.runtime);
+        const resolved = runtimeInput
+          ? resolveInitRuntime(runtimeInput)
+          : workspaceEmpty
+            ? resolveInitRuntime()
+            : detectWorkspaceTemplateAndRuntime(process.cwd());
+        const { template, runtime } = resolved;
+
+        const shouldWriteScaffold = workspaceEmpty || (!workspaceEmpty && hasExplicitRuntime && Boolean(options.force));
         const project = Config.getProject();
 
         let appNameInput = options.app || project.appName || deriveDefaultAppName();
@@ -60,15 +73,20 @@ export function registerInitCommand(cli: CAC) {
         const appName = validateAppName(appNameInput);
 
         const s = spinner();
-        s.start('正在生成项目脚手架...');
-        const files = getScaffoldFiles(template);
-        const { written, skipped } = writeScaffoldFiles(process.cwd(), files, Boolean(options.force));
+        s.start(shouldWriteScaffold ? '正在生成项目脚手架...' : '正在写入 licell 项目配置...');
+        const { written, skipped } = shouldWriteScaffold
+          ? writeScaffoldFiles(process.cwd(), getScaffoldFiles(template), Boolean(options.force))
+          : { written: [] as string[], skipped: [] as string[] };
         Config.setProject({ appName, runtime });
-        s.stop(pc.green('✅ 脚手架创建完成'));
+        s.stop(pc.green(shouldWriteScaffold ? '✅ 脚手架创建完成' : '✅ 配置写入完成'));
 
-        console.log(`template: ${pc.cyan(template)}`);
         console.log(`runtime:  ${pc.cyan(runtime)}`);
         console.log(`appName:  ${pc.cyan(appName)}`);
+        console.log(`mode:     ${pc.cyan(shouldWriteScaffold ? 'scaffold+config' : 'config-only')}`);
+        if (!shouldWriteScaffold) {
+          console.log('\n检测到当前目录已有项目文件，已跳过脚手架生成。');
+          console.log('如需在已有目录生成脚手架，请显式指定 --runtime <runtime> --force。');
+        }
         if (written.length > 0) {
           console.log(`\n已写入文件:`);
           for (const file of written) console.log(`- ${file}`);

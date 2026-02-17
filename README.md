@@ -12,7 +12,7 @@ TypeScript + Bun 实现的阿里云部署 CLI，目标是把阿里云上的部�
 ## 当前已实现能力
 
 - 认证与地域：`login` `logout` `whoami` `switch`
-- 项目初始化：`init --template node|python --runtime --app --force`
+- 项目初始化：`init --runtime --app --force`
 - 部署：`deploy --type api|static --runtime nodejs20|nodejs22|python3.12|python3.13 --target --domain-suffix --ssl --ssl-force-renew`
 - 函数：`fn list|info|invoke|rm`
 - 发布：`release list|promote|rollback|prune`
@@ -150,15 +150,24 @@ git push origin v1.0.0
 cd examples/hello-world-api
 ```
 
-初始化脚手架（可选，Node/Python 二选一）：
+初始化脚手架（可选，按 runtime 选择）：
 
 ```bash
-# Node TypeScript
-licell init --template node
+# 默认 Node TypeScript (nodejs20)
+licell init
 
 # Python
-licell init --template python --runtime python3.12
+licell init --runtime python3.12
+
+# Docker (Bun + TypeScript + Hono)
+licell init --runtime docker
 ```
+
+`init` 的行为：
+
+- 空目录：默认生成脚手架 + 写入 `.licell/project.json`（默认 runtime 为 `nodejs20`）
+- 已有项目目录：默认只写入 `.licell/project.json`（不覆盖现有代码）
+- 若要在已有目录生成并覆盖脚手架：显式传 `--runtime <runtime> --force`
 
 登录（默认地域杭州）：
 
