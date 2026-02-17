@@ -16,6 +16,7 @@ TypeScript + Bun 实现的阿里云部署 CLI，目标是把阿里云上的部�
 - 部署：`deploy --type api|static --runtime nodejs20|nodejs22|python3.12|python3.13 --target --domain-suffix --ssl --ssl-force-renew`
 - 函数：`fn list|info|invoke|rm`
 - 发布：`release list|promote|rollback|prune`
+- 自升级：`upgrade [--version <tag>]`
 - 环境变量：`env list|set|rm|pull`
 - 数据库：`db add|list|info|connect`（默认 RDS Serverless）
 - 缓存：`cache add|list|info|connect|rotate-password`（默认 Tair Serverless KV）
@@ -35,11 +36,12 @@ TypeScript + Bun 实现的阿里云部署 CLI，目标是把阿里云上的部�
 一键安装（默认安装到 `~/.local/bin/licell`）：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/dafang/licell/main/install.sh | bash
+curl -fsSL https://github.com/dafang/licell/releases/latest/download/install.sh | bash
 ```
 
 安装逻辑：
 
+- `releases/latest/download/install.sh` 与 `releases/latest` 资产由同一个最新 release 发布
 - 优先下载 `releases/latest` 的 `licell-<os>-<arch>.tar.gz` 预构建资产
 - 资产默认是单文件可执行（内置 Node 运行时，无需本机安装 Node/npm）
 - macOS 下安装时会自动尝试做一次 ad-hoc `codesign`，避免未签名二进制被系统拦截
@@ -53,22 +55,28 @@ export PATH="$HOME/.local/bin:$PATH"
 licell --help
 ```
 
-升级到最新 main：
+升级到最新 release：
+
+```bash
+licell upgrade
+```
+
+指定版本升级（例如回滚到某个稳定版本）：
+
+```bash
+licell upgrade --version v0.9.6
+```
+
+直接从 main 安装开发版（仅开发调试）：
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/dafang/licell/main/install.sh | bash
 ```
 
-指定分支 / commit 安装：
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/dafang/licell/main/install.sh | LICELL_REF=<ref> bash
-```
-
 指定 release 资产地址安装：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/dafang/licell/main/install.sh | LICELL_BINARY_URL=https://example.com/licell-darwin-arm64.tar.gz bash
+curl -fsSL https://github.com/dafang/licell/releases/latest/download/install.sh | LICELL_BINARY_URL=https://example.com/licell-darwin-arm64.tar.gz bash
 ```
 
 ## 从源码开发（可选）
@@ -111,6 +119,7 @@ bun run build:standalone
 - `licell-darwin-x64.tar.gz`
 - `licell-linux-arm64.tar.gz`
 - `licell-linux-x64.tar.gz`
+- `install.sh`
 - `SHA256SUMS.txt`
 
 发布一个新版本（推荐）：
@@ -457,7 +466,7 @@ LICELL_BIN=./licell ./scripts/smoke.sh \
 `zsh: command not found: licell`
 
 - 先执行安装脚本：
-  `curl -fsSL https://raw.githubusercontent.com/dafang/licell/main/install.sh | bash`
+  `curl -fsSL https://github.com/dafang/licell/releases/latest/download/install.sh | bash`
 - 然后确认 `~/.local/bin` 已加入 PATH。
 
 `licell login` 应该在哪执行？
@@ -478,6 +487,6 @@ Node 运行时只支持 20 吗？
 - 重新安装最新版本后再看帮助：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/dafang/licell/main/install.sh | bash
+licell upgrade
 licell --help
 ```

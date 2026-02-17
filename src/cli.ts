@@ -12,6 +12,7 @@ import { registerDomainCommands } from './commands/domain';
 import { registerDnsCommands } from './commands/dns';
 import { registerEnvCommands } from './commands/env';
 import { registerLogsCommand } from './commands/logs';
+import { registerUpgradeCommand } from './commands/upgrade';
 
 const cli = cac('licell');
 
@@ -27,6 +28,7 @@ registerDomainCommands(cli);
 registerDnsCommands(cli);
 registerEnvCommands(cli);
 registerLogsCommand(cli);
+registerUpgradeCommand(cli);
 
 cli.help();
 cli.on('command:*', () => {

@@ -152,3 +152,4 @@ jobs:
             dist-release/licell-linux-arm64.tar.gz
             dist-release/licell-linux-x64.tar.gz
             dist-release/SHA256SUMS.txt
+            install.sh
