@@ -20,6 +20,7 @@ export interface DeployCliOptions {
   target?: string;
   domain?: string;
   domainSuffix?: string;
+  enableCdn?: boolean;
   ssl?: boolean;
   sslForceRenew?: boolean;
   type?: string;
@@ -37,6 +38,7 @@ export interface DeployContext {
   releaseTarget?: string;
   cliDomain?: string;
   domainSuffix?: string;
+  enableCdn: boolean;
   enableSSL: boolean;
   forceSslRenew: boolean;
   cliResources?: { memorySize?: number; timeout?: number };
@@ -53,8 +55,12 @@ export interface DeployContext {
   cliDist?: string;
 }
 
-export function resolveDeploySslEnabled(sslFlag: boolean | undefined, customDomain: string | undefined) {
-  return Boolean(sslFlag || customDomain);
+export function resolveDeploySslEnabled(
+  sslFlag: boolean | undefined,
+  customDomain: string | undefined,
+  enableCdn: boolean | undefined
+) {
+  return Boolean(sslFlag || customDomain || enableCdn);
 }
 
 export async function resolveDeployContext(options: DeployCliOptions): Promise<DeployContext> {
@@ -109,10 +115,15 @@ export async function resolveDeployContext(options: DeployCliOptions): Promise<D
     type = 'api';
   }
   const releaseTarget = options.target ? normalizeReleaseTarget(options.target) : undefined;
-  const enableSSL = resolveDeploySslEnabled(options.ssl, cliDomain);
+  const enableCdn = Boolean(options.enableCdn);
+  const enableSSL = resolveDeploySslEnabled(options.ssl, cliDomain, enableCdn);
   const forceSslRenew = Boolean(options.sslForceRenew);
   if (cliDomain && cliDomainSuffix) throw new Error('--domain 与 --domain-suffix 不能同时使用');
   if (releaseTarget && type !== 'api') throw new Error('--target 仅适用于 API 部署');
+  if (enableCdn && type !== 'api') throw new Error('--enable-cdn 仅适用于 API 部署');
+  if (enableCdn && !cliDomain && !domainSuffix) {
+    throw new Error('--enable-cdn 需要域名，请提供 --domain（完整域名）或 --domain-suffix');
+  }
   if (type !== 'api' && cliRuntime) throw new Error('--runtime 的 API 运行时仅适用于 API 部署；静态站请使用 --runtime static');
   if (type !== 'api' && cliAcrNamespace) throw new Error('--acr-namespace 仅适用于 API Docker 部署');
   if (type !== 'api' && cliDomain) throw new Error('--domain 仅适用于 API 部署');
@@ -143,6 +154,7 @@ export async function resolveDeployContext(options: DeployCliOptions): Promise<D
     releaseTarget,
     cliDomain,
     domainSuffix,
+    enableCdn,
     enableSSL,
     forceSslRenew,
     cliResources,

@@ -55,6 +55,14 @@ curl -X POST "http://<appName>.your-domain.xyz/math/sum" \
   -d '{"numbers":[1,2,3]}'
 ```
 
+如需接入 CDN 加速，可追加：
+
+```bash
+licell deploy --type api --target preview --domain-suffix your-domain.xyz --enable-cdn
+```
+
+说明：使用 `--enable-cdn` 时，`deploy` 会默认自动开启 HTTPS（CDN 边缘证书需在 CDN 控制台配置）。
+
 如果你希望直接指定完整域名，也可以：
 
 ```bash

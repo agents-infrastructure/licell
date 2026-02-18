@@ -9,7 +9,8 @@ import {
   promoteFunctionAlias
 } from '../providers/fc';
 import { bindCustomDomain } from '../providers/domain';
-import { issueAndBindSSL } from '../providers/ssl';
+import { enableCdnForDomain } from '../providers/cdn';
+import { issueAndBindSSLWithArtifacts } from '../providers/ssl';
 import { probeHttpHealth } from '../utils/health-check';
 import { toPromptValue, withSpinner } from '../utils/cli-shared';
 import type { DeployContext } from './deploy-context';
@@ -73,6 +74,7 @@ export async function executeApiDeploy(
         runtime,
         ctx.cliResources ? { resources: ctx.cliResources } : undefined
       );
+      const fcOriginDomain = `${ctx.auth.accountId}.${ctx.auth.region}.fc.aliyuncs.com`;
       let nextPromotedVersion: string | undefined;
       let nextFixedDomain: string | undefined;
       if (ctx.releaseTarget) {
@@ -93,12 +95,33 @@ export async function executeApiDeploy(
         s.message(`函数部署完成，正在按固定规则绑定域名 ${nextFixedDomain}...`);
         await bindCustomDomain(
           nextFixedDomain,
-          `${ctx.auth.accountId}.${ctx.auth.region}.fc.aliyuncs.com`,
-          ctx.releaseTarget
+          fcOriginDomain,
+          ctx.releaseTarget,
+          { skipDnsBind: ctx.enableCdn }
         );
+        let sslArtifacts: { certificate?: string; privateKey?: string } | undefined;
         if (ctx.enableSSL) {
           s.message(`固定域名绑定完成，正在签发并挂载 HTTPS 证书 (${nextFixedDomain})...`);
-          await issueAndBindSSL(nextFixedDomain, s, { forceRenew: ctx.forceSslRenew });
+          const sslResult = await issueAndBindSSLWithArtifacts(nextFixedDomain, s, { forceRenew: ctx.forceSslRenew });
+          sslArtifacts = {
+            certificate: sslResult.certificate,
+            privateKey: sslResult.privateKey
+          };
+        }
+        if (ctx.enableCdn) {
+          s.message(`固定域名绑定完成，正在启用 CDN 加速 (${nextFixedDomain})...`);
+          const cdnResult = await enableCdnForDomain(nextFixedDomain, fcOriginDomain, sslArtifacts);
+          s.message(
+            cdnResult.created
+              ? `✅ CDN 加速已启用，CNAME=${cdnResult.cdnCname}`
+              : `✅ CDN 加速已存在，已校准 DNS 到 CNAME=${cdnResult.cdnCname}`
+          );
+          if (ctx.enableSSL && cdnResult.httpsConfigured) {
+            s.message('✅ CDN 边缘 HTTPS 已自动配置。');
+          }
+          if (ctx.enableSSL && !cdnResult.httpsConfigured) {
+            s.message('⚠️ 未能自动配置 CDN 边缘 HTTPS（未获取到可用证书），请在 CDN 控制台补充证书。');
+          }
         }
       }
       if (ctx.cliDomain) {
@@ -106,12 +129,33 @@ export async function executeApiDeploy(
         s.message(`函数部署完成，正在绑定自定义域名 ${nextFixedDomain}...`);
         await bindCustomDomain(
           nextFixedDomain,
-          `${ctx.auth.accountId}.${ctx.auth.region}.fc.aliyuncs.com`,
-          ctx.releaseTarget
+          fcOriginDomain,
+          ctx.releaseTarget,
+          { skipDnsBind: ctx.enableCdn }
         );
+        let sslArtifacts: { certificate?: string; privateKey?: string } | undefined;
         if (ctx.enableSSL) {
           s.message(`自定义域名绑定完成，正在签发并挂载 HTTPS 证书 (${nextFixedDomain})...`);
-          await issueAndBindSSL(nextFixedDomain, s, { forceRenew: ctx.forceSslRenew });
+          const sslResult = await issueAndBindSSLWithArtifacts(nextFixedDomain, s, { forceRenew: ctx.forceSslRenew });
+          sslArtifacts = {
+            certificate: sslResult.certificate,
+            privateKey: sslResult.privateKey
+          };
+        }
+        if (ctx.enableCdn) {
+          s.message(`自定义域名绑定完成，正在启用 CDN 加速 (${nextFixedDomain})...`);
+          const cdnResult = await enableCdnForDomain(nextFixedDomain, fcOriginDomain, sslArtifacts);
+          s.message(
+            cdnResult.created
+              ? `✅ CDN 加速已启用，CNAME=${cdnResult.cdnCname}`
+              : `✅ CDN 加速已存在，已校准 DNS 到 CNAME=${cdnResult.cdnCname}`
+          );
+          if (ctx.enableSSL && cdnResult.httpsConfigured) {
+            s.message('✅ CDN 边缘 HTTPS 已自动配置。');
+          }
+          if (ctx.enableSSL && !cdnResult.httpsConfigured) {
+            s.message('⚠️ 未能自动配置 CDN 边缘 HTTPS（未获取到可用证书），请在 CDN 控制台补充证书。');
+          }
         }
       }
       return {
@@ -134,9 +178,13 @@ export async function executeApiDeploy(
   }
   if (fixedDomain) {
     const fixedDomainUrl = `${ctx.enableSSL ? 'https' : 'http'}://${fixedDomain}`;
+    const fixedProbeAttempts = ctx.enableCdn ? 10 : 6;
+    const fixedProbeIntervalMs = ctx.enableCdn ? 3000 : 2000;
+    const fixedProbeTimeoutMs = ctx.enableCdn ? 6000 : 5000;
     const fixedProbe = await probeHttpHealth(fixedDomainUrl, {
-      maxAttempts: 6,
-      intervalMs: 2000
+      maxAttempts: fixedProbeAttempts,
+      intervalMs: fixedProbeIntervalMs,
+      timeoutMs: fixedProbeTimeoutMs
     });
     if (fixedProbe.ok) {
       healthCheckLogs.push(`✅ 固定域名可访问 (${fixedProbe.statusCode} ${fixedProbe.checkedUrl})`);

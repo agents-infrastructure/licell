@@ -122,17 +122,25 @@ async function ensureCnameRecord(
   })));
 }
 
+export async function ensureDomainCname(domainName: string, targetValue: string) {
+  const normalizedDomain = domainName.trim().toLowerCase();
+  if (!normalizedDomain) throw new Error('域名不能为空');
+  const { rootDomain, subDomain } = parseRootAndSubdomain(normalizedDomain);
+  const dnsClient = createDnsClient();
+  await ensureCnameRecord(dnsClient, normalizedDomain, rootDomain, subDomain, targetValue);
+}
+
 export async function bindCustomDomain(
   domainName: string,
   targetFcDomain: string,
-  aliasName?: string
+  aliasName?: string,
+  options: { skipDnsBind?: boolean } = {}
 ) {
   const project = Config.getProject();
   if (!project.appName) throw new Error('未找到应用名，请先执行 licell deploy');
-  const { rootDomain, subDomain } = parseRootAndSubdomain(domainName);
-
-  const dnsClient = createDnsClient();
-  await ensureCnameRecord(dnsClient, domainName, rootDomain, subDomain, targetFcDomain);
+  if (!options.skipDnsBind) {
+    await ensureDomainCname(domainName, targetFcDomain);
+  }
 
   const fcClient = createFcClient();
   const routeConfig = {

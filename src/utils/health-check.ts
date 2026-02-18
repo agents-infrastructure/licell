@@ -1,4 +1,6 @@
 import { sleep } from './runtime';
+import { request as httpRequest } from 'http';
+import { request as httpsRequest } from 'https';
 
 const DEFAULT_PATHS = ['/healthz', '/'];
 const DEFAULT_MAX_ATTEMPTS = 4;
@@ -55,19 +57,60 @@ function formatProbeError(err: unknown) {
 
 async function fetchWithTimeout(url: string, timeoutMs: number, fetchImpl: ProbeFetch) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const timeoutError = new Error('请求超时');
+  timeoutError.name = 'AbortError';
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      reject(timeoutError);
+    }, timeoutMs);
+  });
   try {
-    return await fetchImpl(url, {
-      method: 'GET',
-      redirect: 'manual',
-      signal: controller.signal,
-      headers: {
-        'user-agent': 'licell-health-check/1.0'
-      }
-    });
+    return await Promise.race([
+      fetchImpl(url, {
+        method: 'GET',
+        redirect: 'manual',
+        signal: controller.signal,
+        headers: {
+          'user-agent': 'licell-health-check/1.0'
+        }
+      }),
+      timeoutPromise
+    ]);
   } finally {
-    clearTimeout(timer);
+    if (timer) clearTimeout(timer);
   }
+}
+
+async function requestStatusWithTimeout(url: string, timeoutMs: number): Promise<number> {
+  const target = new URL(url);
+  const isHttps = target.protocol === 'https:';
+  const requestFn = isHttps ? httpsRequest : httpRequest;
+
+  return new Promise((resolve, reject) => {
+    const req = requestFn(
+      target,
+      {
+        method: 'GET',
+        headers: {
+          'user-agent': 'licell-health-check/1.0'
+        },
+        ...(isHttps ? { minVersion: 'TLSv1.2', maxVersion: 'TLSv1.2' } : {})
+      },
+      (res) => {
+        const statusCode = res.statusCode ?? 0;
+        res.resume();
+        res.once('end', () => resolve(statusCode));
+      }
+    );
+
+    req.on('error', reject);
+    req.setTimeout(timeoutMs, () => {
+      req.destroy(new Error('请求超时'));
+    });
+    req.end();
+  });
 }
 
 export async function probeHttpHealth(baseUrl: string, options: ProbeHttpHealthOptions = {}): Promise<ProbeHttpHealthResult> {
@@ -76,7 +119,7 @@ export async function probeHttpHealth(baseUrl: string, options: ProbeHttpHealthO
     return { ok: false, error: 'URL 为空', attempt: 1 };
   }
 
-  const fetchImpl = options.fetchImpl ?? fetch;
+  const fetchImpl = options.fetchImpl;
   const paths = normalizeProbePaths(options.paths);
   const maxAttempts = Math.max(1, Math.floor(options.maxAttempts ?? DEFAULT_MAX_ATTEMPTS));
   const intervalMs = Math.max(0, Math.floor(options.intervalMs ?? DEFAULT_INTERVAL_MS));
@@ -87,8 +130,9 @@ export async function probeHttpHealth(baseUrl: string, options: ProbeHttpHealthO
     for (const path of paths) {
       const checkedUrl = buildProbeUrl(target, path);
       try {
-        const response = await fetchWithTimeout(checkedUrl, timeoutMs, fetchImpl);
-        const { status } = response;
+        const status = fetchImpl
+          ? (await fetchWithTimeout(checkedUrl, timeoutMs, fetchImpl)).status
+          : await requestStatusWithTimeout(checkedUrl, timeoutMs);
         if (status < 500) {
           if (path === '/healthz' && status === 404 && paths.includes('/')) {
             lastError = `GET ${checkedUrl} 返回 404`;

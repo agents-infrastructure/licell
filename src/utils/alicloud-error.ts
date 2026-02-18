@@ -17,7 +17,7 @@ function matchesAny(text: string, patterns: string[]): boolean {
 
 export function isConflictError(err: unknown): boolean {
   return matchesAny(extractErrorText(err), [
-    'alreadyexists', 'entityalreadyexists', 'already exists', 'conflict', 'duplicate', 'domainrecordduplicate'
+    'alreadyexist', 'alreadyexists', 'entityalreadyexists', 'already exists', 'conflict', 'duplicate', 'domainrecordduplicate'
   ]);
 }
 

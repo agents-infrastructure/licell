@@ -69,6 +69,11 @@ export const LICELL_POLICY_ACTIONS = [
   'alidns:AddDomainRecord',
   'alidns:UpdateDomainRecord',
   'alidns:DeleteDomainRecord',
+  // CDN
+  'cdn:DescribeUserDomains',
+  'cdn:AddCdnDomain',
+  'cdn:DeleteUserCdnDomain',
+  'cdn:SetCdnDomainSSLCertificate',
   // VPC (read + managed VSwitch creation)
   'vpc:DescribeVpcs',
   'vpc:DescribeZones',

@@ -141,6 +141,18 @@ licell deploy \
   --domain api.your-domain.xyz
 ```
 
+域名绑定后启用 CDN 加速：
+
+```bash
+licell deploy \
+  --type api \
+  --entry src/index.ts \
+  --runtime nodejs22 \
+  --target preview \
+  --domain-suffix your-domain.xyz \
+  --enable-cdn
+```
+
 ## 3. `init` 模板（与 `examples` 同级）
 
 `init` 现在生成的是“可直接展示能力”的完整模板，不是 hello world。
@@ -360,7 +372,10 @@ licell deploy --type api --target preview --domain api.your-domain.xyz
 
 - `--domain` 与 `--domain-suffix` 不能同时使用
 - 使用 `--domain` 时默认自动开启 HTTPS（可不写 `--ssl`）
-- 使用 `--domain-suffix` 时，只有带 `--ssl` 才会触发证书检查/续签
+- 使用 `--enable-cdn` 时默认自动开启 HTTPS（可不写 `--ssl`）
+- 使用 `--domain-suffix` 时，需带 `--ssl` 或 `--enable-cdn` 才会触发证书检查/续签
+- `--enable-cdn` 仅适用于 API 部署，且需要 `--domain` 或 `--domain-suffix`
+- 当前 `--enable-cdn` 只自动完成域名接入和 DNS CNAME 切换；若启用 HTTPS，CDN 边缘证书需在 CDN 控制台配置
 - 默认续签阈值 30 天
 - 域名需托管在阿里云 DNS
 

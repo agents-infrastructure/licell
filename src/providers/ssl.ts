@@ -31,12 +31,20 @@ export interface ExistingDomainLike {
   protocol?: string;
   certConfig?: {
     certificate?: string;
+    privateKey?: string;
   };
 }
 
 interface IssueSslOptions {
   forceRenew?: boolean;
   renewBeforeDays?: number;
+}
+
+export interface SslBindingArtifacts {
+  url: string;
+  certificate?: string;
+  privateKey?: string;
+  reusedExistingCertificate: boolean;
 }
 
 export interface ResolvedIssueSslOptions {
@@ -211,7 +219,11 @@ export function shouldIssueNewCertificate(
   };
 }
 
-export async function issueAndBindSSL(domain: string, spinner: Spinner, options?: IssueSslOptions) {
+export async function issueAndBindSSLWithArtifacts(
+  domain: string,
+  spinner: Spinner,
+  options?: IssueSslOptions
+): Promise<SslBindingArtifacts> {
   const auth = Config.requireAuth();
   const dnsClient = new AlidnsClientCtor(new $OpenApi.Config({
     accessKeyId: auth.ak,
@@ -238,7 +250,20 @@ export async function issueAndBindSSL(domain: string, spinner: Spinner, options?
 
   const decision = shouldIssueNewCertificate(existingDomain, resolvedOptions);
   spinner.message(decision.message);
-  if (!decision.issue) return `https://${domain}`;
+  if (!decision.issue) {
+    const certificate = typeof existingDomain?.certConfig?.certificate === 'string'
+      ? existingDomain.certConfig.certificate
+      : undefined;
+    const privateKey = typeof existingDomain?.certConfig?.privateKey === 'string'
+      ? existingDomain.certConfig.privateKey
+      : undefined;
+    return {
+      url: `https://${domain}`,
+      certificate: certificate?.trim() ? certificate : undefined,
+      privateKey: privateKey?.trim() ? privateKey : undefined,
+      reusedExistingCertificate: true
+    };
+  }
 
   const { rootDomain, subDomain } = parseRootAndSubdomain(domain);
   const recordIds: string[] = [];
@@ -298,12 +323,23 @@ export async function issueAndBindSSL(domain: string, spinner: Spinner, options?
     }
   });
 
+  const privateKeyPem = toFcPemPrivateKey(certKey);
   spinner.message('📦 证书下发成功，正在自动挂载至云端网关开启 HTTPS...');
   await withRetry(() => fcClient.updateCustomDomain(domain, new $FC.UpdateCustomDomainRequest({
     body: new $FC.UpdateCustomDomainInput({
       protocol: 'HTTP,HTTPS',
-      certConfig: { certName: `licell-cert-${Date.now()}`, certificate: cert.toString(), privateKey: toFcPemPrivateKey(certKey) }
+      certConfig: { certName: `licell-cert-${Date.now()}`, certificate: cert.toString(), privateKey: privateKeyPem }
     })
   })));
-  return `https://${domain}`;
+  return {
+    url: `https://${domain}`,
+    certificate: cert.toString(),
+    privateKey: privateKeyPem,
+    reusedExistingCertificate: false
+  };
+}
+
+export async function issueAndBindSSL(domain: string, spinner: Spinner, options?: IssueSslOptions) {
+  const result = await issueAndBindSSLWithArtifacts(domain, spinner, options);
+  return result.url;
 }

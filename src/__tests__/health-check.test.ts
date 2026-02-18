@@ -73,4 +73,20 @@ describe('probeHttpHealth', () => {
       expect(result.error).toContain('返回 500');
     }
   });
+
+  it('returns timeout when fetch hangs without honoring abort', async () => {
+    const startedAt = Date.now();
+    const result = await probeHttpHealth('https://example.com', {
+      maxAttempts: 1,
+      intervalMs: 0,
+      timeoutMs: 1000,
+      fetchImpl: async () => new Promise<Response>(() => { /* keep pending */ })
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain('请求超时');
+    }
+    expect(Date.now() - startedAt).toBeLessThan(2500);
+  });
 });
