@@ -14,6 +14,7 @@ import { registerDnsCommands } from './commands/dns';
 import { registerEnvCommands } from './commands/env';
 import { registerLogsCommand } from './commands/logs';
 import { registerUpgradeCommand } from './commands/upgrade';
+import { registerMcpCommand } from './commands/mcp';
 import { resolveCliVersion } from './utils/version';
 import { formatErrorMessage } from './utils/errors';
 
@@ -33,6 +34,7 @@ registerDnsCommands(cli);
 registerEnvCommands(cli);
 registerLogsCommand(cli);
 registerUpgradeCommand(cli);
+registerMcpCommand(cli);
 
 cli.help();
 cli.on('command:*', () => {
