@@ -26,8 +26,8 @@ export function registerDeployCommand(cli: CAC) {
     .option('--acr-namespace <ns>', 'Docker 部署时使用的 ACR 命名空间（默认 licell）')
     .option('--enable-vpc', 'API 部署时启用 VPC 接入（默认启用）')
     .option('--disable-vpc', 'API 部署时禁用 VPC 接入（使用公网模式）')
-    .option('--memory <mb>', '函数内存大小（MB，默认 256）')
-    .option('--vcpu <n>', '函数 vCPU 核数（如 0.5 / 1 / 2）')
+    .option('--memory <mb>', '函数内存大小（MB，默认 512）')
+    .option('--vcpu <n>', '函数 vCPU 核数（如 0.5 / 1 / 2，默认 0.5）')
     .option('--instance-concurrency <n>', '单实例并发数（默认自动，通常起始 10）')
     .option('--timeout <seconds>', '函数超时时间（秒，默认 30）')
     .action(async (options: DeployCliOptions) => {

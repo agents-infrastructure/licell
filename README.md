@@ -53,7 +53,7 @@ licell --version
 ```bash
 licell upgrade
 # 或指定版本
-licell upgrade --version v0.9.17
+licell upgrade --version v0.9.18
 ```
 
 安装逻辑说明：
@@ -222,6 +222,13 @@ licell deploy --type api --runtime nodejs22 \
   --instance-concurrency 20 \
   --timeout 60
 ```
+
+默认值：
+
+- `--memory` 默认 `512`
+- `--vcpu` 默认 `0.5`
+- `--instance-concurrency` 默认自动（通常起始 `10`）
+- `--timeout` 默认 `30`
 
 网络参数：
 

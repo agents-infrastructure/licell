@@ -4,7 +4,7 @@ import { resolveFunctionResources } from '../providers/fc/deploy';
 describe('resolveFunctionResources', () => {
   it('uses defaults when both project and cli resources are empty', () => {
     expect(resolveFunctionResources(undefined, undefined)).toEqual({
-      memorySize: 256,
+      memorySize: 512,
       timeout: 30,
       instanceConcurrency: 10
     });

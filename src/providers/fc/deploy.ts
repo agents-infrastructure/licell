@@ -43,10 +43,31 @@ export function packageCodeAsBase64(outdir: string) {
   }
 }
 
-const DEFAULT_MEMORY_SIZE = 256;
+const DEFAULT_MEMORY_SIZE = 512;
 const DEFAULT_TIMEOUT = 30;
 const DEFAULT_DISK_SIZE = 512;
 const DEFAULT_INSTANCE_CONCURRENCY = 10;
+const DEFAULT_CPU = 0.5;
+
+function validateCpuMemoryRatio(memorySizeMb: number, cpu: number) {
+  // FC requires memory (GB) : vCPU ratio in [1, 4].
+  // Equivalent: cpu*1024 <= memorySizeMb <= cpu*4096
+  if (!Number.isFinite(memorySizeMb) || memorySizeMb <= 0) {
+    throw new Error(`无效的 memorySize: ${String(memorySizeMb)}`);
+  }
+  if (!Number.isFinite(cpu) || cpu <= 0) {
+    throw new Error(`无效的 vCPU: ${String(cpu)}`);
+  }
+  const minMb = Math.ceil(cpu * 1024);
+  const maxMb = Math.floor(cpu * 4096);
+  if (memorySizeMb < minMb || memorySizeMb > maxMb) {
+    throw new Error(
+      `FC 资源规格要求：memory 与 vCPU 需满足 1:1~4:1（memoryGB/vCPU ∈ [1,4]）。\n` +
+      `当前：memory=${memorySizeMb}MB, vCPU=${cpu}\n` +
+      `请调整为：memory ∈ [${minMb}, ${maxMb}] MB（或调整 vCPU）。`
+    );
+  }
+}
 
 export interface DeployFCOptions {
   resources?: ProjectResourcesConfig;
@@ -125,6 +146,8 @@ export async function deployFC(appName: string, entryFile: string, runtime: FcRu
   const resources = resolveFunctionResources(project.resources, options.resources);
   const memorySize = resources.memorySize;
   const timeout = resources.timeout;
+  const cpu = resources.cpu ?? DEFAULT_CPU;
+  validateCpuMemoryRatio(memorySize, cpu);
 
   const createBody: Record<string, unknown> = {
     functionName: appName,
@@ -136,7 +159,7 @@ export async function deployFC(appName: string, entryFile: string, runtime: FcRu
     environmentVariables,
     vpcConfig
   };
-  if (resources.cpu !== undefined) createBody.cpu = resources.cpu;
+  createBody.cpu = cpu;
   if (resources.instanceConcurrency !== undefined) createBody.instanceConcurrency = resources.instanceConcurrency;
   if (code) createBody.code = code;
   if (runtimeConfig.customRuntimeConfig) createBody.customRuntimeConfig = runtimeConfig.customRuntimeConfig;
@@ -159,7 +182,7 @@ export async function deployFC(appName: string, entryFile: string, runtime: FcRu
         environmentVariables,
         vpcConfig
       };
-      if (resources.cpu !== undefined) updateBody.cpu = resources.cpu;
+      updateBody.cpu = cpu;
       if (resources.instanceConcurrency !== undefined) updateBody.instanceConcurrency = resources.instanceConcurrency;
       if (code) updateBody.code = code;
       if (runtimeConfig.customRuntimeConfig) updateBody.customRuntimeConfig = runtimeConfig.customRuntimeConfig;
