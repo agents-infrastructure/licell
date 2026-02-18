@@ -11,6 +11,7 @@
         "@alicloud/fc20230330": "^4.0.0",
         "@alicloud/openapi-client": "^0.4.15",
         "@alicloud/r-kvstore20150101": "^6.0.0",
+        "@alicloud/ram20150501": "^1.2.0",
         "@alicloud/rds20140815": "^3.0.0",
         "@alicloud/sls20201230": "^3.0.0",
         "@alicloud/vpc20160428": "^3.0.0",
@@ -70,6 +71,8 @@
     "@alicloud/openapi-util": ["@alicloud/openapi-util@0.3.3", "https://registry.npmmirror.com/@alicloud/openapi-util/-/openapi-util-0.3.3.tgz", { "dependencies": { "@alicloud/tea-typescript": "^1.7.1", "@alicloud/tea-util": "^1.3.0", "kitx": "^2.1.0", "sm3": "^1.0.3" } }, "sha512-vf0cQ/q8R2U7ZO88X5hDiu1yV3t/WexRj+YycWxRutkH/xVXfkmpRgps8lmNEk7Ar+0xnY8+daN2T+2OyB9F4A=="],
 
     "@alicloud/r-kvstore20150101": ["@alicloud/r-kvstore20150101@6.0.0", "https://registry.npmmirror.com/@alicloud/r-kvstore20150101/-/r-kvstore20150101-6.0.0.tgz", { "dependencies": { "@alicloud/openapi-core": "^1.0.0", "@darabonba/typescript": "^1.0.0" } }, "sha512-XoCuG1EU7K02WgTs9ePFIt0IQIAnyA7SStAWRwJQEha/jU3LN5f4FtunxuxdKDDQra15L/kciGpHFYYOLR5OQg=="],
+
+    "@alicloud/ram20150501": ["@alicloud/ram20150501@1.2.0", "https://registry.npmmirror.com/@alicloud/ram20150501/-/ram20150501-1.2.0.tgz", { "dependencies": { "@alicloud/openapi-core": "^1.0.0", "@darabonba/typescript": "^1.0.0" } }, "sha512-+Z1pOwom3cLXhar/Z3I26VkUa8SjSHAvYCgGkf7y+IYaF5x+DT16e5rtT614gVmSmfXdOr+h5qv/+HSy8mc9Yw=="],
 
     "@alicloud/rds20140815": ["@alicloud/rds20140815@3.1.1", "https://registry.npmmirror.com/@alicloud/rds20140815/-/rds20140815-3.1.1.tgz", { "dependencies": { "@alicloud/endpoint-util": "^0.0.1", "@alicloud/openapi-client": "^0.4.8", "@alicloud/openapi-util": "^0.3.2", "@alicloud/tea-typescript": "^1.7.1", "@alicloud/tea-util": "^1.4.7" } }, "sha512-bnwuaJkIRSaDhPqqFDZkgplc2qLtTSCr3QOvyR4cplxld1M3tWuRuW2PUwAPeVjUH1tnyt9POix/NPSUjxOCdA=="],
 

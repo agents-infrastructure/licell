@@ -53,7 +53,7 @@ licell --version
 ```bash
 licell upgrade
 # 或指定版本
-licell upgrade --version v0.9.11
+licell upgrade --version v0.9.12
 ```
 
 安装逻辑说明：
@@ -82,6 +82,26 @@ licell init --runtime nodejs22
 ```bash
 licell login --region cn-hangzhou
 ```
+
+如果你不想手工配置 RAM 权限，推荐 bootstrap 模式：
+
+```bash
+licell login \
+  --account-id <accountId> \
+  --ak <super-ak> \
+  --sk <super-sk> \
+  --region cn-hangzhou \
+  --bootstrap-ram
+```
+
+说明：
+
+- `--bootstrap-ram` 会用你提供的高权限 AK/SK 自动创建 licell 专用 RAM 用户、策略和 AccessKey
+- 本地只保存新创建的 licell 专用 key，不保存输入的高权限 key
+- bootstrap 成功后即完成登录，不需要再执行一次 `licell login`
+- 高权限（超级）AK/SK 可在 `https://ram.console.aliyun.com/profile/access-keys` 获取
+- Docker 部署遇到 ACR 个人版未注册场景时，licell 会自动为当前 RAM 用户初始化 ACR 用户信息再继续部署
+- 如需自定义命名：`--bootstrap-user <name>` `--bootstrap-policy <name>`
 
 ### 2.3 部署 API（FC）
 
@@ -498,6 +518,14 @@ git push origin v1.0.0
 
 - 任意目录都可以（写入 `~/.licell-cli/auth.json`）
 - 但建议在业务目录执行后直接 `deploy`
+
+不熟悉 RAM 权限怎么配？
+
+- 可以直接使用 `licell login --bootstrap-ram`
+- licell 会自动创建专用 RAM 用户和策略，并切换到新 key
+- 需要你提供一次可创建 RAM 资源的高权限 AK/SK（获取地址：`https://ram.console.aliyun.com/profile/access-keys`）
+- licell 不会保存你输入的高权限 key，只保存新创建的 licell 专用 key
+- bootstrap 完成后无需再次 `login`
 
 `--help` 看不到某些子命令？
 

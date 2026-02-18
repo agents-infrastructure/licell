@@ -1,8 +1,9 @@
 import type { CAC } from 'cac';
-import { intro, outro, text, password, isCancel } from '@clack/prompts';
+import { intro, outro, text, password, confirm, isCancel } from '@clack/prompts';
 import pc from 'picocolors';
 import { Config, DEFAULT_ALI_REGION } from '../utils/config';
 import { readEnvWithFallback } from '../utils/env';
+import { bootstrapLicellRamAccess } from '../providers/ram';
 import {
   toPromptValue,
   ensureAuthOrExit,
@@ -18,13 +19,29 @@ export function registerAuthCommands(cli: CAC) {
     .option('--ak <accessKeyId>', '阿里云 AccessKey ID（CI 场景）')
     .option('--sk <accessKeySecret>', '阿里云 AccessKey Secret（CI 场景）')
     .option('--region <region>', `默认地域，默认 ${DEFAULT_ALI_REGION}`)
-    .action(async (options: { accountId?: unknown; ak?: unknown; sk?: unknown; region?: unknown }) => {
+    .option('--bootstrap-ram', '使用高权限 AK/SK 自动创建 licell 专用 RAM 用户与最小权限 AK/SK（仅保存新 key）')
+    .option('--bootstrap-user <name>', 'bootstrap 模式下 RAM 用户名，默认 licell-operator')
+    .option('--bootstrap-policy <name>', 'bootstrap 模式下自定义策略名，默认 LicellOperatorPolicy')
+    .action(async (options: { accountId?: unknown; ak?: unknown; sk?: unknown; region?: unknown; bootstrapRam?: unknown; bootstrapUser?: unknown; bootstrapPolicy?: unknown }) => {
     intro(pc.bgBlue(pc.white(' ▲ Licell CLI (AliCloud) ')));
     const interactiveTTY = isInteractiveTTY();
     const accountIdOpt = toOptionalString(options.accountId) || readEnvWithFallback(process.env, 'LICELL_ACCOUNT_ID', 'ALI_ACCOUNT_ID');
     const akOpt = toOptionalString(options.ak) || readEnvWithFallback(process.env, 'LICELL_ACCESS_KEY_ID', 'ALI_ACCESS_KEY_ID');
     const skOpt = toOptionalString(options.sk) || readEnvWithFallback(process.env, 'LICELL_ACCESS_KEY_SECRET', 'ALI_ACCESS_KEY_SECRET');
     const regionOpt = toOptionalString(options.region) || readEnvWithFallback(process.env, 'LICELL_REGION', 'ALI_REGION');
+    let bootstrapRam = Boolean(options.bootstrapRam);
+
+    if (interactiveTTY && !bootstrapRam && !accountIdOpt && !akOpt && !skOpt) {
+      console.log(pc.gray('\n不会配置 RAM 权限？建议使用 bootstrap 模式自动完成最小权限配置。'));
+      console.log(pc.gray('超级 AK/SK 获取地址: https://ram.console.aliyun.com/profile/access-keys'));
+      console.log(pc.gray('安全说明: licell 不会保存你输入的超级 key，仅保存自动创建的 licell 专用 key。\n'));
+      const chooseBootstrap = await confirm({
+        message: '是否启用 bootstrap 模式自动配置 RAM 用户与专用 AccessKey？',
+        initialValue: true
+      });
+      if (isCancel(chooseBootstrap)) process.exit(0);
+      bootstrapRam = Boolean(chooseBootstrap);
+    }
 
     if (!interactiveTTY && (!accountIdOpt || !akOpt || !skOpt)) {
       throw new Error('非交互模式下 login 需要传入 --account-id、--ak、--sk');
@@ -39,21 +56,37 @@ export function registerAuthCommands(cli: CAC) {
       ? toPromptValue(skOpt, 'AccessKey Secret')
       : toPromptValue(await password({ message: '输入 AccessKey Secret:' }), 'AccessKey Secret');
 
-    if (!interactiveTTY && !regionOpt) {
-      Config.setAuth({ accountId, ak, sk, region: DEFAULT_ALI_REGION });
-      outro(pc.green(`✅ 凭证已安全保存至 ~/.licell-cli/auth.json (region=${DEFAULT_ALI_REGION})`));
+    const region = !interactiveTTY && !regionOpt
+      ? DEFAULT_ALI_REGION
+      : regionOpt
+        ? toPromptValue(regionOpt, 'Region').toLowerCase()
+        : toPromptValue(
+          await text({ message: `默认 Region (回车使用 ${DEFAULT_ALI_REGION}):`, initialValue: DEFAULT_ALI_REGION }),
+          'Region'
+        ).toLowerCase();
+
+    if (!bootstrapRam) {
+      Config.setAuth({ accountId, ak, sk, region });
+      outro(pc.green('✅ 凭证已安全保存至 ~/.licell-cli/auth.json'));
       return;
     }
 
-    const region = regionOpt
-      ? toPromptValue(regionOpt, 'Region').toLowerCase()
-      : toPromptValue(
-        await text({ message: `默认 Region (回车使用 ${DEFAULT_ALI_REGION}):`, initialValue: DEFAULT_ALI_REGION }),
-        'Region'
-      ).toLowerCase();
-
-    Config.setAuth({ accountId, ak, sk, region });
-    outro(pc.green('✅ 凭证已安全保存至 ~/.licell-cli/auth.json'));
+    const bootstrapUser = toOptionalString(options.bootstrapUser);
+    const bootstrapPolicy = toOptionalString(options.bootstrapPolicy);
+    console.log(pc.gray('\nbootstrap 模式：正在创建 licell 专用 RAM 子用户与 AccessKey（不会保存你输入的高权限 key）...'));
+    const bootstrap = await bootstrapLicellRamAccess({
+      adminAuth: { accountId, ak, sk, region },
+      userName: bootstrapUser || undefined,
+      policyName: bootstrapPolicy || undefined
+    });
+    Config.setAuth({
+      accountId,
+      ak: bootstrap.accessKeyId,
+      sk: bootstrap.accessKeySecret,
+      region
+    });
+    const actionSummary = `${bootstrap.createdUser ? 'created-user' : 'reuse-user'}, ${bootstrap.createdPolicy ? 'created-policy' : 'reuse-policy'}`;
+    outro(pc.green(`✅ bootstrap 完成，已保存 licell 专用凭证到 ~/.licell-cli/auth.json (${actionSummary})`));
   });
 
   cli.command('logout', '清除本地凭证')

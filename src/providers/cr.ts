@@ -4,6 +4,7 @@ import * as $Util from '@alicloud/tea-util';
 import { Config, type AuthConfig } from '../utils/config';
 import { resolveSdkCtor } from '../utils/sdk';
 import { isConflictError } from '../utils/errors';
+import { randomStrongPassword } from '../utils/crypto';
 
 const CRClientCtor = resolveSdkCtor<CR>(CR, '@alicloud/cr20181201');
 
@@ -24,6 +25,9 @@ export interface DockerCredentials {
 const DEFAULT_ACR_NAMESPACE = 'licell';
 const ACR_NAMESPACE_MAX_LENGTH = 120;
 const ACR_NAMESPACE_PATTERN = /^[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?$/;
+const LEGACY_CR_API_VERSION = '2016-06-07';
+const LEGACY_CR_USER_PATH = '/users';
+const LEGACY_CR_NAMESPACE_PATH = '/namespace';
 
 export function normalizeAcrNamespace(input: string): string {
   const value = input.trim().toLowerCase();
@@ -86,6 +90,14 @@ function isRepoExistsError(err: unknown): boolean {
   return isCodeError(err, 'REPO_EXIST') || isCodeError(err, 'REPO_ALREADY_EXIST');
 }
 
+function isPersonalUserNotRegisteredError(err: unknown): boolean {
+  return isCodeError(err, 'USER_NOT_REGISTERED') || isCodeError(err, 'USER_NOT_EXIST');
+}
+
+function isPersonalUserAlreadyExistsError(err: unknown): boolean {
+  return isCodeError(err, 'USER_ALREADY_EXIST') || isCodeError(err, 'USER_EXIST');
+}
+
 function isCodeError(err: unknown, code: string): boolean {
   if (typeof err !== 'object' || err === null) return false;
   const errCode = 'code' in err ? String((err as { code?: unknown }).code || '') : '';
@@ -93,13 +105,57 @@ function isCodeError(err: unknown, code: string): boolean {
   return errCode === code || errMsg.includes(code);
 }
 
-async function listPersonalNamespaces(client: CR): Promise<string[]> {
-  const resp = await client.doROARequest(
-    'GetNamespaceList', '2016-06-07', 'HTTPS', 'GET', 'AK', '/namespace', 'json',
-    new $OpenApi.OpenApiRequest({}),
+export function buildAcrPersonalUserPayload(password = randomStrongPassword(20)) {
+  return {
+    user: {
+      password
+    }
+  };
+}
+
+async function doLegacyRoaRequest(client: CR, action: string, method: string, path: string, request?: $OpenApi.OpenApiRequest) {
+  return client.doROARequest(
+    action,
+    LEGACY_CR_API_VERSION,
+    'HTTPS',
+    method,
+    'AK',
+    path,
+    'json',
+    request || new $OpenApi.OpenApiRequest({}),
     new $Util.RuntimeOptions({})
-  ) as { body?: { data?: { namespaces?: Array<{ namespace?: string }> } } };
+  );
+}
+
+async function registerPersonalUserForAcr(client: CR) {
+  const createRequest = new $OpenApi.OpenApiRequest({ body: buildAcrPersonalUserPayload() });
+  try {
+    await doLegacyRoaRequest(client, 'CreateUserInfo', 'PUT', LEGACY_CR_USER_PATH, createRequest);
+    return;
+  } catch (err) {
+    if (!isPersonalUserAlreadyExistsError(err)) throw err;
+  }
+
+  const updateRequest = new $OpenApi.OpenApiRequest({ body: buildAcrPersonalUserPayload() });
+  await doLegacyRoaRequest(client, 'UpdateUserInfo', 'POST', LEGACY_CR_USER_PATH, updateRequest);
+}
+
+async function listPersonalNamespaces(client: CR): Promise<string[]> {
+  const resp = await doLegacyRoaRequest(client, 'GetNamespaceList', 'GET', LEGACY_CR_NAMESPACE_PATH) as {
+    body?: { data?: { namespaces?: Array<{ namespace?: string }> } };
+  };
   return (resp.body?.data?.namespaces || []).map(ns => ns.namespace || '').filter(Boolean);
+}
+
+async function listPersonalNamespacesWithRegistration(client: CR): Promise<string[]> {
+  try {
+    return await listPersonalNamespaces(client);
+  } catch (err) {
+    if (!isPersonalUserNotRegisteredError(err)) throw err;
+  }
+
+  await registerPersonalUserForAcr(client);
+  return await listPersonalNamespaces(client);
 }
 
 export class NamespaceLimitError extends Error {
@@ -115,13 +171,15 @@ export class NamespaceLimitError extends Error {
 }
 
 async function ensurePersonalNamespace(client: CR, namespaceName: string) {
-  const existing = await listPersonalNamespaces(client);
+  const existing = await listPersonalNamespacesWithRegistration(client);
   if (existing.includes(namespaceName)) return;
   try {
-    await client.doROARequest(
-      'CreateNamespace', '2016-06-07', 'HTTPS', 'PUT', 'AK', '/namespace', 'json',
-      new $OpenApi.OpenApiRequest({ body: { Namespace: { Namespace: namespaceName } } }),
-      new $Util.RuntimeOptions({})
+    await doLegacyRoaRequest(
+      client,
+      'CreateNamespace',
+      'PUT',
+      LEGACY_CR_NAMESPACE_PATH,
+      new $OpenApi.OpenApiRequest({ body: { Namespace: { Namespace: namespaceName } } })
     );
   } catch (err) {
     if (isConflictError(err) || isNamespaceExistsError(err)) return;
@@ -134,12 +192,14 @@ async function ensurePersonalNamespace(client: CR, namespaceName: string) {
 
 async function ensurePersonalRepository(client: CR, namespaceName: string, repoName: string) {
   try {
-    await client.doROARequest(
-      'CreateRepo', '2016-06-07', 'HTTPS', 'PUT', 'AK', '/repos', 'json',
+    await doLegacyRoaRequest(
+      client,
+      'CreateRepo',
+      'PUT',
+      '/repos',
       new $OpenApi.OpenApiRequest({
         body: { Repo: { RepoNamespace: namespaceName, RepoName: repoName, RepoType: 'PRIVATE', Summary: `licell deploy: ${repoName}` } }
-      }),
-      new $Util.RuntimeOptions({})
+      })
     );
   } catch (err) {
     if (!isConflictError(err) && !isRepoExistsError(err)) throw err;
@@ -186,10 +246,11 @@ export async function getDockerLoginCredentials(acrInfo: AcrInfo, auth?: AuthCon
   }
 
   const client = createCrClient(resolved);
-  const resp = await client.doROARequest(
-    'GetAuthorizationToken', '2016-06-07', 'HTTPS', 'GET', 'AK', '/tokens', 'json',
-    new $OpenApi.OpenApiRequest({}),
-    new $Util.RuntimeOptions({})
+  const resp = await doLegacyRoaRequest(
+    client,
+    'GetAuthorizationToken',
+    'GET',
+    '/tokens'
   ) as { body?: { data?: { tempUserName?: string; authorizationToken?: string } } };
   const token = resp.body?.data;
   if (!token?.tempUserName || !token?.authorizationToken) {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildImageUri, formatTimestampTag, normalizeAcrNamespace, type AcrInfo } from '../providers/cr';
+import { buildAcrPersonalUserPayload, buildImageUri, formatTimestampTag, normalizeAcrNamespace, type AcrInfo } from '../providers/cr';
 
 describe('acr utilities', () => {
   const enterpriseAcr: AcrInfo = {
@@ -79,6 +79,16 @@ describe('acr utilities', () => {
     it('rejects namespace with separator at boundaries', () => {
       expect(() => normalizeAcrNamespace('-team')).toThrow('分隔符不能在首尾');
       expect(() => normalizeAcrNamespace('team-')).toThrow('分隔符不能在首尾');
+    });
+  });
+
+  describe('buildAcrPersonalUserPayload', () => {
+    it('builds payload with provided password', () => {
+      expect(buildAcrPersonalUserPayload('Aa!12345678')).toEqual({
+        user: {
+          password: 'Aa!12345678'
+        }
+      });
     });
   });
 });

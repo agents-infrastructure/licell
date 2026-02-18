@@ -1,6 +1,6 @@
 {
   "name": "licell",
-  "version": "0.9.11",
+  "version": "0.9.12",
   "type": "module",
   "scripts": {
     "dev": "bun run src/cli.ts",
@@ -19,6 +19,7 @@
     "@alicloud/fc20230330": "^4.0.0",
     "@alicloud/openapi-client": "^0.4.15",
     "@alicloud/r-kvstore20150101": "^6.0.0",
+    "@alicloud/ram20150501": "^1.2.0",
     "@alicloud/rds20140815": "^3.0.0",
     "@alicloud/sls20201230": "^3.0.0",
     "@alicloud/vpc20160428": "^3.0.0",
