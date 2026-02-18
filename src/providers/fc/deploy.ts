@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, statSync } from 'fs';
 import { tmpdir } from 'os';
 import { isAbsolute, join, relative, resolve } from 'path';
 import { spawnSync } from 'child_process';
-import { Config, type ProjectResourcesConfig } from '../../utils/config';
+import { Config, type ProjectNetworkConfig, type ProjectResourcesConfig } from '../../utils/config';
 import { isConflictError } from '../../utils/errors';
 import { withRetry } from '../../utils/retry';
 import { createFcClient } from './client';
@@ -45,9 +45,12 @@ export function packageCodeAsBase64(outdir: string) {
 
 const DEFAULT_MEMORY_SIZE = 256;
 const DEFAULT_TIMEOUT = 30;
+const DEFAULT_DISK_SIZE = 512;
+const DEFAULT_INSTANCE_CONCURRENCY = 10;
 
 export interface DeployFCOptions {
   resources?: ProjectResourcesConfig;
+  network?: ProjectNetworkConfig | null;
 }
 
 export interface ResolvedFunctionResources {
@@ -62,11 +65,20 @@ export function resolveFunctionResources(
   overrideResources?: ProjectResourcesConfig
 ): ResolvedFunctionResources {
   const resources = { ...(projectResources || {}), ...(overrideResources || {}) };
+  const memorySize = resources.memorySize ?? DEFAULT_MEMORY_SIZE;
+  const timeout = resources.timeout ?? DEFAULT_TIMEOUT;
+  const cpu = resources.cpu;
+  const inferredInstanceConcurrency = (() => {
+    if (cpu !== undefined) return Math.max(1, Math.min(100, Math.round(cpu * 10)));
+    if (memorySize >= 2048) return 40;
+    if (memorySize >= 1024) return 20;
+    return DEFAULT_INSTANCE_CONCURRENCY;
+  })();
   return {
-    memorySize: resources.memorySize ?? DEFAULT_MEMORY_SIZE,
-    timeout: resources.timeout ?? DEFAULT_TIMEOUT,
-    ...(resources.cpu !== undefined ? { cpu: resources.cpu } : {}),
-    ...(resources.instanceConcurrency !== undefined ? { instanceConcurrency: resources.instanceConcurrency } : {})
+    memorySize,
+    timeout,
+    ...(cpu !== undefined ? { cpu } : {}),
+    instanceConcurrency: resources.instanceConcurrency ?? inferredInstanceConcurrency
   };
 }
 
@@ -102,7 +114,8 @@ export async function deployFC(appName: string, entryFile: string, runtime: FcRu
     }
     environmentVariables[key] = value;
   }
-  const vpcConfig = await resolveFunctionVpcConfig(project.network);
+  const targetNetwork = options.network === undefined ? project.network : options.network || undefined;
+  const vpcConfig = await resolveFunctionVpcConfig(targetNetwork);
 
   let code: { zipFile: string } | undefined;
   if (!runtimeConfig.skipCodePackaging) {
@@ -118,6 +131,7 @@ export async function deployFC(appName: string, entryFile: string, runtime: FcRu
     runtime: runtimeConfig.runtime,
     handler: runtimeConfig.handler,
     memorySize,
+    diskSize: DEFAULT_DISK_SIZE,
     timeout,
     environmentVariables,
     vpcConfig
@@ -140,6 +154,7 @@ export async function deployFC(appName: string, entryFile: string, runtime: FcRu
         runtime: runtimeConfig.runtime,
         handler: runtimeConfig.handler,
         memorySize,
+        diskSize: DEFAULT_DISK_SIZE,
         timeout,
         environmentVariables,
         vpcConfig

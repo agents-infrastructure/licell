@@ -89,6 +89,9 @@ async function requestStatusWithTimeout(url: string, timeoutMs: number): Promise
   const requestFn = isHttps ? httpsRequest : httpRequest;
 
   return new Promise((resolve, reject) => {
+    let settled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
     const req = requestFn(
       target,
       {
@@ -99,15 +102,28 @@ async function requestStatusWithTimeout(url: string, timeoutMs: number): Promise
         ...(isHttps ? { minVersion: 'TLSv1.2', maxVersion: 'TLSv1.2' } : {})
       },
       (res) => {
+        if (timer) clearTimeout(timer);
         const statusCode = res.statusCode ?? 0;
+        // We only need the status code; don't wait for a potentially long-lived body/connection.
         res.resume();
-        res.once('end', () => resolve(statusCode));
+        res.once('error', () => {});
+        if (!settled) {
+          settled = true;
+          resolve(statusCode);
+        }
+        res.destroy();
       }
     );
 
-    req.on('error', reject);
-    req.setTimeout(timeoutMs, () => {
+    timer = setTimeout(() => {
       req.destroy(new Error('请求超时'));
+    }, timeoutMs);
+
+    req.on('error', (err) => {
+      if (timer) clearTimeout(timer);
+      if (settled) return;
+      settled = true;
+      reject(err);
     });
     req.end();
   });
@@ -119,7 +135,9 @@ export async function probeHttpHealth(baseUrl: string, options: ProbeHttpHealthO
     return { ok: false, error: 'URL 为空', attempt: 1 };
   }
 
-  const fetchImpl = options.fetchImpl;
+  const fetchImpl =
+    options.fetchImpl ??
+    (typeof globalThis.fetch === 'function' ? (globalThis.fetch.bind(globalThis) as ProbeFetch) : undefined);
   const paths = normalizeProbePaths(options.paths);
   const maxAttempts = Math.max(1, Math.floor(options.maxAttempts ?? DEFAULT_MAX_ATTEMPTS));
   const intervalMs = Math.max(0, Math.floor(options.intervalMs ?? DEFAULT_INTERVAL_MS));

@@ -213,6 +213,21 @@ licell deploy --type api --entry src/main.py --runtime python3.13
 licell deploy --type api --runtime docker --target preview
 ```
 
+常见资源参数：
+
+```bash
+licell deploy --type api --runtime nodejs22 \
+  --memory 1024 \
+  --vcpu 1 \
+  --instance-concurrency 20 \
+  --timeout 60
+```
+
+网络参数：
+
+- API 部署默认启用 VPC（会自动创建/复用 `licell-vpc` 与 `licell-vsw` 并写入 `.licell/project.json`）
+- 如需公网模式可显式关闭：`licell deploy --type api --disable-vpc`
+
 支持运行时：
 
 - `nodejs20`

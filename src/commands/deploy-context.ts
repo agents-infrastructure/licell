@@ -10,6 +10,7 @@ import {
   isInteractiveTTY,
   normalizeDeployType,
   parseOptionalPositiveInt,
+  parseOptionalPositiveNumber,
   normalizeCustomDomain,
   normalizeDomainSuffix,
   tryNormalizeDomainSuffix,
@@ -28,7 +29,11 @@ export interface DeployCliOptions {
   dist?: string;
   runtime?: string;
   acrNamespace?: string;
+  enableVpc?: boolean;
+  disableVpc?: boolean;
   memory?: string;
+  vcpu?: string;
+  instanceConcurrency?: string;
   timeout?: string;
 }
 
@@ -39,9 +44,10 @@ export interface DeployContext {
   cliDomain?: string;
   domainSuffix?: string;
   enableCdn: boolean;
+  useVpc: boolean;
   enableSSL: boolean;
   forceSslRenew: boolean;
-  cliResources?: { memorySize?: number; timeout?: number };
+  cliResources?: { memorySize?: number; timeout?: number; cpu?: number; instanceConcurrency?: number };
   cliAcrNamespace?: string;
   interactiveTTY: boolean;
   auth: AuthConfig;
@@ -121,6 +127,9 @@ export async function resolveDeployContext(options: DeployCliOptions): Promise<D
   if (cliDomain && cliDomainSuffix) throw new Error('--domain 与 --domain-suffix 不能同时使用');
   if (releaseTarget && type !== 'api') throw new Error('--target 仅适用于 API 部署');
   if (enableCdn && type !== 'api') throw new Error('--enable-cdn 仅适用于 API 部署');
+  if (options.enableVpc && options.disableVpc) throw new Error('--enable-vpc 与 --disable-vpc 不能同时使用');
+  if (type !== 'api' && options.enableVpc) throw new Error('--enable-vpc 仅适用于 API 部署');
+  if (type !== 'api' && options.disableVpc) throw new Error('--disable-vpc 仅适用于 API 部署');
   if (enableCdn && !cliDomain && !domainSuffix) {
     throw new Error('--enable-cdn 需要域名，请提供 --domain（完整域名）或 --domain-suffix');
   }
@@ -140,13 +149,18 @@ export async function resolveDeployContext(options: DeployCliOptions): Promise<D
   }
 
   const cliMemorySize = parseOptionalPositiveInt(options.memory, '--memory');
+  const cliCpu = parseOptionalPositiveNumber(options.vcpu, '--vcpu');
+  const cliInstanceConcurrency = parseOptionalPositiveInt(options.instanceConcurrency, '--instance-concurrency');
   const cliTimeout = parseOptionalPositiveInt(options.timeout, '--timeout');
-  const cliResources = (cliMemorySize !== undefined || cliTimeout !== undefined)
+  const cliResources = (cliMemorySize !== undefined || cliTimeout !== undefined || cliCpu !== undefined || cliInstanceConcurrency !== undefined)
     ? {
       ...(cliMemorySize !== undefined ? { memorySize: cliMemorySize } : {}),
+      ...(cliCpu !== undefined ? { cpu: cliCpu } : {}),
+      ...(cliInstanceConcurrency !== undefined ? { instanceConcurrency: cliInstanceConcurrency } : {}),
       ...(cliTimeout !== undefined ? { timeout: cliTimeout } : {})
     }
     : undefined;
+  const useVpc = type === 'api' ? !Boolean(options.disableVpc) : false;
 
   return {
     appName,
@@ -155,6 +169,7 @@ export async function resolveDeployContext(options: DeployCliOptions): Promise<D
     cliDomain,
     domainSuffix,
     enableCdn,
+    useVpc,
     enableSSL,
     forceSslRenew,
     cliResources,

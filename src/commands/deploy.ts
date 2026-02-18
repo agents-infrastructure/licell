@@ -24,7 +24,11 @@ export function registerDeployCommand(cli: CAC) {
     .option('--ssl', '启用 HTTPS（使用 --domain 或 --enable-cdn 时默认自动开启；使用 --domain-suffix 需显式开启）')
     .option('--ssl-force-renew', '启用 HTTPS 时强制续签证书（忽略到期阈值）')
     .option('--acr-namespace <ns>', 'Docker 部署时使用的 ACR 命名空间（默认 licell）')
+    .option('--enable-vpc', 'API 部署时启用 VPC 接入（默认启用）')
+    .option('--disable-vpc', 'API 部署时禁用 VPC 接入（使用公网模式）')
     .option('--memory <mb>', '函数内存大小（MB，默认 256）')
+    .option('--vcpu <n>', '函数 vCPU 核数（如 0.5 / 1 / 2）')
+    .option('--instance-concurrency <n>', '单实例并发数（默认自动，通常起始 10）')
     .option('--timeout <seconds>', '函数超时时间（秒，默认 30）')
     .action(async (options: DeployCliOptions) => {
       intro(pc.bgBlue(pc.white(' ▲ Deploying to Aliyun ')));

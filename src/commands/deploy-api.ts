@@ -1,7 +1,9 @@
 import { confirm, text, isCancel, type spinner } from '@clack/prompts';
 import { existsSync } from 'fs';
+import pc from 'picocolors';
 import { Config } from '../utils/config';
 import { getRuntime } from '../providers/fc/runtime-handler';
+import { ensureDefaultNetwork } from '../providers/vpc';
 import {
   DEFAULT_FC_RUNTIME,
   deployFC,
@@ -12,6 +14,7 @@ import { bindCustomDomain } from '../providers/domain';
 import { enableCdnForDomain } from '../providers/cdn';
 import { issueAndBindSSLWithArtifacts } from '../providers/ssl';
 import { probeHttpHealth } from '../utils/health-check';
+import { formatErrorMessage } from '../utils/errors';
 import { toPromptValue, withSpinner } from '../utils/cli-shared';
 import type { DeployContext } from './deploy-context';
 
@@ -68,11 +71,30 @@ export async function executeApiDeploy(
     spinnerMsg,
     '❌ 部署失败',
     async () => {
+      if (ctx.useVpc && !ctx.project.network) {
+        s.message('🌐 正在自动准备 VPC 网络...');
+        try {
+          const defaultNetwork = await ensureDefaultNetwork();
+          Config.setProject({ network: defaultNetwork });
+          ctx.project = Config.getProject();
+          s.message(`✅ VPC 已就绪: ${defaultNetwork.vpcId} / ${defaultNetwork.vswId}`);
+        } catch (err: unknown) {
+          console.warn(pc.yellow(`⚠️ VPC 自动接入失败，回退公网模式: ${formatErrorMessage(err)}`));
+        }
+      }
+
+      const deployNetwork = ctx.useVpc
+        ? ctx.project.network
+        : null;
+      const deployOptions = {
+        ...(ctx.cliResources ? { resources: ctx.cliResources } : {}),
+        ...(deployNetwork !== undefined ? { network: deployNetwork } : {})
+      };
       const deployedUrl = await deployFC(
         ctx.appName,
         entry,
         runtime,
-        ctx.cliResources ? { resources: ctx.cliResources } : undefined
+        Object.keys(deployOptions).length > 0 ? deployOptions : undefined
       );
       const fcOriginDomain = `${ctx.auth.accountId}.${ctx.auth.region}.fc.aliyuncs.com`;
       let nextPromotedVersion: string | undefined;

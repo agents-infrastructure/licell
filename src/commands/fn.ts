@@ -75,7 +75,15 @@ export function registerFnCommands(cli: CAC) {
       console.log(`handler:   ${pc.cyan(fn.handler || '-')}`);
       console.log(`state:     ${pc.cyan(fn.state || '-')}`);
       console.log(`memory:    ${pc.cyan(String(fn.memorySize || '-'))}`);
+      console.log(`vcpu:      ${pc.cyan(String((fn as { cpu?: unknown }).cpu ?? '-'))}`);
+      console.log(`concur:    ${pc.cyan(String((fn as { instanceConcurrency?: unknown }).instanceConcurrency ?? '-'))}`);
       console.log(`timeout:   ${pc.cyan(String(fn.timeout || '-'))}`);
+      const vpcConfig = (fn as { vpcConfig?: { vpcId?: string; vSwitchIds?: string[]; securityGroupId?: string } }).vpcConfig;
+      if (vpcConfig?.vpcId) {
+        console.log(`vpc:       ${pc.cyan(`${vpcConfig.vpcId} / ${(vpcConfig.vSwitchIds || []).join(',') || '-'} / ${vpcConfig.securityGroupId || '-'}`)}`);
+      } else {
+        console.log(`vpc:       ${pc.cyan('-')}`);
+      }
       console.log(`updated:   ${pc.cyan(fn.lastModifiedTime || '-')}`);
       console.log(`envCount:  ${pc.cyan(String(Object.keys(fn.environmentVariables || {}).length))}`);
       console.log('');

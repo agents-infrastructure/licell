@@ -199,6 +199,16 @@ export function parseOptionalNumber(input: unknown, fieldName: string) {
   return value;
 }
 
+export function parseOptionalPositiveNumber(input: unknown, fieldName: string) {
+  const normalized = toOptionalString(input);
+  if (!normalized) return undefined;
+  const value = Number(normalized);
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new Error(`${fieldName} 必须是正数`);
+  }
+  return value;
+}
+
 export function parseOptionalPositiveInt(input: unknown, fieldName: string) {
   const normalized = toOptionalString(input);
   if (!normalized) return undefined;
