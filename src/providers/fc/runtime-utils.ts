@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, mkdirSync, readdirSync, statSync } from 'fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync } from 'fs';
 import { dirname, join } from 'path';
 import { vendorPythonDependencies, type VendorPythonRuntime } from '../../utils/python-deps';
 
@@ -24,6 +24,73 @@ export function findFirstJsOutput(dir: string): string | null {
     if (fullPath.endsWith('.js')) return fullPath;
   }
   return null;
+}
+
+export function hasPythonHandlerSymbol(source: string) {
+  return /^\s*(async\s+)?def\s+handler\s*\(/m.test(source);
+}
+
+export function hasNodeHandlerExport(source: string) {
+  const checks = [
+    /\bexport\s+(?:async\s+)?function\s+handler\b/,
+    /\bexport\s+(?:const|let|var)\s+handler\b/,
+    /\bexport\s*\{\s*handler(?:\s+as\s+\w+)?\s*\}/,
+    /\bexport\s*\{\s*default\s+as\s+handler\s*\}/,
+    /\bmodule\.exports\.handler\s*=/,
+    /\bexports\.handler\s*=/,
+    /\bmodule\.exports\s*=\s*\{[\s\S]*\bhandler\b[\s\S]*\}/
+  ];
+  return checks.some((pattern) => pattern.test(source));
+}
+
+export function hasNodeDefaultExport(source: string) {
+  const checks = [
+    /\bexport\s+default\b/,
+    /\bexports\.default\s*=/
+  ];
+  return checks.some((pattern) => pattern.test(source));
+}
+
+function readEntrypointSource(entryFile: string) {
+  try {
+    return readFileSync(entryFile, 'utf8');
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    throw new Error(`读取入口文件失败: ${entryFile}\n${message}`);
+  }
+}
+
+export function validateRuntimeEntrypoint(entryFile: string, runtime: string) {
+  if (runtime === 'docker') return;
+
+  if (runtime.startsWith('python')) {
+    if (!entryFile.toLowerCase().endsWith('.py')) {
+      throw new Error(`Python runtime=${runtime} 要求入口文件为 .py，当前为: ${entryFile}`);
+    }
+    const source = readEntrypointSource(entryFile);
+    if (hasPythonHandlerSymbol(source)) return;
+    throw new Error(
+      `Python 入口文件缺少 handler 函数: ${entryFile}\n` +
+      '请导出可调用函数，例如:\n' +
+      'def handler(event, context):\n' +
+      '  return {"statusCode": 200, "body": "ok"}'
+    );
+  }
+
+  if (!runtime.startsWith('nodejs')) return;
+  const source = readEntrypointSource(entryFile);
+  if (runtime === 'nodejs22') {
+    if (hasNodeHandlerExport(source) || hasNodeDefaultExport(source)) return;
+    throw new Error(
+      `Node 入口文件缺少导出函数: ${entryFile}\n` +
+      'runtime=nodejs22 需导出 handler 或 default 函数。'
+    );
+  }
+  if (hasNodeHandlerExport(source)) return;
+  throw new Error(
+    `Node 入口文件缺少 handler 导出: ${entryFile}\n` +
+    'runtime=nodejs20 需导出 handler(event, context) 函数。'
+  );
 }
 
 function shouldCopyPythonFile(relativePath: string) {

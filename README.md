@@ -130,6 +130,17 @@ licell deploy \
   --ssl
 ```
 
+也可以直接指定完整域名（不走 `<appName>.suffix` 规则）：
+
+```bash
+licell deploy \
+  --type api \
+  --entry src/index.ts \
+  --runtime nodejs22 \
+  --target preview \
+  --domain api.your-domain.xyz
+```
+
 ## 3. `init` 模板（与 `examples` 同级）
 
 `init` 现在生成的是“可直接展示能力”的完整模板，不是 hello world。
@@ -317,13 +328,19 @@ licell deploy --type api --runtime docker --acr-namespace <existing-namespace>
 
 ## 8. 进阶：固定域名与 HTTPS
 
-固定域名：
+固定域名（按 `appName` + suffix 自动生成）：
 
 ```bash
 licell deploy --type api --target preview --domain-suffix your-domain.xyz
 ```
 
 会绑定为：`<appName>.your-domain.xyz`
+
+完整自定义域名（手动指定）：
+
+```bash
+licell deploy --type api --target preview --domain api.your-domain.xyz
+```
 
 HTTPS：
 
@@ -333,9 +350,17 @@ licell deploy --type api --target preview --domain-suffix your-domain.xyz --ssl
 licell deploy --type api --target preview --domain-suffix your-domain.xyz --ssl --ssl-force-renew
 ```
 
+或完整域名：
+
+```bash
+licell deploy --type api --target preview --domain api.your-domain.xyz
+```
+
 说明：
 
-- 只有带 `--ssl` 的命令会触发证书检查/续签
+- `--domain` 与 `--domain-suffix` 不能同时使用
+- 使用 `--domain` 时默认自动开启 HTTPS（可不写 `--ssl`）
+- 使用 `--domain-suffix` 时，只有带 `--ssl` 才会触发证书检查/续签
 - 默认续签阈值 30 天
 - 域名需托管在阿里云 DNS
 
@@ -429,8 +454,7 @@ licell deploy \
   --entry src/index.ts \
   --runtime nodejs22 \
   --target preview \
-  --domain-suffix your-domain.xyz \
-  --ssl
+  --domain api.your-domain.xyz
 ```
 
 ## 12. 常用环境变量

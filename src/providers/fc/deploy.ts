@@ -9,6 +9,7 @@ import { isConflictError } from '../../utils/errors';
 import { withRetry } from '../../utils/retry';
 import { createFcClient } from './client';
 import { ensureFunctionHttpUrl } from './http';
+import { validateRuntimeEntrypoint } from './runtime-utils';
 import {
   buildUnsupportedRuntimeMessage,
   isInvalidRuntimeValueError,
@@ -60,6 +61,7 @@ export async function deployFC(appName: string, entryFile: string, runtime: FcRu
     }
     if (!existsSync(resolvedEntry)) throw new Error(`入口文件不存在: ${entryFile}`);
     if (!statSync(resolvedEntry).isFile()) throw new Error(`入口文件不是有效文件: ${entryFile}`);
+    validateRuntimeEntrypoint(resolvedEntry, runtime);
   }
 
   const entryRelative = isDocker ? entryFile : relative(process.cwd(), resolve(entryFile)).replace(/\\/g, '/');

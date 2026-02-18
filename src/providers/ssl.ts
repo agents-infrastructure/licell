@@ -10,6 +10,7 @@ import { Config } from '../utils/config';
 import { parseRootAndSubdomain } from '../utils/domain';
 import type { Spinner } from '../utils/errors';
 import { sleep } from '../utils/runtime';
+import { withRetry } from '../utils/retry';
 import { createSharedFcClient, resolveSdkCtor } from '../utils/sdk';
 import { readLicellEnv } from '../utils/env';
 
@@ -117,13 +118,13 @@ async function listChallengeTxtRecords(
   const records: DnsRecordLike[] = [];
   for (const candidate of candidates) {
     try {
-      const response = await dnsClient.describeSubDomainRecords(new $Alidns.DescribeSubDomainRecordsRequest({
+      const response = await withRetry(() => dnsClient.describeSubDomainRecords(new $Alidns.DescribeSubDomainRecordsRequest({
         domainName: rootDomain,
         subDomain: candidate,
         type: 'TXT',
         pageNumber: 1,
         pageSize: 100
-      }));
+      })));
       records.push(...((response.body?.domainRecords?.record || []) as DnsRecordLike[]));
     } catch { /* some candidate subDomain formats may not exist, safe to skip */ }
   }
@@ -231,7 +232,7 @@ export async function issueAndBindSSL(domain: string, spinner: Spinner, options?
   let existingDomain: ExistingDomainLike | null = null;
 
   try {
-    const existingDomainResponse = await fcClient.getCustomDomain(domain);
+    const existingDomainResponse = await withRetry(() => fcClient.getCustomDomain(domain));
     existingDomain = existingDomainResponse.body as ExistingDomainLike;
   } catch { /* best-effort: existing domain query may fail if domain not yet bound */ }
 
@@ -255,7 +256,7 @@ export async function issueAndBindSSL(domain: string, spinner: Spinner, options?
       if (!record.recordId || deleted.has(record.recordId)) continue;
       deleted.add(record.recordId);
       try {
-        await dnsClient.deleteDomainRecord(new $Alidns.DeleteDomainRecordRequest({ recordId: record.recordId }));
+        await withRetry(() => dnsClient.deleteDomainRecord(new $Alidns.DeleteDomainRecordRequest({ recordId: record.recordId })));
       } catch { /* best-effort cleanup: stale challenge records are harmless */ }
     }
   };
@@ -272,13 +273,13 @@ export async function issueAndBindSSL(domain: string, spinner: Spinner, options?
       const txtValue = keyAuthorization;
       spinner.message(`📝 正在自动配置 DNS TXT 记录 (${challengeRecord}) ...`);
       await clearChallengeTxtRecords(challengeRecord);
-      const addRecordRes = await dnsClient.addDomainRecord(new $Alidns.AddDomainRecordRequest({
+      const addRecordRes = await withRetry(() => dnsClient.addDomainRecord(new $Alidns.AddDomainRecordRequest({
         domainName: rootDomain,
         RR: challengeRecord,
         type: 'TXT',
         value: txtValue,
         TTL: DEFAULT_ACME_TXT_TTL_SECONDS
-      }));
+      })));
       if (addRecordRes.body?.recordId) recordIds.push(addRecordRes.body.recordId);
       await waitForChallengeTxtReady(dnsClient, rootDomain, challengeRecord, txtValue, spinner);
       spinner.message(`🌐 DNS TXT 已就绪，等待 Let's Encrypt 验证 (${challengeRecord}) ...`);
@@ -286,7 +287,7 @@ export async function issueAndBindSSL(domain: string, spinner: Spinner, options?
     challengeRemoveFn: async () => {
       for (const recordId of recordIds) {
         try {
-          await dnsClient.deleteDomainRecord(new $Alidns.DeleteDomainRecordRequest({ recordId }));
+          await withRetry(() => dnsClient.deleteDomainRecord(new $Alidns.DeleteDomainRecordRequest({ recordId })));
         } catch (cleanupErr: unknown) {
           const msg = cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr);
           if (!msg.toLowerCase().includes('notfound') && !msg.toLowerCase().includes('not found')) {
@@ -298,11 +299,11 @@ export async function issueAndBindSSL(domain: string, spinner: Spinner, options?
   });
 
   spinner.message('📦 证书下发成功，正在自动挂载至云端网关开启 HTTPS...');
-  await fcClient.updateCustomDomain(domain, new $FC.UpdateCustomDomainRequest({
+  await withRetry(() => fcClient.updateCustomDomain(domain, new $FC.UpdateCustomDomainRequest({
     body: new $FC.UpdateCustomDomainInput({
       protocol: 'HTTP,HTTPS',
       certConfig: { certName: `licell-cert-${Date.now()}`, certificate: cert.toString(), privateKey: toFcPemPrivateKey(certKey) }
     })
-  }));
+  })));
   return `https://${domain}`;
 }

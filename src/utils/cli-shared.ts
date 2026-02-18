@@ -56,12 +56,30 @@ export function normalizeDomainSuffix(input: string) {
   return value;
 }
 
+export function normalizeCustomDomain(input: string) {
+  const value = input.trim().toLowerCase().replace(/^\.+|\.+$/g, '');
+  if (!value) throw new Error('域名不能为空');
+  parseRootAndSubdomain(value);
+  return value;
+}
+
 export function tryNormalizeDomainSuffix(input: unknown) {
   if (typeof input !== 'string') return undefined;
   const value = input.trim();
   if (!value) return undefined;
   try {
     return normalizeDomainSuffix(value);
+  } catch {
+    return undefined;
+  }
+}
+
+export function tryNormalizeCustomDomain(input: unknown) {
+  if (typeof input !== 'string') return undefined;
+  const value = input.trim();
+  if (!value) return undefined;
+  try {
+    return normalizeCustomDomain(value);
   } catch {
     return undefined;
   }

@@ -20,17 +20,23 @@ import { normalizeAcrNamespace } from '../providers/cr';
 import { readLicellEnv } from '../utils/env';
 import { parseDeployRuntimeOption } from '../utils/deploy-runtime';
 import { detectStaticDistDir } from '../utils/static-dist';
+import { probeHttpHealth } from '../utils/health-check';
 import {
   toPromptValue,
   ensureAuthOrExit,
   isInteractiveTTY,
   toOptionalString,
   normalizeDeployType,
+  normalizeCustomDomain,
   normalizeDomainSuffix,
   tryNormalizeDomainSuffix,
   tryNormalizeFcRuntime,
   withSpinner
 } from '../utils/cli-shared';
+
+export function resolveDeploySslEnabled(sslFlag: boolean | undefined, customDomain: string | undefined) {
+  return Boolean(sslFlag || customDomain);
+}
 
 export function registerDeployCommand(cli: CAC) {
   cli.command('deploy', '一键极速打包部署')
@@ -39,11 +45,12 @@ export function registerDeployCommand(cli: CAC) {
     .option('--dist <dist>', '静态站点目录（默认 dist）')
     .option('--runtime <runtime>', '运行时（API: nodejs20/nodejs22/python3.12/python3.13/docker；静态站: static/statis）')
     .option('--target <target>', 'API 部署后自动发布并切流到该 alias（如 prod/preview）')
+    .option('--domain <domain>', '绑定完整自定义域名（如 api.your-domain.xyz）')
     .option('--domain-suffix <suffix>', '自动绑定固定子域名后缀（如 your-domain.xyz）')
-    .option('--ssl', '配合固定域名自动签发/续签并绑定 HTTPS（需配置 domainSuffix）')
+    .option('--ssl', '启用 HTTPS（使用 --domain 时默认自动开启；使用 --domain-suffix 需显式开启）')
     .option('--ssl-force-renew', '启用 HTTPS 时强制续签证书（忽略到期阈值）')
     .option('--acr-namespace <ns>', 'Docker 部署时使用的 ACR 命名空间（默认 licell）')
-    .action(async (options: { target?: string; domainSuffix?: string; ssl?: boolean; sslForceRenew?: boolean; type?: string; entry?: string; dist?: string; runtime?: string; acrNamespace?: string }) => {
+    .action(async (options: { target?: string; domain?: string; domainSuffix?: string; ssl?: boolean; sslForceRenew?: boolean; type?: string; entry?: string; dist?: string; runtime?: string; acrNamespace?: string }) => {
     intro(pc.bgBlue(pc.white(' ▲ Deploying to Aliyun ')));
     const auth = ensureAuthOrExit();
     const interactiveTTY = isInteractiveTTY();
@@ -63,10 +70,11 @@ export function registerDeployCommand(cli: CAC) {
       project = Config.getProject();
     }
 
+    const cliDomain = options.domain ? normalizeCustomDomain(options.domain) : undefined;
     const cliDomainSuffix = options.domainSuffix ? normalizeDomainSuffix(options.domainSuffix) : undefined;
     const projectDomainSuffix = tryNormalizeDomainSuffix(project.domainSuffix);
     const envDomainSuffix = tryNormalizeDomainSuffix(readLicellEnv(process.env, 'DOMAIN_SUFFIX'));
-    const domainSuffix = cliDomainSuffix || projectDomainSuffix || envDomainSuffix;
+    const domainSuffix = cliDomain ? undefined : (cliDomainSuffix || projectDomainSuffix || envDomainSuffix);
     const runtimeSelection = parseDeployRuntimeOption(options.runtime);
     const cliRuntime = runtimeSelection.runtime;
     const projectRuntime = tryNormalizeFcRuntime(project.runtime);
@@ -95,15 +103,18 @@ export function registerDeployCommand(cli: CAC) {
       type = 'api';
     }
     const releaseTarget = options.target ? normalizeReleaseTarget(options.target) : undefined;
-    const enableSSL = Boolean(options.ssl);
+    const enableSSL = resolveDeploySslEnabled(options.ssl, cliDomain);
     const forceSslRenew = Boolean(options.sslForceRenew);
+    if (cliDomain && cliDomainSuffix) throw new Error('--domain 与 --domain-suffix 不能同时使用');
     if (releaseTarget && type !== 'api') throw new Error('--target 仅适用于 API 部署');
     if (type !== 'api' && cliRuntime) throw new Error('--runtime 的 API 运行时仅适用于 API 部署；静态站请使用 --runtime static');
     if (type !== 'api' && cliAcrNamespace) throw new Error('--acr-namespace 仅适用于 API Docker 部署');
+    if (type !== 'api' && cliDomain) throw new Error('--domain 仅适用于 API 部署');
+    if (type !== 'api' && cliDomainSuffix) throw new Error('--domain-suffix 仅适用于 API 部署');
     if (enableSSL && type !== 'api') throw new Error('--ssl 仅适用于 API 部署');
-    if (forceSslRenew && !enableSSL) throw new Error('--ssl-force-renew 需要与 --ssl 一起使用');
-    if (enableSSL && !domainSuffix) {
-      throw new Error('--ssl 需要固定域名，请提供 --domain-suffix，或在 .licell/project.json 配置 domainSuffix');
+    if (forceSslRenew && !enableSSL) throw new Error('--ssl-force-renew 需要启用 HTTPS（请使用 --domain 或 --ssl）');
+    if (enableSSL && !cliDomain && !domainSuffix) {
+      throw new Error('--ssl 需要域名，请提供 --domain（完整域名）或 --domain-suffix');
     }
 
     const appName = project.appName;
@@ -116,6 +127,7 @@ export function registerDeployCommand(cli: CAC) {
       let url = '';
       let promotedVersion: string | undefined;
       let fixedDomain: string | undefined;
+      const healthCheckLogs: string[] = [];
       if (type === 'api') {
         let runtime = cliRuntime || projectRuntime || envRuntime || DEFAULT_FC_RUNTIME;
         if (runtime !== 'docker' && !cliRuntime && existsSync('Dockerfile') && interactiveTTY) {
@@ -189,6 +201,19 @@ export function registerDeployCommand(cli: CAC) {
                 await issueAndBindSSL(nextFixedDomain, s, { forceRenew: forceSslRenew });
               }
             }
+            if (cliDomain) {
+              nextFixedDomain = cliDomain;
+              s.message(`函数部署完成，正在绑定自定义域名 ${nextFixedDomain}...`);
+              await bindCustomDomain(
+                nextFixedDomain,
+                `${auth.accountId}.${auth.region}.fc.aliyuncs.com`,
+                releaseTarget
+              );
+              if (enableSSL) {
+                s.message(`自定义域名绑定完成，正在签发并挂载 HTTPS 证书 (${nextFixedDomain})...`);
+                await issueAndBindSSL(nextFixedDomain, s, { forceRenew: forceSslRenew });
+              }
+            }
             return {
               url: deployedUrl,
               promotedVersion: nextPromotedVersion,
@@ -200,6 +225,26 @@ export function registerDeployCommand(cli: CAC) {
         url = apiDeployResult.url;
         promotedVersion = apiDeployResult.promotedVersion;
         fixedDomain = apiDeployResult.fixedDomain;
+
+        s.message('🩺 部署完成，正在做可访问性检测...');
+        const productionProbe = await probeHttpHealth(url);
+        if (productionProbe.ok) {
+          healthCheckLogs.push(`✅ 生产地址可访问 (${productionProbe.statusCode} ${productionProbe.checkedUrl})`);
+        } else {
+          healthCheckLogs.push(`⚠️ 生产地址可访问性检测未通过: ${productionProbe.error}`);
+        }
+        if (fixedDomain) {
+          const fixedDomainUrl = `${enableSSL ? 'https' : 'http'}://${fixedDomain}`;
+          const fixedProbe = await probeHttpHealth(fixedDomainUrl, {
+            maxAttempts: 6,
+            intervalMs: 2000
+          });
+          if (fixedProbe.ok) {
+            healthCheckLogs.push(`✅ 固定域名可访问 (${fixedProbe.statusCode} ${fixedProbe.checkedUrl})`);
+          } else {
+            healthCheckLogs.push(`⚠️ 固定域名检测未通过（可能 DNS 传播中）: ${fixedProbe.error}`);
+          }
+        }
       } else {
         const detectedDist = detectStaticDistDir();
         const dist = options.dist
@@ -224,6 +269,9 @@ export function registerDeployCommand(cli: CAC) {
       }
       if (releaseTarget && promotedVersion) {
         console.log(`🏷️  alias=${pc.cyan(releaseTarget)} -> version=${pc.cyan(promotedVersion)}\n`);
+      }
+      if (healthCheckLogs.length > 0) {
+        console.log(`${healthCheckLogs.join('\n')}\n`);
       }
       const projectPatch = buildDeployProjectPatch({
         deploySucceeded: true,

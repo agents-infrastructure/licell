@@ -4,6 +4,7 @@ import * as $OpenApi from '@alicloud/openapi-client';
 import { Config } from '../utils/config';
 import { parseRootAndSubdomain } from '../utils/domain';
 import { isConflictError } from '../utils/errors';
+import { withRetry } from '../utils/retry';
 import { createSharedFcClient, resolveSdkCtor } from '../utils/sdk';
 
 const AlidnsClientCtor = resolveSdkCtor<Alidns>(Alidns, '@alicloud/alidns20150109');
@@ -72,13 +73,13 @@ async function findCnameRecord(
   const candidates = buildSubDomainQueryCandidates(rootDomain, subDomain);
   for (const candidate of candidates) {
     try {
-      const response = await dnsClient.describeSubDomainRecords(new $Alidns.DescribeSubDomainRecordsRequest({
+      const response = await withRetry(() => dnsClient.describeSubDomainRecords(new $Alidns.DescribeSubDomainRecordsRequest({
         domainName: rootDomain,
         subDomain: candidate,
         type: 'CNAME',
         pageNumber: 1,
         pageSize: 100
-      }));
+      })));
       allRecords.push(...((response.body?.domainRecords?.record || []) as DomainRecordLike[]));
     } catch (err: unknown) {
       if (isInvalidDomainNameError(err)) continue;
@@ -103,12 +104,12 @@ async function ensureCnameRecord(
 
   if (!existing?.recordId) {
     try {
-      await dnsClient.addDomainRecord(new $Alidns.AddDomainRecordRequest({
+      await withRetry(() => dnsClient.addDomainRecord(new $Alidns.AddDomainRecordRequest({
         domainName: rootDomain,
         RR: subDomain,
         type: 'CNAME',
         value: normalizedTarget
-      }));
+      })));
       return;
     } catch (err: unknown) {
       if (!isConflictError(err)) throw err;
@@ -123,12 +124,12 @@ async function ensureCnameRecord(
   const normalizedExisting = normalizeDnsValue(existing.value || '');
   if (normalizedExisting === normalizedTarget) return;
 
-  await dnsClient.updateDomainRecord(new $Alidns.UpdateDomainRecordRequest({
+  await withRetry(() => dnsClient.updateDomainRecord(new $Alidns.UpdateDomainRecordRequest({
     recordId: existing.recordId,
     RR: subDomain,
     type: 'CNAME',
     value: normalizedTarget
-  }));
+  })));
 }
 
 export async function bindCustomDomain(
@@ -157,14 +158,14 @@ export async function bindCustomDomain(
     routeConfig
   });
   try {
-    await fcClient.createCustomDomain(new $FC.CreateCustomDomainRequest({
+    await withRetry(() => fcClient.createCustomDomain(new $FC.CreateCustomDomainRequest({
       body: domainInput
-    }));
+    })));
   } catch (err: unknown) {
     if (!isConflictError(err)) throw err;
-    await fcClient.updateCustomDomain(domainName, new $FC.UpdateCustomDomainRequest({
+    await withRetry(() => fcClient.updateCustomDomain(domainName, new $FC.UpdateCustomDomainRequest({
       body: new $FC.UpdateCustomDomainInput({ routeConfig })
-    }));
+    })));
   }
   return `http://${domainName}`;
 }
@@ -177,7 +178,7 @@ export async function unbindCustomDomain(domainName: string) {
   const fcClient = createFcClient();
 
   try {
-    await fcClient.deleteCustomDomain(normalizedDomain);
+    await withRetry(() => fcClient.deleteCustomDomain(normalizedDomain));
   } catch (err: unknown) {
     if (!isNotFoundError(err)) throw err;
   }
@@ -187,13 +188,13 @@ export async function unbindCustomDomain(domainName: string) {
   for (const candidate of candidates) {
     let records: DomainRecordLike[] = [];
     try {
-      const recordsRes = await dnsClient.describeSubDomainRecords(new $Alidns.DescribeSubDomainRecordsRequest({
+      const recordsRes = await withRetry(() => dnsClient.describeSubDomainRecords(new $Alidns.DescribeSubDomainRecordsRequest({
         domainName: rootDomain,
         subDomain: candidate,
         type: 'CNAME',
         pageNumber: 1,
         pageSize: 200
-      }));
+      })));
       records = (recordsRes.body?.domainRecords?.record || []) as DomainRecordLike[];
     } catch (err: unknown) {
       if (isInvalidDomainNameError(err)) continue;
@@ -206,7 +207,7 @@ export async function unbindCustomDomain(domainName: string) {
       if (!recordId || deleted.has(recordId)) continue;
       deleted.add(recordId);
       try {
-        await dnsClient.deleteDomainRecord(new $Alidns.DeleteDomainRecordRequest({ recordId }));
+        await withRetry(() => dnsClient.deleteDomainRecord(new $Alidns.DeleteDomainRecordRequest({ recordId })));
       } catch (err: unknown) {
         if (!isNotFoundError(err)) throw err;
       }
@@ -223,11 +224,11 @@ export async function listDnsRecords(domainName: string, limit = 200): Promise<D
   const pageSize = Math.min(100, safeLimit);
 
   for (let pageNumber = 1; pageNumber <= 20 && results.length < safeLimit; pageNumber += 1) {
-    const response = await dnsClient.describeDomainRecords(new $Alidns.DescribeDomainRecordsRequest({
+    const response = await withRetry(() => dnsClient.describeDomainRecords(new $Alidns.DescribeDomainRecordsRequest({
       domainName: normalizedDomain,
       pageNumber,
       pageSize
-    }));
+    })));
     const rows = response.body?.domainRecords?.record || [];
     for (const row of rows) {
       const recordId = row.recordId;
@@ -269,14 +270,14 @@ export async function addDnsRecord(domainName: string, options: AddDnsRecordOpti
   if (!value) throw new Error('记录值不能为空');
 
   const dnsClient = createDnsClient();
-  const response = await dnsClient.addDomainRecord(new $Alidns.AddDomainRecordRequest({
+  const response = await withRetry(() => dnsClient.addDomainRecord(new $Alidns.AddDomainRecordRequest({
     domainName: normalizedDomain,
     RR: rr,
     type,
     value,
     TTL: options.ttl,
     line: options.line || 'default'
-  }));
+  })));
   const recordId = response.body?.recordId;
   if (!recordId) throw new Error('添加 DNS 记录失败：未返回 recordId');
   return recordId;
@@ -286,5 +287,5 @@ export async function removeDnsRecord(recordId: string) {
   const normalized = recordId.trim();
   if (!normalized) throw new Error('recordId 不能为空');
   const dnsClient = createDnsClient();
-  await dnsClient.deleteDomainRecord(new $Alidns.DeleteDomainRecordRequest({ recordId: normalized }));
+  await withRetry(() => dnsClient.deleteDomainRecord(new $Alidns.DeleteDomainRecordRequest({ recordId: normalized })));
 }

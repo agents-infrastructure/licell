@@ -54,3 +54,12 @@ curl -X POST "http://<appName>.your-domain.xyz/math/sum" \
   -H 'content-type: application/json' \
   -d '{"numbers":[1,2,3]}'
 ```
+
+如果你希望直接指定完整域名，也可以：
+
+```bash
+licell deploy --type api --target preview --domain api.your-domain.xyz
+curl "https://api.your-domain.xyz/healthz"
+```
+
+说明：使用 `--domain` 时，`deploy` 会默认自动开启 HTTPS。
