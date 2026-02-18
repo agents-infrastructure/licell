@@ -29,5 +29,12 @@ describe('ram bootstrap helpers', () => {
     expect(doc.Statement[0].Effect).toBe('Allow');
     expect(doc.Statement[0].Resource).toBe('*');
     expect(doc.Statement[0].Action).toEqual([...LICELL_POLICY_ACTIONS]);
+    expect(doc.Statement[0].Action).toEqual(expect.arrayContaining([
+      'fc:DeleteFunction',
+      'fc:DeleteTrigger',
+      'fc:DeleteAlias',
+      'vpc:DescribeZones',
+      'vpc:CreateVpc'
+    ]));
   });
 });

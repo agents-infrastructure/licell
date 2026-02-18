@@ -38,11 +38,25 @@ export interface ProjectCacheConfig {
   mode?: string;
 }
 
+export interface ProjectResourcesConfig {
+  memorySize?: number;
+  timeout?: number;
+  cpu?: number;
+  instanceConcurrency?: number;
+}
+
+export interface ProjectHooksConfig {
+  preDeploy?: string;
+  postDeploy?: string;
+}
+
 export interface ProjectConfig {
   appName?: string;
   runtime?: string;
   acrNamespace?: string;
   envs: Record<string, string>;
+  resources?: ProjectResourcesConfig;
+  hooks?: ProjectHooksConfig;
   network?: ProjectNetworkConfig;
   cache?: ProjectCacheConfig;
   [key: string]: unknown;
@@ -52,7 +66,7 @@ interface SetProjectOptions {
   replaceEnvs?: boolean;
 }
 
-function ensureSecureDir(path: string) {
+export function ensureSecureDir(path: string) {
   if (!existsSync(path)) mkdirSync(path, { recursive: true, mode: SECURE_DIR_MODE });
   try { chmodSync(path, SECURE_DIR_MODE); } catch {
     console.error(`⚠️ 无法设置目录权限 ${path}，请手动确认权限为 0700`);
@@ -87,6 +101,27 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function toPositiveNumber(value: unknown) {
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value) || value <= 0) return undefined;
+    return value;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return undefined;
+    const parsed = Number(trimmed);
+    if (!Number.isFinite(parsed) || parsed <= 0) return undefined;
+    return parsed;
+  }
+  return undefined;
+}
+
+function toPositiveInt(value: unknown) {
+  const parsed = toPositiveNumber(value);
+  if (parsed === undefined || !Number.isInteger(parsed)) return undefined;
+  return parsed;
+}
+
 export function normalizeProject(raw: unknown): ProjectConfig {
   const projectRaw = isRecord(raw) ? raw : {};
   const envsRaw = isRecord(projectRaw.envs) ? projectRaw.envs : {};
@@ -104,6 +139,35 @@ export function normalizeProject(raw: unknown): ProjectConfig {
   }
   if (typeof projectRaw.acrNamespace === 'string' && projectRaw.acrNamespace.trim().length > 0) {
     normalized.acrNamespace = projectRaw.acrNamespace.trim();
+  }
+  const resourcesRaw = isRecord(projectRaw.resources) ? projectRaw.resources : null;
+  if (resourcesRaw) {
+    const memorySize = toPositiveInt(resourcesRaw.memorySize);
+    const timeout = toPositiveInt(resourcesRaw.timeout);
+    const cpu = toPositiveNumber(resourcesRaw.cpu);
+    const instanceConcurrency = toPositiveInt(resourcesRaw.instanceConcurrency);
+    const resources: ProjectResourcesConfig = {
+      ...(memorySize !== undefined ? { memorySize } : {}),
+      ...(timeout !== undefined ? { timeout } : {}),
+      ...(cpu !== undefined ? { cpu } : {}),
+      ...(instanceConcurrency !== undefined ? { instanceConcurrency } : {})
+    };
+    if (Object.keys(resources).length > 0) {
+      normalized.resources = resources;
+    }
+  }
+
+  const hooksRaw = isRecord(projectRaw.hooks) ? projectRaw.hooks : null;
+  if (hooksRaw) {
+    const preDeploy = typeof hooksRaw.preDeploy === 'string' ? hooksRaw.preDeploy.trim() : '';
+    const postDeploy = typeof hooksRaw.postDeploy === 'string' ? hooksRaw.postDeploy.trim() : '';
+    const hooks: ProjectHooksConfig = {
+      ...(preDeploy ? { preDeploy } : {}),
+      ...(postDeploy ? { postDeploy } : {})
+    };
+    if (Object.keys(hooks).length > 0) {
+      normalized.hooks = hooks;
+    }
   }
 
   const networkRaw = isRecord(projectRaw.network) ? projectRaw.network : null;
@@ -138,7 +202,17 @@ export function normalizeProject(raw: unknown): ProjectConfig {
     normalized.cache = cache;
   }
 
-  const { appName: _a, runtime: _r, acrNamespace: _an, envs: _e, network: _n, cache: _c, ...extra } = projectRaw;
+  const {
+    appName: _a,
+    runtime: _r,
+    acrNamespace: _an,
+    envs: _e,
+    resources: _res,
+    hooks: _h,
+    network: _n,
+    cache: _c,
+    ...extra
+  } = projectRaw;
   return { ...extra, ...normalized, envs };
 }
 

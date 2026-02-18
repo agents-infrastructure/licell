@@ -12,6 +12,7 @@ import {
 } from '../providers/fc';
 import {
   ensureAuthOrExit,
+  ensureDestructiveActionConfirmed,
   toOptionalString,
   parseListLimit,
   withSpinner
@@ -134,13 +135,18 @@ export function registerFnCommands(cli: CAC) {
 
   cli.command('fn rm [name]', '删除函数')
     .option('--force', '级联删除触发器、alias、已发布版本后再删除函数')
-    .action(async (name: string | undefined, options: { force?: boolean }) => {
+    .option('--yes', '跳过二次确认（危险）')
+    .action(async (name: string | undefined, options: { force?: boolean; yes?: boolean }) => {
       ensureAuthOrExit();
       const project = Config.getProject();
       const functionName = toOptionalString(name) || project.appName;
       if (!functionName) {
         throw new Error('请传入函数名，或先在当前项目执行 licell deploy 生成 appName');
       }
+      await ensureDestructiveActionConfirmed(
+        options.force ? `删除函数 ${functionName}（含触发器/alias/版本）` : `删除函数 ${functionName}`,
+        { yes: Boolean(options.yes) }
+      );
 
       const s = spinner();
       const deleted = await withSpinner(

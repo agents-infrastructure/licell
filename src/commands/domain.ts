@@ -6,6 +6,7 @@ import { bindCustomDomain, unbindCustomDomain } from '../providers/domain';
 import { issueAndBindSSL } from '../providers/ssl';
 import {
   ensureAuthOrExit,
+  ensureDestructiveActionConfirmed,
   requireAppName,
   toPromptValue,
   withSpinner
@@ -50,10 +51,12 @@ export function registerDomainCommands(cli: CAC) {
     });
 
   cli.command('domain rm <domain>', '解绑自定义域名并清理 DNS CNAME')
-    .action(async (domain: string) => {
+    .option('--yes', '跳过二次确认（危险）')
+    .action(async (domain: string, options: { yes?: boolean }) => {
       intro(pc.bgCyan(pc.black(' 🌐 Domain Removal ')));
       ensureAuthOrExit();
       const normalizedDomain = toPromptValue(domain, '域名').toLowerCase();
+      await ensureDestructiveActionConfirmed(`解绑域名 ${normalizedDomain}`, { yes: Boolean(options.yes) });
       const s = spinner();
       const removed = await withSpinner(
         s,

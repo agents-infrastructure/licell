@@ -2,6 +2,7 @@ import Rds, * as $Rds from '@alicloud/rds20140815';
 import { Config } from '../../utils/config';
 import { randomStrongPassword } from '../../utils/crypto';
 import { ignoreConflict, type Spinner } from '../../utils/errors';
+import { isRoleMissingError, isAlreadyExistsRoleError, isTransientError } from '../../utils/alicloud-error';
 import { sleep } from '../../utils/runtime';
 import { ensureDefaultNetwork, resolveProvidedNetwork } from '../vpc';
 import { createRdsClient } from './client';
@@ -27,27 +28,6 @@ const RDS_SERVICE_LINKED_ROLE_BY_DB = {
   postgres: 'AliyunServiceRoleForRdsPgsqlOnEcs',
   mysql: 'AliyunServiceRoleForRds'
 } as const;
-
-function isRoleMissingError(err: unknown) {
-  const text = `${(err as { code?: unknown })?.code || ''} ${(err as Error)?.message || ''}`.toLowerCase();
-  return text.includes('servicelinkedrole.notexist');
-}
-
-function isAlreadyExistsRoleError(err: unknown) {
-  const text = `${(err as { code?: unknown })?.code || ''} ${(err as Error)?.message || ''}`.toLowerCase();
-  return text.includes('entityalreadyexists.role') || text.includes('already exists');
-}
-
-function isRetriableCreateError(err: unknown) {
-  const text = `${(err as { code?: unknown })?.code || ''} ${(err as Error)?.message || ''}`.toLowerCase();
-  return (
-    text.includes('connecttimeout') ||
-    text.includes('readtimeout') ||
-    text.includes('requesttimeouterror') ||
-    text.includes('socket disconnected') ||
-    text.includes('econnreset')
-  );
-}
 
 function versionMatches(expectedVersion: string, availableVersion?: string) {
   if (!availableVersion) return false;
@@ -151,7 +131,7 @@ async function createDbInstanceWithRetry(
       return await rdsClient.createDBInstance(request);
     } catch (err: unknown) {
       lastError = err;
-      if (!isRetriableCreateError(err) || attempt === CREATE_DB_MAX_ATTEMPTS) throw err;
+      if (!isTransientError(err) || attempt === CREATE_DB_MAX_ATTEMPTS) throw err;
       spinner.message(`🌐 RDS API 网络抖动，${attempt}/${CREATE_DB_MAX_ATTEMPTS} 次失败，正在重试...`);
       await sleep(1500 * attempt);
     }
@@ -366,5 +346,6 @@ export async function provisionDatabase(
     name: databaseName
   };
   Config.setProject(project);
+  spinner.message('⚠️ DATABASE_URL（含密码）已写入 .licell/project.json，请确认该目录已在 .gitignore 中');
   return dbUrl;
 }

@@ -4,6 +4,7 @@ import pc from 'picocolors';
 import { addDnsRecord, listDnsRecords, removeDnsRecord } from '../providers/domain';
 import {
   ensureAuthOrExit,
+  ensureDestructiveActionConfirmed,
   toPromptValue,
   toOptionalString,
   parseListLimit,
@@ -72,9 +73,11 @@ export function registerDnsCommands(cli: CAC) {
     });
 
   cli.command('dns records rm <recordId>', '删除域名解析记录')
-    .action(async (recordId: string) => {
+    .option('--yes', '跳过二次确认（危险）')
+    .action(async (recordId: string, options: { yes?: boolean }) => {
       ensureAuthOrExit();
       const normalizedRecordId = toPromptValue(recordId, 'recordId');
+      await ensureDestructiveActionConfirmed(`删除 DNS 记录 ${normalizedRecordId}`, { yes: Boolean(options.yes) });
       const s = spinner();
       const removed = await withSpinner(
         s,

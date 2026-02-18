@@ -216,6 +216,48 @@ describe('normalizeProject', () => {
     });
   });
 
+  it('normalizes resources and hooks fields', () => {
+    const result = normalizeProject({
+      resources: {
+        memorySize: '512',
+        timeout: 60,
+        cpu: '1.5',
+        instanceConcurrency: '10'
+      },
+      hooks: {
+        preDeploy: ' npm run pre ',
+        postDeploy: ' npm run post '
+      }
+    });
+    expect(result.resources).toEqual({
+      memorySize: 512,
+      timeout: 60,
+      cpu: 1.5,
+      instanceConcurrency: 10
+    });
+    expect(result.hooks).toEqual({
+      preDeploy: 'npm run pre',
+      postDeploy: 'npm run post'
+    });
+  });
+
+  it('drops invalid resources and empty hooks', () => {
+    const result = normalizeProject({
+      resources: {
+        memorySize: 0,
+        timeout: 'NaN',
+        cpu: -1,
+        instanceConcurrency: 'abc'
+      },
+      hooks: {
+        preDeploy: '   ',
+        postDeploy: 123
+      }
+    });
+    expect(result.resources).toBeUndefined();
+    expect(result.hooks).toBeUndefined();
+  });
+
   it('preserves unknown top-level keys', () => {
     const result = normalizeProject({ appName: 'test', customField: 'value', envs: {} });
     expect((result as any).customField).toBe('value');

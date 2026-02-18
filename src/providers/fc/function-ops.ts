@@ -1,6 +1,7 @@
 import * as $FC from '@alicloud/fc20230330';
 import { Readable } from 'stream';
 import { createFcClient } from './client';
+import { isNotFoundError } from '../../utils/alicloud-error';
 import type { FunctionInvokeResult, FunctionSummary, RemoveFunctionResult } from './types';
 
 export async function pullFunctionEnvs(appName: string, qualifier?: string) {
@@ -56,13 +57,6 @@ export async function getFunctionInfo(functionName: string, qualifier?: string) 
   const fn = response.body;
   if (!fn?.functionName) throw new Error(`未找到函数: ${normalizedName}`);
   return fn;
-}
-
-function isNotFoundError(err: unknown) {
-  if (typeof err !== 'object' || err === null) return false;
-  const error = err as { code?: string; message?: string };
-  const text = `${error.code || ''} ${error.message || ''}`;
-  return /NotFound|404|ResourceNotFound/i.test(text);
 }
 
 async function listAllTriggers(functionName: string, client: ReturnType<typeof createFcClient>['client']) {

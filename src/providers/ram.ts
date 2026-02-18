@@ -2,6 +2,7 @@ import RAM, * as $RAM from '@alicloud/ram20150501';
 import * as $OpenApi from '@alicloud/openapi-client';
 import type { AuthConfig } from '../utils/config';
 import { resolveSdkCtor } from '../utils/sdk';
+import { isNotFoundError } from '../utils/alicloud-error';
 
 const RamClientCtor = resolveSdkCtor<RAM>(RAM, '@alicloud/ram20150501');
 
@@ -11,16 +12,80 @@ const RAM_USER_PATTERN = /^[A-Za-z0-9._-]{1,64}$/;
 const RAM_POLICY_PATTERN = /^[A-Za-z0-9-]{1,128}$/;
 
 export const LICELL_POLICY_ACTIONS = [
-  'fc:*',
-  'rds:*',
-  'kvstore:*',
-  'oss:*',
-  'alidns:*',
-  'vpc:*',
-  'ecs:*',
-  'cr:*',
-  'log:*',
-  'cdn:*'
+  // FC (Function Compute)
+  'fc:CreateFunction',
+  'fc:UpdateFunction',
+  'fc:GetFunction',
+  'fc:ListFunctions',
+  'fc:InvokeFunction',
+  'fc:CreateTrigger',
+  'fc:UpdateTrigger',
+  'fc:ListTriggers',
+  'fc:CreateCustomDomain',
+  'fc:UpdateCustomDomain',
+  'fc:DeleteCustomDomain',
+  'fc:GetCustomDomain',
+  'fc:PublishFunctionVersion',
+  'fc:ListFunctionVersions',
+  'fc:DeleteFunctionVersion',
+  'fc:CreateAlias',
+  'fc:UpdateAlias',
+  'fc:ListAliases',
+  'fc:DeleteAlias',
+  'fc:DeleteTrigger',
+  'fc:DeleteFunction',
+  // RDS
+  'rds:DescribeAvailableZones',
+  'rds:DescribeAvailableClasses',
+  'rds:DescribeDBInstances',
+  'rds:CreateDBInstance',
+  'rds:DescribeDBInstanceNetInfo',
+  'rds:CreateAccount',
+  'rds:CreateDatabase',
+  'rds:GrantAccountPrivilege',
+  'rds:CheckServiceLinkedRole',
+  'rds:CreateServiceLinkedRole',
+  // KVStore (Redis/Tair)
+  'kvstore:DescribeInstances',
+  'kvstore:DescribeAccounts',
+  'kvstore:DescribeServiceLinkedRoleExists',
+  'kvstore:InitializeKvstorePermission',
+  'kvstore:DescribeTairKVCacheInferInstances',
+  'kvstore:DescribeTairKVCacheInferInstanceAttribute',
+  'kvstore:CreateTairKVCacheVNode',
+  'kvstore:ResetAccountPassword',
+  'kvstore:ResetTairKVCacheCustomInstancePassword',
+  'kvstore:ModifySecurityIps',
+  // OSS
+  'oss:PutBucket',
+  'oss:GetBucketInfo',
+  'oss:PutBucketACL',
+  'oss:PutObject',
+  'oss:ListBuckets',
+  'oss:ListObjects',
+  // Alidns
+  'alidns:DescribeSubDomainRecords',
+  'alidns:DescribeDomainRecords',
+  'alidns:AddDomainRecord',
+  'alidns:UpdateDomainRecord',
+  'alidns:DeleteDomainRecord',
+  // VPC (read + managed VSwitch creation)
+  'vpc:DescribeVpcs',
+  'vpc:DescribeZones',
+  'vpc:DescribeVSwitchAttributes',
+  'vpc:DescribeVSwitches',
+  'vpc:CreateVpc',
+  'vpc:CreateVSwitch',
+  // ECS (security group only)
+  'ecs:DescribeSecurityGroups',
+  'ecs:CreateSecurityGroup',
+  // CR (Container Registry)
+  'cr:ListInstance',
+  'cr:CreateNamespace',
+  'cr:CreateRepository',
+  'cr:GetAuthorizationToken',
+  // SLS (Log Service, read-only)
+  'log:GetLogs'
 ] as const;
 
 export interface BootstrapRamAccessInput {
@@ -75,39 +140,12 @@ function createRamClient(adminAuth: AuthConfig) {
   }));
 }
 
-function getErrorCode(err: unknown) {
-  if (typeof err !== 'object' || err === null) return '';
-  if (!('code' in err)) return '';
-  return String((err as { code?: unknown }).code || '');
-}
-
-function getErrorMessage(err: unknown) {
-  if (typeof err !== 'object' || err === null) return '';
-  if (!('message' in err)) return '';
-  return String((err as { message?: unknown }).message || '');
-}
-
-function isEntityNotExistError(err: unknown) {
-  const code = getErrorCode(err);
-  const message = getErrorMessage(err).toLowerCase();
-  return code.includes('EntityNotExist') || message.includes('not exist');
-}
-
-function isAlreadyExistsError(err: unknown) {
-  const code = getErrorCode(err);
-  const message = getErrorMessage(err).toLowerCase();
-  return code.includes('EntityAlreadyExists')
-    || code.includes('EntityAlreadyExist')
-    || message.includes('already exists')
-    || message.includes('already attached');
-}
-
 async function ensureRamUser(client: RAM, userName: string) {
   try {
     await client.getUser(new $RAM.GetUserRequest({ userName }));
     return { created: false };
   } catch (err: unknown) {
-    if (!isEntityNotExistError(err)) throw err;
+    if (!isNotFoundError(err)) throw err;
   }
 
   await client.createUser(new $RAM.CreateUserRequest({
@@ -123,7 +161,7 @@ async function ensureCustomPolicy(client: RAM, policyName: string) {
     await client.getPolicy(new $RAM.GetPolicyRequest({ policyType: 'Custom', policyName }));
     return { created: false };
   } catch (err: unknown) {
-    if (!isEntityNotExistError(err)) throw err;
+    if (!isNotFoundError(err)) throw err;
   }
 
   await client.createPolicy(new $RAM.CreatePolicyRequest({
@@ -142,7 +180,10 @@ async function ensurePolicyAttachedToUser(client: RAM, policyName: string, userN
       userName
     }));
   } catch (err: unknown) {
-    if (isAlreadyExistsError(err)) return;
+    const text = `${String((err as { code?: unknown })?.code || '')} ${String((err as { message?: unknown })?.message || '')}`.toLowerCase();
+    if (text.includes('entityalreadyexists') || text.includes('already attached') || text.includes('attached already')) {
+      return;
+    }
     throw err;
   }
 }

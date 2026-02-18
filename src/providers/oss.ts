@@ -3,7 +3,8 @@ import { existsSync, readdirSync, statSync } from 'fs';
 import { join, relative } from 'path';
 import mime from 'mime-types';
 import { Config } from '../utils/config';
-import { formatErrorMessage, isConflictError } from '../utils/errors';
+import { formatErrorMessage } from '../utils/errors';
+import { isConflictError, isAccessDeniedError } from '../utils/alicloud-error';
 import { createPool } from '../utils/concurrency';
 
 const UPLOAD_CONCURRENCY = 10;
@@ -35,11 +36,6 @@ function createOssClient() {
   return { auth, client };
 }
 
-function isBucketAccessDeniedError(err: unknown) {
-  const message = formatErrorMessage(err).toLowerCase();
-  return message.includes('accessdenied') || message.includes('forbidden') || message.includes('no permission');
-}
-
 export async function deployOSS(appName: string, distDir: string) {
   const { auth, client } = createOssClient();
   if (!existsSync(distDir) || !statSync(distDir).isDirectory()) {
@@ -54,7 +50,7 @@ export async function deployOSS(appName: string, distDir: string) {
     try {
       await client.getBucketInfo(bucket);
     } catch (infoErr: unknown) {
-      if (isBucketAccessDeniedError(infoErr)) {
+      if (isAccessDeniedError(infoErr)) {
         throw new Error(`OSS Bucket 已被占用且当前账号无权限访问: ${bucket}，请更换 appName 后重试`);
       }
       throw infoErr;
@@ -63,7 +59,7 @@ export async function deployOSS(appName: string, distDir: string) {
   try {
     await client.putBucketACL(bucket, 'public-read');
   } catch (err: unknown) {
-    if (isBucketAccessDeniedError(err)) {
+    if (isAccessDeniedError(err)) {
       throw new Error(`OSS Bucket 无权限修改 ACL: ${bucket}，请确认该 Bucket 属于当前账号并可写`);
     }
     throw err;

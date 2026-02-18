@@ -1,21 +1,10 @@
+export { isConflictError, isInstanceClassError } from './alicloud-error';
+import { isConflictError } from './alicloud-error';
+
 export interface Spinner {
   start(msg?: string): void;
   stop(msg?: string): void;
   message(msg: string): void;
-}
-
-export function isConflictError(err: unknown): boolean {
-  if (typeof err !== 'object' || err === null) return false;
-  const error = err as { code?: string; message?: string };
-  const text = `${error.code || ''} ${error.message || ''}`;
-  return /AlreadyExists|Conflict|Duplicate|Exist|DomainRecordDuplicate/i.test(text);
-}
-
-export function isInstanceClassError(err: unknown): boolean {
-  if (typeof err !== 'object' || err === null) return false;
-  const error = err as { code?: string; message?: string };
-  const text = `${error.code || ''} ${error.message || ''}`;
-  return /InstanceClass|SoldOut|OutOfStock|InvalidParameter|not support|Unsupported/i.test(text);
 }
 
 export async function ignoreConflict(task: () => Promise<unknown>): Promise<void> {

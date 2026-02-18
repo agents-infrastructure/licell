@@ -10,6 +10,7 @@ import {
 } from '../providers/fc';
 import {
   ensureAuthOrExit,
+  ensureDestructiveActionConfirmed,
   requireAppName,
   toPromptValue,
   isNoChangesPublishError,
@@ -131,7 +132,8 @@ export function registerReleaseCommands(cli: CAC) {
   cli.command('release prune', '清理历史函数版本（默认仅预览）')
     .option('--keep <n>', '保留最近 N 个版本，默认 10')
     .option('--apply', '执行删除，未传则仅预览')
-    .action(async (options: { keep?: string; apply?: boolean }) => {
+    .option('--yes', '跳过二次确认（危险）')
+    .action(async (options: { keep?: string; apply?: boolean; yes?: boolean }) => {
       intro(pc.bgBlue(pc.white(' 🧹 Prune Function Versions ')));
       ensureAuthOrExit();
       const project = Config.getProject();
@@ -139,6 +141,9 @@ export function registerReleaseCommands(cli: CAC) {
 
       const keep = parseOptionalPositiveInt(options.keep, 'keep') || 10;
       const apply = Boolean(options.apply);
+      if (apply) {
+        await ensureDestructiveActionConfirmed(`清理函数历史版本（保留最近 ${keep} 个）`, { yes: Boolean(options.yes) });
+      }
       const s = spinner();
       const result = await withSpinner(
         s,

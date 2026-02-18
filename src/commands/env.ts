@@ -6,6 +6,7 @@ import { escapeEnvValue, normalizeReleaseTarget } from '../utils/cli-helpers';
 import { pullFunctionEnvs, setFunctionEnv, removeFunctionEnv } from '../providers/fc';
 import {
   ensureAuthOrExit,
+  ensureDestructiveActionConfirmed,
   requireAppName,
   toPromptValue,
   normalizeEnvKey,
@@ -69,11 +70,13 @@ export function registerEnvCommands(cli: CAC) {
     });
 
   cli.command('env rm <key>', '删除云端环境变量（并同步本地 .licell/project.json）')
-    .action(async (key: string) => {
+    .option('--yes', '跳过二次确认（危险）')
+    .action(async (key: string, options: { yes?: boolean }) => {
       ensureAuthOrExit();
       const project = Config.getProject();
       requireAppName(project);
       const envKey = normalizeEnvKey(toPromptValue(key, '环境变量名'));
+      await ensureDestructiveActionConfirmed(`删除环境变量 ${envKey}`, { yes: Boolean(options.yes) });
 
       const s = spinner();
       const envs = await withSpinner(

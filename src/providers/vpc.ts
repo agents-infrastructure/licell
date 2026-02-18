@@ -4,6 +4,7 @@ import * as $OpenApi from '@alicloud/openapi-client';
 import { Config } from '../utils/config';
 import { sleep } from '../utils/runtime';
 import { resolveSdkCtor } from '../utils/sdk';
+import { isCidrConflictError } from '../utils/alicloud-error';
 
 const VpcClientCtor = resolveSdkCtor<Vpc>(Vpc, '@alicloud/vpc20160428');
 const EcsClientCtor = resolveSdkCtor<Ecs>(Ecs, '@alicloud/ecs20140526');
@@ -42,11 +43,6 @@ function normalizePreferredZones(zoneIds?: string[]) {
 
 function isManagedVSwitchName(vSwitchName?: string) {
   return vSwitchName === DEFAULT_VSW_NAME || (vSwitchName || '').startsWith(`${DEFAULT_VSW_NAME}-`);
-}
-
-function isCidrConflictError(err: unknown) {
-  const message = `${(err as { code?: unknown })?.code || ''} ${(err as Error)?.message || ''}`.toLowerCase();
-  return message.includes('cidr') && (message.includes('conflict') || message.includes('overlap') || message.includes('invalid'));
 }
 
 function isUsableSwitch(vswitch: VSwitchSummary) {

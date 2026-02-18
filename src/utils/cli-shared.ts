@@ -1,4 +1,4 @@
-import { outro, spinner, isCancel } from '@clack/prompts';
+import { confirm, outro, spinner, isCancel } from '@clack/prompts';
 import pc from 'picocolors';
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { Config } from './config';
@@ -108,6 +108,35 @@ export function ensureEnvIgnored() {
 
 export function isInteractiveTTY() {
   return Boolean(process.stdin.isTTY && process.stdout.isTTY);
+}
+
+export interface DestructiveConfirmOptions {
+  yes?: boolean;
+  interactiveTTY?: boolean;
+  confirmPrompt?: (message: string) => Promise<boolean>;
+}
+
+export async function ensureDestructiveActionConfirmed(
+  actionLabel: string,
+  options: DestructiveConfirmOptions = {}
+) {
+  if (options.yes) return;
+  const interactiveTTY = options.interactiveTTY ?? isInteractiveTTY();
+  if (!interactiveTTY) {
+    throw new Error(`${actionLabel} 属于删除操作；非交互模式请添加 --yes 明确确认`);
+  }
+
+  const confirmPrompt = options.confirmPrompt || (async (message: string) => {
+    const answered = await confirm({ message });
+    if (isCancel(answered)) process.exit(0);
+    return Boolean(answered);
+  });
+
+  const firstConfirm = await confirmPrompt(`${actionLabel} 将删除云端资源，是否继续？`);
+  if (!firstConfirm) throw new Error('操作已取消');
+
+  const secondConfirm = await confirmPrompt(`请再次确认：继续执行${actionLabel}？`);
+  if (!secondConfirm) throw new Error('操作已取消');
 }
 
 export const DEPLOY_TYPES = ['api', 'static'] as const;

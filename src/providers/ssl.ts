@@ -3,10 +3,10 @@ import Alidns, * as $Alidns from '@alicloud/alidns20150109';
 import * as $FC from '@alicloud/fc20230330';
 import * as $OpenApi from '@alicloud/openapi-client';
 import { createPrivateKey, X509Certificate } from 'crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { homedir } from 'os';
-import { Config } from '../utils/config';
+import { Config, ensureSecureDir } from '../utils/config';
 import { parseRootAndSubdomain } from '../utils/domain';
 import type { Spinner } from '../utils/errors';
 import { sleep } from '../utils/runtime';
@@ -57,7 +57,7 @@ async function getOrCreateAccountKey(): Promise<Buffer> {
   if (existsSync(ACME_KEY_PATH)) {
     return readFileSync(ACME_KEY_PATH);
   }
-  mkdirSync(dirname(ACME_KEY_PATH), { recursive: true });
+  ensureSecureDir(dirname(ACME_KEY_PATH));
   const key = await acme.crypto.createPrivateKey();
   writeFileSync(ACME_KEY_PATH, key, { mode: 0o600 });
   return key;

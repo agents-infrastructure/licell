@@ -1,0 +1,154 @@
+import { confirm, text, isCancel, type spinner } from '@clack/prompts';
+import { existsSync } from 'fs';
+import { Config } from '../utils/config';
+import { getRuntime } from '../providers/fc/runtime-handler';
+import {
+  DEFAULT_FC_RUNTIME,
+  deployFC,
+  publishFunctionVersion,
+  promoteFunctionAlias
+} from '../providers/fc';
+import { bindCustomDomain } from '../providers/domain';
+import { issueAndBindSSL } from '../providers/ssl';
+import { probeHttpHealth } from '../utils/health-check';
+import { toPromptValue, withSpinner } from '../utils/cli-shared';
+import type { DeployContext } from './deploy-context';
+
+export interface ApiDeployResult {
+  url: string;
+  promotedVersion?: string;
+  fixedDomain?: string;
+  healthCheckLogs: string[];
+}
+
+export async function executeApiDeploy(
+  ctx: DeployContext,
+  s: ReturnType<typeof spinner>
+): Promise<ApiDeployResult | undefined> {
+  let runtime = ctx.cliRuntime || ctx.projectRuntime || ctx.envRuntime || DEFAULT_FC_RUNTIME;
+  if (runtime !== 'docker' && !ctx.cliRuntime && existsSync('Dockerfile') && ctx.interactiveTTY) {
+    const useDocker = await confirm({ message: '检测到 Dockerfile，是否使用 Docker 容器部署？' });
+    if (isCancel(useDocker)) process.exit(0);
+    if (useDocker) runtime = 'docker';
+  }
+  if (ctx.cliAcrNamespace && runtime !== 'docker') {
+    throw new Error('--acr-namespace 仅适用于 --runtime docker');
+  }
+  if (runtime === 'docker' && ctx.cliAcrNamespace) {
+    Config.setProject({ acrNamespace: ctx.cliAcrNamespace });
+  }
+
+  const defaultApiEntry = getRuntime(runtime).defaultEntry;
+  let entry: string;
+  if (runtime === 'docker') {
+    entry = ctx.cliEntry || '';
+  } else if (ctx.cliEntry) {
+    entry = toPromptValue(ctx.cliEntry, '入口文件路径');
+  } else if (ctx.interactiveTTY) {
+    entry = toPromptValue(await text({
+      message: runtime.startsWith('python')
+        ? '入口文件路径 (Python 需包含 handler 函数):'
+        : '入口文件路径 (需导出 handler):',
+      initialValue: defaultApiEntry
+    }), '入口文件路径');
+  } else {
+    entry = defaultApiEntry;
+  }
+
+  let spinnerMsg = '🔨 正在使用 Bun 极速剥离依赖打包，并推送至云端...';
+  if (runtime === 'docker') {
+    spinnerMsg = '🐳 正在构建 Docker 镜像并推送至 ACR...';
+  } else if (runtime.startsWith('python')) {
+    spinnerMsg = '🐍 正在打包 Python 源码并推送至云端...';
+  }
+
+  const apiDeployResult = await withSpinner(
+    s,
+    spinnerMsg,
+    '❌ 部署失败',
+    async () => {
+      const deployedUrl = await deployFC(
+        ctx.appName,
+        entry,
+        runtime,
+        ctx.cliResources ? { resources: ctx.cliResources } : undefined
+      );
+      let nextPromotedVersion: string | undefined;
+      let nextFixedDomain: string | undefined;
+      if (ctx.releaseTarget) {
+        s.message(`函数部署完成，正在发布版本并切流到 ${ctx.releaseTarget}...`);
+        nextPromotedVersion = await publishFunctionVersion(
+          ctx.appName,
+          `deploy ${ctx.releaseTarget} at ${new Date().toISOString()}`
+        );
+        await promoteFunctionAlias(
+          ctx.appName,
+          ctx.releaseTarget,
+          nextPromotedVersion,
+          `deployed by licell at ${new Date().toISOString()}`
+        );
+      }
+      if (ctx.domainSuffix) {
+        nextFixedDomain = `${ctx.appName}.${ctx.domainSuffix}`;
+        s.message(`函数部署完成，正在按固定规则绑定域名 ${nextFixedDomain}...`);
+        await bindCustomDomain(
+          nextFixedDomain,
+          `${ctx.auth.accountId}.${ctx.auth.region}.fc.aliyuncs.com`,
+          ctx.releaseTarget
+        );
+        if (ctx.enableSSL) {
+          s.message(`固定域名绑定完成，正在签发并挂载 HTTPS 证书 (${nextFixedDomain})...`);
+          await issueAndBindSSL(nextFixedDomain, s, { forceRenew: ctx.forceSslRenew });
+        }
+      }
+      if (ctx.cliDomain) {
+        nextFixedDomain = ctx.cliDomain;
+        s.message(`函数部署完成，正在绑定自定义域名 ${nextFixedDomain}...`);
+        await bindCustomDomain(
+          nextFixedDomain,
+          `${ctx.auth.accountId}.${ctx.auth.region}.fc.aliyuncs.com`,
+          ctx.releaseTarget
+        );
+        if (ctx.enableSSL) {
+          s.message(`自定义域名绑定完成，正在签发并挂载 HTTPS 证书 (${nextFixedDomain})...`);
+          await issueAndBindSSL(nextFixedDomain, s, { forceRenew: ctx.forceSslRenew });
+        }
+      }
+      return {
+        url: deployedUrl,
+        promotedVersion: nextPromotedVersion,
+        fixedDomain: nextFixedDomain
+      };
+    }
+  );
+  if (!apiDeployResult) return undefined;
+  const { url, promotedVersion, fixedDomain } = apiDeployResult;
+
+  s.message('🩺 部署完成，正在做可访问性检测...');
+  const healthCheckLogs: string[] = [];
+  const productionProbe = await probeHttpHealth(url);
+  if (productionProbe.ok) {
+    healthCheckLogs.push(`✅ 生产地址可访问 (${productionProbe.statusCode} ${productionProbe.checkedUrl})`);
+  } else {
+    healthCheckLogs.push(`⚠️ 生产地址可访问性检测未通过: ${productionProbe.error}`);
+  }
+  if (fixedDomain) {
+    const fixedDomainUrl = `${ctx.enableSSL ? 'https' : 'http'}://${fixedDomain}`;
+    const fixedProbe = await probeHttpHealth(fixedDomainUrl, {
+      maxAttempts: 6,
+      intervalMs: 2000
+    });
+    if (fixedProbe.ok) {
+      healthCheckLogs.push(`✅ 固定域名可访问 (${fixedProbe.statusCode} ${fixedProbe.checkedUrl})`);
+    } else {
+      healthCheckLogs.push(`⚠️ 固定域名检测未通过（可能 DNS 传播中）: ${fixedProbe.error}`);
+    }
+  }
+
+  return {
+    url,
+    promotedVersion,
+    fixedDomain,
+    healthCheckLogs
+  };
+}

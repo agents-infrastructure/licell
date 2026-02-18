@@ -3,7 +3,7 @@ import * as $FC from '@alicloud/fc20230330';
 import * as $OpenApi from '@alicloud/openapi-client';
 import { Config } from '../utils/config';
 import { parseRootAndSubdomain } from '../utils/domain';
-import { isConflictError } from '../utils/errors';
+import { isConflictError, isNotFoundError, isInvalidDomainNameError } from '../utils/alicloud-error';
 import { withRetry } from '../utils/retry';
 import { createSharedFcClient, resolveSdkCtor } from '../utils/sdk';
 
@@ -45,16 +45,6 @@ function createDnsClient() {
 
 function createFcClient() {
   return createSharedFcClient().client;
-}
-
-function isNotFoundError(err: unknown) {
-  const text = `${(err as { code?: unknown })?.code || ''} ${(err as { message?: unknown })?.message || ''}`.toLowerCase();
-  return text.includes('notfound') || text.includes('no such') || text.includes('404');
-}
-
-function isInvalidDomainNameError(err: unknown) {
-  const text = `${(err as { code?: unknown })?.code || ''} ${(err as { message?: unknown })?.message || ''}`.toLowerCase();
-  return text.includes('invaliddomainname.format') || text.includes('invalid domain name');
 }
 
 interface DomainRecordLike {

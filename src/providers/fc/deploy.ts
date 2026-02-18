@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, statSync } from 'fs';
 import { tmpdir } from 'os';
 import { isAbsolute, join, relative, resolve } from 'path';
 import { spawnSync } from 'child_process';
-import { Config } from '../../utils/config';
+import { Config, type ProjectResourcesConfig } from '../../utils/config';
 import { isConflictError } from '../../utils/errors';
 import { withRetry } from '../../utils/retry';
 import { createFcClient } from './client';
@@ -43,7 +43,34 @@ export function packageCodeAsBase64(outdir: string) {
   }
 }
 
-export async function deployFC(appName: string, entryFile: string, runtime: FcRuntime = DEFAULT_FC_RUNTIME) {
+const DEFAULT_MEMORY_SIZE = 256;
+const DEFAULT_TIMEOUT = 30;
+
+export interface DeployFCOptions {
+  resources?: ProjectResourcesConfig;
+}
+
+export interface ResolvedFunctionResources {
+  memorySize: number;
+  timeout: number;
+  cpu?: number;
+  instanceConcurrency?: number;
+}
+
+export function resolveFunctionResources(
+  projectResources?: ProjectResourcesConfig,
+  overrideResources?: ProjectResourcesConfig
+): ResolvedFunctionResources {
+  const resources = { ...(projectResources || {}), ...(overrideResources || {}) };
+  return {
+    memorySize: resources.memorySize ?? DEFAULT_MEMORY_SIZE,
+    timeout: resources.timeout ?? DEFAULT_TIMEOUT,
+    ...(resources.cpu !== undefined ? { cpu: resources.cpu } : {}),
+    ...(resources.instanceConcurrency !== undefined ? { instanceConcurrency: resources.instanceConcurrency } : {})
+  };
+}
+
+export async function deployFC(appName: string, entryFile: string, runtime: FcRuntime = DEFAULT_FC_RUNTIME, options: DeployFCOptions = {}) {
   const { client } = createFcClient();
   const project = Config.getProject();
 
@@ -82,15 +109,21 @@ export async function deployFC(appName: string, entryFile: string, runtime: FcRu
     code = { zipFile: packageCodeAsBase64(outdir) };
   }
 
+  const resources = resolveFunctionResources(project.resources, options.resources);
+  const memorySize = resources.memorySize;
+  const timeout = resources.timeout;
+
   const createBody: Record<string, unknown> = {
     functionName: appName,
     runtime: runtimeConfig.runtime,
     handler: runtimeConfig.handler,
-    memorySize: 256,
-    timeout: 30,
+    memorySize,
+    timeout,
     environmentVariables,
     vpcConfig
   };
+  if (resources.cpu !== undefined) createBody.cpu = resources.cpu;
+  if (resources.instanceConcurrency !== undefined) createBody.instanceConcurrency = resources.instanceConcurrency;
   if (code) createBody.code = code;
   if (runtimeConfig.customRuntimeConfig) createBody.customRuntimeConfig = runtimeConfig.customRuntimeConfig;
   if (runtimeConfig.customContainerConfig) createBody.customContainerConfig = runtimeConfig.customContainerConfig;
@@ -106,9 +139,13 @@ export async function deployFC(appName: string, entryFile: string, runtime: FcRu
       const updateBody: Record<string, unknown> = {
         runtime: runtimeConfig.runtime,
         handler: runtimeConfig.handler,
+        memorySize,
+        timeout,
         environmentVariables,
         vpcConfig
       };
+      if (resources.cpu !== undefined) updateBody.cpu = resources.cpu;
+      if (resources.instanceConcurrency !== undefined) updateBody.instanceConcurrency = resources.instanceConcurrency;
       if (code) updateBody.code = code;
       if (runtimeConfig.customRuntimeConfig) updateBody.customRuntimeConfig = runtimeConfig.customRuntimeConfig;
       if (runtimeConfig.customContainerConfig) updateBody.customContainerConfig = runtimeConfig.customContainerConfig;

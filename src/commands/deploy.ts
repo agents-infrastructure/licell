@@ -1,42 +1,15 @@
 import type { CAC } from 'cac';
-import { intro, outro, spinner, select, text, isCancel, confirm } from '@clack/prompts';
+import { intro, outro, spinner } from '@clack/prompts';
 import pc from 'picocolors';
-import { existsSync } from 'fs';
 import { Config } from '../utils/config';
 import { formatErrorMessage } from '../utils/errors';
-import { getRuntime } from '../providers/fc/runtime-handler';
-import { normalizeReleaseTarget } from '../utils/cli-helpers';
+import { runHook } from '../utils/hooks';
 import { buildDeployProjectPatch } from '../utils/deploy-config';
-import {
-  DEFAULT_FC_RUNTIME,
-  deployFC,
-  publishFunctionVersion,
-  promoteFunctionAlias
-} from '../providers/fc';
-import { deployOSS } from '../providers/oss';
-import { bindCustomDomain } from '../providers/domain';
-import { issueAndBindSSL } from '../providers/ssl';
-import { normalizeAcrNamespace } from '../providers/cr';
-import { readLicellEnv } from '../utils/env';
-import { parseDeployRuntimeOption } from '../utils/deploy-runtime';
-import { detectStaticDistDir } from '../utils/static-dist';
-import { probeHttpHealth } from '../utils/health-check';
-import {
-  toPromptValue,
-  ensureAuthOrExit,
-  isInteractiveTTY,
-  toOptionalString,
-  normalizeDeployType,
-  normalizeCustomDomain,
-  normalizeDomainSuffix,
-  tryNormalizeDomainSuffix,
-  tryNormalizeFcRuntime,
-  withSpinner
-} from '../utils/cli-shared';
+import { resolveDeployContext, type DeployCliOptions } from './deploy-context';
+import { executeApiDeploy } from './deploy-api';
+import { executeStaticDeploy } from './deploy-static';
 
-export function resolveDeploySslEnabled(sslFlag: boolean | undefined, customDomain: string | undefined) {
-  return Boolean(sslFlag || customDomain);
-}
+export { resolveDeploySslEnabled } from './deploy-context';
 
 export function registerDeployCommand(cli: CAC) {
   cli.command('deploy', '一键极速打包部署')
@@ -50,244 +23,70 @@ export function registerDeployCommand(cli: CAC) {
     .option('--ssl', '启用 HTTPS（使用 --domain 时默认自动开启；使用 --domain-suffix 需显式开启）')
     .option('--ssl-force-renew', '启用 HTTPS 时强制续签证书（忽略到期阈值）')
     .option('--acr-namespace <ns>', 'Docker 部署时使用的 ACR 命名空间（默认 licell）')
-    .action(async (options: { target?: string; domain?: string; domainSuffix?: string; ssl?: boolean; sslForceRenew?: boolean; type?: string; entry?: string; dist?: string; runtime?: string; acrNamespace?: string }) => {
-    intro(pc.bgBlue(pc.white(' ▲ Deploying to Aliyun ')));
-    const auth = ensureAuthOrExit();
-    const interactiveTTY = isInteractiveTTY();
+    .option('--memory <mb>', '函数内存大小（MB，默认 256）')
+    .option('--timeout <seconds>', '函数超时时间（秒，默认 30）')
+    .action(async (options: DeployCliOptions) => {
+      intro(pc.bgBlue(pc.white(' ▲ Deploying to Aliyun ')));
 
-    let project = Config.getProject();
-    if (!project.appName) {
-      if (!interactiveTTY) {
-        throw new Error('缺少应用名，请先配置 .licell/project.json 的 appName，或在交互终端执行 deploy 初始化');
-      }
-      const appName = toPromptValue(await text({
-        message: '为你的应用起个名字 (小写英文):',
-        placeholder: 'my-awesome-app'
-      }), '应用名');
-      if (!/^[a-z0-9-]+$/.test(appName)) throw new Error('应用名仅允许小写字母、数字和短横线');
-      if (appName.length > 128) throw new Error('应用名长度不能超过 128 个字符');
-      Config.setProject({ appName });
-      project = Config.getProject();
-    }
+      const ctx = await resolveDeployContext(options);
 
-    const cliDomain = options.domain ? normalizeCustomDomain(options.domain) : undefined;
-    const cliDomainSuffix = options.domainSuffix ? normalizeDomainSuffix(options.domainSuffix) : undefined;
-    const projectDomainSuffix = tryNormalizeDomainSuffix(project.domainSuffix);
-    const envDomainSuffix = tryNormalizeDomainSuffix(readLicellEnv(process.env, 'DOMAIN_SUFFIX'));
-    const domainSuffix = cliDomain ? undefined : (cliDomainSuffix || projectDomainSuffix || envDomainSuffix);
-    const runtimeSelection = parseDeployRuntimeOption(options.runtime);
-    const cliRuntime = runtimeSelection.runtime;
-    const projectRuntime = tryNormalizeFcRuntime(project.runtime);
-    const envRuntime = tryNormalizeFcRuntime(readLicellEnv(process.env, 'FC_RUNTIME'));
-    const cliAcrNamespace = options.acrNamespace ? normalizeAcrNamespace(options.acrNamespace) : undefined;
-    const cliType = options.type ? normalizeDeployType(options.type) : undefined;
-    let type: 'api' | 'static';
-    if (cliType && runtimeSelection.deployTypeHint && cliType !== runtimeSelection.deployTypeHint) {
-      throw new Error(`--type ${cliType} 与 --runtime ${options.runtime} 冲突`);
-    }
-    if (cliType) {
-      type = cliType;
-    } else if (runtimeSelection.deployTypeHint === 'api') {
-      type = 'api';
-    } else if (runtimeSelection.deployTypeHint === 'static') {
-      type = 'static';
-    } else if (interactiveTTY) {
-      const selectedType = await select({ message: '选择部署环境:', options: [
-        { value: 'api', label: '🚀 API 服务 (Node/Python/Docker -> FC 3.0)' },
-        { value: 'static', label: '📦 前端静态网站 (直推 OSS 托管)' }
-      ]});
-      if (isCancel(selectedType)) process.exit(0);
-      if (selectedType !== 'api' && selectedType !== 'static') throw new Error('未知部署类型');
-      type = selectedType;
-    } else {
-      type = 'api';
-    }
-    const releaseTarget = options.target ? normalizeReleaseTarget(options.target) : undefined;
-    const enableSSL = resolveDeploySslEnabled(options.ssl, cliDomain);
-    const forceSslRenew = Boolean(options.sslForceRenew);
-    if (cliDomain && cliDomainSuffix) throw new Error('--domain 与 --domain-suffix 不能同时使用');
-    if (releaseTarget && type !== 'api') throw new Error('--target 仅适用于 API 部署');
-    if (type !== 'api' && cliRuntime) throw new Error('--runtime 的 API 运行时仅适用于 API 部署；静态站请使用 --runtime static');
-    if (type !== 'api' && cliAcrNamespace) throw new Error('--acr-namespace 仅适用于 API Docker 部署');
-    if (type !== 'api' && cliDomain) throw new Error('--domain 仅适用于 API 部署');
-    if (type !== 'api' && cliDomainSuffix) throw new Error('--domain-suffix 仅适用于 API 部署');
-    if (enableSSL && type !== 'api') throw new Error('--ssl 仅适用于 API 部署');
-    if (forceSslRenew && !enableSSL) throw new Error('--ssl-force-renew 需要启用 HTTPS（请使用 --domain 或 --ssl）');
-    if (enableSSL && !cliDomain && !domainSuffix) {
-      throw new Error('--ssl 需要域名，请提供 --domain（完整域名）或 --domain-suffix');
-    }
-
-    const appName = project.appName;
-    if (!appName) {
-      throw new Error('appName 未设置，请检查项目配置');
-    }
-
-    const s = spinner();
-    try {
-      let url = '';
-      let promotedVersion: string | undefined;
-      let fixedDomain: string | undefined;
-      const healthCheckLogs: string[] = [];
-      if (type === 'api') {
-        let runtime = cliRuntime || projectRuntime || envRuntime || DEFAULT_FC_RUNTIME;
-        if (runtime !== 'docker' && !cliRuntime && existsSync('Dockerfile') && interactiveTTY) {
-          const useDocker = await confirm({ message: '检测到 Dockerfile，是否使用 Docker 容器部署？' });
-          if (isCancel(useDocker)) process.exit(0);
-          if (useDocker) runtime = 'docker';
-        }
-        if (cliAcrNamespace && runtime !== 'docker') {
-          throw new Error('--acr-namespace 仅适用于 --runtime docker');
-        }
-        if (runtime === 'docker' && cliAcrNamespace) {
-          Config.setProject({ acrNamespace: cliAcrNamespace });
-          project = Config.getProject();
+      const s = spinner();
+      try {
+        if (ctx.project.hooks?.preDeploy) {
+          s.start('执行 preDeploy hook...');
+          runHook('preDeploy', ctx.project.hooks.preDeploy);
+          s.stop(pc.green('✅ preDeploy hook 完成'));
         }
 
-        const defaultApiEntry = getRuntime(runtime).defaultEntry;
-        let entry: string;
-        if (runtime === 'docker') {
-          entry = options.entry || '';
-        } else if (options.entry) {
-          entry = toPromptValue(options.entry, '入口文件路径');
-        } else if (interactiveTTY) {
-          entry = toPromptValue(await text({
-            message: runtime.startsWith('python')
-              ? '入口文件路径 (Python 需包含 handler 函数):'
-              : '入口文件路径 (需导出 handler):',
-            initialValue: defaultApiEntry
-          }), '入口文件路径');
+        let url: string;
+        let promotedVersion: string | undefined;
+        let fixedDomain: string | undefined;
+        let healthCheckLogs: string[] = [];
+
+        if (ctx.type === 'api') {
+          const result = await executeApiDeploy(ctx, s);
+          if (!result) return;
+          ({ url, promotedVersion, fixedDomain, healthCheckLogs } = result);
         } else {
-          entry = defaultApiEntry;
+          const result = await executeStaticDeploy(ctx, s);
+          if (!result) return;
+          ({ url } = result);
         }
 
-        let spinnerMsg = '🔨 正在使用 Bun 极速剥离依赖打包，并推送至云端...';
-        if (runtime === 'docker') {
-          spinnerMsg = '🐳 正在构建 Docker 镜像并推送至 ACR...';
-        } else if (runtime.startsWith('python')) {
-          spinnerMsg = '🐍 正在打包 Python 源码并推送至云端...';
-        }
-
-        const apiDeployResult = await withSpinner(
-          s,
-          spinnerMsg,
-          '❌ 部署失败',
-          async () => {
-            const deployedUrl = await deployFC(appName, entry, runtime);
-            let nextPromotedVersion: string | undefined;
-            let nextFixedDomain: string | undefined;
-            if (releaseTarget) {
-              s.message(`函数部署完成，正在发布版本并切流到 ${releaseTarget}...`);
-              nextPromotedVersion = await publishFunctionVersion(
-                appName,
-                `deploy ${releaseTarget} at ${new Date().toISOString()}`
-              );
-              await promoteFunctionAlias(
-                appName,
-                releaseTarget,
-                nextPromotedVersion,
-                `deployed by licell at ${new Date().toISOString()}`
-              );
-            }
-            if (domainSuffix) {
-              nextFixedDomain = `${appName}.${domainSuffix}`;
-              s.message(`函数部署完成，正在按固定规则绑定域名 ${nextFixedDomain}...`);
-              await bindCustomDomain(
-                nextFixedDomain,
-                `${auth.accountId}.${auth.region}.fc.aliyuncs.com`,
-                releaseTarget
-              );
-              if (enableSSL) {
-                s.message(`固定域名绑定完成，正在签发并挂载 HTTPS 证书 (${nextFixedDomain})...`);
-                await issueAndBindSSL(nextFixedDomain, s, { forceRenew: forceSslRenew });
-              }
-            }
-            if (cliDomain) {
-              nextFixedDomain = cliDomain;
-              s.message(`函数部署完成，正在绑定自定义域名 ${nextFixedDomain}...`);
-              await bindCustomDomain(
-                nextFixedDomain,
-                `${auth.accountId}.${auth.region}.fc.aliyuncs.com`,
-                releaseTarget
-              );
-              if (enableSSL) {
-                s.message(`自定义域名绑定完成，正在签发并挂载 HTTPS 证书 (${nextFixedDomain})...`);
-                await issueAndBindSSL(nextFixedDomain, s, { forceRenew: forceSslRenew });
-              }
-            }
-            return {
-              url: deployedUrl,
-              promotedVersion: nextPromotedVersion,
-              fixedDomain: nextFixedDomain
-            };
-          }
-        );
-        if (!apiDeployResult) return;
-        url = apiDeployResult.url;
-        promotedVersion = apiDeployResult.promotedVersion;
-        fixedDomain = apiDeployResult.fixedDomain;
-
-        s.message('🩺 部署完成，正在做可访问性检测...');
-        const productionProbe = await probeHttpHealth(url);
-        if (productionProbe.ok) {
-          healthCheckLogs.push(`✅ 生产地址可访问 (${productionProbe.statusCode} ${productionProbe.checkedUrl})`);
-        } else {
-          healthCheckLogs.push(`⚠️ 生产地址可访问性检测未通过: ${productionProbe.error}`);
-        }
+        s.stop(pc.green('✅ 部署成功!'));
+        console.log(`\n🎉 Production URL: ${pc.cyan(pc.underline(url))}\n`);
         if (fixedDomain) {
-          const fixedDomainUrl = `${enableSSL ? 'https' : 'http'}://${fixedDomain}`;
-          const fixedProbe = await probeHttpHealth(fixedDomainUrl, {
-            maxAttempts: 6,
-            intervalMs: 2000
-          });
-          if (fixedProbe.ok) {
-            healthCheckLogs.push(`✅ 固定域名可访问 (${fixedProbe.statusCode} ${fixedProbe.checkedUrl})`);
-          } else {
-            healthCheckLogs.push(`⚠️ 固定域名检测未通过（可能 DNS 传播中）: ${fixedProbe.error}`);
+          const fixedDomainUrl = `${ctx.enableSSL ? 'https' : 'http'}://${fixedDomain}`;
+          console.log(`🌐 Fixed Domain: ${pc.cyan(pc.underline(fixedDomainUrl))}\n`);
+        }
+        if (ctx.releaseTarget && promotedVersion) {
+          console.log(`🏷️  alias=${pc.cyan(ctx.releaseTarget)} -> version=${pc.cyan(promotedVersion)}\n`);
+        }
+        if (healthCheckLogs.length > 0) {
+          console.log(`${healthCheckLogs.join('\n')}\n`);
+        }
+        const projectPatch = buildDeployProjectPatch({
+          deploySucceeded: true,
+          cliDomainSuffix: ctx.cliDomainSuffix,
+          projectDomainSuffix: ctx.projectDomainSuffix,
+          cliRuntime: ctx.cliRuntime,
+          projectRuntime: ctx.projectRuntime
+        });
+        if (Object.keys(projectPatch).length > 0) {
+          Config.setProject(projectPatch);
+        }
+        if (ctx.project.hooks?.postDeploy) {
+          try {
+            runHook('postDeploy', ctx.project.hooks.postDeploy);
+          } catch (err: unknown) {
+            console.warn(pc.yellow(`⚠️ postDeploy hook 执行失败，已忽略: ${formatErrorMessage(err)}`));
           }
         }
-      } else {
-        const detectedDist = detectStaticDistDir();
-        const dist = options.dist
-          ? toPromptValue(options.dist, '构建产物目录')
-          : interactiveTTY
-            ? toPromptValue(await text({ message: '前端构建产物目录:', initialValue: detectedDist }), '构建产物目录')
-            : detectedDist;
-        const staticDeployResult = await withSpinner(
-          s,
-          '☁️ 正在递归上传静态资源到 OSS 边缘节点...',
-          '❌ 部署失败',
-          async () => ({ url: await deployOSS(appName, dist) })
-        );
-        if (!staticDeployResult) return;
-        url = staticDeployResult.url;
+        outro('Done!');
+      } catch (err: unknown) {
+        s.stop(pc.red('❌ 部署失败'));
+        console.error(formatErrorMessage(err));
+        process.exitCode = 1;
       }
-      s.stop(pc.green('✅ 部署成功!'));
-      console.log(`\n🎉 Production URL: ${pc.cyan(pc.underline(url))}\n`);
-      if (fixedDomain) {
-        const fixedDomainUrl = `${enableSSL ? 'https' : 'http'}://${fixedDomain}`;
-        console.log(`🌐 Fixed Domain: ${pc.cyan(pc.underline(fixedDomainUrl))}\n`);
-      }
-      if (releaseTarget && promotedVersion) {
-        console.log(`🏷️  alias=${pc.cyan(releaseTarget)} -> version=${pc.cyan(promotedVersion)}\n`);
-      }
-      if (healthCheckLogs.length > 0) {
-        console.log(`${healthCheckLogs.join('\n')}\n`);
-      }
-      const projectPatch = buildDeployProjectPatch({
-        deploySucceeded: true,
-        cliDomainSuffix,
-        projectDomainSuffix,
-        cliRuntime,
-        projectRuntime
-      });
-      if (Object.keys(projectPatch).length > 0) {
-        Config.setProject(projectPatch);
-      }
-      outro('Done!');
-    } catch (err: unknown) {
-      s.stop(pc.red('❌ 部署失败'));
-      console.error(formatErrorMessage(err));
-      process.exitCode = 1;
-    }
-  });
+    });
 }
