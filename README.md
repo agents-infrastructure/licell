@@ -8,6 +8,8 @@
 
 默认面向中国区生产环境，默认地域 `cn-hangzhou`。
 
+当前项目你是指挥官，全部代码由 Codex（贡献度 60%）、Claude Code（共享度 35%）和 Manus（贡献度 5%）协同完成。
+
 ## 你可以先看这 3 行
 
 ```bash
@@ -16,8 +18,44 @@ licell login --region cn-hangzhou
 licell init --runtime nodejs22 && licell deploy --type api --target preview
 ```
 
+## MCP（让 Agent 驱动 licell）
+
+Licell 内置 MCP（Model Context Protocol）stdio server，方便 Claude Code 等 Agent 直接调用 `licell` 执行部署/发布/查询/清理（默认仍以 `deploy` 为主线）。
+
+在你的业务项目根目录执行：
+
+```bash
+licell mcp init
+```
+
+会生成/更新项目内的 `.mcp.json`，默认内容类似：
+
+```json
+{
+  "mcpServers": {
+    "licell": {
+      "command": "licell",
+      "args": ["mcp", "serve"]
+    }
+  }
+}
+```
+
+调试时也可以手动启动 stdio server（会阻塞等待输入，这是正常的）：
+
+```bash
+licell mcp serve
+```
+
+注意事项：
+
+- MCP 是非交互模式：会触发交互选择/确认的命令，需要显式补齐参数（例如 `deploy --type/--entry/--runtime`）以及删除确认 `--yes`
+- `licell_cli`：通用执行任意 `licell` 子命令（返回 stdout/stderr）
+- 结构化 tool：`licell_deploy` / `licell_init` / `licell_release_*` / `licell_fn_*` / `licell_domain_*` / `licell_dns_records_*`（减少 Agent 拼 argv 的成本）
+
 ## 目录
 
+- [MCP（让 Agent 驱动 licell）](#mcp让-agent-驱动-licell)
 - [1. 安装与升级（最快路径）](#1-安装与升级最快路径)
 - [2. 第一次部署（5 分钟）](#2-第一次部署5-分钟)
 - [3. `init` 模板（与 `examples` 同级）](#3-init-模板与-examples-同级)
@@ -573,41 +611,6 @@ bun run build:standalone
 git tag v1.0.0
 git push origin v1.0.0
 ```
-
-### 13.4 MCP（让 Agent 驱动 licell）
-
-Licell 内置一个最小 MCP（Model Context Protocol）stdio server，方便 Claude Code 等 Agent 直接调用 `licell` 执行部署/发布/查询/清理（默认仍以 `deploy` 为主线）。
-
-在你的业务项目根目录执行：
-
-```bash
-licell mcp init
-```
-
-会生成/更新项目内的 `.mcp.json`，默认内容类似：
-
-```json
-{
-  "mcpServers": {
-    "licell": {
-      "command": "licell",
-      "args": ["mcp", "serve"]
-    }
-  }
-}
-```
-
-调试时也可以手动启动 stdio server（会阻塞等待输入，这是正常的）：
-
-```bash
-licell mcp serve
-```
-
-注意事项：
-
-- MCP 是非交互模式：会触发交互选择/确认的命令，需要显式补齐参数（例如 `deploy --type/--entry/--runtime`）以及删除确认 `--yes`
-- `licell_cli`：通用执行任意 `licell` 子命令（返回 stdout/stderr）
-- 结构化 tool：`licell_deploy` / `licell_init` / `licell_release_*` / `licell_fn_*` / `licell_domain_*` / `licell_dns_records_*`（减少 Agent 拼 argv 的成本）
 
 ## 14. 常见问题
 
