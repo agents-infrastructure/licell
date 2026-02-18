@@ -1,4 +1,5 @@
 import { cac } from 'cac';
+import pc from 'picocolors';
 import { normalizeMultiWordCommandArgv } from './utils/argv';
 import { registerAuthCommands } from './commands/auth';
 import { registerInitCommand } from './commands/init';
@@ -14,6 +15,7 @@ import { registerEnvCommands } from './commands/env';
 import { registerLogsCommand } from './commands/logs';
 import { registerUpgradeCommand } from './commands/upgrade';
 import { resolveCliVersion } from './utils/version';
+import { formatErrorMessage } from './utils/errors';
 
 const cli = cac('licell');
 cli.version(resolveCliVersion());
@@ -46,4 +48,19 @@ if (argv.length <= 2) {
   process.exit(0);
 }
 
-cli.parse(argv);
+function handleCliError(err: unknown): never {
+  const message = formatErrorMessage(err);
+  const missingArgsMatch = message.match(/missing required args for command `(.+?)`/);
+  if (missingArgsMatch) {
+    console.error(pc.red('命令参数不完整。'));
+    console.error(pc.gray(`用法: licell ${missingArgsMatch[1]}`));
+    cli.outputHelp();
+    process.exit(1);
+  }
+  console.error(pc.red(message));
+  process.exit(1);
+}
+
+void Promise.resolve()
+  .then(() => cli.parse(argv))
+  .catch(handleCliError);

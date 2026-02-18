@@ -1,10 +1,11 @@
 import type { CAC } from 'cac';
-import { outro, spinner } from '@clack/prompts';
+import { text, isCancel, outro, spinner } from '@clack/prompts';
 import pc from 'picocolors';
 import { addDnsRecord, listDnsRecords, removeDnsRecord } from '../providers/domain';
 import {
   ensureAuthOrExit,
   ensureDestructiveActionConfirmed,
+  isInteractiveTTY,
   toPromptValue,
   toOptionalString,
   parseListLimit,
@@ -13,11 +14,25 @@ import {
 } from '../utils/cli-shared';
 
 export function registerDnsCommands(cli: CAC) {
-  cli.command('dns records list <domain>', '查看域名解析记录')
+  cli.command('dns records list [domain]', '查看域名解析记录')
     .option('--limit <n>', '返回数量，默认 100')
-    .action(async (domain: string, options: { limit?: unknown }) => {
+    .action(async (domain: string | undefined, options: { limit?: unknown }) => {
       ensureAuthOrExit();
-      const normalizedDomain = toPromptValue(domain, '域名').toLowerCase();
+      let domainInput = domain;
+      if (!domainInput) {
+        if (!isInteractiveTTY()) {
+          outro(pc.red('缺少域名参数，请使用：licell dns records list <domain>'));
+          process.exit(1);
+        }
+        const promptValue = await text({
+          message: '请输入要查看的域名:',
+          placeholder: 'example.com'
+        });
+        if (isCancel(promptValue)) process.exit(0);
+        domainInput = toPromptValue(promptValue, '域名');
+      }
+
+      const normalizedDomain = toPromptValue(domainInput, '域名').toLowerCase();
       const limit = parseListLimit(options.limit, 100, 500);
       const s = spinner();
       const records = await withSpinner(

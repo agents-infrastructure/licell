@@ -53,7 +53,7 @@ licell --version
 ```bash
 licell upgrade
 # 或指定版本
-licell upgrade --version v0.9.15
+licell upgrade --version v0.9.16
 ```
 
 安装逻辑说明：
@@ -526,6 +526,12 @@ bun run build
 ```bash
 bun run build:standalone
 ```
+
+说明：
+
+- standalone 产物基于 Node 官方 SEA（Single Executable Applications）链路构建
+- 兼容新链路：优先 `node --build-sea`，低版本 Node 自动回退 `--experimental-sea-config + postject`
+- 本地构建需 Node >= 20
 
 产物：
 

@@ -56,10 +56,10 @@ jobs:
             runner: ubuntu-24.04-arm
           - os: darwin
             arch: x64
-            runner: ubuntu-latest
+            runner: macos-13
           - os: darwin
             arch: arm64
-            runner: ubuntu-24.04-arm
+            runner: macos-14
     runs-on: ${{ matrix.runner }}
     steps:
       - name: Checkout
@@ -75,7 +75,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
