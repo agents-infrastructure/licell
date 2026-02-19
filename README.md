@@ -45,11 +45,28 @@ licell mcp init
 licell mcp serve
 ```
 
+### Agent Skills（让 Agent 了解 licell 命令）
+
+MCP 让 Agent 能"调用" licell，而 Skills 让 Agent 能"理解" licell —— 生成一份结构化的命令参考文档，Agent 可以据此规划和执行部署任务。
+
+```bash
+# Claude Code
+licell skills init claude
+# → .claude/skills/licell/SKILL.md + AGENTS.md
+
+# OpenAI Codex
+licell skills init codex
+# → codex.md + AGENTS.md
+```
+
+支持 `--force` 覆盖已有文件，重复执行会自动跳过内容相同的文件。
+
 ## 目录
 
 - [Licell CLI (`licell`)](#licell-cli-licell)
   - [你可以先看这 3 行](#你可以先看这-3-行)
   - [MCP（让 Agent 驱动 licell）](#mcp让-agent-驱动-licell)
+    - [Agent Skills（让 Agent 了解 licell 命令）](#agent-skills让-agent-了解-licell-命令)
   - [目录](#目录)
   - [1. 安装与升级（最快路径）](#1-安装与升级最快路径)
   - [2. 第一次部署（5 分钟）](#2-第一次部署5-分钟)

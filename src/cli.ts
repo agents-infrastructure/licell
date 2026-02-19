@@ -17,6 +17,7 @@ import { registerLogsCommand } from './commands/logs';
 import { registerUpgradeCommand } from './commands/upgrade';
 import { registerMcpCommand } from './commands/mcp';
 import { registerShellCommands } from './commands/shell';
+import { registerSkillsCommands } from './commands/skills';
 import { resolveCliVersion } from './utils/version';
 import { formatErrorMessage } from './utils/errors';
 
@@ -39,6 +40,7 @@ registerLogsCommand(cli);
 registerUpgradeCommand(cli);
 registerMcpCommand(cli);
 registerShellCommands(cli);
+registerSkillsCommands(cli);
 
 cli.help();
 cli.on('command:*', () => {

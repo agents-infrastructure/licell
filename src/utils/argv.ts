@@ -33,7 +33,8 @@ const MULTI_WORD_COMMANDS = new Set([
   'env list',
   'env set',
   'env rm',
-  'env pull'
+  'env pull',
+  'skills init'
 ]);
 
 function isOptionLike(token: string | undefined) {
