@@ -11,7 +11,7 @@ import {
   writeSkillFiles,
   ensureAgentsMdEntry
 } from '../utils/skills-scaffold';
-import { ensureMcpJsonConfig, ensureGlobalClaudeMcpConfig } from './mcp';
+import { ensureMcpJsonConfig, ensureGlobalClaudeMcpConfig, ensureGlobalCodexMcpConfig } from './mcp';
 
 type Scope = 'global' | 'project';
 
@@ -125,9 +125,7 @@ export function registerSetupCommand(cli: CAC) {
         let configureMcp = false;
         let mcpConfigPath: string | null = null;
         let mcpConfigUpdated: boolean | null = null;
-        if (scope === 'global' && agent === 'codex') {
-          // Codex 暂无全局 MCP 标准路径，跳过
-        } else if (interactiveTTY) {
+        if (interactiveTTY) {
           const mcpConfirm = await confirm({ message: '是否配置 MCP（让 Agent 能调用 licell）？' });
           if (isCancel(mcpConfirm)) {
             cancelFlow();
@@ -139,6 +137,13 @@ export function registerSetupCommand(cli: CAC) {
         if (configureMcp) {
           if (scope === 'global' && agent === 'claude') {
             const { configPath, updated } = ensureGlobalClaudeMcpConfig();
+            mcpConfigPath = configPath;
+            mcpConfigUpdated = updated;
+            if (!jsonMode) {
+              console.log(`  ${updated ? pc.green('+') : pc.gray('=')} ${configPath}${updated ? '' : '（已存在）'}`);
+            }
+          } else if (scope === 'global' && agent === 'codex') {
+            const { configPath, updated } = ensureGlobalCodexMcpConfig();
             mcpConfigPath = configPath;
             mcpConfigUpdated = updated;
             if (!jsonMode) {

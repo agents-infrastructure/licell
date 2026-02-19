@@ -20,6 +20,25 @@ licell init --runtime nodejs22 && licell deploy --type api --target preview
 
 Licell 内置 MCP（Model Context Protocol）stdio server，方便 Claude Code 等 Agent 直接调用 `licell` 执行部署/发布/查询/清理（默认仍以 `deploy` 为主线）。
 
+### 一键 setup（推荐）
+
+如果你刚安装完成，建议先跑一次：
+
+```bash
+# 交互式：选择 agent、作用域，并可选配置 MCP
+licell setup
+
+# 非交互示例：
+licell setup --agent codex
+licell setup --agent codex --global
+licell setup --agent claude --global
+```
+
+`setup` 配置 MCP 时，按 Agent 写入对应配置文件：
+- Claude 全局：`~/.claude/settings.local.json`
+- Codex 全局：`~/.codex/config.toml`
+- 项目级（Claude/Codex 通用）：`<project>/.mcp.json`
+
 在你的业务项目根目录执行：
 
 ```bash
@@ -112,6 +131,7 @@ licell skills init codex
 - [Licell CLI (`licell`)](#licell-cli-licell)
   - [你可以先看这 3 行](#你可以先看这-3-行)
   - [MCP（让 Agent 驱动 licell）](#mcp让-agent-驱动-licell)
+    - [一键 setup（推荐）](#一键-setup推荐)
     - [Agent 部署前置（FC API Spec / Check）](#agent-部署前置fc-api-spec--check)
     - [Agent 可读输出（`--output json`）](#agent-可读输出--output-json)
     - [Agent Skills（让 Agent 了解 licell 命令）](#agent-skills让-agent-了解-licell-命令)
@@ -166,7 +186,7 @@ licell --version
 ```bash
 licell upgrade
 # 或指定版本
-licell upgrade --version v0.9.21
+licell upgrade --version vX.Y.Z
 ```
 
 安装逻辑说明：
@@ -217,6 +237,13 @@ licell login \
 - 如需自定义命名：`--bootstrap-user <name>` `--bootstrap-policy <name>`
 
 ### 2.3 部署 API（FC）
+
+建议在第一次 deploy 前先做一轮规格读取与预检：
+
+```bash
+licell deploy spec nodejs22
+licell deploy check --runtime nodejs22 --entry src/index.ts
+```
 
 ```bash
 licell deploy \
@@ -462,6 +489,9 @@ licell fn info [name] --target preview
 licell fn invoke [name] --target preview --payload '{"ping":"pong"}'
 licell fn rm [name]
 licell fn rm [name] --force
+# 非交互/CI 场景删除需显式确认
+licell fn rm [name] --yes
+licell fn rm [name] --force --yes
 ```
 
 环境变量：
@@ -478,9 +508,11 @@ licell env pull --target preview
 ```bash
 licell domain add api.your-domain.xyz --target preview --ssl
 licell domain rm api.your-domain.xyz
+licell domain rm api.your-domain.xyz --yes
 licell dns records list your-domain.xyz
 licell dns records add your-domain.xyz --rr preview --type CNAME --value target.example.com
 licell dns records rm <recordId>
+licell dns records rm <recordId> --yes
 ```
 
 发布：
@@ -491,7 +523,10 @@ licell release promote --target prod
 licell release rollback <versionId> --target prod
 licell release prune --keep 10
 licell release prune --keep 10 --apply
+licell release prune --keep 10 --apply --yes
 ```
+
+说明：涉及删除/清理的命令在非交互模式下需要 `--yes`（交互模式会二次确认）。
 
 日志与对象存储：
 
