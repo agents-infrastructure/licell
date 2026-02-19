@@ -6,6 +6,8 @@ const MULTI_WORD_COMMANDS = new Set([
   'oss list',
   'oss info',
   'oss ls',
+  'oss upload',
+  'oss bucket',
   'db add',
   'db list',
   'db info',

@@ -1,11 +1,11 @@
 import OSS from 'ali-oss';
-import { existsSync, readdirSync, statSync } from 'fs';
-import { join, relative } from 'path';
+import { existsSync, lstatSync, readdirSync, realpathSync, statSync } from 'fs';
+import { isAbsolute, join, relative } from 'path';
 import mime from 'mime-types';
 import { Config } from '../utils/config';
-import { formatErrorMessage } from '../utils/errors';
-import { isConflictError, isAccessDeniedError } from '../utils/alicloud-error';
+import { isConflictError, isAccessDeniedError, isTransientError } from '../utils/alicloud-error';
 import { createPool } from '../utils/concurrency';
+import { withRetry } from '../utils/retry';
 
 const UPLOAD_CONCURRENCY = 10;
 
@@ -26,6 +26,25 @@ export interface OssObjectSummary {
   storageClass?: string;
 }
 
+export interface OssUploadDirectoryResult {
+  bucket: string;
+  targetDir?: string;
+  uploadedCount: number;
+  baseUrl: string;
+  skippedSymlinkCount: number;
+}
+
+interface OssUploadCandidate {
+  sourceFile: string;
+  objectName: string;
+}
+
+export interface CollectOssUploadFilesResult {
+  sourceRoot: string;
+  files: OssUploadCandidate[];
+  skippedSymlinkCount: number;
+}
+
 function createOssClient() {
   const auth = Config.requireAuth();
   const client = new OSS({
@@ -42,11 +61,116 @@ function isPublicBucketAclBlockedError(err: unknown) {
   return message.includes('put public bucket acl is not allowed');
 }
 
+export function normalizeOssTargetDir(targetDir?: string) {
+  if (!targetDir) return undefined;
+  const normalized = targetDir
+    .trim()
+    .replace(/\\/g, '/')
+    .replace(/\/{2,}/g, '/')
+    .replace(/^\/+|\/+$/g, '');
+  return normalized.length > 0 ? normalized : undefined;
+}
+
+export function buildOssObjectKey(relativeFilePath: string, targetDir?: string) {
+  const normalizedPath = relativeFilePath
+    .replace(/\\/g, '/')
+    .replace(/^\/+/, '');
+  if (!normalizedPath || normalizedPath === '.') {
+    throw new Error('对象路径不能为空');
+  }
+  const prefix = normalizeOssTargetDir(targetDir);
+  return prefix ? `${prefix}/${normalizedPath}` : normalizedPath;
+}
+
+export function collectOssUploadFiles(sourceDir: string, targetDir?: string): CollectOssUploadFilesResult {
+  if (!existsSync(sourceDir) || !statSync(sourceDir).isDirectory()) {
+    throw new Error(`本地目录不存在或不可读: ${sourceDir}`);
+  }
+  const sourceRoot = realpathSync(sourceDir);
+  const normalizedTargetDir = normalizeOssTargetDir(targetDir);
+  const visitedDirectories = new Set<string>([sourceRoot]);
+  const files: OssUploadCandidate[] = [];
+  let skippedSymlinkCount = 0;
+
+  function walk(dirPath: string) {
+    for (const fileName of readdirSync(dirPath)) {
+      const fullPath = join(dirPath, fileName);
+      const stats = lstatSync(fullPath);
+
+      if (stats.isSymbolicLink()) {
+        skippedSymlinkCount += 1;
+        continue;
+      }
+
+      if (stats.isDirectory()) {
+        const realDir = realpathSync(fullPath);
+        if (visitedDirectories.has(realDir)) continue;
+        visitedDirectories.add(realDir);
+        walk(realDir);
+        continue;
+      }
+
+      if (!stats.isFile()) continue;
+      const relativePath = relative(sourceRoot, fullPath).replace(/\\/g, '/');
+      if (!relativePath || relativePath === '.' || relativePath.startsWith('..') || isAbsolute(relativePath)) {
+        throw new Error(`检测到越界路径，已拒绝上传: ${fullPath}`);
+      }
+      files.push({
+        sourceFile: fullPath,
+        objectName: buildOssObjectKey(relativePath, normalizedTargetDir)
+      });
+    }
+  }
+
+  walk(sourceRoot);
+  return {
+    sourceRoot,
+    files,
+    skippedSymlinkCount
+  };
+}
+
+export async function uploadDirectoryToBucket(
+  bucketName: string,
+  sourceDir: string,
+  options?: { targetDir?: string; concurrency?: number }
+): Promise<OssUploadDirectoryResult> {
+  const { auth, client } = createOssClient();
+  const normalizedBucket = bucketName.trim();
+  if (!normalizedBucket) throw new Error('bucket 名称不能为空');
+  const targetDir = normalizeOssTargetDir(options?.targetDir);
+  const collected = collectOssUploadFiles(sourceDir, targetDir);
+  const concurrency = Number.isFinite(options?.concurrency)
+    && Number((options?.concurrency || 0)) > 0
+    ? Math.floor(Number(options?.concurrency))
+    : UPLOAD_CONCURRENCY;
+  const pool = createPool(concurrency);
+  client.useBucket(normalizedBucket);
+  await Promise.all(
+    collected.files.map((file) => pool(async () => {
+      const mimeType = mime.lookup(file.sourceFile) || 'application/octet-stream';
+      await withRetry(
+        () => client.put(file.objectName, file.sourceFile, { headers: { 'Content-Type': mimeType } }),
+        {
+          maxAttempts: 4,
+          baseDelayMs: 1000,
+          shouldRetry: isTransientError
+        }
+      );
+    }))
+  );
+
+  return {
+    bucket: normalizedBucket,
+    targetDir,
+    uploadedCount: collected.files.length,
+    baseUrl: `https://${normalizedBucket}.oss-${auth.region}.aliyuncs.com`,
+    skippedSymlinkCount: collected.skippedSymlinkCount
+  };
+}
+
 export async function deployOSS(appName: string, distDir: string) {
   const { auth, client } = createOssClient();
-  if (!existsSync(distDir) || !statSync(distDir).isDirectory()) {
-    throw new Error(`静态产物目录不存在或不可读: ${distDir}`);
-  }
   const bucket = `licell-${appName}-${auth.accountId.substring(0, 4)}`.toLowerCase();
 
   try {
@@ -77,26 +201,8 @@ export async function deployOSS(appName: string, distDir: string) {
     if (!skippedPublicAcl) throw err;
   }
 
-  client.useBucket(bucket);
-  const pool = createPool(UPLOAD_CONCURRENCY);
-
-  async function uploadDir(dir: string) {
-    const promises: Promise<unknown>[] = [];
-    for (const file of readdirSync(dir)) {
-      const fullPath = join(dir, file);
-      if (statSync(fullPath).isDirectory()) {
-        promises.push(uploadDir(fullPath));
-      } else {
-        const objectName = relative(distDir, fullPath).replace(/\\/g, '/');
-        const mimeType = mime.lookup(fullPath) || 'application/octet-stream';
-        promises.push(pool(() => client.put(objectName, fullPath, { headers: { 'Content-Type': mimeType } })));
-      }
-    }
-    await Promise.all(promises);
-  }
-
-  await uploadDir(distDir);
-  return `https://${bucket}.oss-${auth.region}.aliyuncs.com`;
+  const uploadResult = await uploadDirectoryToBucket(bucket, distDir);
+  return uploadResult.baseUrl;
 }
 
 export async function listOssBuckets(limit = 200): Promise<OssBucketSummary[]> {

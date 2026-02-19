@@ -91,7 +91,7 @@ licell --version
 ```bash
 licell upgrade
 # 或指定版本
-licell upgrade --version v0.9.18
+licell upgrade --version v0.9.19
 ```
 
 安装逻辑说明：
@@ -382,7 +382,11 @@ licell logs
 licell oss list
 licell oss info <bucket>
 licell oss ls <bucket> [prefix]
+licell oss upload <bucket> --source-dir dist --target-dir mysite
+licell oss bucket --bucket <bucket> --source-dir dist --target-dir mysite
 ```
+
+说明：`oss upload` 与 `oss bucket` 等价；`--target-dir` 不传时上传到 Bucket 根目录。
 
 ## 7. 进阶：运行时细节
 

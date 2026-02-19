@@ -1,7 +1,7 @@
 import type { CAC } from 'cac';
-import { outro, spinner } from '@clack/prompts';
+import { text, outro, spinner } from '@clack/prompts';
 import pc from 'picocolors';
-import { getOssBucketInfo, listOssBuckets, listOssObjects } from '../providers/oss';
+import { getOssBucketInfo, listOssBuckets, listOssObjects, uploadDirectoryToBucket } from '../providers/oss';
 import { executeWithAuthRecovery } from '../utils/auth-recovery';
 import {
   ensureAuthOrExit,
@@ -113,4 +113,64 @@ export function registerOssCommands(cli: CAC) {
         }
       );
     });
+
+  const registerUploadCommand = (name: string, description: string) => {
+    cli.command(name, description)
+      .option('--bucket <bucket>', 'Bucket 名称（可替代位置参数）')
+      .option('--source-dir <dir>', '本地目录（默认 dist）')
+      .option('--target-dir <dir>', 'Bucket 内目标目录前缀（如 mysite 或 mysite/v2）')
+      .action(async (bucket: string | undefined, options: { bucket?: unknown; sourceDir?: unknown; targetDir?: unknown }) => {
+        await executeWithAuthRecovery(
+          {
+            commandLabel: 'licell oss upload',
+            interactiveTTY: isInteractiveTTY(),
+            requiredCapabilities: ['oss']
+          },
+          async () => {
+            ensureAuthOrExit();
+            const interactiveTTY = isInteractiveTTY();
+            const bucketName = toOptionalString(options.bucket)
+              || toOptionalString(bucket)
+              || (
+                interactiveTTY
+                  ? toPromptValue(await text({ message: 'Bucket 名称:' }), 'bucket')
+                  : undefined
+              );
+            if (!bucketName) throw new Error('请通过 <bucket> 或 --bucket 指定 Bucket 名称');
+
+            const sourceDir = toOptionalString(options.sourceDir)
+              || (
+                interactiveTTY
+                  ? toPromptValue(await text({ message: '本地目录:', initialValue: 'dist' }), 'source-dir')
+                  : 'dist'
+              );
+            const targetDir = toOptionalString(options.targetDir);
+
+            const s = spinner();
+            const result = await withSpinner(
+              s,
+              `正在上传 ${sourceDir} 到 OSS Bucket ${bucketName}${targetDir ? `/${targetDir}` : ''}...`,
+              '❌ OSS 目录上传失败',
+              () => uploadDirectoryToBucket(bucketName, sourceDir, { targetDir })
+            );
+            if (!result) return;
+
+            s.stop(pc.green(`✅ 上传完成，共 ${result.uploadedCount} 个文件`));
+            const objectPrefix = result.targetDir ? `${result.targetDir}/` : '';
+            console.log(`\nbucket: ${pc.cyan(result.bucket)}`);
+            console.log(`prefix: ${pc.cyan(result.targetDir || '(root)')}`);
+            console.log(`base:   ${pc.cyan(result.baseUrl)}`);
+            console.log(`hint:   ${pc.gray(`${result.baseUrl}/${objectPrefix}<file>`)}`);
+            if (result.skippedSymlinkCount > 0) {
+              console.log(pc.yellow(`warning: 已跳过 ${result.skippedSymlinkCount} 个符号链接（为避免目录逃逸与递归风险）`));
+            }
+            console.log('');
+            outro('Done.');
+          }
+        );
+      });
+  };
+
+  registerUploadCommand('oss upload [bucket]', '上传本地目录到 OSS Bucket 指定目录');
+  registerUploadCommand('oss bucket [bucket]', '上传本地目录到 OSS Bucket 指定目录（兼容命令，等同 oss upload）');
 }
