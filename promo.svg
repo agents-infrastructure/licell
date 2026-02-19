@@ -74,3 +74,94 @@
   <text x="633" y="318" font-family="'SF Mono',monospace" font-size="12" fill="#3fb950" opacity="0.75">✓ FC deployed · VPC auto-created</text>
   <text x="633" y="338" font-family="'SF Mono',monospace" font-size="12" fill="#3fb950" opacity="0.75">✓ HTTPS cert auto-issued</text>
   <text x="633" y="358" font-family="'SF Mono',monospace" font-size="12" fill="#3fb950" opacity="0.75">✓ https://api.example.com → ready</text>
+
+  <!-- ===== MCP + Agent Skills ===== -->
+  <text x="600" y="418" text-anchor="middle" font-family="system-ui,sans-serif"
+        font-size="16" font-weight="600" fill="#c9d1d9" letter-spacing="1">MCP + Agent Skills — 让 AI Agent 直接驱动部署</text>
+
+  <!-- Card 1: MCP Server -->
+  <rect x="40" y="438" width="280" height="108" rx="10" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+  <text x="60" y="462" font-family="'SF Mono',monospace" font-size="12.5" fill="#a371f7" font-weight="600">MCP Server (内置)</text>
+  <text x="60" y="484" font-family="'SF Mono',monospace" font-size="12">
+    <tspan fill="#3fb950">$</tspan><tspan fill="#c9d1d9"> licell </tspan><tspan fill="#ff7b72">mcp</tspan><tspan fill="#79c0ff"> init</tspan></text>
+  <text x="60" y="504" font-family="'SF Mono',monospace" font-size="10.5" fill="#8b949e">→ .mcp.json 一键生成</text>
+  <text x="60" y="520" font-family="'SF Mono',monospace" font-size="10.5" fill="#8b949e">→ Claude Code / Cursor / Windsurf</text>
+  <text x="60" y="536" font-family="'SF Mono',monospace" font-size="10.5" fill="#8b949e">→ deploy / release / spec / check</text>
+
+  <!-- Card 2: Agent Skills -->
+  <rect x="330" y="438" width="280" height="108" rx="10" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+  <text x="350" y="462" font-family="'SF Mono',monospace" font-size="12.5" fill="#58a6ff" font-weight="600">Agent Skills 导出</text>
+  <text x="350" y="484" font-family="'SF Mono',monospace" font-size="12">
+    <tspan fill="#3fb950">$</tspan><tspan fill="#c9d1d9"> licell </tspan><tspan fill="#ff7b72">skills</tspan><tspan fill="#79c0ff"> init</tspan><tspan fill="#a5d6ff"> claude</tspan></text>
+  <text x="350" y="504" font-family="'SF Mono',monospace" font-size="12">
+    <tspan fill="#3fb950">$</tspan><tspan fill="#c9d1d9"> licell </tspan><tspan fill="#ff7b72">skills</tspan><tspan fill="#79c0ff"> init</tspan><tspan fill="#a5d6ff"> codex</tspan></text>
+  <text x="350" y="524" font-family="'SF Mono',monospace" font-size="10.5" fill="#8b949e">→ SKILL.md + AGENTS.md 自动生成</text>
+  <text x="350" y="540" font-family="'SF Mono',monospace" font-size="10.5" fill="#8b949e">→ Agent 理解全部命令并规划任务</text>
+
+  <!-- Card 3: Deploy Spec + Check -->
+  <rect x="620" y="438" width="280" height="108" rx="10" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+  <text x="640" y="462" font-family="'SF Mono',monospace" font-size="12.5" fill="#d29922" font-weight="600">Agent 部署前置</text>
+  <text x="640" y="484" font-family="'SF Mono',monospace" font-size="12">
+    <tspan fill="#3fb950">$</tspan><tspan fill="#c9d1d9"> licell </tspan><tspan fill="#ff7b72">deploy</tspan><tspan fill="#79c0ff"> spec</tspan><tspan fill="#a5d6ff"> nodejs22</tspan></text>
+  <text x="640" y="504" font-family="'SF Mono',monospace" font-size="12">
+    <tspan fill="#3fb950">$</tspan><tspan fill="#c9d1d9"> licell </tspan><tspan fill="#ff7b72">deploy</tspan><tspan fill="#79c0ff"> check</tspan></text>
+  <text x="640" y="524" font-family="'SF Mono',monospace" font-size="10.5" fill="#8b949e">→ 读取 runtime 规格 + 预检项目</text>
+  <text x="640" y="540" font-family="'SF Mono',monospace" font-size="10.5" fill="#8b949e">→ --output json 结构化输出</text>
+
+  <!-- Card 4: Runtimes -->
+  <rect x="910" y="438" width="250" height="108" rx="10" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+  <text x="930" y="462" font-family="'SF Mono',monospace" font-size="12.5" fill="#00d4aa" font-weight="600">多运行时 + 全自动化</text>
+  <text x="930" y="484" font-family="system-ui,sans-serif" font-size="12" fill="#c9d1d9">Node.js 22 · Python 3.13 · Docker</text>
+  <text x="930" y="504" font-family="system-ui,sans-serif" font-size="12" fill="#c9d1d9">Auto VPC · RAM Bootstrap</text>
+  <text x="930" y="524" font-family="system-ui,sans-serif" font-size="12" fill="#c9d1d9">Serverless DB · Redis Cache</text>
+  <text x="930" y="540" font-family="system-ui,sans-serif" font-size="12" fill="#c9d1d9">CI/CD · E2E · Shell 补全</text>
+
+  <!-- ===== Feature tags ===== -->
+  <rect x="80" y="575" width="155" height="34" rx="7" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+  <text x="157" y="597" text-anchor="middle" font-family="system-ui,sans-serif" font-size="12" fill="#c9d1d9"><tspan fill="#00d4aa">&#9679;</tspan> Node · Python · Docker</text>
+
+  <rect x="250" y="575" width="170" height="34" rx="7" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+  <text x="335" y="597" text-anchor="middle" font-family="system-ui,sans-serif" font-size="12" fill="#c9d1d9"><tspan fill="#58a6ff">&#9679;</tspan> API (FC) + Static (OSS)</text>
+
+  <rect x="435" y="575" width="155" height="34" rx="7" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+  <text x="512" y="597" text-anchor="middle" font-family="system-ui,sans-serif" font-size="12" fill="#c9d1d9"><tspan fill="#d29922">&#9679;</tspan> Domain · HTTPS · CDN</text>
+
+  <rect x="605" y="575" width="160" height="34" rx="7" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+  <text x="685" y="597" text-anchor="middle" font-family="system-ui,sans-serif" font-size="12" fill="#c9d1d9"><tspan fill="#f778ba">&#9679;</tspan> Serverless DB + Cache</text>
+
+  <rect x="780" y="575" width="155" height="34" rx="7" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+  <text x="857" y="597" text-anchor="middle" font-family="system-ui,sans-serif" font-size="12" fill="#c9d1d9"><tspan fill="#a371f7">&#9679;</tspan> MCP + Agent Skills</text>
+
+  <rect x="950" y="575" width="130" height="34" rx="7" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+  <text x="1015" y="597" text-anchor="middle" font-family="system-ui,sans-serif" font-size="12" fill="#c9d1d9"><tspan fill="#3fb950">&#9679;</tspan> CI/CD Ready</text>
+
+  <!-- ===== Install command ===== -->
+  <text x="600" y="650" text-anchor="middle" font-family="'SF Mono',monospace" font-size="13" fill="#8b949e" opacity="0.55">
+    curl -fsSL https://github.com/agents-infrastructure/licell/releases/latest/download/install.sh | bash</text>
+
+  <!-- ===== Divider ===== -->
+  <line x1="250" y1="675" x2="950" y2="675" stroke="#21262d" stroke-width="1"/>
+
+  <!-- ===== GitHub URL ===== -->
+  <g transform="translate(406,694) scale(0.032)">
+    <path fill="#58a6ff" opacity="0.85" d="M400 0C179 0 0 179 0 400c0 177 114 327 273 380 20 4 27-9 27-19v-67c-111 24-134-54-134-54-18-46-44-58-44-58-36-25 3-24 3-24 40 3 61 41 61 41 36 61 93 43 116 33 4-26 14-43 25-53-89-10-182-44-182-198 0-44 16-80 41-108-4-10-18-51 4-106 0 0 33-11 110 41 32-9 66-13 100-14 34 0 68 5 100 14 76-52 110-41 110-41 22 55 8 96 4 106 26 28 41 64 41 108 0 155-94 188-183 198 14 12 27 37 27 74v110c0 10 7 23 27 19C686 727 800 577 800 400 800 179 621 0 400 0z"/>
+  </g>
+  <text x="442" y="714" text-anchor="start" font-family="'SF Mono',monospace" font-size="15" fill="#58a6ff" opacity="0.9">github.com/agents-infrastructure/licell</text>
+
+  <!-- ===== Bottom accent ===== -->
+  <rect x="0" y="777" width="1200" height="3" fill="url(#accent)"/>
+
+  <!-- Decorative corners -->
+  <path d="M 30 25 L 30 55" stroke="url(#accent-v)" stroke-width="1.5" opacity="0.3"/>
+  <path d="M 30 25 L 60 25" stroke="url(#accent)" stroke-width="1.5" opacity="0.3"/>
+  <path d="M 1170 25 L 1170 55" stroke="url(#accent-v)" stroke-width="1.5" opacity="0.3"/>
+  <path d="M 1170 25 L 1140 25" stroke="url(#accent)" stroke-width="1.5" opacity="0.3"/>
+  <path d="M 30 755 L 30 725" stroke="url(#accent-v)" stroke-width="1.5" opacity="0.3"/>
+  <path d="M 30 755 L 60 755" stroke="url(#accent)" stroke-width="1.5" opacity="0.3"/>
+  <path d="M 1170 755 L 1170 725" stroke="url(#accent-v)" stroke-width="1.5" opacity="0.3"/>
+  <path d="M 1170 755 L 1140 755" stroke="url(#accent)" stroke-width="1.5" opacity="0.3"/>
+
+  <!-- Glow orbs -->
+  <circle cx="200" cy="350" r="200" fill="#00d4aa" opacity="0.015"/>
+  <circle cx="1000" cy="350" r="200" fill="#0088ff" opacity="0.015"/>
+</svg>
