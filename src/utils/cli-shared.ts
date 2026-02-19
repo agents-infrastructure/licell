@@ -1,4 +1,4 @@
-import { confirm, outro, spinner, isCancel } from '@clack/prompts';
+import { confirm, intro, outro, spinner, isCancel } from '@clack/prompts';
 import pc from 'picocolors';
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { Config } from './config';
@@ -7,6 +7,7 @@ import { parseRootAndSubdomain } from './domain';
 import { normalizeFcRuntime } from '../providers/fc';
 import { listFunctionVersions } from '../providers/fc';
 import { isAccessDeniedError, isAuthCredentialInvalidError } from './alicloud-error';
+import { isJsonOutput } from './output';
 
 export function toPromptValue(input: unknown, fieldName: string) {
   if (isCancel(input)) process.exit(0);
@@ -16,9 +17,31 @@ export function toPromptValue(input: unknown, fieldName: string) {
   return value;
 }
 
+export function showIntro(message: string) {
+  if (isJsonOutput()) return;
+  intro(message);
+}
+
+export function showOutro(message: string) {
+  if (isJsonOutput()) return;
+  outro(message);
+}
+
+export function createSpinner() {
+  if (!isJsonOutput()) return spinner();
+  return {
+    start: () => {},
+    stop: () => {},
+    message: () => {}
+  } as ReturnType<typeof spinner>;
+}
+
 export function ensureAuthOrExit() {
   const auth = Config.getAuth();
   if (!auth) {
+    if (isJsonOutput()) {
+      throw new Error('未登录，请先执行 `licell login`');
+    }
     outro(pc.red('未登录，请先执行 `licell login`'));
     process.exit(1);
   }
@@ -27,6 +50,7 @@ export function ensureAuthOrExit() {
 
 export function requireAppName(project: { appName?: string }, message = '请先执行 licell deploy 部署项目'): asserts project is { appName: string } {
   if (!project.appName) {
+    if (isJsonOutput()) throw new Error(message);
     outro(pc.red(message));
     process.exit(1);
   }
@@ -38,10 +62,13 @@ export async function withSpinner<T>(
   failMsg: string,
   fn: () => Promise<T>
 ): Promise<T | undefined> {
-  s.start(startMsg);
+  if (!isJsonOutput()) {
+    s.start(startMsg);
+  }
   try {
     return await fn();
   } catch (err: unknown) {
+    if (isJsonOutput()) throw err;
     const message = formatErrorMessage(err).toLowerCase();
     const authRelated = isAccessDeniedError(err)
       || isAuthCredentialInvalidError(err)

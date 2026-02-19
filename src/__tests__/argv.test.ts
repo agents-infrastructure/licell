@@ -80,6 +80,27 @@ describe('normalizeMultiWordCommandArgv', () => {
     ]);
   });
 
+  it('merges deploy spec command', () => {
+    const argv = ['node', 'src/cli.ts', 'deploy', 'spec', 'nodejs22'];
+    expect(normalizeMultiWordCommandArgv(argv)).toEqual([
+      'node',
+      'src/cli.ts',
+      'deploy spec',
+      'nodejs22'
+    ]);
+  });
+
+  it('merges deploy check command', () => {
+    const argv = ['node', 'src/cli.ts', 'deploy', 'check', '--runtime', 'python3.13'];
+    expect(normalizeMultiWordCommandArgv(argv)).toEqual([
+      'node',
+      'src/cli.ts',
+      'deploy check',
+      '--runtime',
+      'python3.13'
+    ]);
+  });
+
   it('merges multi-word commands when command is last token', () => {
     const argv = ['node', 'src/cli.ts', 'fn', 'list'];
     expect(normalizeMultiWordCommandArgv(argv)).toEqual([

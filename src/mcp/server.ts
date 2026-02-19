@@ -2,6 +2,7 @@ import { spawn } from 'child_process';
 import { createInterface } from 'readline';
 import { isAbsolute, resolve } from 'path';
 import { formatErrorMessage } from '../utils/errors';
+import { extractJsonRecordsFromOutput } from '../utils/output';
 
 type JsonRpcId = string | number | null;
 
@@ -126,6 +127,16 @@ function assertTrue(flag: unknown, message: string) {
   if (flag !== true) throw new Error(message);
 }
 
+function hasOutputOption(argv: string[]) {
+  for (let i = 0; i < argv.length; i += 1) {
+    const token = argv[i];
+    if (token === '--') break;
+    if (token === '--output') return true;
+    if (token.startsWith('--output=')) return true;
+  }
+  return false;
+}
+
 async function runLicellCliTool(options: {
   projectRoot: string;
   argv: string[];
@@ -145,7 +156,10 @@ async function runLicellCliTool(options: {
     : 10 * 60 * 1_000;
 
   const { command, baseArgs } = resolveSelfCommand();
-  const args = [...baseArgs, ...options.argv];
+  const cliArgs = hasOutputOption(options.argv)
+    ? [...options.argv]
+    : [...options.argv, '--output', 'json'];
+  const args = [...baseArgs, ...cliArgs];
 
   // Keep output reasonably bounded to avoid blowing up MCP payload size.
   const limitBytes = 1024 * 1024; // 1MB each stream (stdout/stderr)
@@ -200,7 +214,8 @@ function toToolCallResult(run: Awaited<ReturnType<typeof runLicellCliTool>>) {
     stdout: run.stdout.text,
     stdoutTruncated: run.stdout.truncated,
     stderr: run.stderr.text,
-    stderrTruncated: run.stderr.truncated
+    stderrTruncated: run.stderr.truncated,
+    records: extractJsonRecordsFromOutput(run.stdout.text)
   };
 
   const headline = run.timedOut
@@ -269,7 +284,7 @@ export async function runLicellMcpServer(options: { projectRoot: string; serverT
       name: 'licell_deploy',
       title: 'Deploy service (API/Static) to Aliyun',
       description:
-        'Deploy current project. API deploys to Function Compute (FC 3.0); Static deploys to OSS hosting. Supports domain/SSL/CDN options.',
+        'Deploy current project. API deploys to Function Compute (FC 3.0); Static deploys to OSS hosting. For API, Agent should call licell_fc_deploy_spec + licell_fc_deploy_check before deploy.',
       inputSchema: {
         type: 'object',
         additionalProperties: false,
@@ -295,6 +310,41 @@ export async function runLicellMcpServer(options: { projectRoot: string; serverT
           timeoutMs: { type: 'number', description: 'Command timeout in milliseconds.' }
         },
         required: ['type']
+      }
+    },
+
+    licell_fc_deploy_spec: {
+      name: 'licell_fc_deploy_spec',
+      title: 'Get FC API deploy spec',
+      description:
+        'Return machine-readable FC API runtime specs (handlerContract/eventSchema/responseSchema/examples/validationRules and resource constraints) for agent planning.',
+      inputSchema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          runtime: { type: 'string', description: 'Optional runtime filter: nodejs20/nodejs22/python3.12/python3.13/docker.' },
+          all: { type: 'boolean', description: 'Return all runtime specs.' },
+          cwd: { type: 'string', description: 'Working directory relative to projectRoot (default: projectRoot).' },
+          timeoutMs: { type: 'number', description: 'Command timeout in milliseconds.' }
+        }
+      }
+    },
+
+    licell_fc_deploy_check: {
+      name: 'licell_fc_deploy_check',
+      title: 'Precheck FC API deploy readiness',
+      description:
+        'Read-only validation before FC API deployment. Returns actionable issues (missing handler, wrong entry, Docker prerequisites, etc.) and does not modify project files.',
+      inputSchema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          runtime: { type: 'string', description: 'Runtime to validate (default from project/env or nodejs20).' },
+          entry: { type: 'string', description: 'Optional entry path override.' },
+          dockerDaemon: { type: 'boolean', description: 'When runtime=docker, also check local Docker daemon availability.' },
+          cwd: { type: 'string', description: 'Working directory relative to projectRoot (default: projectRoot).' },
+          timeoutMs: { type: 'number', description: 'Command timeout in milliseconds.' }
+        }
       }
     },
 
@@ -672,6 +722,20 @@ export async function runLicellMcpServer(options: { projectRoot: string; serverT
           if (vcpu !== undefined) argv.push('--vcpu', String(vcpu));
           if (instanceConcurrency !== undefined) argv.push('--instance-concurrency', String(instanceConcurrency));
           if (timeoutSeconds !== undefined) argv.push('--timeout', String(timeoutSeconds));
+        } else if (name === 'licell_fc_deploy_spec') {
+          argv = ['deploy', 'spec'];
+          const runtime = toOptionalString(toolArgs.runtime);
+          const all = toOptionalBoolean(toolArgs.all);
+          if (runtime) argv.push(runtime);
+          if (all) argv.push('--all');
+        } else if (name === 'licell_fc_deploy_check') {
+          argv = ['deploy', 'check'];
+          const runtime = toOptionalString(toolArgs.runtime);
+          const entry = toOptionalString(toolArgs.entry);
+          const dockerDaemon = toOptionalBoolean(toolArgs.dockerDaemon);
+          if (runtime) argv.push('--runtime', runtime);
+          if (entry) argv.push('--entry', entry);
+          if (dockerDaemon) argv.push('--docker-daemon');
         } else if (name === 'licell_init') {
           argv = ['init'];
           const runtime = toOptionalString(toolArgs.runtime);

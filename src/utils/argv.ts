@@ -34,7 +34,9 @@ const MULTI_WORD_COMMANDS = new Set([
   'env set',
   'env rm',
   'env pull',
-  'skills init'
+  'skills init',
+  'deploy spec',
+  'deploy check'
 ]);
 
 function isOptionLike(token: string | undefined) {

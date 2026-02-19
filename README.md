@@ -11,7 +11,7 @@
 ## 你可以先看这 3 行
 
 ```bash
-curl -fsSL https://github.com/dafang/licell/releases/latest/download/install.sh | bash
+curl -fsSL https://github.com/agents-infrastructure/licell/releases/latest/download/install.sh | bash
 licell login --region cn-hangzhou
 licell init --runtime nodejs22 && licell deploy --type api --target preview
 ```
@@ -45,6 +45,52 @@ licell mcp init
 licell mcp serve
 ```
 
+### Agent 部署前置（FC API Spec / Check）
+
+为了避免“部署成功但运行失败”（如 Python 缺少 `handler`），建议 Agent 在调用 `deploy` 前固定执行两步：
+
+```bash
+# 1) 读取 runtime 规格（entry / handler / 资源约束）
+licell deploy spec nodejs22
+# 或查看全部
+licell deploy spec --all
+
+# 2) 预检当前项目是否满足要求（会给出可执行修复建议）
+licell deploy check --runtime nodejs22 --entry src/index.ts
+```
+
+说明：`deploy check` 仅做只读检测，不会自动修改项目文件。
+
+`deploy spec --output json` 会返回适合 Agent 解析的字段：
+- `handlerContract`（导出要求、签名、容器端口约束）
+- `eventSchema` / `responseSchema`（请求事件与返回格式）
+- `examples`（最小可通过示例、常见失败示例、修复提示）
+- `validationRules`（对应预检规则 ID）
+
+`licell mcp` 已提供对应 MCP tools：
+
+- `licell_fc_deploy_spec`
+- `licell_fc_deploy_check`
+- `licell_deploy`（建议在前两步通过后再调用）
+
+### Agent 可读输出（`--output json`）
+
+为便于 Agent 自动诊断与修复，licell 支持结构化输出：
+
+```bash
+licell deploy --type api --output json
+```
+
+当启用该模式时，stdout 会输出带前缀的 JSON 记录（便于在混合日志中提取）：
+
+- 前缀：`@@LICELL_JSON@@`
+- 记录类型：`event` / `result` / `error`
+- 字段：`schemaVersion`、`stage`、`error.code`、`error.category`、`retryable`、`provider.requestId` 等
+- 覆盖范围：除 `licell mcp serve`（stdio 协议保留原样）外，所有命令均支持 `--output json`
+- 安全默认：涉及凭证/环境变量时，默认输出脱敏值；仅在显式参数下返回完整值（如 `env list --show-values`）
+
+`licell mcp` 在调用 CLI 时会默认附加 `--output json`，并在 MCP 的 `structuredContent.records` 返回这些结构化记录。
+
 ### Agent Skills（让 Agent 了解 licell 命令）
 
 MCP 让 Agent 能"调用" licell，而 Skills 让 Agent 能"理解" licell —— 生成一份结构化的命令参考文档，Agent 可以据此规划和执行部署任务。
@@ -66,6 +112,8 @@ licell skills init codex
 - [Licell CLI (`licell`)](#licell-cli-licell)
   - [你可以先看这 3 行](#你可以先看这-3-行)
   - [MCP（让 Agent 驱动 licell）](#mcp让-agent-驱动-licell)
+    - [Agent 部署前置（FC API Spec / Check）](#agent-部署前置fc-api-spec--check)
+    - [Agent 可读输出（`--output json`）](#agent-可读输出--output-json)
     - [Agent Skills（让 Agent 了解 licell 命令）](#agent-skills让-agent-了解-licell-命令)
   - [目录](#目录)
   - [1. 安装与升级（最快路径）](#1-安装与升级最快路径)
@@ -103,7 +151,7 @@ licell skills init codex
 一键安装（默认安装到 `~/.local/bin/licell`）：
 
 ```bash
-curl -fsSL https://github.com/dafang/licell/releases/latest/download/install.sh | bash
+curl -fsSL https://github.com/agents-infrastructure/licell/releases/latest/download/install.sh | bash
 ```
 
 如果 shell 还没包含 `~/.local/bin`：
@@ -130,7 +178,7 @@ licell upgrade --version v0.9.21
 开发调试可用（不建议生产）：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/dafang/licell/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/agents-infrastructure/licell/main/install.sh | bash
 ```
 
 ## 2. 第一次部署（5 分钟）
@@ -405,6 +453,10 @@ echo '[[ -f "$HOME/.local/share/licell/completions/_licell" ]] && source "$HOME/
 函数与调试：
 
 ```bash
+# 先看 runtime 规格，再做入口预检（推荐 Agent 固定执行）
+licell deploy spec nodejs22
+licell deploy check --runtime nodejs22 --entry src/index.ts
+
 licell fn list
 licell fn info [name] --target preview
 licell fn invoke [name] --target preview --payload '{"ping":"pong"}'

@@ -1,6 +1,6 @@
 export type CompletionShell = 'bash' | 'zsh';
 
-const ROOT_OPTIONS = ['-h', '--help', '-v', '--version'];
+const ROOT_OPTIONS = ['-h', '--help', '-v', '--version', '--output'];
 
 const ROOT_COMMANDS = [
   'login',
@@ -27,6 +27,7 @@ const ROOT_COMMANDS = [
 
 const SUBCOMMANDS: Record<string, string[]> = {
   auth: ['repair'],
+  deploy: ['spec', 'check'],
   fn: ['list', 'info', 'invoke', 'rm'],
   oss: ['list', 'info', 'ls', 'upload', 'bucket'],
   db: ['add', 'list', 'info', 'connect'],
@@ -54,6 +55,8 @@ const COMMAND_OPTIONS: Record<string, string[]> = {
     '--enable-cdn', '--ssl', '--ssl-force-renew', '--acr-namespace', '--enable-vpc',
     '--disable-vpc', '--memory', '--vcpu', '--instance-concurrency', '--timeout'
   ],
+  'deploy spec': ['--all'],
+  'deploy check': ['--runtime', '--entry', '--docker-daemon'],
   'fn list': ['--limit', '--prefix'],
   'fn info': ['--target'],
   'fn invoke': ['--target', '--payload', '--file'],

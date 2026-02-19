@@ -1,5 +1,4 @@
 import type { CAC } from 'cac';
-import { intro, outro, spinner } from '@clack/prompts';
 import pc from 'picocolors';
 import { normalizeReleaseTarget } from '../utils/cli-helpers';
 import { executeWithAuthRecovery } from '../utils/auth-recovery';
@@ -12,6 +11,9 @@ import {
 import {
   ensureAuthOrExit,
   ensureDestructiveActionConfirmed,
+  createSpinner,
+  showIntro,
+  showOutro,
   requireAppName,
   toPromptValue,
   isNoChangesPublishError,
@@ -22,6 +24,7 @@ import {
   withSpinner
 } from '../utils/cli-shared';
 import { Config } from '../utils/config';
+import { emitCliResult, isJsonOutput } from '../utils/output';
 
 export function registerReleaseCommands(cli: CAC) {
   cli.command('release list', '查看函数版本列表')
@@ -34,14 +37,14 @@ export function registerReleaseCommands(cli: CAC) {
           requiredCapabilities: ['fc']
         },
         async () => {
-          intro(pc.bgBlue(pc.white(' 📚 Function Versions ')));
+          showIntro(pc.bgBlue(pc.white(' 📚 Function Versions ')));
           ensureAuthOrExit();
           const project = Config.getProject();
           requireAppName(project);
 
           const limit = parseListLimit(options.limit, 20, 100);
 
-          const s = spinner();
+          const s = createSpinner();
           const versions = await withSpinner(
             s,
             '正在拉取函数版本列表...',
@@ -49,9 +52,20 @@ export function registerReleaseCommands(cli: CAC) {
             () => listFunctionVersions(project.appName, limit)
           );
           if (!versions) return;
-          s.stop(pc.green(`✅ 共获取 ${versions.length} 个版本`));
+          if (!isJsonOutput()) {
+            s.stop(pc.green(`✅ 共获取 ${versions.length} 个版本`));
+          }
+          if (isJsonOutput()) {
+            emitCliResult({
+              stage: 'release.list',
+              appName: project.appName,
+              count: versions.length,
+              versions
+            });
+            return;
+          }
           if (versions.length === 0) {
-            outro('当前函数还没有已发布版本');
+            showOutro('当前函数还没有已发布版本');
             return;
           }
           for (const version of versions) {
@@ -60,7 +74,7 @@ export function registerReleaseCommands(cli: CAC) {
             const desc = version.description || '-';
             console.log(`${pc.cyan(id)}  ${pc.gray(time)}  ${desc}`);
           }
-          outro('Done.');
+          showOutro('Done.');
         }
       );
     });
@@ -75,13 +89,13 @@ export function registerReleaseCommands(cli: CAC) {
           requiredCapabilities: ['fc']
         },
         async () => {
-          intro(pc.bgBlue(pc.white(' 🚀 Promote Release ')));
+          showIntro(pc.bgBlue(pc.white(' 🚀 Promote Release ')));
           ensureAuthOrExit();
           const project = Config.getProject();
           requireAppName(project);
 
           const target = normalizeReleaseTarget(options.target);
-          const s = spinner();
+          const s = createSpinner();
           const versionId = await withSpinner(
             s,
             `正在准备发布到别名 ${target}...`,
@@ -111,9 +125,20 @@ export function registerReleaseCommands(cli: CAC) {
             }
           );
           if (!versionId) return;
-          s.stop(pc.green('✅ 别名切流完成'));
+          if (!isJsonOutput()) {
+            s.stop(pc.green('✅ 别名切流完成'));
+          }
+          if (isJsonOutput()) {
+            emitCliResult({
+              stage: 'release.promote',
+              appName: project.appName,
+              target,
+              versionId
+            });
+            return;
+          }
           console.log(`\n🏷️  alias=${pc.cyan(target)} -> version=${pc.cyan(versionId)}\n`);
-          outro('Done.');
+          showOutro('Done.');
         }
       );
     });
@@ -128,14 +153,14 @@ export function registerReleaseCommands(cli: CAC) {
           requiredCapabilities: ['fc']
         },
         async () => {
-          intro(pc.bgBlue(pc.white(' ↩ Rollback Release ')));
+          showIntro(pc.bgBlue(pc.white(' ↩ Rollback Release ')));
           ensureAuthOrExit();
           const project = Config.getProject();
           requireAppName(project);
 
           const target = normalizeReleaseTarget(options.target);
           const rollbackVersion = toPromptValue(versionId, 'versionId');
-          const s = spinner();
+          const s = createSpinner();
           const rolledBack = await withSpinner(
             s,
             `正在回滚 ${target} 到版本 ${rollbackVersion}...`,
@@ -151,9 +176,20 @@ export function registerReleaseCommands(cli: CAC) {
             }
           );
           if (!rolledBack) return;
-          s.stop(pc.green('✅ 回滚完成'));
+          if (!isJsonOutput()) {
+            s.stop(pc.green('✅ 回滚完成'));
+          }
+          if (isJsonOutput()) {
+            emitCliResult({
+              stage: 'release.rollback',
+              appName: project.appName,
+              target,
+              versionId: rollbackVersion
+            });
+            return;
+          }
           console.log(`\n🏷️  alias=${pc.cyan(target)} -> version=${pc.cyan(rollbackVersion)}\n`);
-          outro('Done.');
+          showOutro('Done.');
         }
       );
     });
@@ -170,7 +206,7 @@ export function registerReleaseCommands(cli: CAC) {
           requiredCapabilities: ['fc']
         },
         async () => {
-          intro(pc.bgBlue(pc.white(' 🧹 Prune Function Versions ')));
+          showIntro(pc.bgBlue(pc.white(' 🧹 Prune Function Versions ')));
           ensureAuthOrExit();
           const project = Config.getProject();
           requireAppName(project);
@@ -180,7 +216,7 @@ export function registerReleaseCommands(cli: CAC) {
           if (apply) {
             await ensureDestructiveActionConfirmed(`清理函数历史版本（保留最近 ${keep} 个）`, { yes: Boolean(options.yes) });
           }
-          const s = spinner();
+          const s = createSpinner();
           const result = await withSpinner(
             s,
             apply ? '正在清理历史版本...' : '正在预览可清理版本...',
@@ -188,7 +224,19 @@ export function registerReleaseCommands(cli: CAC) {
             () => pruneFunctionVersions(project.appName, keep, apply)
           );
           if (!result) return;
-          s.stop(pc.green(apply ? '✅ 清理任务完成' : '✅ 预览完成'));
+          if (!isJsonOutput()) {
+            s.stop(pc.green(apply ? '✅ 清理任务完成' : '✅ 预览完成'));
+          }
+          if (isJsonOutput()) {
+            emitCliResult({
+              stage: 'release.prune',
+              appName: project.appName,
+              keepRequested: keep,
+              applyRequested: apply,
+              ...result
+            });
+            return;
+          }
           console.log(`\n保留数量: ${pc.cyan(String(result.keep))}`);
           console.log(`总发布版本: ${pc.cyan(String(result.totalVersions))}`);
           console.log(`Alias 保护版本: ${pc.cyan(String(result.aliasProtectedVersions.length))}`);
@@ -208,7 +256,7 @@ export function registerReleaseCommands(cli: CAC) {
             console.log(pc.gray('\n提示: 加上 --apply 才会执行实际删除'));
           }
           console.log('');
-          outro('Done.');
+          showOutro('Done.');
         }
       );
     });

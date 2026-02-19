@@ -1,11 +1,13 @@
 import type { CAC } from 'cac';
 import pc from 'picocolors';
-import { existsSync, readFileSync, writeFileSync } from 'fs';
-import { join } from 'path';
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { join, dirname } from 'path';
+import { homedir } from 'os';
 import { runLicellMcpServer } from '../mcp/server';
 import { ensureAuthReadyForCommand, ensureAuthCapabilityPreflight, type AuthCapability } from '../utils/auth-recovery';
 import { isInteractiveTTY } from '../utils/cli-shared';
 import { resolveCliVersion } from '../utils/version';
+import { emitCliResult, isJsonOutput } from '../utils/output';
 
 const MCP_OPERATION_CAPABILITIES: AuthCapability[] = [
   'fc',
@@ -56,6 +58,33 @@ export function ensureMcpJsonConfig(options: { projectRoot: string; serverName: 
   return { configPath, updated: true };
 }
 
+export function ensureGlobalClaudeMcpConfig(options?: { serverName?: string }) {
+  const serverName = options?.serverName || 'licell';
+  const configPath = join(homedir(), '.claude', 'settings.local.json');
+  const configDir = dirname(configPath);
+  if (!existsSync(configDir)) mkdirSync(configDir, { recursive: true });
+
+  const existingRaw = readJsonFile(configPath);
+  const config: Record<string, unknown> = isRecord(existingRaw) ? { ...existingRaw } : {};
+  const mcpServersRaw = isRecord(config.mcpServers) ? config.mcpServers : {};
+  const mcpServers: Record<string, unknown> = { ...mcpServersRaw };
+
+  const nextEntry = {
+    command: 'licell',
+    args: ['mcp', 'serve']
+  };
+
+  const currentEntry = mcpServers[serverName];
+  if (JSON.stringify(currentEntry) === JSON.stringify(nextEntry)) {
+    return { configPath, updated: false };
+  }
+
+  mcpServers[serverName] = nextEntry;
+  config.mcpServers = mcpServers;
+  writeJsonFile(configPath, config);
+  return { configPath, updated: true };
+}
+
 export function registerMcpCommand(cli: CAC) {
   cli.command('mcp [action]', 'MCP：让 Agent 通过 licell 执行部署/发布/运维（初始化 .mcp.json 或启动 stdio server）')
     .option('--project-root <path>', '项目根目录（默认当前目录）')
@@ -78,6 +107,16 @@ export function registerMcpCommand(cli: CAC) {
           requiredCapabilities: MCP_OPERATION_CAPABILITIES
         });
         const { configPath, updated } = ensureMcpJsonConfig({ projectRoot, serverName });
+        if (isJsonOutput()) {
+          emitCliResult({
+            stage: 'mcp',
+            action: 'init',
+            configPath,
+            updated,
+            next: 'run `licell mcp serve` without --output json to start stdio server'
+          });
+          return;
+        }
         console.log(pc.green(`✅ MCP 配置已就绪: ${configPath}${updated ? ' (updated)' : ''}`));
         console.log(pc.gray('现在启动 MCP 服务（stdio）。用于 Claude Code/Cursor 等客户端时，请在 .mcp.json 中使用 args: ["mcp","serve"]。'));
         console.log(pc.gray('提示：删除/清理类命令在 MCP 非交互模式下仍需要显式传 --yes。'));
@@ -92,12 +131,24 @@ export function registerMcpCommand(cli: CAC) {
 
       if (act === 'init') {
         const { configPath, updated } = ensureMcpJsonConfig({ projectRoot, serverName });
-        console.log(pc.green(`✅ 已写入 MCP 配置: ${configPath}${updated ? '' : ' (no changes)'}`));
-        console.log(pc.gray('下一步：在支持 MCP 的客户端中启用该项目的 .mcp.json（例如 Claude Code）。'));
+        if (isJsonOutput()) {
+          emitCliResult({
+            stage: 'mcp',
+            action: 'init',
+            configPath,
+            updated
+          });
+        } else {
+          console.log(pc.green(`✅ 已写入 MCP 配置: ${configPath}${updated ? '' : ' (no changes)'}`));
+          console.log(pc.gray('下一步：在支持 MCP 的客户端中启用该项目的 .mcp.json（例如 Claude Code）。'));
+        }
         return;
       }
 
       if (act === 'serve') {
+        if (isJsonOutput()) {
+          throw new Error('mcp serve 使用 stdio JSON-RPC 协议，不支持 --output json');
+        }
         await ensureAuthReadyForCommand({ commandLabel: 'licell mcp serve', interactiveTTY });
         await ensureAuthCapabilityPreflight({
           commandLabel: 'licell mcp serve',

@@ -1,5 +1,4 @@
 import type { CAC } from 'cac';
-import { outro, spinner } from '@clack/prompts';
 import pc from 'picocolors';
 import { writeFileSync } from 'fs';
 import { escapeEnvValue, normalizeReleaseTarget } from '../utils/cli-helpers';
@@ -8,14 +7,17 @@ import { pullFunctionEnvs, setFunctionEnv, removeFunctionEnv } from '../provider
 import {
   ensureAuthOrExit,
   ensureDestructiveActionConfirmed,
+  createSpinner,
   requireAppName,
   isInteractiveTTY,
+  showOutro,
   toPromptValue,
   normalizeEnvKey,
   ensureEnvIgnored,
   withSpinner
 } from '../utils/cli-shared';
 import { Config } from '../utils/config';
+import { emitCliResult, isJsonOutput } from '../utils/output';
 
 export function registerEnvCommands(cli: CAC) {
   cli.command('env list', '查看云端环境变量')
@@ -34,7 +36,7 @@ export function registerEnvCommands(cli: CAC) {
           requireAppName(project);
           const qualifier = options.target ? normalizeReleaseTarget(options.target) : undefined;
 
-          const s = spinner();
+          const s = createSpinner();
           const envs = await withSpinner(
             s,
             qualifier ? `正在拉取 alias=${qualifier} 的环境变量...` : '正在拉取云端环境变量...',
@@ -42,19 +44,34 @@ export function registerEnvCommands(cli: CAC) {
             () => pullFunctionEnvs(project.appName, qualifier)
           );
           if (!envs) return;
-          s.stop(pc.green(`✅ 共 ${Object.keys(envs).length} 个环境变量`));
+          if (!isJsonOutput()) {
+            s.stop(pc.green(`✅ 共 ${Object.keys(envs).length} 个环境变量`));
+          }
           const entries = Object.entries(envs).sort(([a], [b]) => a.localeCompare(b));
-          if (entries.length === 0) {
-            outro('云端当前无环境变量');
+          const showValues = Boolean(options.showValues);
+          if (isJsonOutput()) {
+            const renderedEnvs = showValues
+              ? Object.fromEntries(entries)
+              : Object.fromEntries(entries.map(([key, value]) => [key, `<hidden:${String(value).length} chars>`]));
+            emitCliResult({
+              stage: 'env.list',
+              qualifier: qualifier || null,
+              count: entries.length,
+              showValues,
+              envs: renderedEnvs
+            });
             return;
           }
-          const showValues = Boolean(options.showValues);
+          if (entries.length === 0) {
+            showOutro('云端当前无环境变量');
+            return;
+          }
           for (const [key, value] of entries) {
             const renderedValue = showValues ? value : `<hidden:${String(value).length} chars>`;
             console.log(`${pc.cyan(key)}=${renderedValue}`);
           }
           console.log('');
-          outro('Done.');
+          showOutro('Done.');
         }
       );
     });
@@ -74,7 +91,7 @@ export function registerEnvCommands(cli: CAC) {
           const envKey = normalizeEnvKey(toPromptValue(key, '环境变量名'));
           const envValue = toPromptValue(value, '环境变量值');
 
-          const s = spinner();
+          const s = createSpinner();
           const envs = await withSpinner(
             s,
             `正在写入环境变量 ${envKey}...`,
@@ -83,8 +100,16 @@ export function registerEnvCommands(cli: CAC) {
           );
           if (!envs) return;
           Config.setProject({ envs }, { replaceEnvs: true });
-          s.stop(pc.green('✅ 环境变量已写入云端并同步到本地配置'));
-          outro('Done.');
+          if (!isJsonOutput()) {
+            s.stop(pc.green('✅ 环境变量已写入云端并同步到本地配置'));
+            showOutro('Done.');
+          } else {
+            emitCliResult({
+              stage: 'env.set',
+              key: envKey,
+              updatedCount: Object.keys(envs).length
+            });
+          }
         }
       );
     });
@@ -105,7 +130,7 @@ export function registerEnvCommands(cli: CAC) {
           const envKey = normalizeEnvKey(toPromptValue(key, '环境变量名'));
           await ensureDestructiveActionConfirmed(`删除环境变量 ${envKey}`, { yes: Boolean(options.yes) });
 
-          const s = spinner();
+          const s = createSpinner();
           const envs = await withSpinner(
             s,
             `正在删除环境变量 ${envKey}...`,
@@ -114,8 +139,16 @@ export function registerEnvCommands(cli: CAC) {
           );
           if (!envs) return;
           Config.setProject({ envs }, { replaceEnvs: true });
-          s.stop(pc.green('✅ 环境变量已从云端移除（若存在）并同步本地配置'));
-          outro('Done.');
+          if (!isJsonOutput()) {
+            s.stop(pc.green('✅ 环境变量已从云端移除（若存在）并同步本地配置'));
+            showOutro('Done.');
+          } else {
+            emitCliResult({
+              stage: 'env.rm',
+              key: envKey,
+              updatedCount: Object.keys(envs).length
+            });
+          }
         }
       );
     });
@@ -135,7 +168,7 @@ export function registerEnvCommands(cli: CAC) {
           requireAppName(project);
           const qualifier = options.target ? normalizeReleaseTarget(options.target) : undefined;
 
-          const s = spinner();
+          const s = createSpinner();
           const envs = await withSpinner(
             s,
             qualifier ? `正在拉取 alias=${qualifier} 的环境变量...` : '正在拉取云端环境变量...',
@@ -149,7 +182,16 @@ export function registerEnvCommands(cli: CAC) {
             try { writeFileSync('.env', '', { mode: 0o600 }); } catch (e) {
               throw new Error(`写入 .env 文件失败: ${e instanceof Error ? e.message : String(e)}`);
             }
-            s.stop(pc.yellow('云端无环境变量，已清空本地 .env'));
+            if (!isJsonOutput()) {
+              s.stop(pc.yellow('云端无环境变量，已清空本地 .env'));
+            }
+            emitCliResult({
+              stage: 'env.pull',
+              qualifier: qualifier || null,
+              count: 0,
+              envFile: '.env',
+              emptied: true
+            });
             return;
           }
           const envContent = entries.map(([k, v]) => `${k}="${escapeEnvValue(String(v))}"`).join('\n');
@@ -157,7 +199,16 @@ export function registerEnvCommands(cli: CAC) {
             throw new Error(`写入 .env 文件失败: ${e instanceof Error ? e.message : String(e)}`);
           }
           ensureEnvIgnored();
-          s.stop(pc.green(`✅ 已拉取 ${entries.length} 个环境变量并写入 .env`));
+          if (!isJsonOutput()) {
+            s.stop(pc.green(`✅ 已拉取 ${entries.length} 个环境变量并写入 .env`));
+          }
+          emitCliResult({
+            stage: 'env.pull',
+            qualifier: qualifier || null,
+            count: entries.length,
+            envFile: '.env',
+            emptied: false
+          });
         }
       );
     });

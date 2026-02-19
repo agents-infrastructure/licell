@@ -6,7 +6,9 @@ import { getRuntime } from '../providers/fc/runtime-handler';
 import { ensureDefaultNetwork } from '../providers/vpc';
 import {
   DEFAULT_FC_RUNTIME,
+  createFcApiDeployPrecheckError,
   deployFC,
+  runFcApiDeployPrecheck,
   publishFunctionVersion,
   promoteFunctionAlias
 } from '../providers/fc';
@@ -16,6 +18,7 @@ import { issueAndBindSSLWithArtifacts } from '../providers/ssl';
 import { probeHttpHealth } from '../utils/health-check';
 import { formatErrorMessage } from '../utils/errors';
 import { toPromptValue, withSpinner } from '../utils/cli-shared';
+import { isJsonOutput } from '../utils/output';
 import type { DeployContext } from './deploy-context';
 
 export interface ApiDeployResult {
@@ -25,6 +28,21 @@ export interface ApiDeployResult {
   healthCheckLogs: string[];
 }
 
+function formatPrecheckIssueLines(issues: Array<{ id: string; level: 'error' | 'warning'; message: string; remediation?: string[] }>) {
+  const lines: string[] = [];
+  for (const issue of issues) {
+    const prefix = issue.level === 'error' ? 'ERROR' : 'WARN';
+    lines.push(`[${prefix}] ${issue.id}`);
+    lines.push(issue.message);
+    if (issue.remediation && issue.remediation.length > 0) {
+      for (const tip of issue.remediation) {
+        lines.push(`- ${tip}`);
+      }
+    }
+  }
+  return lines;
+}
+
 export async function executeApiDeploy(
   ctx: DeployContext,
   s: ReturnType<typeof spinner>
@@ -32,7 +50,10 @@ export async function executeApiDeploy(
   let runtime = ctx.cliRuntime || ctx.projectRuntime || ctx.envRuntime || DEFAULT_FC_RUNTIME;
   if (runtime !== 'docker' && !ctx.cliRuntime && existsSync('Dockerfile') && ctx.interactiveTTY) {
     const useDocker = await confirm({ message: '检测到 Dockerfile，是否使用 Docker 容器部署？' });
-    if (isCancel(useDocker)) process.exit(0);
+    if (isCancel(useDocker)) {
+      if (isJsonOutput()) throw new Error('操作已取消');
+      process.exit(0);
+    }
     if (useDocker) runtime = 'docker';
   }
   if (ctx.cliAcrNamespace && runtime !== 'docker') {
@@ -57,6 +78,23 @@ export async function executeApiDeploy(
     }), '入口文件路径');
   } else {
     entry = defaultApiEntry;
+  }
+
+  const precheck = runFcApiDeployPrecheck({
+    runtime,
+    entry,
+    checkDockerDaemon: runtime === 'docker'
+  });
+  const precheckWarnings = precheck.issues.filter((item) => item.level === 'warning');
+  if (!precheck.ok) {
+    const lines = formatPrecheckIssueLines(precheck.issues);
+    const err = createFcApiDeployPrecheckError(precheck) as Error & { message?: string };
+    err.message = `${err.message}\n${lines.join('\n')}`;
+    throw err;
+  }
+  if (precheckWarnings.length > 0) {
+    const warnings = formatPrecheckIssueLines(precheckWarnings);
+    s.message(`⚠️ 部署前预检通过（含 warning）:\n${warnings.join('\n')}`);
   }
 
   let spinnerMsg = '🔨 正在使用 Bun 极速剥离依赖打包，并推送至云端...';

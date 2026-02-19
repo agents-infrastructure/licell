@@ -1,18 +1,21 @@
 import type { CAC } from 'cac';
-import { text, isCancel, outro, spinner } from '@clack/prompts';
+import { text, isCancel } from '@clack/prompts';
 import pc from 'picocolors';
 import { addDnsRecord, listDnsRecords, removeDnsRecord } from '../providers/domain';
 import { executeWithAuthRecovery } from '../utils/auth-recovery';
 import {
   ensureAuthOrExit,
   ensureDestructiveActionConfirmed,
+  createSpinner,
   isInteractiveTTY,
+  showOutro,
   toPromptValue,
   toOptionalString,
   parseListLimit,
   parseOptionalPositiveInt,
   withSpinner
 } from '../utils/cli-shared';
+import { emitCliResult, isJsonOutput } from '../utils/output';
 
 export function registerDnsCommands(cli: CAC) {
   cli.command('dns records list [domain]', '查看域名解析记录')
@@ -29,8 +32,7 @@ export function registerDnsCommands(cli: CAC) {
           let domainInput = domain;
           if (!domainInput) {
             if (!isInteractiveTTY()) {
-              outro(pc.red('缺少域名参数，请使用：licell dns records list <domain>'));
-              process.exit(1);
+              throw new Error('缺少域名参数，请使用：licell dns records list <domain>');
             }
             const promptValue = await text({
               message: '请输入要查看的域名:',
@@ -42,7 +44,7 @@ export function registerDnsCommands(cli: CAC) {
 
           const normalizedDomain = toPromptValue(domainInput, '域名').toLowerCase();
           const limit = parseListLimit(options.limit, 100, 500);
-          const s = spinner();
+          const s = createSpinner();
           const records = await withSpinner(
             s,
             `正在拉取 ${normalizedDomain} 的解析记录...`,
@@ -50,9 +52,20 @@ export function registerDnsCommands(cli: CAC) {
             () => listDnsRecords(normalizedDomain, limit)
           );
           if (!records) return;
-          s.stop(pc.green(`✅ 共获取 ${records.length} 条记录`));
+          if (!isJsonOutput()) {
+            s.stop(pc.green(`✅ 共获取 ${records.length} 条记录`));
+          }
+          if (isJsonOutput()) {
+            emitCliResult({
+              stage: 'dns.records.list',
+              domain: normalizedDomain,
+              count: records.length,
+              records
+            });
+            return;
+          }
           if (records.length === 0) {
-            outro('当前域名无解析记录');
+            showOutro('当前域名无解析记录');
             return;
           }
           for (const record of records) {
@@ -61,7 +74,7 @@ export function registerDnsCommands(cli: CAC) {
             );
           }
           console.log('');
-          outro('Done.');
+          showOutro('Done.');
         }
       );
     });
@@ -91,7 +104,7 @@ export function registerDnsCommands(cli: CAC) {
           const ttl = parseOptionalPositiveInt(options.ttl, 'ttl');
           const line = toOptionalString(options.line) || 'default';
 
-          const s = spinner();
+          const s = createSpinner();
           const recordId = await withSpinner(
             s,
             '正在添加 DNS 记录...',
@@ -99,9 +112,24 @@ export function registerDnsCommands(cli: CAC) {
             () => addDnsRecord(normalizedDomain, { rr, type, value, ttl, line })
           );
           if (!recordId) return;
-          s.stop(pc.green('✅ DNS 记录已创建'));
+          if (!isJsonOutput()) {
+            s.stop(pc.green('✅ DNS 记录已创建'));
+          }
+          if (isJsonOutput()) {
+            emitCliResult({
+              stage: 'dns.records.add',
+              domain: normalizedDomain,
+              recordId,
+              rr,
+              type,
+              value,
+              ttl: ttl || 600,
+              line
+            });
+            return;
+          }
           console.log(`\nrecordId: ${pc.cyan(recordId)}\n`);
-          outro('Done.');
+          showOutro('Done.');
         }
       );
     });
@@ -119,7 +147,7 @@ export function registerDnsCommands(cli: CAC) {
           ensureAuthOrExit();
           const normalizedRecordId = toPromptValue(recordId, 'recordId');
           await ensureDestructiveActionConfirmed(`删除 DNS 记录 ${normalizedRecordId}`, { yes: Boolean(options.yes) });
-          const s = spinner();
+          const s = createSpinner();
           const removed = await withSpinner(
             s,
             `正在删除记录 ${normalizedRecordId}...`,
@@ -130,8 +158,16 @@ export function registerDnsCommands(cli: CAC) {
             }
           );
           if (!removed) return;
-          s.stop(pc.green('✅ DNS 记录已删除'));
-          outro('Done.');
+          if (!isJsonOutput()) {
+            s.stop(pc.green('✅ DNS 记录已删除'));
+            showOutro('Done.');
+          } else {
+            emitCliResult({
+              stage: 'dns.records.rm',
+              recordId: normalizedRecordId,
+              removed: true
+            });
+          }
         }
       );
     });

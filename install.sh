@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO="${LICELL_REPO:-dafang/licell}"
+REPO="${LICELL_REPO:-agents-infrastructure/licell}"
 REF="${LICELL_REF:-main}"
 ARCHIVE_URL="${LICELL_ARCHIVE_URL:-https://api.github.com/repos/${REPO}/tarball/${REF}}"
 INSTALL_ROOT="${LICELL_INSTALL_ROOT:-$HOME/.local/share/licell}"
@@ -67,6 +67,13 @@ show_path_hint() {
     log "add ${BIN_DIR} to PATH:"
     log "  export PATH=\"${BIN_DIR}:\$PATH\""
   fi
+}
+
+show_setup_hint() {
+  log ""
+  log "快速开始："
+  log "  licell setup    # 配置 AI Agent 集成（Skills + MCP）"
+  log "  licell --help   # 查看所有命令"
 }
 
 should_skip_run_check() {
@@ -136,7 +143,7 @@ EOF
 
   log "installed prebuilt runtime package to ${prebuilt_dir}"
   show_path_hint
-  log "run: licell --help"
+  show_setup_hint
   return 0
 }
 
@@ -189,7 +196,7 @@ install_from_binary_archive() {
 
   log "installed prebuilt standalone binary to ${BIN_DIR}/licell"
   show_path_hint
-  log "run: licell --help"
+  show_setup_hint
   return 0
 }
 
@@ -281,7 +288,7 @@ EOF
 
   log "installed source fallback to ${BIN_DIR}/licell"
   show_path_hint
-  log "run: licell --help"
+  show_setup_hint
 }
 
 main() {

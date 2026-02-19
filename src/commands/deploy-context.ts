@@ -16,6 +16,7 @@ import {
   tryNormalizeDomainSuffix,
   tryNormalizeFcRuntime
 } from '../utils/cli-shared';
+import { isJsonOutput } from '../utils/output';
 
 export interface DeployCliOptions {
   target?: string;
@@ -113,7 +114,10 @@ export async function resolveDeployContext(options: DeployCliOptions): Promise<D
       { value: 'api', label: '🚀 API 服务 (Node/Python/Docker -> FC 3.0)' },
       { value: 'static', label: '📦 前端静态网站 (直推 OSS 托管)' }
     ]});
-    if (isCancel(selectedType)) process.exit(0);
+    if (isCancel(selectedType)) {
+      if (isJsonOutput()) throw new Error('操作已取消');
+      process.exit(0);
+    }
     if (selectedType !== 'api' && selectedType !== 'static') throw new Error('未知部署类型');
     type = selectedType;
   } else {

@@ -1,22 +1,40 @@
 import type { CAC } from 'cac';
-import { intro, outro, spinner } from '@clack/prompts';
 import pc from 'picocolors';
 import { Config } from '../utils/config';
+import {
+  DEFAULT_FC_RUNTIME,
+  getFcApiDeploySpecDocument,
+  getFcApiRuntimeDeploySpec,
+  runFcApiDeployPrecheck
+} from '../providers/fc';
 import { formatErrorMessage } from '../utils/errors';
 import { runHook } from '../utils/hooks';
 import { buildDeployProjectPatch } from '../utils/deploy-config';
+import { parseDeployRuntimeOption } from '../utils/deploy-runtime';
+import { readLicellEnv } from '../utils/env';
 import {
   ensureAuthReadyForCommand,
   tryRecoverAuthForError,
   ensureAuthCapabilityPreflight,
   type AuthCapability
 } from '../utils/auth-recovery';
-import { isInteractiveTTY } from '../utils/cli-shared';
+import { createSpinner, isInteractiveTTY, showIntro, showOutro, tryNormalizeFcRuntime } from '../utils/cli-shared';
+import { emitCliError, emitCliEvent, emitCliResult, isJsonOutput } from '../utils/output';
 import { resolveDeployContext, type DeployCliOptions } from './deploy-context';
 import { executeApiDeploy } from './deploy-api';
 import { executeStaticDeploy } from './deploy-static';
 
 export { resolveDeploySslEnabled } from './deploy-context';
+
+interface DeploySpecOptions {
+  all?: boolean;
+}
+
+interface DeployCheckOptions {
+  runtime?: string;
+  entry?: string;
+  dockerDaemon?: boolean;
+}
 
 function resolveDeployRequiredCapabilities(ctx: {
   type: 'api' | 'static';
@@ -42,7 +60,161 @@ function resolveDeployRequiredCapabilities(ctx: {
   return [...new Set(capabilities)];
 }
 
+function resolveApiRuntimeForSpec(input: string | undefined) {
+  if (input && input.trim()) {
+    const parsed = parseDeployRuntimeOption(input);
+    if (parsed.deployTypeHint === 'static') {
+      throw new Error('deploy spec/check 仅适用于 FC API runtime（不要传 static/statis）');
+    }
+    if (parsed.runtime) return parsed.runtime;
+    throw new Error(`无法解析 runtime: ${input}`);
+  }
+  const projectRuntime = tryNormalizeFcRuntime(Config.getProject().runtime);
+  const envRuntime = tryNormalizeFcRuntime(readLicellEnv(process.env, 'FC_RUNTIME'));
+  return projectRuntime || envRuntime || DEFAULT_FC_RUNTIME;
+}
+
+function printDeploySpec(runtimeInput: string | undefined, includeAll: boolean | undefined) {
+  if (isJsonOutput()) {
+    const payload = includeAll || !runtimeInput
+      ? getFcApiDeploySpecDocument()
+      : { runtime: getFcApiRuntimeDeploySpec(resolveApiRuntimeForSpec(runtimeInput)) };
+    emitCliResult({
+      stage: 'deploy.spec',
+      ...payload
+    });
+    return;
+  }
+
+  if (includeAll || !runtimeInput) {
+    const doc = getFcApiDeploySpecDocument();
+    console.log(`${pc.bold('FC API Deploy Spec')}`);
+    console.log(`runtime: ${doc.runtimes.map((item) => item.runtime).join(', ')}`);
+    console.log(
+      `defaults: memory=${doc.resources.defaults.memoryMb}MB, vcpu=${doc.resources.defaults.vcpu}, ` +
+      `timeout=${doc.resources.defaults.timeoutSeconds}s, instanceConcurrency=${doc.resources.defaults.instanceConcurrency}`
+    );
+    console.log(`constraint: ${doc.resources.constraints.memoryToVcpuRatio.expression}`);
+    for (const item of doc.runtimes) {
+      console.log(`\n- runtime=${pc.cyan(item.runtime)} (${item.mode})`);
+      console.log(`  entry: ${item.defaultEntry || '(按 Dockerfile/项目自动推断)'}`);
+      console.log(`  entryRule: ${item.entryRule}`);
+      console.log(`  handlerRule: ${item.handlerRule}`);
+      if (item.handlerContract.signature) {
+        console.log(`  signature: ${item.handlerContract.signature}`);
+      }
+      console.log(`  acceptedResponse: ${item.responseSchema.acceptedForms.join(' | ')}`);
+      console.log(`  example(pass): ${item.examples.minimalPassExample}`);
+      console.log(`  example(fail): ${item.examples.commonFailExample}`);
+      for (const note of item.notes) {
+        console.log(`  note: ${note}`);
+      }
+    }
+    return;
+  }
+
+  const runtime = resolveApiRuntimeForSpec(runtimeInput);
+  const item = getFcApiRuntimeDeploySpec(runtime);
+  const doc = getFcApiDeploySpecDocument();
+  console.log(`${pc.bold('FC API Deploy Spec')}`);
+  console.log(`runtime: ${pc.cyan(item.runtime)} (${item.mode})`);
+  console.log(`entry: ${item.defaultEntry || '(按 Dockerfile/项目自动推断)'}`);
+  console.log(`entryRule: ${item.entryRule}`);
+  console.log(`handlerRule: ${item.handlerRule}`);
+  if (item.handlerContract.signature) {
+    console.log(`signature: ${item.handlerContract.signature}`);
+  }
+  console.log(`acceptedResponse: ${item.responseSchema.acceptedForms.join(' | ')}`);
+  console.log(`example(pass): ${item.examples.minimalPassExample}`);
+  console.log(`example(fail): ${item.examples.commonFailExample}`);
+  for (const note of item.notes) {
+    console.log(`note: ${note}`);
+  }
+  console.log(
+    `resources: default memory=${doc.resources.defaults.memoryMb}MB, ` +
+    `vcpu=${doc.resources.defaults.vcpu}, timeout=${doc.resources.defaults.timeoutSeconds}s`
+  );
+  console.log(`constraints: ${doc.resources.constraints.memoryToVcpuRatio.expression}`);
+}
+
+function runDeployCheck(options: DeployCheckOptions) {
+  const runtime = resolveApiRuntimeForSpec(options.runtime);
+  const runtimeSpec = getFcApiRuntimeDeploySpec(runtime);
+  const entry = options.entry?.trim() || runtimeSpec.defaultEntry || undefined;
+  const result = runFcApiDeployPrecheck({
+    runtime,
+    entry,
+    checkDockerDaemon: Boolean(options.dockerDaemon)
+  });
+
+  if (isJsonOutput()) {
+    emitCliResult({
+      stage: 'deploy.check',
+      ...result
+    });
+  } else {
+    console.log(`${pc.bold('FC API Deploy Precheck')}`);
+    console.log(`runtime: ${pc.cyan(result.runtime)}`);
+    console.log(`entry:   ${result.entry || '-'}`);
+    if (result.issues.length === 0) {
+      console.log(pc.green('\n✅ 预检通过'));
+    } else {
+      for (const issue of result.issues) {
+        const icon = issue.level === 'error' ? pc.red('✖') : pc.yellow('⚠');
+        console.log(`\n${icon} [${issue.level}] ${issue.id}`);
+        console.log(issue.message);
+        if (issue.remediation && issue.remediation.length > 0) {
+          for (const tip of issue.remediation) {
+            console.log(`  - ${tip}`);
+          }
+        }
+      }
+      if (result.ok) {
+        console.log(pc.yellow('\n⚠️ 预检通过（存在 warning）'));
+      } else {
+        console.log(pc.red('\n❌ 预检失败（存在 error）'));
+      }
+    }
+  }
+
+  if (!result.ok) {
+    process.exitCode = 1;
+  }
+}
+
 export function registerDeployCommand(cli: CAC) {
+  cli.command('deploy spec [runtime]', '查看 FC API 部署规格（给 Agent/开发者在 deploy 前对照）')
+    .option('--all', '输出全部 runtime 规格')
+    .action((runtime: string | undefined, options: DeploySpecOptions) => {
+      try {
+        printDeploySpec(runtime, options.all);
+      } catch (err: unknown) {
+        if (isJsonOutput()) {
+          emitCliError(err, { stage: 'deploy.spec' });
+        } else {
+          console.error(formatErrorMessage(err));
+        }
+        process.exitCode = 1;
+      }
+    });
+
+  cli.command('deploy check', '本地预检 FC API 入口与 runtime 约束（建议 deploy 前执行）')
+    .option('--runtime <runtime>', 'FC runtime：nodejs20/nodejs22/python3.12/python3.13/docker')
+    .option('--entry <entry>', '入口文件路径（默认按 runtime 推断）')
+    .option('--docker-daemon', 'runtime=docker 时额外检测本机 Docker daemon 可用性')
+    .action((options: DeployCheckOptions) => {
+      try {
+        runDeployCheck(options);
+      } catch (err: unknown) {
+        if (isJsonOutput()) {
+          emitCliError(err, { stage: 'deploy.check' });
+        } else {
+          console.error(formatErrorMessage(err));
+        }
+        process.exitCode = 1;
+      }
+    });
+
   cli.command('deploy', '一键极速打包部署')
     .option('--type <type>', '部署类型：api 或 static（适配 CI 非交互场景）')
     .option('--entry <entry>', 'API 入口文件（Node 默认 src/index.ts；Python 默认 src/main.py）')
@@ -62,8 +234,12 @@ export function registerDeployCommand(cli: CAC) {
     .option('--instance-concurrency <n>', '单实例并发数（默认自动，通常起始 10）')
     .option('--timeout <seconds>', '函数超时时间（秒，默认 30）')
     .action(async (options: DeployCliOptions) => {
-      intro(pc.bgBlue(pc.white(' ▲ Deploying to Aliyun ')));
-      const s = spinner();
+      if (!isJsonOutput()) {
+        showIntro(pc.bgBlue(pc.white(' ▲ Deploying to Aliyun ')));
+      } else {
+        emitCliEvent({ stage: 'deploy', action: 'deploy', status: 'start' });
+      }
+      const s = createSpinner();
       const interactiveTTY = isInteractiveTTY();
       try {
         await ensureAuthReadyForCommand({ commandLabel: 'licell deploy', interactiveTTY });
@@ -89,6 +265,18 @@ export function registerDeployCommand(cli: CAC) {
             continue;
           }
           try {
+            emitCliEvent({
+              stage: 'deploy.preflight',
+              action: 'resolve-context',
+              status: 'info',
+              data: {
+                type: ctx.type,
+                runtime: ctx.cliRuntime || ctx.projectRuntime || ctx.envRuntime || null,
+                releaseTarget: ctx.releaseTarget || null,
+                enableCdn: ctx.enableCdn,
+                enableSSL: ctx.enableSSL
+              }
+            });
             if (ctx.project.hooks?.preDeploy) {
               s.start('执行 preDeploy hook...');
               runHook('preDeploy', ctx.project.hooks.preDeploy);
@@ -101,12 +289,16 @@ export function registerDeployCommand(cli: CAC) {
             let healthCheckLogs: string[] = [];
 
             if (ctx.type === 'api') {
+              emitCliEvent({ stage: 'deploy.api', action: 'execute', status: 'start' });
               const result = await executeApiDeploy(ctx, s);
               if (!result) return;
+              emitCliEvent({ stage: 'deploy.api', action: 'execute', status: 'ok' });
               ({ url, promotedVersion, fixedDomain, healthCheckLogs } = result);
             } else {
+              emitCliEvent({ stage: 'deploy.static', action: 'execute', status: 'start' });
               const result = await executeStaticDeploy(ctx, s);
               if (!result) return;
+              emitCliEvent({ stage: 'deploy.static', action: 'execute', status: 'ok' });
               ({ url, fixedDomain, healthCheckLogs } = result);
             }
 
@@ -139,7 +331,20 @@ export function registerDeployCommand(cli: CAC) {
                 console.warn(pc.yellow(`⚠️ postDeploy hook 执行失败，已忽略: ${formatErrorMessage(err)}`));
               }
             }
-            outro('Done!');
+            if (isJsonOutput()) {
+              emitCliResult({
+                stage: 'deploy',
+                type: ctx.type,
+                runtime: ctx.cliRuntime || ctx.projectRuntime || ctx.envRuntime || null,
+                url,
+                fixedDomain: fixedDomain || null,
+                releaseTarget: ctx.releaseTarget || null,
+                promotedVersion: promotedVersion || null,
+                healthCheckLogs
+              });
+            } else {
+              showOutro('Done!');
+            }
             return;
           } catch (err: unknown) {
             if (!recoveredAuth) {
@@ -158,7 +363,11 @@ export function registerDeployCommand(cli: CAC) {
         }
       } catch (err: unknown) {
         s.stop(pc.red('❌ 部署失败'));
-        console.error(formatErrorMessage(err));
+        if (isJsonOutput()) {
+          emitCliError(err, { stage: 'deploy' });
+        } else {
+          console.error(formatErrorMessage(err));
+        }
         process.exitCode = 1;
       }
     });

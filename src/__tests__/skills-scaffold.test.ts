@@ -35,6 +35,8 @@ describe('getSkillFiles', () => {
     for (const section of sections) {
       expect(file.content).toContain(section);
     }
+    expect(file.content).toContain('licell deploy spec');
+    expect(file.content).toContain('licell deploy check');
   });
 });
 

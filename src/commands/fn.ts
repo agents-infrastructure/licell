@@ -1,5 +1,4 @@
 import type { CAC } from 'cac';
-import { outro, spinner } from '@clack/prompts';
 import pc from 'picocolors';
 import { readFileSync, realpathSync } from 'fs';
 import { resolve, relative, isAbsolute } from 'path';
@@ -16,9 +15,12 @@ import {
   isInteractiveTTY,
   toOptionalString,
   parseListLimit,
+  createSpinner,
+  showOutro,
   withSpinner
 } from '../utils/cli-shared';
 import { executeWithAuthRecovery } from '../utils/auth-recovery';
+import { emitCliResult, isJsonOutput } from '../utils/output';
 
 export function registerFnCommands(cli: CAC) {
   cli.command('fn list', '查看函数列表')
@@ -36,7 +38,7 @@ export function registerFnCommands(cli: CAC) {
           const limit = parseListLimit(options.limit, 20, 200);
           const prefix = toOptionalString(options.prefix);
 
-          const s = spinner();
+          const s = createSpinner();
           const functions = await withSpinner(
             s,
             '正在拉取函数列表...',
@@ -44,9 +46,19 @@ export function registerFnCommands(cli: CAC) {
             () => listFunctions(limit, prefix)
           );
           if (!functions) return;
-          s.stop(pc.green(`✅ 共获取 ${functions.length} 个函数`));
+          if (!isJsonOutput()) {
+            s.stop(pc.green(`✅ 共获取 ${functions.length} 个函数`));
+          }
+          if (isJsonOutput()) {
+            emitCliResult({
+              stage: 'fn.list',
+              count: functions.length,
+              functions
+            });
+            return;
+          }
           if (functions.length === 0) {
-            outro('当前地域没有函数');
+            showOutro('当前地域没有函数');
             return;
           }
           for (const fn of functions) {
@@ -55,7 +67,7 @@ export function registerFnCommands(cli: CAC) {
             );
           }
           console.log('');
-          outro('Done.');
+          showOutro('Done.');
         }
       );
     });
@@ -78,7 +90,7 @@ export function registerFnCommands(cli: CAC) {
           }
           const qualifier = toOptionalString(options.target);
 
-          const s = spinner();
+          const s = createSpinner();
           const fn = await withSpinner(
             s,
             `正在拉取函数 ${functionName} 详情...`,
@@ -86,7 +98,26 @@ export function registerFnCommands(cli: CAC) {
             () => getFunctionInfo(functionName, qualifier || undefined)
           );
           if (!fn) return;
-          s.stop(pc.green('✅ 获取成功'));
+          if (!isJsonOutput()) {
+            s.stop(pc.green('✅ 获取成功'));
+          } else {
+            emitCliResult({
+              stage: 'fn.info',
+              functionName: fn.functionName || functionName,
+              qualifier: qualifier || null,
+              runtime: fn.runtime || null,
+              handler: fn.handler || null,
+              state: fn.state || null,
+              memorySize: fn.memorySize ?? null,
+              cpu: (fn as { cpu?: unknown }).cpu ?? null,
+              instanceConcurrency: (fn as { instanceConcurrency?: unknown }).instanceConcurrency ?? null,
+              timeout: fn.timeout ?? null,
+              vpcConfig: (fn as { vpcConfig?: unknown }).vpcConfig ?? null,
+              updatedAt: fn.lastModifiedTime || null,
+              envCount: Object.keys(fn.environmentVariables || {}).length
+            });
+            return;
+          }
           console.log(`\nfunction: ${pc.cyan(fn.functionName || functionName)}`);
           if (qualifier) console.log(`qualifier: ${pc.cyan(qualifier)}`);
           console.log(`runtime:   ${pc.cyan(fn.runtime || '-')}`);
@@ -105,7 +136,7 @@ export function registerFnCommands(cli: CAC) {
           console.log(`updated:   ${pc.cyan(fn.lastModifiedTime || '-')}`);
           console.log(`envCount:  ${pc.cyan(String(Object.keys(fn.environmentVariables || {}).length))}`);
           console.log('');
-          outro('Done.');
+          showOutro('Done.');
         }
       );
     });
@@ -149,7 +180,7 @@ export function registerFnCommands(cli: CAC) {
             payload = payloadText;
           }
 
-          const s = spinner();
+          const s = createSpinner();
           const result = await withSpinner(
             s,
             `正在调用函数 ${functionName}...`,
@@ -157,15 +188,28 @@ export function registerFnCommands(cli: CAC) {
             () => invokeFunction(functionName, { qualifier: qualifier || undefined, payload: payload || undefined })
           );
           if (!result) return;
-          s.stop(pc.green(`✅ 调用完成 (status=${result.statusCode})`));
+          if (!isJsonOutput()) {
+            s.stop(pc.green(`✅ 调用完成 (status=${result.statusCode})`));
+          }
+          const responseBody = result.body && result.body.trim().length > 0 ? result.body : '';
+          if (isJsonOutput()) {
+            emitCliResult({
+              stage: 'fn.invoke',
+              functionName,
+              qualifier: qualifier || null,
+              statusCode: result.statusCode,
+              body: responseBody
+            });
+            return;
+          }
           console.log('');
-          if (result.body && result.body.trim().length > 0) {
-            console.log(result.body);
+          if (responseBody) {
+            console.log(responseBody);
           } else {
             console.log('<empty response>');
           }
           console.log('');
-          outro('Done.');
+          showOutro('Done.');
         }
       );
     });
@@ -192,7 +236,7 @@ export function registerFnCommands(cli: CAC) {
             { yes: Boolean(options.yes) }
           );
 
-          const s = spinner();
+          const s = createSpinner();
           const deleted = await withSpinner(
             s,
             options.force
@@ -202,11 +246,25 @@ export function registerFnCommands(cli: CAC) {
             () => removeFunction(functionName, { force: Boolean(options.force) })
           );
           if (!deleted) return;
-          s.stop(pc.green('✅ 函数已删除'));
+          if (!isJsonOutput()) {
+            s.stop(pc.green('✅ 函数已删除'));
+          }
+          if (isJsonOutput()) {
+            emitCliResult({
+              stage: 'fn.rm',
+              functionName,
+              force: Boolean(options.force),
+              forced: deleted.forced,
+              deletedTriggers: deleted.deletedTriggers,
+              deletedAliases: deleted.deletedAliases,
+              deletedVersions: deleted.deletedVersions
+            });
+            return;
+          }
           if (deleted.forced) {
             console.log(`\ncleanup: triggers=${deleted.deletedTriggers.length} aliases=${deleted.deletedAliases.length} versions=${deleted.deletedVersions.length}`);
           }
-          outro('Done.');
+          showOutro('Done.');
         }
       );
     });

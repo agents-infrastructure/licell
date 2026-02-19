@@ -24,6 +24,7 @@ export interface TailLogsOptions {
   once?: boolean;
   windowSeconds?: number;
   lineLimit?: number;
+  silent?: boolean;
 }
 
 function shouldIgnoreLogsBootstrapError(err: unknown) {
@@ -31,7 +32,8 @@ function shouldIgnoreLogsBootstrapError(err: unknown) {
   return message.includes('projectnotexist') || message.includes('logstorenotexist');
 }
 
-function renderLogEntries(logs: LogEntry[], seenLogs?: Set<string>) {
+function renderLogEntries(logs: LogEntry[], seenLogs?: Set<string>, silent = false) {
+  const rendered: string[] = [];
   logs
     .sort((a, b) => parseInt(a.__time__ || '0', 10) - parseInt(b.__time__ || '0', 10))
     .forEach((log) => {
@@ -49,8 +51,13 @@ function renderLogEntries(logs: LogEntry[], seenLogs?: Set<string>) {
       const timeStr = new Date(parseInt(log.__time__ || '0', 10) * 1000).toLocaleTimeString();
       let formattedMsg = String(log.message || log.content || JSON.stringify(log)).trim();
       if (formattedMsg.toLowerCase().includes('error')) formattedMsg = pc.red(formattedMsg);
-      console.log(`${pc.gray(`[${timeStr}]`)} ${formattedMsg}`);
+      const line = `${pc.gray(`[${timeStr}]`)} ${formattedMsg}`;
+      rendered.push(line);
+      if (!silent) {
+        console.log(line);
+      }
     });
+  return rendered;
 }
 
 export async function tailLogs(appName: string, options: TailLogsOptions = {}) {
@@ -80,21 +87,27 @@ export async function tailLogs(appName: string, options: TailLogsOptions = {}) {
       );
       const logs: LogEntry[] = (res.body as LogEntry[] | undefined) || [];
       if (logs.length === 0) {
-        console.log(pc.gray(`最近 ${windowSeconds}s 无日志`));
-        return;
+        if (!options.silent) {
+          console.log(pc.gray(`最近 ${windowSeconds}s 无日志`));
+        }
+        return { mode: 'once' as const, logs: [], lines: [] };
       }
-      renderLogEntries(logs);
-      return;
+      const lines = renderLogEntries(logs, undefined, Boolean(options.silent));
+      return { mode: 'once' as const, logs, lines };
     } catch (err: unknown) {
       if (shouldIgnoreLogsBootstrapError(err)) {
-        console.log(pc.yellow(`⚠️ 日志服务尚未就绪，已跳过: ${formatErrorMessage(err)}`));
-        return;
+        if (!options.silent) {
+          console.log(pc.yellow(`⚠️ 日志服务尚未就绪，已跳过: ${formatErrorMessage(err)}`));
+        }
+        return { mode: 'once' as const, logs: [], lines: [] };
       }
       throw err;
     }
   }
 
-  console.log(pc.gray(`\n📡 正在监听云端 [${pc.cyan(appName)}] 的实时日志流 (Ctrl+C 退出)...\n`));
+  if (!options.silent) {
+    console.log(pc.gray(`\n📡 正在监听云端 [${pc.cyan(appName)}] 的实时日志流 (Ctrl+C 退出)...\n`));
+  }
   let lastLogTime = Math.floor(Date.now() / 1000) - 60;
   const seenLogs = new Set<string>();
   let lastErrorAt = 0;
@@ -102,7 +115,9 @@ export async function tailLogs(appName: string, options: TailLogsOptions = {}) {
 
   const shutdown = () => {
     running = false;
-    console.log(pc.gray('\n👋 日志流已断开'));
+    if (!options.silent) {
+      console.log(pc.gray('\n👋 日志流已断开'));
+    }
     process.exit(0);
   };
   process.on('SIGINT', shutdown);
@@ -119,7 +134,7 @@ export async function tailLogs(appName: string, options: TailLogsOptions = {}) {
         line: lineLimit
       }));
       const logs: LogEntry[] = (res.body as LogEntry[] | undefined) || [];
-      renderLogEntries(logs, seenLogs);
+      renderLogEntries(logs, seenLogs, Boolean(options.silent));
       if (logs.length > 0) {
         const latest = parseInt(logs[logs.length - 1].__time__ || `${lastLogTime}`, 10);
         if (Number.isFinite(latest) && latest > 0) lastLogTime = latest;
@@ -128,7 +143,9 @@ export async function tailLogs(appName: string, options: TailLogsOptions = {}) {
       const now = Date.now();
       if (now - lastErrorAt > 10_000) {
         const message = formatErrorMessage(err);
-        console.log(pc.yellow(`⚠️ 日志拉取失败，10 秒后重试: ${message}`));
+        if (!options.silent) {
+          console.log(pc.yellow(`⚠️ 日志拉取失败，10 秒后重试: ${message}`));
+        }
         lastErrorAt = now;
       }
     }

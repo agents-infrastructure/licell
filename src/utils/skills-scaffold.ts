@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
-import { dirname, join } from 'path';
+import { dirname, join, isAbsolute } from 'path';
+import { homedir } from 'os';
 
 export type AgentType = 'claude' | 'codex';
 
@@ -77,6 +78,30 @@ function getCommandReference(): string {
 | \`--instance-concurrency <n>\` | 单实例并发数 |
 | \`--timeout <seconds>\` | 函数超时（秒，默认 30） |
 | \`--acr-namespace <ns>\` | Docker 部署的 ACR 命名空间（默认 licell） |
+
+### FC API Spec & Precheck（Agent 推荐）
+
+| 命令 | 说明 |
+|------|------|
+| \`licell deploy spec [runtime]\` | 查看 FC API runtime 规格（entry/handler/资源约束） |
+| \`licell deploy spec --all\` | 查看全部 runtime 规格 |
+| \`licell deploy check --runtime <runtime> --entry <entry>\` | 部署前本地预检（缺少 handler/入口错误会提前报出） |
+| \`licell deploy check --runtime docker --docker-daemon\` | Docker 预检并检测本机 Docker daemon |
+
+**Agent 最佳实践：**
+
+\`\`\`bash
+# 1) 先读规格（知道该 runtime 的硬性要求）
+licell deploy spec nodejs22
+
+# 2) 再做预检（拿到可执行修复建议）
+licell deploy check --runtime nodejs22 --entry src/index.ts
+
+# 3) 预检通过后再部署
+licell deploy --type api --runtime nodejs22 --entry src/index.ts --target preview
+\`\`\`
+
+\`deploy spec --output json\` 包含 \`handlerContract\`、\`eventSchema\`、\`responseSchema\`、\`examples\`、\`validationRules\`，可直接供 Agent 规划与校验。
 
 **常见用法：**
 
@@ -243,6 +268,12 @@ licell deploy --type api --target preview --enable-vpc
 /*  Public API                                                         */
 /* ------------------------------------------------------------------ */
 
+export function getGlobalSkillsDir(agent: AgentType): string {
+  const home = homedir();
+  if (agent === 'claude') return join(home, '.claude', 'skills', 'licell');
+  return join(home, '.agents', 'skills', 'licell');
+}
+
 export function getSkillFiles(agent: AgentType): SkillFile[] {
   const body = getSkillContent().replace('<!-- PLACEHOLDER_COMMAND_REFERENCE -->\n', '') + getCommandReference();
 
@@ -252,6 +283,12 @@ export function getSkillFiles(agent: AgentType): SkillFile[] {
 
   // codex: standalone instruction file at project root
   return [{ path: 'codex.md', content: body }];
+}
+
+export function getGlobalSkillFiles(agent: AgentType): SkillFile[] {
+  const body = getSkillContent().replace('<!-- PLACEHOLDER_COMMAND_REFERENCE -->\n', '') + getCommandReference();
+  const dir = getGlobalSkillsDir(agent);
+  return [{ path: join(dir, 'SKILL.md'), content: body }];
 }
 
 export function ensureAgentsMdEntry(projectRoot: string): { filePath: string; updated: boolean } {
@@ -293,7 +330,7 @@ export function writeSkillFiles(
   const skipped: string[] = [];
 
   for (const file of files) {
-    const fullPath = join(projectRoot, file.path);
+    const fullPath = isAbsolute(file.path) ? file.path : join(projectRoot, file.path);
     const dir = dirname(fullPath);
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
 

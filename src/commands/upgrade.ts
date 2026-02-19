@@ -1,14 +1,14 @@
 import type { CAC } from 'cac';
-import { intro, outro, spinner } from '@clack/prompts';
 import pc from 'picocolors';
 import { createHash } from 'crypto';
 import { spawnSync } from 'child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { toOptionalString } from '../utils/cli-shared';
+import { createSpinner, showIntro, showOutro, toOptionalString } from '../utils/cli-shared';
+import { emitCliEvent, emitCliResult, isJsonOutput } from '../utils/output';
 
-const DEFAULT_UPGRADE_REPO = 'dafang/licell';
+const DEFAULT_UPGRADE_REPO = 'agents-infrastructure/licell';
 const REPO_SLUG_RE = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 
 export function resolveUpgradeScriptUrl(input: { repo?: string; version?: string; scriptUrl?: string }) {
@@ -60,7 +60,7 @@ export function registerUpgradeCommand(cli: CAC) {
     .option('--skip-checksum', '跳过 SHA256 完整性校验（不推荐）')
     .option('--dry-run', '只输出将使用的安装脚本地址')
     .action(async (options: { version?: unknown; repo?: unknown; scriptUrl?: unknown; skipChecksum?: unknown; dryRun?: unknown }) => {
-      intro(pc.bgBlue(pc.white(' ⬆ Licell Upgrade ')));
+      showIntro(pc.bgBlue(pc.white(' ⬆ Licell Upgrade ')));
 
       const version = toOptionalString(options.version);
       const repo = toOptionalString(options.repo) || DEFAULT_UPGRADE_REPO;
@@ -78,12 +78,20 @@ export function registerUpgradeCommand(cli: CAC) {
       });
 
       if (Boolean(options.dryRun)) {
-        console.log(scriptUrl);
-        outro('Done.');
+        if (isJsonOutput()) {
+          emitCliResult({
+            stage: 'upgrade',
+            dryRun: true,
+            scriptUrl
+          });
+        } else {
+          console.log(scriptUrl);
+          showOutro('Done.');
+        }
         return;
       }
 
-      const s = spinner();
+      const s = createSpinner();
       s.start('正在下载升级脚本...');
 
       const installScript = downloadText(scriptUrl, '安装脚本');
@@ -100,11 +108,29 @@ export function registerUpgradeCommand(cli: CAC) {
                 throw new Error('install.sh SHA256 校验失败，脚本可能被篡改。如需跳过校验请使用 --skip-checksum');
               }
             } else {
-              console.error(pc.yellow('⚠️ SHA256SUMS 中未找到 install.sh 条目，跳过校验'));
+              if (isJsonOutput()) {
+                emitCliEvent({
+                  stage: 'upgrade',
+                  action: 'checksum',
+                  status: 'info',
+                  message: 'SHA256SUMS 未包含 install.sh，已跳过校验'
+                });
+              } else {
+                console.error(pc.yellow('⚠️ SHA256SUMS 中未找到 install.sh 条目，跳过校验'));
+              }
             }
           } catch (err: unknown) {
             if (err instanceof Error && err.message.includes('SHA256 校验失败')) throw err;
-            console.error(pc.yellow('⚠️ 无法下载 SHA256SUMS 校验文件，跳过校验'));
+            if (isJsonOutput()) {
+              emitCliEvent({
+                stage: 'upgrade',
+                action: 'checksum',
+                status: 'info',
+                message: '无法下载 SHA256SUMS，已跳过校验'
+              });
+            } else {
+              console.error(pc.yellow('⚠️ 无法下载 SHA256SUMS 校验文件，跳过校验'));
+            }
           }
         }
       }
@@ -114,18 +140,50 @@ export function registerUpgradeCommand(cli: CAC) {
 
       try {
         writeFileSync(tempScriptPath, installScript, { mode: 0o700 });
-        s.stop(pc.green('✅ 脚本下载完成，开始安装'));
+        if (!isJsonOutput()) {
+          s.stop(pc.green('✅ 脚本下载完成，开始安装'));
+        }
 
         const install = spawnSync('bash', [tempScriptPath], {
-          stdio: 'inherit',
+          stdio: isJsonOutput() ? 'pipe' : 'inherit',
+          encoding: 'utf8',
           env: { ...process.env, LICELL_SKIP_RUN_CHECK: '1' }
         });
+        if (isJsonOutput()) {
+          const stdout = typeof install.stdout === 'string' ? install.stdout.trim() : '';
+          const stderr = typeof install.stderr === 'string' ? install.stderr.trim() : '';
+          if (stdout) {
+            emitCliEvent({
+              stage: 'upgrade.install',
+              action: 'stdout',
+              status: 'info',
+              message: stdout
+            });
+          }
+          if (stderr) {
+            emitCliEvent({
+              stage: 'upgrade.install',
+              action: 'stderr',
+              status: 'info',
+              message: stderr
+            });
+          }
+        }
 
         if (install.status !== 0) {
           throw new Error(`升级安装失败（exit=${install.status ?? 'unknown'}）`);
         }
 
-        outro(pc.green('✅ 升级完成'));
+        if (isJsonOutput()) {
+          emitCliResult({
+            stage: 'upgrade',
+            dryRun: false,
+            scriptUrl,
+            checksumSkipped: skipChecksum
+          });
+        } else {
+          showOutro(pc.green('✅ 升级完成'));
+        }
       } finally {
         rmSync(tempDir, { recursive: true, force: true });
       }

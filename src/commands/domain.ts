@@ -1,5 +1,4 @@
 import type { CAC } from 'cac';
-import { intro, outro, spinner } from '@clack/prompts';
 import pc from 'picocolors';
 import { normalizeReleaseTarget } from '../utils/cli-helpers';
 import { bindCustomDomain, unbindCustomDomain } from '../providers/domain';
@@ -8,12 +7,16 @@ import { executeWithAuthRecovery } from '../utils/auth-recovery';
 import {
   ensureAuthOrExit,
   ensureDestructiveActionConfirmed,
+  createSpinner,
   isInteractiveTTY,
+  showIntro,
+  showOutro,
   requireAppName,
   toPromptValue,
   withSpinner
 } from '../utils/cli-shared';
 import { Config } from '../utils/config';
+import { emitCliResult, isJsonOutput } from '../utils/output';
 
 export function registerDomainCommands(cli: CAC) {
   cli.command('domain add <domain>', '绑定自定义域名')
@@ -28,7 +31,7 @@ export function registerDomainCommands(cli: CAC) {
           requiredCapabilities: ['fc', 'dns']
         },
         async () => {
-          intro(pc.bgCyan(pc.black(' 🌐 Domain & SSL Configuration ')));
+          showIntro(pc.bgCyan(pc.black(' 🌐 Domain & SSL Configuration ')));
           const auth = ensureAuthOrExit();
           const normalizedDomain = toPromptValue(domain, '域名');
           const releaseTarget = options.target ? normalizeReleaseTarget(options.target) : undefined;
@@ -36,7 +39,7 @@ export function registerDomainCommands(cli: CAC) {
           const project = Config.getProject();
           requireAppName(project);
 
-          const s = spinner();
+          const s = createSpinner();
           const finalUrl = await withSpinner(
             s,
             `正在配置云解析 DNS，将 ${normalizedDomain} 指向应用...`,
@@ -52,11 +55,23 @@ export function registerDomainCommands(cli: CAC) {
             }
           );
           if (!finalUrl) return;
-          s.stop(pc.green('✅ 域名绑定与网络平面配置大功告成！'));
+          if (!isJsonOutput()) {
+            s.stop(pc.green('✅ 域名绑定与网络平面配置大功告成！'));
+          }
+          if (isJsonOutput()) {
+            emitCliResult({
+              stage: 'domain.add',
+              domain: normalizedDomain,
+              releaseTarget: releaseTarget || null,
+              ssl: Boolean(options.ssl),
+              finalUrl
+            });
+            return;
+          }
           if (releaseTarget) {
             console.log(`\n🏷️  域名路由已绑定 alias=${pc.cyan(releaseTarget)}\n`);
           }
-          outro(`🔗 你的应用现在可通过安全的 ${pc.cyan(pc.underline(finalUrl))} 访问`);
+          showOutro(`🔗 你的应用现在可通过安全的 ${pc.cyan(pc.underline(finalUrl))} 访问`);
         }
       );
     });
@@ -71,11 +86,11 @@ export function registerDomainCommands(cli: CAC) {
           requiredCapabilities: ['fc', 'dns']
         },
         async () => {
-          intro(pc.bgCyan(pc.black(' 🌐 Domain Removal ')));
+          showIntro(pc.bgCyan(pc.black(' 🌐 Domain Removal ')));
           ensureAuthOrExit();
           const normalizedDomain = toPromptValue(domain, '域名').toLowerCase();
           await ensureDestructiveActionConfirmed(`解绑域名 ${normalizedDomain}`, { yes: Boolean(options.yes) });
-          const s = spinner();
+          const s = createSpinner();
           const removed = await withSpinner(
             s,
             `正在解绑域名 ${normalizedDomain}...`,
@@ -86,8 +101,16 @@ export function registerDomainCommands(cli: CAC) {
             }
           );
           if (!removed) return;
-          s.stop(pc.green('✅ 域名已解绑并完成 DNS 清理'));
-          outro('Done.');
+          if (!isJsonOutput()) {
+            s.stop(pc.green('✅ 域名已解绑并完成 DNS 清理'));
+            showOutro('Done.');
+          } else {
+            emitCliResult({
+              stage: 'domain.rm',
+              domain: normalizedDomain,
+              removed: true
+            });
+          }
         }
       );
     });

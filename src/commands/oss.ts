@@ -1,16 +1,19 @@
 import type { CAC } from 'cac';
-import { text, outro, spinner } from '@clack/prompts';
+import { text } from '@clack/prompts';
 import pc from 'picocolors';
 import { getOssBucketInfo, listOssBuckets, listOssObjects, uploadDirectoryToBucket } from '../providers/oss';
 import { executeWithAuthRecovery } from '../utils/auth-recovery';
 import {
   ensureAuthOrExit,
+  createSpinner,
   isInteractiveTTY,
+  showOutro,
   toPromptValue,
   toOptionalString,
   parseListLimit,
   withSpinner
 } from '../utils/cli-shared';
+import { emitCliResult, isJsonOutput } from '../utils/output';
 
 export function registerOssCommands(cli: CAC) {
   cli.command('oss list', '查看 OSS Bucket 列表')
@@ -25,7 +28,7 @@ export function registerOssCommands(cli: CAC) {
         async () => {
           ensureAuthOrExit();
           const limit = parseListLimit(options.limit, 50, 500);
-          const s = spinner();
+          const s = createSpinner();
           const buckets = await withSpinner(
             s,
             '正在拉取 OSS Bucket 列表...',
@@ -33,16 +36,26 @@ export function registerOssCommands(cli: CAC) {
             () => listOssBuckets(limit)
           );
           if (!buckets) return;
-          s.stop(pc.green(`✅ 共获取 ${buckets.length} 个 Bucket`));
+          if (!isJsonOutput()) {
+            s.stop(pc.green(`✅ 共获取 ${buckets.length} 个 Bucket`));
+          }
+          if (isJsonOutput()) {
+            emitCliResult({
+              stage: 'oss.list',
+              count: buckets.length,
+              buckets
+            });
+            return;
+          }
           if (buckets.length === 0) {
-            outro('当前账号没有 Bucket');
+            showOutro('当前账号没有 Bucket');
             return;
           }
           for (const bucket of buckets) {
             console.log(`${pc.cyan(bucket.name)}  region=${pc.gray(bucket.location || '-')}  created=${pc.gray(bucket.creationDate || '-')}`);
           }
           console.log('');
-          outro('Done.');
+          showOutro('Done.');
         }
       );
     });
@@ -58,7 +71,7 @@ export function registerOssCommands(cli: CAC) {
         async () => {
           ensureAuthOrExit();
           const bucketName = toPromptValue(bucket, 'bucket');
-          const s = spinner();
+          const s = createSpinner();
           const info = await withSpinner(
             s,
             `正在拉取 Bucket ${bucketName} 详情...`,
@@ -66,14 +79,23 @@ export function registerOssCommands(cli: CAC) {
             () => getOssBucketInfo(bucketName)
           );
           if (!info) return;
-          s.stop(pc.green('✅ 获取成功'));
+          if (!isJsonOutput()) {
+            s.stop(pc.green('✅ 获取成功'));
+          } else {
+            emitCliResult({
+              stage: 'oss.info',
+              bucket: bucketName,
+              info
+            });
+            return;
+          }
           console.log(`\nname:      ${pc.cyan(info.name)}`);
           console.log(`location:  ${pc.cyan(info.location || '-')}`);
           console.log(`created:   ${pc.cyan(info.creationDate || '-')}`);
           console.log(`endpoint:  ${pc.cyan(info.extranetEndpoint || '-')}`);
           console.log(`intranet:  ${pc.cyan(info.intranetEndpoint || '-')}`);
           console.log('');
-          outro('Done.');
+          showOutro('Done.');
         }
       );
     });
@@ -92,7 +114,7 @@ export function registerOssCommands(cli: CAC) {
           const bucketName = toPromptValue(bucket, 'bucket');
           const normalizedPrefix = toOptionalString(prefix);
           const limit = parseListLimit(options.limit, 100, 2000);
-          const s = spinner();
+          const s = createSpinner();
           const objects = await withSpinner(
             s,
             `正在列出 ${bucketName} 对象...`,
@@ -100,16 +122,28 @@ export function registerOssCommands(cli: CAC) {
             () => listOssObjects(bucketName, normalizedPrefix || undefined, limit)
           );
           if (!objects) return;
-          s.stop(pc.green(`✅ 共获取 ${objects.length} 个对象`));
+          if (!isJsonOutput()) {
+            s.stop(pc.green(`✅ 共获取 ${objects.length} 个对象`));
+          }
+          if (isJsonOutput()) {
+            emitCliResult({
+              stage: 'oss.ls',
+              bucket: bucketName,
+              prefix: normalizedPrefix || null,
+              count: objects.length,
+              objects
+            });
+            return;
+          }
           if (objects.length === 0) {
-            outro('当前条件下无对象');
+            showOutro('当前条件下无对象');
             return;
           }
           for (const object of objects) {
             console.log(`${pc.cyan(object.name)}  size=${pc.gray(String(object.size ?? '-'))}  modified=${pc.gray(object.lastModified || '-')}`);
           }
           console.log('');
-          outro('Done.');
+          showOutro('Done.');
         }
       );
     });
@@ -146,7 +180,7 @@ export function registerOssCommands(cli: CAC) {
               );
             const targetDir = toOptionalString(options.targetDir);
 
-            const s = spinner();
+            const s = createSpinner();
             const result = await withSpinner(
               s,
               `正在上传 ${sourceDir} 到 OSS Bucket ${bucketName}${targetDir ? `/${targetDir}` : ''}...`,
@@ -155,7 +189,20 @@ export function registerOssCommands(cli: CAC) {
             );
             if (!result) return;
 
-            s.stop(pc.green(`✅ 上传完成，共 ${result.uploadedCount} 个文件`));
+            if (!isJsonOutput()) {
+              s.stop(pc.green(`✅ 上传完成，共 ${result.uploadedCount} 个文件`));
+            } else {
+              emitCliResult({
+                stage: 'oss.upload',
+                bucket: result.bucket,
+                sourceDir,
+                targetDir: result.targetDir || null,
+                uploadedCount: result.uploadedCount,
+                skippedSymlinkCount: result.skippedSymlinkCount,
+                baseUrl: result.baseUrl
+              });
+              return;
+            }
             const objectPrefix = result.targetDir ? `${result.targetDir}/` : '';
             console.log(`\nbucket: ${pc.cyan(result.bucket)}`);
             console.log(`prefix: ${pc.cyan(result.targetDir || '(root)')}`);
@@ -165,7 +212,7 @@ export function registerOssCommands(cli: CAC) {
               console.log(pc.yellow(`warning: 已跳过 ${result.skippedSymlinkCount} 个符号链接（为避免目录逃逸与递归风险）`));
             }
             console.log('');
-            outro('Done.');
+            showOutro('Done.');
           }
         );
       });

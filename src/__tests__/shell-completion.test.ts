@@ -20,6 +20,16 @@ describe('resolveCompletionCandidates', () => {
     expect(candidates).toContain('domain');
   });
 
+  it('suggests global --output option from root', () => {
+    const candidates = resolveCompletionCandidates({
+      compWords: 'licell --',
+      compCword: 1,
+      compCur: '--'
+    });
+
+    expect(candidates).toContain('--output');
+  });
+
   it('suggests nested dns records subcommands', () => {
     const candidates = resolveCompletionCandidates({
       compWords: 'licell dns records',
@@ -43,6 +53,17 @@ describe('resolveCompletionCandidates', () => {
     expect(candidates).toContain('--type');
     expect(candidates).toContain('--target');
     expect(candidates).not.toContain('auth');
+  });
+
+  it('suggests deploy subcommands for agent precheck flow', () => {
+    const candidates = resolveCompletionCandidates({
+      compWords: 'licell deploy ',
+      compCword: 2,
+      compCur: ''
+    });
+
+    expect(candidates).toContain('spec');
+    expect(candidates).toContain('check');
   });
 });
 

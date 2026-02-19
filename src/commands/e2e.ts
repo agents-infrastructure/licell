@@ -1,5 +1,4 @@
 import type { CAC } from 'cac';
-import { intro, outro } from '@clack/prompts';
 import pc from 'picocolors';
 import { mkdirSync, existsSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { join, resolve } from 'path';
@@ -12,6 +11,8 @@ import {
   isInteractiveTTY,
   normalizeCustomDomain,
   normalizeDomainSuffix,
+  showIntro,
+  showOutro,
   toOptionalString
 } from '../utils/cli-shared';
 import {
@@ -29,6 +30,7 @@ import {
 } from '../utils/e2e';
 import { parseRootAndSubdomain } from '../utils/domain';
 import { formatErrorMessage } from '../utils/errors';
+import { emitCliError, emitCliEvent, emitCliResult, isJsonOutput } from '../utils/output';
 
 interface E2eRunOptions {
   suite?: unknown;
@@ -174,6 +176,12 @@ function applyStepRecord(manifest: E2eManifest, step: E2eStepRecord) {
 function runStep(ctx: E2eStepContext, name: string, args: string[]) {
   const startedAt = nowIso();
   const command = `licell ${args.join(' ')}`;
+  emitCliEvent({
+    stage: `e2e.${name}`,
+    action: name,
+    status: 'start',
+    data: { command }
+  });
   try {
     runCliCommand(ctx.invocation, args, ctx.workspaceDir);
     applyStepRecord(ctx.manifest, {
@@ -184,6 +192,7 @@ function runStep(ctx: E2eStepContext, name: string, args: string[]) {
       endedAt: nowIso()
     });
     saveE2eManifest(ctx.manifest);
+    emitCliEvent({ stage: `e2e.${name}`, action: name, status: 'ok' });
   } catch (err: unknown) {
     applyStepRecord(ctx.manifest, {
       name,
@@ -194,6 +203,12 @@ function runStep(ctx: E2eStepContext, name: string, args: string[]) {
       error: formatErrorMessage(err)
     });
     saveE2eManifest(ctx.manifest);
+    emitCliEvent({
+      stage: `e2e.${name}`,
+      action: name,
+      status: 'failed',
+      message: formatErrorMessage(err)
+    });
     throw err;
   }
 }
@@ -216,6 +231,12 @@ function runStepIf(ctx: E2eStepContext, condition: boolean, name: string, args: 
 function runExternalStep(ctx: E2eStepContext, name: string, command: string, args: string[]) {
   const startedAt = nowIso();
   const displayCommand = `${command} ${args.join(' ')}`.trim();
+  emitCliEvent({
+    stage: `e2e.${name}`,
+    action: name,
+    status: 'start',
+    data: { command: displayCommand }
+  });
   try {
     runSystemCommand(command, args, ctx.workspaceDir);
     applyStepRecord(ctx.manifest, {
@@ -226,6 +247,7 @@ function runExternalStep(ctx: E2eStepContext, name: string, command: string, arg
       endedAt: nowIso()
     });
     saveE2eManifest(ctx.manifest);
+    emitCliEvent({ stage: `e2e.${name}`, action: name, status: 'ok' });
   } catch (err: unknown) {
     applyStepRecord(ctx.manifest, {
       name,
@@ -236,6 +258,12 @@ function runExternalStep(ctx: E2eStepContext, name: string, command: string, arg
       error: formatErrorMessage(err)
     });
     saveE2eManifest(ctx.manifest);
+    emitCliEvent({
+      stage: `e2e.${name}`,
+      action: name,
+      status: 'failed',
+      message: formatErrorMessage(err)
+    });
     throw err;
   }
 }
@@ -321,7 +349,7 @@ async function executeE2eRun(options: E2eRunOptions) {
     state: { hasDeployedApi: false, hasDeployedStatic: false }
   };
 
-  intro(pc.bgBlue(pc.white(' 🧪 Licell E2E Runner ')));
+  showIntro(pc.bgBlue(pc.white(' 🧪 Licell E2E Runner ')));
   console.log(`runId:      ${pc.cyan(runId)}`);
   console.log(`suite:      ${pc.cyan(suite)}`);
   console.log(`workspace:  ${pc.cyan(workspaceDir)}`);
@@ -338,6 +366,18 @@ async function executeE2eRun(options: E2eRunOptions) {
   ]);
 
   let runError: unknown;
+  emitCliEvent({
+    stage: 'e2e',
+    action: 'run',
+    status: 'start',
+    data: {
+      runId,
+      suite,
+      runtime,
+      target,
+      workspaceDir
+    }
+  });
   try {
     await executeWithAuthRecovery(
       {
@@ -461,6 +501,16 @@ async function executeE2eRun(options: E2eRunOptions) {
       ...(manifest.resources.vpcId ? [`vpc: ${manifest.resources.vpcId}/${manifest.resources.vswId || '-'}`] : [])
     ]);
     console.log(pc.green(`✅ E2E run 完成（${runId}）`));
+    emitCliResult({
+      stage: 'e2e',
+      runId,
+      suite,
+      status: manifest.status,
+      appName: manifest.resources.appName || null,
+      domain: manifest.resources.domain || null,
+      staticBucket: manifest.resources.staticBucket || null,
+      workspaceDir
+    });
   } catch (err: unknown) {
     runError = err;
     manifest.status = 'failed';
@@ -487,7 +537,7 @@ async function executeE2eRun(options: E2eRunOptions) {
   }
 
   if (runError) throw runError;
-  outro('Done.');
+  showOutro('Done.');
 }
 
 async function cleanupByManifest(
@@ -544,6 +594,17 @@ async function cleanupByManifest(
   manifest.cleanup.errors = errors;
   manifest.updatedAt = nowIso();
   saveE2eManifest(manifest, manifest.projectRoot);
+  emitCliEvent({
+    stage: 'e2e.cleanup',
+    action: 'cleanup',
+    status: 'start',
+    data: {
+      runId: manifest.runId,
+      appName: appName || null,
+      domain: domain || null,
+      staticBucket: staticBucket || null
+    }
+  });
   printSection('清理目标', [
     ...(appName ? [`fc function: ${appName}`] : []),
     ...(domain ? [`domain binding: ${domain}`] : []),
@@ -624,6 +685,13 @@ async function cleanupByManifest(
     printSection('清理结果', details.map((item) => item.replace(/^([^:]+): /, '$1 => ')));
     console.log(pc.green(`✅ 清理完成: ${manifest.runId}`));
   }
+  emitCliResult({
+    stage: 'e2e.cleanup',
+    runId: manifest.runId,
+    status: manifest.cleanup.status || 'unknown',
+    details,
+    errors
+  });
 }
 
 export function registerE2eCommands(cli: CAC) {
@@ -646,7 +714,11 @@ export function registerE2eCommands(cli: CAC) {
       try {
         await executeE2eRun(options);
       } catch (err: unknown) {
-        console.error(pc.red(formatErrorMessage(err)));
+        if (isJsonOutput()) {
+          emitCliError(err, { stage: 'e2e' });
+        } else {
+          console.error(pc.red(formatErrorMessage(err)));
+        }
         process.exitCode = 1;
       }
     });
@@ -672,7 +744,7 @@ export function registerE2eCommands(cli: CAC) {
           if (!manifest) throw new Error(`未找到 runId=${runId} 的 manifest`);
         }
 
-        intro(pc.bgBlue(pc.white(' 🧹 Licell E2E Cleanup ')));
+        showIntro(pc.bgBlue(pc.white(' 🧹 Licell E2E Cleanup ')));
         console.log(`runId:      ${pc.cyan(manifest.runId)}`);
         console.log(`workspace:  ${pc.cyan(manifest.workspaceDir)}`);
         console.log(`manifest:   ${pc.cyan(getE2eManifestPath(manifest.runId, manifest.projectRoot))}\n`);
@@ -681,9 +753,13 @@ export function registerE2eCommands(cli: CAC) {
           yes: Boolean(options.yes),
           keepWorkspace: Boolean(options.keepWorkspace)
         });
-        outro('Done.');
+        showOutro('Done.');
       } catch (err: unknown) {
-        console.error(pc.red(formatErrorMessage(err)));
+        if (isJsonOutput()) {
+          emitCliError(err, { stage: 'e2e.cleanup' });
+        } else {
+          console.error(pc.red(formatErrorMessage(err)));
+        }
         process.exitCode = 1;
       }
     });
@@ -692,7 +768,7 @@ export function registerE2eCommands(cli: CAC) {
     .action(() => {
       const runIds = listE2eManifestRunIds(process.cwd());
       if (runIds.length === 0) {
-        outro('当前项目暂无 e2e 记录');
+        showOutro('当前项目暂无 e2e 记录');
         return;
       }
       for (const runId of runIds) {
@@ -703,6 +779,6 @@ export function registerE2eCommands(cli: CAC) {
         );
       }
       console.log('');
-      outro('Done.');
+      showOutro('Done.');
     });
 }

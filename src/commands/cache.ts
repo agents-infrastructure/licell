@@ -1,5 +1,5 @@
 import type { CAC } from 'cac';
-import { intro, outro, spinner, select, isCancel } from '@clack/prompts';
+import { select, isCancel } from '@clack/prompts';
 import pc from 'picocolors';
 import { maskConnectionString } from '../utils/cli-helpers';
 import { executeWithAuthRecovery } from '../utils/auth-recovery';
@@ -12,13 +12,17 @@ import {
 } from '../providers/redis';
 import {
   ensureAuthOrExit,
+  createSpinner,
   isInteractiveTTY,
+  showIntro,
+  showOutro,
   toPromptValue,
   toOptionalString,
   parseListLimit,
   parseOptionalPositiveInt,
   withSpinner
 } from '../utils/cli-shared';
+import { emitCliResult, isJsonOutput } from '../utils/output';
 
 export function registerCacheCommands(cli: CAC) {
   cli.command('cache add', '分配 Redis 缓存')
@@ -59,7 +63,7 @@ export function registerCacheCommands(cli: CAC) {
           requiredCapabilities: ['redis', 'vpc']
         },
         async () => {
-          intro(pc.bgGreen(pc.black(' 🧠 Cache Provisioning (Redis) ')));
+          showIntro(pc.bgGreen(pc.black(' 🧠 Cache Provisioning (Redis) ')));
           ensureAuthOrExit();
           const interactiveTTY = isInteractiveTTY();
           let type = toOptionalString(options.type)?.toLowerCase();
@@ -77,7 +81,7 @@ export function registerCacheCommands(cli: CAC) {
           const capacityMb = parseOptionalPositiveInt(options.capacity, 'capacity');
           const computeUnitNum = parseOptionalPositiveInt(options.computeUnit, 'compute-unit');
 
-          const s = spinner();
+          const s = createSpinner();
           const redisUrl = await withSpinner(
             s,
             '正在初始化缓存资源编排...',
@@ -99,9 +103,19 @@ export function registerCacheCommands(cli: CAC) {
             })
           );
           if (!redisUrl) return;
-          s.stop(pc.green('✅ Redis 缓存已就绪并绑定到本工程内网！'));
+          if (!isJsonOutput()) {
+            s.stop(pc.green('✅ Redis 缓存已就绪并绑定到本工程内网！'));
+          }
+          if (isJsonOutput()) {
+            emitCliResult({
+              stage: 'cache.add',
+              type,
+              connectionStringMasked: maskConnectionString(redisUrl)
+            });
+            return;
+          }
           console.log(`\n🔑 缓存连接串已生成: ${pc.cyan(maskConnectionString(redisUrl))}\n`);
-          outro('下次执行 licell deploy 时，将自动作为 process.env.REDIS_URL 注入！');
+          showOutro('下次执行 licell deploy 时，将自动作为 process.env.REDIS_URL 注入！');
         }
       );
   });
@@ -118,7 +132,7 @@ export function registerCacheCommands(cli: CAC) {
         async () => {
           ensureAuthOrExit();
           const limit = parseListLimit(options.limit, 20, 200);
-          const s = spinner();
+          const s = createSpinner();
           const instances = await withSpinner(
             s,
             '正在拉取缓存实例列表...',
@@ -126,9 +140,19 @@ export function registerCacheCommands(cli: CAC) {
             () => listCacheInstances(limit)
           );
           if (!instances) return;
-          s.stop(pc.green(`✅ 共获取 ${instances.length} 个实例`));
+          if (!isJsonOutput()) {
+            s.stop(pc.green(`✅ 共获取 ${instances.length} 个实例`));
+          }
+          if (isJsonOutput()) {
+            emitCliResult({
+              stage: 'cache.list',
+              count: instances.length,
+              instances
+            });
+            return;
+          }
           if (instances.length === 0) {
-            outro('当前地域没有缓存实例');
+            showOutro('当前地域没有缓存实例');
             return;
           }
           for (const item of instances) {
@@ -137,7 +161,7 @@ export function registerCacheCommands(cli: CAC) {
             );
           }
           console.log('');
-          outro('Done.');
+          showOutro('Done.');
         }
       );
     });
@@ -153,7 +177,7 @@ export function registerCacheCommands(cli: CAC) {
         async () => {
           ensureAuthOrExit();
           const normalizedId = toPromptValue(instanceId, 'instanceId');
-          const s = spinner();
+          const s = createSpinner();
           const detail = await withSpinner(
             s,
             `正在拉取实例 ${normalizedId} 详情...`,
@@ -162,7 +186,16 @@ export function registerCacheCommands(cli: CAC) {
           );
           if (!detail) return;
           const summary = detail.summary;
-          s.stop(pc.green('✅ 获取成功'));
+          if (!isJsonOutput()) {
+            s.stop(pc.green('✅ 获取成功'));
+          } else {
+            emitCliResult({
+              stage: 'cache.info',
+              instanceId: normalizedId,
+              detail
+            });
+            return;
+          }
           console.log(`\ninstanceId: ${pc.cyan(summary.instanceId)}`);
           console.log(`mode:       ${pc.cyan(summary.mode)}`);
           console.log(`status:     ${pc.cyan(summary.status || '-')}`);
@@ -172,7 +205,7 @@ export function registerCacheCommands(cli: CAC) {
           console.log(`network:    ${pc.cyan(`${summary.vpcId || '-'} / ${summary.vSwitchId || '-'} / ${summary.zoneId || '-'}`)}`);
           if (detail.accountNames.length > 0) console.log(`accounts:   ${pc.cyan(detail.accountNames.join(', '))}`);
           console.log('');
-          outro('Done.');
+          showOutro('Done.');
         }
       );
     });
@@ -188,7 +221,7 @@ export function registerCacheCommands(cli: CAC) {
         async () => {
           ensureAuthOrExit();
           const normalizedId = toOptionalString(instanceId);
-          const s = spinner();
+          const s = createSpinner();
           const info = await withSpinner(
             s,
             '正在解析缓存连接信息...',
@@ -196,7 +229,16 @@ export function registerCacheCommands(cli: CAC) {
             () => resolveCacheConnectInfo(normalizedId)
           );
           if (!info) return;
-          s.stop(pc.green('✅ 连接信息已生成'));
+          if (!isJsonOutput()) {
+            s.stop(pc.green('✅ 连接信息已生成'));
+          } else {
+            emitCliResult({
+              stage: 'cache.connect',
+              instanceId: info.instanceId,
+              connection: info
+            });
+            return;
+          }
           console.log(`\ninstanceId: ${pc.cyan(info.instanceId)}`);
           console.log(`mode:       ${pc.cyan(info.mode)}`);
           console.log(`host:       ${pc.cyan(info.host)}`);
@@ -205,7 +247,7 @@ export function registerCacheCommands(cli: CAC) {
           console.log(`password:   ${pc.cyan(info.passwordKnown ? '<known in project>' : '<unknown, please provide manually>')}`);
           console.log(`url:        ${pc.cyan(info.connectionString)}`);
           console.log('');
-          outro('Done.');
+          showOutro('Done.');
         }
       );
     });
@@ -220,11 +262,11 @@ export function registerCacheCommands(cli: CAC) {
           requiredCapabilities: ['redis']
         },
         async () => {
-          intro(pc.bgGreen(pc.black(' 🔐 Rotate Redis Password ')));
+          showIntro(pc.bgGreen(pc.black(' 🔐 Rotate Redis Password ')));
           ensureAuthOrExit();
           const instanceId = options.instance ? toPromptValue(options.instance, '实例 ID') : undefined;
 
-          const s = spinner();
+          const s = createSpinner();
           const redisUrl = await withSpinner(
             s,
             '正在执行 Redis 密钥轮换...',
@@ -232,9 +274,19 @@ export function registerCacheCommands(cli: CAC) {
             () => rotateRedisPassword(s, instanceId)
           );
           if (!redisUrl) return;
-          s.stop(pc.green('✅ Redis 密钥轮换完成'));
+          if (!isJsonOutput()) {
+            s.stop(pc.green('✅ Redis 密钥轮换完成'));
+          }
+          if (isJsonOutput()) {
+            emitCliResult({
+              stage: 'cache.rotate-password',
+              instanceId: instanceId || null,
+              connectionStringMasked: maskConnectionString(redisUrl)
+            });
+            return;
+          }
           console.log(`\n🔑 新连接串: ${pc.cyan(maskConnectionString(redisUrl))}\n`);
-          outro('已同步更新 .licell/project.json 的 REDIS_* 环境变量');
+          showOutro('已同步更新 .licell/project.json 的 REDIS_* 环境变量');
         }
       );
     });

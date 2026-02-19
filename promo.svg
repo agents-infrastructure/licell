@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 780" width="1200" height="780">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0d1117"/>
+      <stop offset="100%" stop-color="#161b22"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#00d4aa"/>
+      <stop offset="100%" stop-color="#0088ff"/>
+    </linearGradient>
+    <linearGradient id="accent-v" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#00d4aa"/>
+      <stop offset="100%" stop-color="#0088ff"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <rect width="1200" height="780" fill="url(#bg)"/>
+  <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+    <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#21262d" stroke-width="0.5"/>
+  </pattern>
+  <rect width="1200" height="780" fill="url(#grid)" opacity="0.4"/>
+  <rect x="0" y="0" width="1200" height="3" fill="url(#accent)"/>
+
+  <!-- Title -->
+  <text x="600" y="68" text-anchor="middle" font-family="system-ui,-apple-system,sans-serif"
+        font-size="50" font-weight="700" fill="url(#accent)" filter="url(#glow)">Licell CLI</text>
+  <text x="600" y="102" text-anchor="middle" font-family="system-ui,sans-serif"
+        font-size="19" fill="#8b949e" letter-spacing="2">面向阿里云的一体化部署 CLI</text>
+  <text x="600" y="128" text-anchor="middle" font-family="system-ui,sans-serif"
+        font-size="14" fill="#58a6ff" letter-spacing="1" opacity="0.8">像 Vercel 一样简单 · init → deploy → release → rollback</text>
+
+  <!-- ===== LEFT TERMINAL: Static Site ===== -->
+  <rect x="40" y="152" width="555" height="230" rx="12" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+  <rect x="40" y="152" width="555" height="32" rx="12" fill="#21262d"/>
+  <rect x="40" y="174" width="555" height="10" fill="#21262d"/>
+  <circle cx="62" cy="168" r="5.5" fill="#f85149" opacity="0.9"/>
+  <circle cx="80" cy="168" r="5.5" fill="#d29922" opacity="0.9"/>
+  <circle cx="98" cy="168" r="5.5" fill="#3fb950" opacity="0.9"/>
+  <text x="317" y="173" text-anchor="middle" font-family="'SF Mono',monospace" font-size="11" fill="#8b949e">Static Site → OSS + CDN + HTTPS</text>
+
+  <text x="68" y="210" font-family="'SF Mono',monospace" font-size="13.5">
+    <tspan fill="#8b949e"># 一条命令：部署 + 域名 + CDN + SSL 全自动</tspan></text>
+  <text x="68" y="234" font-family="'SF Mono',monospace" font-size="13.5">
+    <tspan fill="#3fb950">$</tspan><tspan fill="#c9d1d9"> cd my-static-site</tspan></text>
+  <text x="68" y="258" font-family="'SF Mono',monospace" font-size="13.5">
+    <tspan fill="#3fb950">$</tspan><tspan fill="#c9d1d9"> licell </tspan><tspan fill="#ff7b72">deploy</tspan><tspan fill="#79c0ff"> --type</tspan><tspan fill="#a5d6ff"> static \</tspan></text>
+  <text x="68" y="280" font-family="'SF Mono',monospace" font-size="13.5">
+    <tspan fill="#79c0ff">    --domain</tspan><tspan fill="#a5d6ff"> www.example.com</tspan></text>
+  <text x="68" y="318" font-family="'SF Mono',monospace" font-size="12" fill="#3fb950" opacity="0.75">✓ OSS uploaded</text>
+  <text x="68" y="338" font-family="'SF Mono',monospace" font-size="12" fill="#3fb950" opacity="0.75">✓ CDN enabled · HTTPS cert auto-issued</text>
+  <text x="68" y="358" font-family="'SF Mono',monospace" font-size="12" fill="#3fb950" opacity="0.75">✓ https://www.example.com → ready</text>
+
+  <!-- ===== RIGHT TERMINAL: API Deploy ===== -->
+  <rect x="605" y="152" width="555" height="230" rx="12" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+  <rect x="605" y="152" width="555" height="32" rx="12" fill="#21262d"/>
+  <rect x="605" y="174" width="555" height="10" fill="#21262d"/>
+  <circle cx="627" cy="168" r="5.5" fill="#f85149" opacity="0.9"/>
+  <circle cx="645" cy="168" r="5.5" fill="#d29922" opacity="0.9"/>
+  <circle cx="663" cy="168" r="5.5" fill="#3fb950" opacity="0.9"/>
+  <text x="882" y="173" text-anchor="middle" font-family="'SF Mono',monospace" font-size="11" fill="#8b949e">API Deploy → FC Serverless</text>
+
+  <text x="633" y="210" font-family="'SF Mono',monospace" font-size="13.5">
+    <tspan fill="#8b949e"># API 部署 + 自定义域名 + HTTPS</tspan></text>
+  <text x="633" y="234" font-family="'SF Mono',monospace" font-size="13.5">
+    <tspan fill="#3fb950">$</tspan><tspan fill="#c9d1d9"> licell </tspan><tspan fill="#ff7b72">init</tspan><tspan fill="#79c0ff"> --runtime</tspan><tspan fill="#a5d6ff"> nodejs22</tspan></text>
+  <text x="633" y="258" font-family="'SF Mono',monospace" font-size="13.5">
+    <tspan fill="#3fb950">$</tspan><tspan fill="#c9d1d9"> licell </tspan><tspan fill="#ff7b72">deploy</tspan><tspan fill="#79c0ff"> --type</tspan><tspan fill="#a5d6ff"> api \</tspan></text>
+  <text x="633" y="280" font-family="'SF Mono',monospace" font-size="13.5">
+    <tspan fill="#79c0ff">    --domain</tspan><tspan fill="#a5d6ff"> api.example.com</tspan></text>
+  <text x="633" y="318" font-family="'SF Mono',monospace" font-size="12" fill="#3fb950" opacity="0.75">✓ FC deployed · VPC auto-created</text>
+  <text x="633" y="338" font-family="'SF Mono',monospace" font-size="12" fill="#3fb950" opacity="0.75">✓ HTTPS cert auto-issued</text>
+  <text x="633" y="358" font-family="'SF Mono',monospace" font-size="12" fill="#3fb950" opacity="0.75">✓ https://api.example.com → ready</text>

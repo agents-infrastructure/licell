@@ -5,6 +5,7 @@ import {
   renderCompletionScript,
   resolveCompletionCandidates
 } from '../utils/shell-completion';
+import { emitCliResult, isJsonOutput } from '../utils/output';
 
 interface CompletionOptions {
   engine?: boolean;
@@ -20,6 +21,14 @@ export function registerShellCommands(cli: CAC) {
           compCword: process.env.COMP_CWORD,
           compCur: process.env.COMP_CUR
         });
+        if (isJsonOutput()) {
+          emitCliResult({
+            stage: 'completion.engine',
+            count: candidates.length,
+            candidates
+          });
+          return;
+        }
         if (candidates.length > 0) {
           process.stdout.write(`${candidates.join('\n')}\n`);
         }
@@ -28,6 +37,15 @@ export function registerShellCommands(cli: CAC) {
 
       const detected = detectShellFromEnv(process.env.SHELL);
       const resolvedShell = normalizeCompletionShell(shell || detected || 'bash');
-      process.stdout.write(renderCompletionScript(resolvedShell));
+      const script = renderCompletionScript(resolvedShell);
+      if (isJsonOutput()) {
+        emitCliResult({
+          stage: 'completion.script',
+          shell: resolvedShell,
+          script
+        });
+      } else {
+        process.stdout.write(script);
+      }
     });
 }

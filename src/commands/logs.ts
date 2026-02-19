@@ -1,10 +1,16 @@
 import type { CAC } from 'cac';
-import { intro } from '@clack/prompts';
 import pc from 'picocolors';
 import { tailLogs } from '../providers/logs';
 import { executeWithAuthRecovery } from '../utils/auth-recovery';
-import { ensureAuthOrExit, requireAppName, isInteractiveTTY, parseOptionalPositiveInt } from '../utils/cli-shared';
+import {
+  ensureAuthOrExit,
+  requireAppName,
+  isInteractiveTTY,
+  parseOptionalPositiveInt,
+  showIntro
+} from '../utils/cli-shared';
 import { Config } from '../utils/config';
+import { emitCliResult, isJsonOutput } from '../utils/output';
 
 interface LogsCommandOptions {
   once?: unknown;
@@ -25,15 +31,26 @@ export function registerLogsCommand(cli: CAC) {
         requiredCapabilities: ['fc', 'logs']
       },
       async () => {
-        intro(pc.bgBlue(pc.white(' 📡 Serverless Log Stream ')));
+        showIntro(pc.bgBlue(pc.white(' 📡 Serverless Log Stream ')));
         ensureAuthOrExit();
         const project = Config.getProject();
         requireAppName(project, '当前目录下没有找到绑定的云端项目');
-        await tailLogs(project.appName, {
-          once: Boolean(options.once),
+        const once = isJsonOutput() ? true : Boolean(options.once);
+        const result = await tailLogs(project.appName, {
+          once,
           windowSeconds: parseOptionalPositiveInt(options.window, '--window'),
-          lineLimit: parseOptionalPositiveInt(options.lines, '--lines')
+          lineLimit: parseOptionalPositiveInt(options.lines, '--lines'),
+          silent: isJsonOutput()
         });
+        if (isJsonOutput()) {
+          emitCliResult({
+            stage: 'logs',
+            appName: project.appName,
+            once,
+            lines: result && 'lines' in result ? result.lines : [],
+            count: result && 'logs' in result ? result.logs.length : 0
+          });
+        }
       }
     );
   });

@@ -1,5 +1,5 @@
 import type { CAC } from 'cac';
-import { intro, outro, spinner, select, isCancel } from '@clack/prompts';
+import { select, isCancel } from '@clack/prompts';
 import pc from 'picocolors';
 import { maskConnectionString } from '../utils/cli-helpers';
 import { executeWithAuthRecovery } from '../utils/auth-recovery';
@@ -11,7 +11,10 @@ import {
 } from '../providers/infra';
 import {
   ensureAuthOrExit,
+  createSpinner,
   isInteractiveTTY,
+  showIntro,
+  showOutro,
   toPromptValue,
   toOptionalString,
   parseListLimit,
@@ -21,6 +24,7 @@ import {
   normalizeAutoPause,
   withSpinner
 } from '../utils/cli-shared';
+import { emitCliResult, isJsonOutput } from '../utils/output';
 
 export function registerDbCommands(cli: CAC) {
   cli.command('db add', '分配 Serverless 数据库')
@@ -65,7 +69,7 @@ export function registerDbCommands(cli: CAC) {
           requiredCapabilities: ['rds']
         },
         async () => {
-          intro(pc.bgMagenta(pc.white(' 🗄️ Database Provisioning (IaC) ')));
+          showIntro(pc.bgMagenta(pc.white(' 🗄️ Database Provisioning (IaC) ')));
           ensureAuthOrExit();
           const interactiveTTY = isInteractiveTTY();
           let type: 'postgres' | 'mysql';
@@ -94,7 +98,7 @@ export function registerDbCommands(cli: CAC) {
           }
           const autoPause = toOptionalString(options.autoPause) ? normalizeAutoPause(options.autoPause) : undefined;
 
-          const s = spinner();
+          const s = createSpinner();
           const dbUrl = await withSpinner(
             s,
             '正在初始化基础设施编排引擎...',
@@ -118,9 +122,19 @@ export function registerDbCommands(cli: CAC) {
             })
           );
           if (!dbUrl) return;
-          s.stop(pc.green('✅ 数据库实例已就绪并绑定到本工程内网！'));
+          if (!isJsonOutput()) {
+            s.stop(pc.green('✅ 数据库实例已就绪并绑定到本工程内网！'));
+          }
+          if (isJsonOutput()) {
+            emitCliResult({
+              stage: 'db.add',
+              type,
+              connectionStringMasked: maskConnectionString(dbUrl)
+            });
+            return;
+          }
           console.log(`\n🔑 内网直连凭证已生成: ${pc.cyan(maskConnectionString(dbUrl))}\n`);
-          outro('下次执行 licell deploy 时，将自动作为 process.env.DATABASE_URL 注入！');
+          showOutro('下次执行 licell deploy 时，将自动作为 process.env.DATABASE_URL 注入！');
         }
       );
     });
@@ -138,7 +152,7 @@ export function registerDbCommands(cli: CAC) {
           ensureAuthOrExit();
           const limit = parseListLimit(options.limit, 20, 200);
 
-          const s = spinner();
+          const s = createSpinner();
           const instances = await withSpinner(
             s,
             '正在拉取数据库实例列表...',
@@ -146,9 +160,19 @@ export function registerDbCommands(cli: CAC) {
             () => listDatabaseInstances(limit)
           );
           if (!instances) return;
-          s.stop(pc.green(`✅ 共获取 ${instances.length} 个实例`));
+          if (!isJsonOutput()) {
+            s.stop(pc.green(`✅ 共获取 ${instances.length} 个实例`));
+          }
+          if (isJsonOutput()) {
+            emitCliResult({
+              stage: 'db.list',
+              count: instances.length,
+              instances
+            });
+            return;
+          }
           if (instances.length === 0) {
-            outro('当前地域没有数据库实例');
+            showOutro('当前地域没有数据库实例');
             return;
           }
           for (const item of instances) {
@@ -157,7 +181,7 @@ export function registerDbCommands(cli: CAC) {
             );
           }
           console.log('');
-          outro('Done.');
+          showOutro('Done.');
         }
       );
     });
@@ -173,7 +197,7 @@ export function registerDbCommands(cli: CAC) {
         async () => {
           ensureAuthOrExit();
           const normalizedId = toPromptValue(instanceId, 'instanceId');
-          const s = spinner();
+          const s = createSpinner();
           const detail = await withSpinner(
             s,
             `正在拉取实例 ${normalizedId} 详情...`,
@@ -182,7 +206,16 @@ export function registerDbCommands(cli: CAC) {
           );
           if (!detail) return;
           const summary = detail.summary;
-          s.stop(pc.green('✅ 获取成功'));
+          if (!isJsonOutput()) {
+            s.stop(pc.green('✅ 获取成功'));
+          } else {
+            emitCliResult({
+              stage: 'db.info',
+              instanceId: normalizedId,
+              detail
+            });
+            return;
+          }
           console.log(`\ninstanceId: ${pc.cyan(summary.instanceId)}`);
           console.log(`engine:     ${pc.cyan(`${summary.engine || '-'} ${summary.engineVersion || ''}`.trim())}`);
           console.log(`status:     ${pc.cyan(summary.status || '-')}`);
@@ -196,7 +229,7 @@ export function registerDbCommands(cli: CAC) {
           if (detail.databases.length > 0) console.log(`databases:  ${pc.cyan(detail.databases.join(', '))}`);
           if (detail.accounts.length > 0) console.log(`accounts:   ${pc.cyan(detail.accounts.join(', '))}`);
           console.log('');
-          outro('Done.');
+          showOutro('Done.');
         }
       );
     });
@@ -212,7 +245,7 @@ export function registerDbCommands(cli: CAC) {
         async () => {
           ensureAuthOrExit();
           const normalizedId = toOptionalString(instanceId);
-          const s = spinner();
+          const s = createSpinner();
           const info = await withSpinner(
             s,
             '正在解析数据库连接信息...',
@@ -220,7 +253,16 @@ export function registerDbCommands(cli: CAC) {
             () => resolveDatabaseConnectInfo(normalizedId)
           );
           if (!info) return;
-          s.stop(pc.green('✅ 连接信息已生成'));
+          if (!isJsonOutput()) {
+            s.stop(pc.green('✅ 连接信息已生成'));
+          } else {
+            emitCliResult({
+              stage: 'db.connect',
+              instanceId: info.instanceId,
+              connection: info
+            });
+            return;
+          }
           console.log(`\ninstanceId: ${pc.cyan(info.instanceId)}`);
           console.log(`engine:     ${pc.cyan(info.engine)}`);
           console.log(`host:       ${pc.cyan(info.host)}`);
@@ -230,7 +272,7 @@ export function registerDbCommands(cli: CAC) {
           console.log(`password:   ${pc.cyan(info.passwordKnown ? '<known in project>' : '<unknown, please provide manually>')}`);
           console.log(`url:        ${pc.cyan(info.connectionString)}`);
           console.log('');
-          outro('Done.');
+          showOutro('Done.');
         }
       );
     });

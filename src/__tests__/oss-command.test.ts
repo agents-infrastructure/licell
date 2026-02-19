@@ -33,7 +33,13 @@ vi.mock('../utils/cli-shared', () => {
   };
   return {
     ensureAuthOrExit: vi.fn(),
+    createSpinner: () => ({
+      start: vi.fn(),
+      stop: vi.fn(),
+      message: vi.fn()
+    }),
     isInteractiveTTY: vi.fn(() => false),
+    showOutro: vi.fn(),
     toPromptValue: (value: unknown) => String(value),
     toOptionalString,
     parseListLimit: (_input: unknown, fallback: number) => fallback,

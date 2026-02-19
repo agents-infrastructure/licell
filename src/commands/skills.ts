@@ -1,8 +1,9 @@
 import type { CAC } from 'cac';
-import { intro, outro, select, spinner, isCancel } from '@clack/prompts';
+import { select, isCancel } from '@clack/prompts';
 import pc from 'picocolors';
-import { isInteractiveTTY } from '../utils/cli-shared';
+import { createSpinner, isInteractiveTTY, showIntro, showOutro } from '../utils/cli-shared';
 import { formatErrorMessage } from '../utils/errors';
+import { emitCliError, emitCliEvent, emitCliResult, isJsonOutput } from '../utils/output';
 import {
   type AgentType,
   getSkillFiles,
@@ -22,7 +23,11 @@ export function registerSkillsCommands(cli: CAC) {
     .option('--project-root <path>', '目标项目目录（默认当前目录）')
     .option('--force', '覆盖已有文件')
     .action(async (agentInput: string | undefined, options: SkillsInitOptions) => {
-      intro(pc.bgBlue(pc.white(' 🛠 Licell Skills Init ')));
+      if (!isJsonOutput()) {
+        showIntro(pc.bgBlue(pc.white(' 🛠 Licell Skills Init ')));
+      } else {
+        emitCliEvent({ stage: 'skills', action: 'skills init', status: 'start' });
+      }
 
       const interactiveTTY = isInteractiveTTY();
       const projectRoot = typeof options.projectRoot === 'string' && options.projectRoot.trim()
@@ -44,13 +49,16 @@ export function registerSkillsCommands(cli: CAC) {
               { value: 'codex', label: 'OpenAI Codex (codex.md + AGENTS.md)' }
             ]
           });
-          if (isCancel(selected)) process.exit(0);
+          if (isCancel(selected)) {
+            if (isJsonOutput()) throw new Error('操作已取消');
+            process.exit(0);
+          }
           agent = selected as AgentType;
         } else {
           throw new Error('非交互模式下必须指定 agent 参数（claude / codex）');
         }
 
-        const s = spinner();
+        const s = createSpinner();
         s.start(`正在生成 ${agent} skills...`);
 
         const files = getSkillFiles(agent);
@@ -74,9 +82,24 @@ export function registerSkillsCommands(cli: CAC) {
           console.log(`  ${pc.gray('=')} AGENTS.md（已包含 licell 条目）`);
         }
 
-        outro('Done.');
+        if (isJsonOutput()) {
+          emitCliResult({
+            stage: 'skills',
+            agent,
+            projectRoot,
+            writtenFiles: written,
+            skippedFiles: skipped,
+            agentsMdUpdated: agentsMd.updated
+          });
+        } else {
+          showOutro('Done.');
+        }
       } catch (err: unknown) {
-        console.error(formatErrorMessage(err));
+        if (isJsonOutput()) {
+          emitCliError(err, { stage: 'skills' });
+        } else {
+          console.error(formatErrorMessage(err));
+        }
         process.exitCode = 1;
       }
     });

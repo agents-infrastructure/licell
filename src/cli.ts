@@ -18,11 +18,24 @@ import { registerUpgradeCommand } from './commands/upgrade';
 import { registerMcpCommand } from './commands/mcp';
 import { registerShellCommands } from './commands/shell';
 import { registerSkillsCommands } from './commands/skills';
+import { registerSetupCommand } from './commands/setup';
 import { resolveCliVersion } from './utils/version';
 import { formatErrorMessage } from './utils/errors';
+import {
+  emitCliError,
+  emitCliResult,
+  getOutputMode,
+  hasEmittedCliError,
+  hasEmittedCliResult,
+  initOutputContext,
+  installJsonConsoleBridge,
+  isJsonOutput,
+  parseGlobalOutputModeArgv
+} from './utils/output';
 
 const cli = cac('licell');
 cli.version(resolveCliVersion());
+cli.option('--output <mode>', '输出格式：text|json（json 更适合 Agent/MCP 解析）', { default: 'text' });
 
 registerAuthCommands(cli);
 registerInitCommand(cli);
@@ -41,17 +54,44 @@ registerUpgradeCommand(cli);
 registerMcpCommand(cli);
 registerShellCommands(cli);
 registerSkillsCommands(cli);
+registerSetupCommand(cli);
 
 cli.help();
 cli.on('command:*', () => {
   const command = cli.args.join(' ');
+  if (isJsonOutput()) {
+    emitCliError(new Error(`未知命令: ${command}`), {
+      stage: 'parse',
+      details: { command }
+    });
+    process.exit(1);
+  }
   console.error(`未知命令: ${command}`);
   cli.outputHelp();
   process.exit(1);
 });
 
-const argv = normalizeMultiWordCommandArgv(process.argv);
+const normalizedArgv = normalizeMultiWordCommandArgv(process.argv);
+let argv = normalizedArgv;
+try {
+  const parsedOutput = parseGlobalOutputModeArgv(normalizedArgv);
+  argv = parsedOutput.argv;
+  initOutputContext(parsedOutput.mode, argv);
+  installJsonConsoleBridge();
+} catch (err: unknown) {
+  const message = formatErrorMessage(err);
+  console.error(pc.red(message));
+  process.exit(1);
+}
+
 if (argv.length <= 2) {
+  if (getOutputMode() === 'json') {
+    emitCliResult({
+      stage: 'help',
+      help: '请执行 licell <command> --help 查看命令说明'
+    });
+    process.exit(0);
+  }
   cli.outputHelp();
   process.exit(0);
 }
@@ -59,6 +99,15 @@ if (argv.length <= 2) {
 function handleCliError(err: unknown): never {
   const message = formatErrorMessage(err);
   const missingArgsMatch = message.match(/missing required args for command `(.+?)`/);
+  const isParseError = missingArgsMatch
+    || (typeof err === 'object' && err !== null && 'name' in err && String((err as { name?: unknown }).name || '') === 'CACError');
+  if (isJsonOutput()) {
+    emitCliError(err, {
+      stage: isParseError ? 'parse' : 'runtime',
+      ...(missingArgsMatch ? { details: { usage: missingArgsMatch[1] } } : {})
+    });
+    process.exit(1);
+  }
   if (missingArgsMatch) {
     console.error(pc.red('命令参数不完整。'));
     console.error(pc.gray(`用法: licell ${missingArgsMatch[1]}`));
@@ -68,6 +117,35 @@ function handleCliError(err: unknown): never {
   console.error(pc.red(message));
   process.exit(1);
 }
+
+let fatalErrorHandled = false;
+function handleFatalError(err: unknown, stage: 'unhandled_rejection' | 'uncaught_exception') {
+  if (fatalErrorHandled) return;
+  fatalErrorHandled = true;
+  if (isJsonOutput()) {
+    emitCliError(err, { stage });
+  } else {
+    console.error(pc.red(formatErrorMessage(err)));
+  }
+  process.exit(1);
+}
+
+process.on('unhandledRejection', (reason) => {
+  handleFatalError(reason, 'unhandled_rejection');
+});
+process.on('uncaughtException', (err) => {
+  handleFatalError(err, 'uncaught_exception');
+});
+
+process.once('beforeExit', (code) => {
+  if (code !== 0) return;
+  if (!isJsonOutput()) return;
+  if (hasEmittedCliResult() || hasEmittedCliError()) return;
+  emitCliResult({
+    stage: 'runtime',
+    completed: true
+  });
+});
 
 void Promise.resolve()
   .then(() => cli.parse(argv))

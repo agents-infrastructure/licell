@@ -1,9 +1,10 @@
 import type { CAC } from 'cac';
-import { intro, outro, select, text, spinner, isCancel } from '@clack/prompts';
+import { select, text, isCancel } from '@clack/prompts';
 import pc from 'picocolors';
 import { Config } from '../utils/config';
 import { formatErrorMessage } from '../utils/errors';
-import { isInteractiveTTY, toPromptValue } from '../utils/cli-shared';
+import { createSpinner, isInteractiveTTY, showIntro, showOutro, toPromptValue } from '../utils/cli-shared';
+import { emitCliError, emitCliEvent, emitCliResult, isJsonOutput } from '../utils/output';
 import {
   detectWorkspaceTemplateAndRuntime,
   deriveDefaultAppName,
@@ -28,7 +29,11 @@ export function registerInitCommand(cli: CAC) {
     .option('--force', '在已有项目目录生成/覆盖脚手架文件')
     .option('--yes', '使用默认值，不进入交互')
     .action(async (options: InitOptions) => {
-      intro(pc.bgBlue(pc.white(' ⚡ Licell Project Init ')));
+      if (!isJsonOutput()) {
+        showIntro(pc.bgBlue(pc.white(' ⚡ Licell Project Init ')));
+      } else {
+        emitCliEvent({ stage: 'init', action: 'init', status: 'start' });
+      }
 
       const interactiveTTY = isInteractiveTTY();
       const nonInteractive = options.yes || !interactiveTTY;
@@ -49,7 +54,10 @@ export function registerInitCommand(cli: CAC) {
               { value: 'docker', label: 'docker (Bun + TypeScript + Hono)' }
             ]
           });
-          if (isCancel(selected)) process.exit(0);
+          if (isCancel(selected)) {
+            if (isJsonOutput()) throw new Error('操作已取消');
+            process.exit(0);
+          }
           runtimeInput = String(selected);
         }
 
@@ -72,7 +80,7 @@ export function registerInitCommand(cli: CAC) {
         }
         const appName = validateAppName(appNameInput);
 
-        const s = spinner();
+        const s = createSpinner();
         s.start(shouldWriteScaffold ? '正在生成项目脚手架...' : '正在写入 licell 项目配置...');
         const { written, skipped } = shouldWriteScaffold
           ? writeScaffoldFiles(process.cwd(), getScaffoldFiles(template, runtime), Boolean(options.force))
@@ -98,9 +106,24 @@ export function registerInitCommand(cli: CAC) {
         console.log('\n下一步可直接执行:');
         console.log(`- licell deploy --type api --runtime ${runtime} --target preview`);
 
-        outro('Done.');
+        if (isJsonOutput()) {
+          emitCliResult({
+            stage: 'init',
+            runtime,
+            appName,
+            mode: shouldWriteScaffold ? 'scaffold+config' : 'config-only',
+            writtenFiles: written,
+            skippedFiles: skipped
+          });
+        } else {
+          showOutro('Done.');
+        }
       } catch (err: unknown) {
-        console.error(formatErrorMessage(err));
+        if (isJsonOutput()) {
+          emitCliError(err, { stage: 'init' });
+        } else {
+          console.error(formatErrorMessage(err));
+        }
         process.exitCode = 1;
       }
     });
