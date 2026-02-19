@@ -15,6 +15,7 @@ import { registerEnvCommands } from './commands/env';
 import { registerLogsCommand } from './commands/logs';
 import { registerUpgradeCommand } from './commands/upgrade';
 import { registerMcpCommand } from './commands/mcp';
+import { registerShellCommands } from './commands/shell';
 import { resolveCliVersion } from './utils/version';
 import { formatErrorMessage } from './utils/errors';
 
@@ -35,6 +36,7 @@ registerEnvCommands(cli);
 registerLogsCommand(cli);
 registerUpgradeCommand(cli);
 registerMcpCommand(cli);
+registerShellCommands(cli);
 
 cli.help();
 cli.on('command:*', () => {

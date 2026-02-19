@@ -91,7 +91,7 @@ licell --version
 ```bash
 licell upgrade
 # 或指定版本
-licell upgrade --version v0.9.20
+licell upgrade --version v0.9.21
 ```
 
 安装逻辑说明：
@@ -334,6 +334,20 @@ licell login
 licell whoami
 licell switch --region cn-shanghai
 licell logout
+```
+
+Shell 补全（bash / zsh）：
+
+```bash
+mkdir -p ~/.local/share/licell/completions
+
+# 生成 bash 补全脚本
+licell completion bash > ~/.local/share/licell/completions/licell.bash
+echo '[[ -f "$HOME/.local/share/licell/completions/licell.bash" ]] && source "$HOME/.local/share/licell/completions/licell.bash"' >> ~/.bashrc
+
+# 生成 zsh 补全脚本
+licell completion zsh > ~/.local/share/licell/completions/_licell
+echo '[[ -f "$HOME/.local/share/licell/completions/_licell" ]] && source "$HOME/.local/share/licell/completions/_licell"' >> ~/.zshrc
 ```
 
 函数与调试：
