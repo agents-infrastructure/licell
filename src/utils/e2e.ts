@@ -38,6 +38,9 @@ export interface E2eManifest {
     domainSuffix?: string;
     staticBucket?: string;
     dnsRecordIds?: string[];
+    vpcId?: string;
+    vswId?: string;
+    sgId?: string;
   };
   steps: E2eStepRecord[];
   cleanup?: E2eCleanupRecord;

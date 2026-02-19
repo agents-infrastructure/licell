@@ -75,7 +75,7 @@ const COMMAND_OPTIONS: Record<string, string[]> = {
   'cache list': ['--limit'],
   'cache rotate-password': ['--instance'],
   'e2e run': [
-    '--suite', '--run-id', '--runtime', '--target', '--domain', '--domain-suffix',
+    '--suite', '--run-id', '--runtime', '--target', '--enable-vpc', '--domain', '--domain-suffix',
     '--db-instance', '--cache-instance', '--skip-static',
     '--enable-cdn', '--cleanup', '--workspace', '--yes'
   ],

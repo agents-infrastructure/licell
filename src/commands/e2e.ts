@@ -35,6 +35,7 @@ interface E2eRunOptions {
   runId?: unknown;
   runtime?: unknown;
   target?: unknown;
+  enableVpc?: unknown;
   domain?: unknown;
   domainSuffix?: unknown;
   dbInstance?: unknown;
@@ -63,6 +64,15 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+function printSection(title: string, lines: string[]) {
+  if (lines.length === 0) return;
+  console.log(pc.bold(title));
+  for (const line of lines) {
+    console.log(`- ${line}`);
+  }
+  console.log('');
+}
+
 function readProjectAppName(workspaceDir: string) {
   const paths = [join(workspaceDir, '.licell', 'project.json'), join(workspaceDir, '.ali', 'project.json')];
   for (const path of paths) {
@@ -72,6 +82,34 @@ function readProjectAppName(workspaceDir: string) {
       if (typeof data.appName === 'string' && data.appName.trim().length > 0) {
         return data.appName.trim();
       }
+    } catch {
+      // ignore invalid file and fallback
+    }
+  }
+  return undefined;
+}
+
+function readProjectNetwork(workspaceDir: string) {
+  const paths = [join(workspaceDir, '.licell', 'project.json'), join(workspaceDir, '.ali', 'project.json')];
+  for (const path of paths) {
+    if (!existsSync(path)) continue;
+    try {
+      const data = JSON.parse(readFileSync(path, 'utf8')) as {
+        network?: { vpcId?: unknown; vswId?: unknown; sgId?: unknown };
+      };
+      const network = data.network;
+      if (!network || typeof network !== 'object') continue;
+      const vpcId = typeof network.vpcId === 'string' && network.vpcId.trim().length > 0
+        ? network.vpcId.trim()
+        : undefined;
+      const vswId = typeof network.vswId === 'string' && network.vswId.trim().length > 0
+        ? network.vswId.trim()
+        : undefined;
+      const sgId = typeof network.sgId === 'string' && network.sgId.trim().length > 0
+        ? network.sgId.trim()
+        : undefined;
+      if (!vpcId || !vswId) continue;
+      return { vpcId, vswId, sgId };
     } catch {
       // ignore invalid file and fallback
     }
@@ -207,11 +245,13 @@ function resolveRunCapabilities(options: {
   domainSuffix?: string;
   enableCdn: boolean;
   includeStatic: boolean;
-}): Array<'fc' | 'dns' | 'oss' | 'rds' | 'redis' | 'cdn' | 'logs'> {
-  const caps: Array<'fc' | 'dns' | 'oss' | 'rds' | 'redis' | 'cdn' | 'logs'> = ['fc', 'oss', 'rds', 'redis', 'logs'];
+  useVpc: boolean;
+}): Array<'fc' | 'dns' | 'oss' | 'rds' | 'redis' | 'cdn' | 'logs' | 'vpc'> {
+  const caps: Array<'fc' | 'dns' | 'oss' | 'rds' | 'redis' | 'cdn' | 'logs' | 'vpc'> = ['fc', 'oss', 'rds', 'redis', 'logs'];
   if (options.domain || options.domainSuffix) caps.push('dns');
   if (options.enableCdn) caps.push('cdn');
   if (options.includeStatic) caps.push('oss');
+  if (options.useVpc) caps.push('vpc');
   return [...new Set(caps)];
 }
 
@@ -227,6 +267,7 @@ async function executeE2eRun(options: E2eRunOptions) {
   const appName = deriveE2eAppName(runId);
   const runtime = toOptionalString(options.runtime) || 'nodejs22';
   const target = toOptionalString(options.target) || 'preview';
+  const useVpc = Boolean(options.enableVpc);
   const domainInput = toOptionalString(options.domain);
   const domainSuffixInput = toOptionalString(options.domainSuffix);
   const dbInstance = toOptionalString(options.dbInstance);
@@ -285,6 +326,16 @@ async function executeE2eRun(options: E2eRunOptions) {
   console.log(`suite:      ${pc.cyan(suite)}`);
   console.log(`workspace:  ${pc.cyan(workspaceDir)}`);
   console.log(`manifest:   ${pc.cyan(manifestPath)}\n`);
+  printSection('执行计划', [
+    `runtime: ${runtime}`,
+    `target: ${target}`,
+    `api function: ${appName}`,
+    `network: ${useVpc ? 'vpc(shared licell-vpc)' : 'public(no-vpc)'}`,
+    ...(domain ? [`fixed domain: ${domain}`] : []),
+    ...(domainSuffix ? [`domain suffix: ${domainSuffix}`] : []),
+    ...(enableCdn ? ['cdn: enabled'] : []),
+    ...(suite === 'full' && !skipStatic ? ['static deploy: enabled'] : ['static deploy: skipped'])
+  ]);
 
   let runError: unknown;
   try {
@@ -296,7 +347,8 @@ async function executeE2eRun(options: E2eRunOptions) {
           domain,
           domainSuffix,
           enableCdn,
-          includeStatic: suite === 'full' && !skipStatic
+          includeStatic: suite === 'full' && !skipStatic,
+          useVpc
         })
       },
       async () => {
@@ -312,13 +364,25 @@ async function executeE2eRun(options: E2eRunOptions) {
         }
         manifest.updatedAt = nowIso();
         saveE2eManifest(manifest, projectRoot);
+        printSection('创建资源', [
+          `fc function: ${appNameFromConfig}`,
+          ...(manifest.resources.domain ? [`domain: ${manifest.resources.domain}`] : [])
+        ]);
 
         const deployArgs = ['deploy', '--type', 'api', '--runtime', runtime, '--target', target];
+        deployArgs.push(useVpc ? '--enable-vpc' : '--disable-vpc');
         if (domain) deployArgs.push('--domain', domain);
         if (domainSuffix) deployArgs.push('--domain-suffix', domainSuffix);
         if (enableCdn) deployArgs.push('--enable-cdn');
         runStep(ctx, 'deploy-api', deployArgs);
         ctx.state.hasDeployedApi = true;
+        const networkFromConfig = readProjectNetwork(workspaceDir);
+        if (networkFromConfig) {
+          manifest.resources.vpcId = networkFromConfig.vpcId;
+          manifest.resources.vswId = networkFromConfig.vswId;
+          if (networkFromConfig.sgId) manifest.resources.sgId = networkFromConfig.sgId;
+          saveE2eManifest(manifest, projectRoot);
+        }
 
         runStep(ctx, 'fn-list', ['fn', 'list', '--prefix', appNameFromConfig, '--limit', '20']);
         runStep(ctx, 'fn-info', ['fn', 'info', appNameFromConfig, '--target', target]);
@@ -364,6 +428,10 @@ async function executeE2eRun(options: E2eRunOptions) {
             ctx.state.hasDeployedStatic = true;
             manifest.resources.staticBucket = resolveStaticBucketName(appNameFromConfig, auth.accountId);
             saveE2eManifest(manifest, projectRoot);
+            printSection('静态资源', [
+              `oss bucket: ${manifest.resources.staticBucket}`,
+              `upload prefix: e2e-upload-${runId}`
+            ]);
             runStep(ctx, 'oss-upload', [
               'oss', 'upload',
               '--bucket', manifest.resources.staticBucket,
@@ -384,7 +452,15 @@ async function executeE2eRun(options: E2eRunOptions) {
     manifest.status = 'succeeded';
     manifest.updatedAt = nowIso();
     saveE2eManifest(manifest, projectRoot);
-    console.log(pc.green(`\n✅ E2E run 完成（${runId}）`));
+    printSection('E2E 结果', [
+      `runId: ${runId}`,
+      `status: ${manifest.status}`,
+      ...(manifest.resources.appName ? [`fc function: ${manifest.resources.appName}`] : []),
+      ...(manifest.resources.domain ? [`domain: ${manifest.resources.domain}`] : []),
+      ...(manifest.resources.staticBucket ? [`oss bucket: ${manifest.resources.staticBucket}`] : []),
+      ...(manifest.resources.vpcId ? [`vpc: ${manifest.resources.vpcId}/${manifest.resources.vswId || '-'}`] : [])
+    ]);
+    console.log(pc.green(`✅ E2E run 完成（${runId}）`));
   } catch (err: unknown) {
     runError = err;
     manifest.status = 'failed';
@@ -437,6 +513,8 @@ async function cleanupByManifest(
   const appName = manifest.resources.appName;
   const domain = manifest.resources.domain;
   const staticBucket = manifest.resources.staticBucket;
+  const vpcId = manifest.resources.vpcId;
+  const vswId = manifest.resources.vswId;
 
   const runCleanupCommand = (
     name: string,
@@ -466,6 +544,13 @@ async function cleanupByManifest(
   manifest.cleanup.errors = errors;
   manifest.updatedAt = nowIso();
   saveE2eManifest(manifest, manifest.projectRoot);
+  printSection('清理目标', [
+    ...(appName ? [`fc function: ${appName}`] : []),
+    ...(domain ? [`domain binding: ${domain}`] : []),
+    ...(staticBucket ? [`oss bucket: ${staticBucket}`] : []),
+    ...(vpcId ? [`vpc network: ${vpcId}/${vswId || '-'} (shared, keep)`] : []),
+    ...(options.keepWorkspace ? ['workspace: keep'] : [`workspace: ${workspaceDir}`])
+  ]);
 
   await executeWithAuthRecovery(
     {
@@ -479,9 +564,11 @@ async function cleanupByManifest(
     },
     async () => {
       if (domain) {
+        console.log(pc.gray(`清理 domain: ${domain}`));
         runCleanupCommand('domain-rm', ['domain', 'rm', domain, '--yes']);
       }
       if (appName) {
+        console.log(pc.gray(`清理 function: ${appName}`));
         runCleanupCommand(
           'fn-rm',
           ['fn', 'rm', appName, '--force', '--yes'],
@@ -489,15 +576,21 @@ async function cleanupByManifest(
         );
       }
       if (staticBucket) {
+        console.log(pc.gray(`清理 oss bucket: ${staticBucket}`));
         try {
           const result = await deleteOssBucketRecursively(staticBucket);
           details.push(
             `oss-bucket-rm: ok (${result.bucket}, objects=${result.deletedObjects}, bucketDeleted=${result.deletedBucket})`
           );
+          console.log(pc.green(`oss 清理完成: ${result.bucket} (objects=${result.deletedObjects})`));
         } catch (err: unknown) {
           errors.push(`oss-bucket-rm: ${formatErrorMessage(err)}`);
           details.push('oss-bucket-rm: failed');
+          console.warn(pc.yellow(`oss 清理失败: ${formatErrorMessage(err)}`));
         }
+      }
+      if (vpcId) {
+        details.push(`vpc-rm: skipped (${vpcId} 为共享网络，e2e 默认不自动删除)`);
       }
     }
   );
@@ -506,9 +599,11 @@ async function cleanupByManifest(
     try {
       rmSync(workspaceDir, { recursive: true, force: true });
       details.push('workspace-rm: ok');
+      console.log(pc.green(`workspace 已清理: ${workspaceDir}`));
     } catch (err: unknown) {
       errors.push(`workspace-rm: ${formatErrorMessage(err)}`);
       details.push('workspace-rm: failed');
+      console.warn(pc.yellow(`workspace 清理失败: ${formatErrorMessage(err)}`));
     }
   }
 
@@ -526,6 +621,7 @@ async function cleanupByManifest(
     console.warn(pc.yellow(`⚠️ 清理存在 ${errors.length} 个失败项：`));
     for (const err of errors) console.warn(pc.yellow(`- ${err}`));
   } else {
+    printSection('清理结果', details.map((item) => item.replace(/^([^:]+): /, '$1 => ')));
     console.log(pc.green(`✅ 清理完成: ${manifest.runId}`));
   }
 }
@@ -536,6 +632,7 @@ export function registerE2eCommands(cli: CAC) {
     .option('--run-id <id>', '指定 runId（默认自动生成）')
     .option('--runtime <runtime>', '部署 runtime（默认 nodejs22）')
     .option('--target <alias>', '部署 target alias（默认 preview）')
+    .option('--enable-vpc', 'API 部署启用 VPC（默认关闭，便于无残留清理）')
     .option('--domain <domain>', '固定完整域名（可选）')
     .option('--domain-suffix <suffix>', '固定域名后缀（可选）')
     .option('--db-instance <instanceId>', 'full 套件时附加验证 db info/connect（复用已有实例）')

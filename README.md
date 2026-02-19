@@ -345,6 +345,9 @@ licell e2e run
 # 执行 full 套件（包含 static + oss upload）
 licell e2e run --suite full
 
+# e2e 默认使用公网模式（便于完全清理）；需要验证 VPC 时显式开启
+licell e2e run --enable-vpc
+
 # 指定 runtime + 域名后缀 + CDN，执行后自动清理
 licell e2e run --runtime nodejs22 --domain-suffix your-domain.xyz --enable-cdn --cleanup
 
