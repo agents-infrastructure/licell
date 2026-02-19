@@ -20,12 +20,79 @@ interface LogEntry {
   [key: string]: unknown;
 }
 
-export async function tailLogs(appName: string) {
+export interface TailLogsOptions {
+  once?: boolean;
+  windowSeconds?: number;
+  lineLimit?: number;
+}
+
+function shouldIgnoreLogsBootstrapError(err: unknown) {
+  const message = formatErrorMessage(err).toLowerCase();
+  return message.includes('projectnotexist') || message.includes('logstorenotexist');
+}
+
+function renderLogEntries(logs: LogEntry[], seenLogs?: Set<string>) {
+  logs
+    .sort((a, b) => parseInt(a.__time__ || '0', 10) - parseInt(b.__time__ || '0', 10))
+    .forEach((log) => {
+      const logKey = `${log.__time__ || ''}|${log.__source__ || ''}|${log.message || log.content || ''}`;
+      if (seenLogs?.has(logKey)) return;
+      if (seenLogs) {
+        seenLogs.add(logKey);
+        if (seenLogs.size > 5000) {
+          const entries = [...seenLogs];
+          seenLogs.clear();
+          for (const entry of entries.slice(-2500)) seenLogs.add(entry);
+        }
+      }
+
+      const timeStr = new Date(parseInt(log.__time__ || '0', 10) * 1000).toLocaleTimeString();
+      let formattedMsg = String(log.message || log.content || JSON.stringify(log)).trim();
+      if (formattedMsg.toLowerCase().includes('error')) formattedMsg = pc.red(formattedMsg);
+      console.log(`${pc.gray(`[${timeStr}]`)} ${formattedMsg}`);
+    });
+}
+
+export async function tailLogs(appName: string, options: TailLogsOptions = {}) {
   const auth = Config.requireAuth();
   const slsClient = new SlsClientCtor(new $OpenApi.Config({ accessKeyId: auth.ak, accessKeySecret: auth.sk, endpoint: `${auth.region}.log.aliyuncs.com` }));
   const slsProject = `aliyun-fc-${auth.region}-${auth.accountId}`;
   const slsLogstore = `function-log`;
   const safeName = sanitizeQueryValue(appName);
+  const lineLimit = options.lineLimit && options.lineLimit > 0 ? Math.floor(options.lineLimit) : 1000;
+
+  if (options.once) {
+    const windowSeconds = options.windowSeconds && options.windowSeconds > 0
+      ? Math.floor(options.windowSeconds)
+      : 120;
+    const toTime = Math.floor(Date.now() / 1000);
+    const fromTime = Math.max(0, toTime - windowSeconds);
+    try {
+      const res = await slsClient.getLogs(
+        slsProject,
+        slsLogstore,
+        new $SLS.GetLogsRequest({
+          from: fromTime,
+          to: toTime,
+          query: `* and functionName: "${safeName}"`,
+          line: lineLimit
+        })
+      );
+      const logs: LogEntry[] = (res.body as LogEntry[] | undefined) || [];
+      if (logs.length === 0) {
+        console.log(pc.gray(`最近 ${windowSeconds}s 无日志`));
+        return;
+      }
+      renderLogEntries(logs);
+      return;
+    } catch (err: unknown) {
+      if (shouldIgnoreLogsBootstrapError(err)) {
+        console.log(pc.yellow(`⚠️ 日志服务尚未就绪，已跳过: ${formatErrorMessage(err)}`));
+        return;
+      }
+      throw err;
+    }
+  }
 
   console.log(pc.gray(`\n📡 正在监听云端 [${pc.cyan(appName)}] 的实时日志流 (Ctrl+C 退出)...\n`));
   let lastLogTime = Math.floor(Date.now() / 1000) - 60;
@@ -49,25 +116,10 @@ export async function tailLogs(appName: string) {
         from: lastLogTime,
         to: toTime,
         query: `* and functionName: "${safeName}"`,
-        line: 1000
+        line: lineLimit
       }));
       const logs: LogEntry[] = (res.body as LogEntry[] | undefined) || [];
-
-      logs.sort((a, b) => parseInt(a.__time__ || '0', 10) - parseInt(b.__time__ || '0', 10)).forEach((log) => {
-        const logKey = `${log.__time__ || ''}|${log.__source__ || ''}|${log.message || log.content || ''}`;
-        if (seenLogs.has(logKey)) return;
-        seenLogs.add(logKey);
-        if (seenLogs.size > 5000) {
-          const entries = [...seenLogs];
-          seenLogs.clear();
-          for (const entry of entries.slice(-2500)) seenLogs.add(entry);
-        }
-
-        const timeStr = new Date(parseInt(log.__time__ || '0', 10) * 1000).toLocaleTimeString();
-        let formattedMsg = String(log.message || log.content || JSON.stringify(log)).trim();
-        if (formattedMsg.toLowerCase().includes('error')) formattedMsg = pc.red(formattedMsg);
-        console.log(`${pc.gray(`[${timeStr}]`)} ${formattedMsg}`);
-      });
+      renderLogEntries(logs, seenLogs);
       if (logs.length > 0) {
         const latest = parseInt(logs[logs.length - 1].__time__ || `${lastLogTime}`, 10);
         if (Number.isFinite(latest) && latest > 0) lastLogTime = latest;

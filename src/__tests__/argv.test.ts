@@ -69,6 +69,17 @@ describe('normalizeMultiWordCommandArgv', () => {
     ]);
   });
 
+  it('merges e2e run command', () => {
+    const argv = ['node', 'src/cli.ts', 'e2e', 'run', '--suite', 'smoke'];
+    expect(normalizeMultiWordCommandArgv(argv)).toEqual([
+      'node',
+      'src/cli.ts',
+      'e2e run',
+      '--suite',
+      'smoke'
+    ]);
+  });
+
   it('merges multi-word commands when command is last token', () => {
     const argv = ['node', 'src/cli.ts', 'fn', 'list'];
     expect(normalizeMultiWordCommandArgv(argv)).toEqual([

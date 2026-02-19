@@ -13,6 +13,7 @@ const ROOT_COMMANDS = [
   'oss',
   'db',
   'cache',
+  'e2e',
   'release',
   'domain',
   'dns',
@@ -30,6 +31,7 @@ const SUBCOMMANDS: Record<string, string[]> = {
   oss: ['list', 'info', 'ls', 'upload', 'bucket'],
   db: ['add', 'list', 'info', 'connect'],
   cache: ['add', 'list', 'info', 'connect', 'rotate-password'],
+  e2e: ['run', 'cleanup', 'list'],
   release: ['list', 'promote', 'rollback', 'prune'],
   domain: ['add', 'rm'],
   dns: ['records'],
@@ -72,6 +74,12 @@ const COMMAND_OPTIONS: Record<string, string[]> = {
   ],
   'cache list': ['--limit'],
   'cache rotate-password': ['--instance'],
+  'e2e run': [
+    '--suite', '--run-id', '--runtime', '--target', '--domain', '--domain-suffix',
+    '--db-instance', '--cache-instance', '--skip-static',
+    '--enable-cdn', '--cleanup', '--workspace', '--yes'
+  ],
+  'e2e cleanup': ['--manifest', '--keep-workspace', '--yes'],
   'release list': ['--limit'],
   'release promote': ['--target'],
   'release rollback': ['--target'],

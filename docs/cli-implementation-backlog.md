@@ -19,6 +19,9 @@
 - `cache info`
 - `cache connect`
 - `cache rotate-password`
+- `e2e run`
+- `e2e cleanup`
+- `e2e list`
 - `fn list`
 - `fn info`
 - `fn invoke`

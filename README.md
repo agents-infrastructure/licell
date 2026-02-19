@@ -336,6 +336,28 @@ licell switch --region cn-shanghai
 licell logout
 ```
 
+固定 E2E 套件（发布前建议）：
+
+```bash
+# 执行 smoke 套件（默认）
+licell e2e run
+
+# 执行 full 套件（包含 static + oss upload）
+licell e2e run --suite full
+
+# 指定 runtime + 域名后缀 + CDN，执行后自动清理
+licell e2e run --runtime nodejs22 --domain-suffix your-domain.xyz --enable-cdn --cleanup
+
+# full 套件复用已有数据资源做 connect/info 校验（不新建 DB/Cache）
+licell e2e run --suite full --db-instance rm-xxx --cache-instance r-xxx
+
+# 查看历史 run
+licell e2e list
+
+# 按 runId 清理
+licell e2e cleanup <runId>
+```
+
 Shell 补全（bash / zsh）：
 
 ```bash
