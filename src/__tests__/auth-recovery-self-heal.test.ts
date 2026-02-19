@@ -1,18 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mockRepairLicellRamAccess = vi.fn();
-const mockGetAuth = vi.fn();
-const mockSetAuth = vi.fn();
-
 vi.mock('../providers/ram', () => ({
-  repairLicellRamAccess: mockRepairLicellRamAccess
+  repairLicellRamAccess: vi.fn()
 }));
 
 vi.mock('../utils/config', () => ({
   DEFAULT_ALI_REGION: 'cn-hangzhou',
   Config: {
-    getAuth: mockGetAuth,
-    setAuth: mockSetAuth
+    getAuth: vi.fn(),
+    setAuth: vi.fn()
   }
 }));
 
@@ -23,7 +19,13 @@ vi.mock('@clack/prompts', () => ({
   text: vi.fn(async () => { throw new Error('text prompt should not be called in this test'); })
 }));
 
+import { repairLicellRamAccess } from '../providers/ram';
+import { Config } from '../utils/config';
 import { runAuthRepairFlow } from '../utils/auth-recovery';
+
+const mockRepairLicellRamAccess = repairLicellRamAccess as unknown as ReturnType<typeof vi.fn>;
+const mockGetAuth = Config.getAuth as unknown as ReturnType<typeof vi.fn>;
+const mockSetAuth = Config.setAuth as unknown as ReturnType<typeof vi.fn>;
 
 const CURRENT_AUTH = {
   accountId: '1234567890',

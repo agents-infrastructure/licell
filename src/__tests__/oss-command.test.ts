@@ -2,8 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cac } from 'cac';
 import { registerOssCommands } from '../commands/oss';
 
-const uploadDirectoryToBucketMock = vi.fn();
-
 vi.mock('@clack/prompts', () => ({
   text: vi.fn(),
   outro: vi.fn(),
@@ -19,7 +17,7 @@ vi.mock('../providers/oss', async () => {
     getOssBucketInfo: vi.fn(),
     listOssBuckets: vi.fn(),
     listOssObjects: vi.fn(),
-    uploadDirectoryToBucket: uploadDirectoryToBucketMock
+    uploadDirectoryToBucket: vi.fn()
   };
 });
 
@@ -42,6 +40,10 @@ vi.mock('../utils/cli-shared', () => {
     withSpinner: async (_spinner: unknown, _startMsg: string, _failMsg: string, fn: () => Promise<unknown>) => fn()
   };
 });
+
+import { uploadDirectoryToBucket } from '../providers/oss';
+
+const uploadDirectoryToBucketMock = uploadDirectoryToBucket as unknown as ReturnType<typeof vi.fn>;
 
 function createCli() {
   const cli = cac('licell');
