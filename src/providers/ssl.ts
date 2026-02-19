@@ -38,6 +38,7 @@ export interface ExistingDomainLike {
 interface IssueSslOptions {
   forceRenew?: boolean;
   renewBeforeDays?: number;
+  bindToFcDomain?: boolean;
 }
 
 export interface SslBindingArtifacts {
@@ -225,6 +226,7 @@ export async function issueAndBindSSLWithArtifacts(
   options?: IssueSslOptions
 ): Promise<SslBindingArtifacts> {
   const auth = Config.requireAuth();
+  const bindToFcDomain = options?.bindToFcDomain !== false;
   const dnsClient = new AlidnsClientCtor(new $OpenApi.Config({
     accessKeyId: auth.ak,
     accessKeySecret: auth.sk,
@@ -232,7 +234,7 @@ export async function issueAndBindSSLWithArtifacts(
     connectTimeout: 10000,
     readTimeout: 600000
   }));
-  const fcClient = createSharedFcClient(auth).client;
+  const fcClient = bindToFcDomain ? createSharedFcClient(auth).client : undefined;
   const resolvedOptions: ResolvedIssueSslOptions = {
     forceRenew: Boolean(options?.forceRenew),
     renewBeforeDays: resolveRenewBeforeDays(options?.renewBeforeDays ?? readLicellEnv(process.env, 'SSL_RENEW_BEFORE_DAYS'))
@@ -243,12 +245,21 @@ export async function issueAndBindSSLWithArtifacts(
 
   let existingDomain: ExistingDomainLike | null = null;
 
-  try {
-    const existingDomainResponse = await withRetry(() => fcClient.getCustomDomain(domain));
-    existingDomain = existingDomainResponse.body as ExistingDomainLike;
-  } catch { /* best-effort: existing domain query may fail if domain not yet bound */ }
+  if (fcClient) {
+    try {
+      const existingDomainResponse = await withRetry(() => fcClient.getCustomDomain(domain));
+      existingDomain = existingDomainResponse.body as ExistingDomainLike;
+    } catch { /* best-effort: existing domain query may fail if domain not yet bound */ }
+  }
 
-  const decision = shouldIssueNewCertificate(existingDomain, resolvedOptions);
+  const decision = fcClient
+    ? shouldIssueNewCertificate(existingDomain, resolvedOptions)
+    : {
+      issue: true,
+      message: resolvedOptions.forceRenew
+        ? '🔁 已启用强制续签，开始签发 CDN HTTPS 证书...'
+        : '🔒 正在签发 CDN HTTPS 证书...'
+    };
   spinner.message(decision.message);
   if (!decision.issue) {
     const certificate = typeof existingDomain?.certConfig?.certificate === 'string'
@@ -324,13 +335,17 @@ export async function issueAndBindSSLWithArtifacts(
   });
 
   const privateKeyPem = toFcPemPrivateKey(certKey);
-  spinner.message('📦 证书下发成功，正在自动挂载至云端网关开启 HTTPS...');
-  await withRetry(() => fcClient.updateCustomDomain(domain, new $FC.UpdateCustomDomainRequest({
-    body: new $FC.UpdateCustomDomainInput({
-      protocol: 'HTTP,HTTPS',
-      certConfig: { certName: `licell-cert-${Date.now()}`, certificate: cert.toString(), privateKey: privateKeyPem }
-    })
-  })));
+  if (fcClient) {
+    spinner.message('📦 证书下发成功，正在自动挂载至云端网关开启 HTTPS...');
+    await withRetry(() => fcClient.updateCustomDomain(domain, new $FC.UpdateCustomDomainRequest({
+      body: new $FC.UpdateCustomDomainInput({
+        protocol: 'HTTP,HTTPS',
+        certConfig: { certName: `licell-cert-${Date.now()}`, certificate: cert.toString(), privateKey: privateKeyPem }
+      })
+    })));
+  } else {
+    spinner.message('📦 证书下发成功，正在用于 CDN 边缘 HTTPS 配置...');
+  }
   return {
     url: `https://${domain}`,
     certificate: cert.toString(),

@@ -17,6 +17,27 @@ describe('normalizeAuth', () => {
     });
   });
 
+  it('preserves optional bootstrap metadata', () => {
+    const result = normalizeAuth({
+      accountId: '123456',
+      ak: 'LTAI_xxx',
+      sk: 'secret',
+      region: 'cn-hangzhou',
+      authSource: 'bootstrap',
+      ramUser: 'licell-operator',
+      ramPolicy: 'LicellOperatorPolicy'
+    });
+    expect(result).toEqual({
+      accountId: '123456',
+      ak: 'LTAI_xxx',
+      sk: 'secret',
+      region: 'cn-hangzhou',
+      authSource: 'bootstrap',
+      ramUser: 'licell-operator',
+      ramPolicy: 'LicellOperatorPolicy'
+    });
+  });
+
   it('trims whitespace from all fields', () => {
     const result = normalizeAuth({
       accountId: '  123  ',

@@ -4,9 +4,9 @@ import pc from 'picocolors';
 import { Config, DEFAULT_ALI_REGION } from '../utils/config';
 import { readEnvWithFallback } from '../utils/env';
 import { bootstrapLicellRamAccess } from '../providers/ram';
+import { runAuthRepairFlow } from '../utils/auth-recovery';
 import {
   toPromptValue,
-  ensureAuthOrExit,
   isInteractiveTTY,
   toOptionalString,
   normalizeRegion,
@@ -66,7 +66,7 @@ export function registerAuthCommands(cli: CAC) {
         ).toLowerCase();
 
     if (!bootstrapRam) {
-      Config.setAuth({ accountId, ak, sk, region });
+      Config.setAuth({ accountId, ak, sk, region, authSource: 'manual' });
       outro(pc.green('✅ 凭证已安全保存至 ~/.licell-cli/auth.json'));
       return;
     }
@@ -83,11 +83,65 @@ export function registerAuthCommands(cli: CAC) {
       accountId,
       ak: bootstrap.accessKeyId,
       sk: bootstrap.accessKeySecret,
-      region
+      region,
+      authSource: 'bootstrap',
+      ramUser: bootstrap.userName,
+      ramPolicy: bootstrap.policyName
     });
     const actionSummary = `${bootstrap.createdUser ? 'created-user' : 'reuse-user'}, ${bootstrap.createdPolicy ? 'created-policy' : 'reuse-policy'}`;
     outro(pc.green(`✅ bootstrap 完成，已保存 licell 专用凭证到 ~/.licell-cli/auth.json (${actionSummary})`));
   });
+
+  cli.command('auth repair', '修复凭证权限（推荐：用超级 AK/SK 自动补齐 licell 最小权限并继续使用）')
+    .option('--account-id <id>', '阿里云 Account ID（CI 场景）')
+    .option('--ak <accessKeyId>', '超级 AccessKey ID（仅用于本次修复，不会保存）')
+    .option('--sk <accessKeySecret>', '超级 AccessKey Secret（仅用于本次修复，不会保存）')
+    .option('--region <region>', `默认地域，默认 ${DEFAULT_ALI_REGION}`)
+    .option('--bootstrap-user <name>', '修复目标 RAM 用户名（默认自动识别当前 key 所属用户）')
+    .option('--bootstrap-policy <name>', '修复使用的自定义策略名（默认 LicellOperatorPolicy）')
+    .action(async (options: {
+      accountId?: unknown;
+      ak?: unknown;
+      sk?: unknown;
+      region?: unknown;
+      bootstrapUser?: unknown;
+      bootstrapPolicy?: unknown;
+    }) => {
+      intro(pc.bgBlue(pc.white(' ▲ Licell Auth Repair ')));
+      const interactiveTTY = isInteractiveTTY();
+      const accountIdOpt = toOptionalString(options.accountId)
+        || readEnvWithFallback(process.env, 'LICELL_BOOTSTRAP_ACCOUNT_ID', 'LICELL_ACCOUNT_ID')
+        || readEnvWithFallback(process.env, 'ALI_ACCOUNT_ID');
+      const akOpt = toOptionalString(options.ak)
+        || readEnvWithFallback(process.env, 'LICELL_BOOTSTRAP_ACCESS_KEY_ID', 'LICELL_ACCESS_KEY_ID')
+        || readEnvWithFallback(process.env, 'ALI_ACCESS_KEY_ID');
+      const skOpt = toOptionalString(options.sk)
+        || readEnvWithFallback(process.env, 'LICELL_BOOTSTRAP_ACCESS_KEY_SECRET', 'LICELL_ACCESS_KEY_SECRET')
+        || readEnvWithFallback(process.env, 'ALI_ACCESS_KEY_SECRET');
+      const regionOpt = toOptionalString(options.region)
+        || readEnvWithFallback(process.env, 'LICELL_BOOTSTRAP_REGION', 'LICELL_REGION')
+        || readEnvWithFallback(process.env, 'ALI_REGION');
+      const bootstrapUser = toOptionalString(options.bootstrapUser);
+      const bootstrapPolicy = toOptionalString(options.bootstrapPolicy);
+      const currentAuth = Config.getAuth();
+
+      const result = await runAuthRepairFlow({
+        commandLabel: 'licell auth repair',
+        reason: 'manual',
+        interactiveTTY,
+        currentAuth,
+        accountId: accountIdOpt || currentAuth?.accountId,
+        region: regionOpt || currentAuth?.region,
+        adminAk: akOpt,
+        adminSk: skOpt,
+        bootstrapUser: bootstrapUser || undefined,
+        bootstrapPolicy: bootstrapPolicy || undefined,
+        forceRotateKey: false
+      });
+
+      const mode = result.rotatedKey ? 'rotated-key' : 'reuse-current-key';
+      outro(pc.green(`✅ 授权修复完成，已更新 ~/.licell-cli/auth.json (${mode}, user=${result.userName}, policy=${result.policyName})`));
+    });
 
   cli.command('logout', '清除本地凭证')
     .action(() => {

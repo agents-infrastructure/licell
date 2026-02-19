@@ -19,6 +19,9 @@ export interface AuthConfig {
   ak: string;
   sk: string;
   region: string;
+  authSource?: 'manual' | 'bootstrap';
+  ramUser?: string;
+  ramPolicy?: string;
 }
 
 export interface ProjectNetworkConfig {
@@ -227,11 +230,23 @@ export function normalizeAuth(raw: unknown): AuthConfig | null {
   }
   const regionRaw = typeof raw.region === 'string' ? raw.region : DEFAULT_ALI_REGION;
   const region = regionRaw.trim().toLowerCase() || DEFAULT_ALI_REGION;
+  const authSource = raw.authSource === 'bootstrap' || raw.authSource === 'manual'
+    ? raw.authSource
+    : undefined;
+  const ramUser = typeof raw.ramUser === 'string' && raw.ramUser.trim().length > 0
+    ? raw.ramUser.trim()
+    : undefined;
+  const ramPolicy = typeof raw.ramPolicy === 'string' && raw.ramPolicy.trim().length > 0
+    ? raw.ramPolicy.trim()
+    : undefined;
   return {
     accountId: raw.accountId.trim(),
     ak: raw.ak.trim(),
     sk: raw.sk.trim(),
-    region
+    region,
+    ...(authSource ? { authSource } : {}),
+    ...(ramUser ? { ramUser } : {}),
+    ...(ramPolicy ? { ramPolicy } : {})
   };
 }
 

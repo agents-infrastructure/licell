@@ -1,12 +1,13 @@
 # Licell Examples
 
-这 3 个示例共享同一套 API 能力，但使用不同 runtime / 框架实现，方便你横向比较和验证部署：
+这 4 个示例分为 3 个 API 示例 + 1 个静态站示例，方便你横向比较和验证部署：
 
 1. `node22-express-api`：`nodejs22` + Express
 2. `python313-flask-api`：`python3.13` + Flask
 3. `docker-bun-hono-api`：`docker` + Bun + Hono
+4. `static-oss-site`：`static`（直推 OSS 托管）
 
-## 统一 API 能力
+## 统一 API 能力（仅 API 示例）
 
 三个示例都包含：
 
@@ -18,7 +19,7 @@
 - `PATCH /todos/:id/toggle`（Python 为 `/todos/<id>/toggle`）
 - `POST /math/sum`
 
-## 快速开始
+## 快速开始（API 示例）
 
 任选一个目录：
 
@@ -43,7 +44,21 @@ licell deploy --type api --target preview
 - Python3.13：`licell deploy --type api --runtime python3.13 --entry src/main.py --target preview`
 - Docker：`licell deploy --type api --runtime docker --target preview`
 
-## 进阶验证（可选）
+## 快速开始（静态站）
+
+```bash
+cd examples/static-oss-site
+licell login
+licell deploy --type static
+
+# 绑定固定域名（自动 CDN + 默认 HTTPS）
+licell deploy --type static --domain-suffix your-domain.xyz
+
+# 或完整域名
+licell deploy --type static --domain static.your-domain.xyz
+```
+
+## 进阶验证（API 可选）
 
 绑定固定域名并探测接口：
 

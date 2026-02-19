@@ -5,11 +5,42 @@ import { Config } from '../utils/config';
 import { formatErrorMessage } from '../utils/errors';
 import { runHook } from '../utils/hooks';
 import { buildDeployProjectPatch } from '../utils/deploy-config';
+import {
+  ensureAuthReadyForCommand,
+  tryRecoverAuthForError,
+  ensureAuthCapabilityPreflight,
+  type AuthCapability
+} from '../utils/auth-recovery';
+import { isInteractiveTTY } from '../utils/cli-shared';
 import { resolveDeployContext, type DeployCliOptions } from './deploy-context';
 import { executeApiDeploy } from './deploy-api';
 import { executeStaticDeploy } from './deploy-static';
 
 export { resolveDeploySslEnabled } from './deploy-context';
+
+function resolveDeployRequiredCapabilities(ctx: {
+  type: 'api' | 'static';
+  cliRuntime?: string;
+  projectRuntime?: string;
+  envRuntime?: string;
+  useVpc: boolean;
+  cliDomain?: string;
+  domainSuffix?: string;
+  enableCdn: boolean;
+}): AuthCapability[] {
+  const capabilities: AuthCapability[] = [];
+  if (ctx.type === 'api') {
+    capabilities.push('fc');
+    const runtime = (ctx.cliRuntime || ctx.projectRuntime || ctx.envRuntime || '').trim().toLowerCase();
+    if (runtime === 'docker') capabilities.push('cr');
+    if (ctx.useVpc) capabilities.push('vpc');
+  } else {
+    capabilities.push('oss');
+  }
+  if (ctx.cliDomain || ctx.domainSuffix) capabilities.push('dns');
+  if (ctx.enableCdn) capabilities.push('cdn');
+  return [...new Set(capabilities)];
+}
 
 export function registerDeployCommand(cli: CAC) {
   cli.command('deploy', '一键极速打包部署')
@@ -20,8 +51,8 @@ export function registerDeployCommand(cli: CAC) {
     .option('--target <target>', 'API 部署后自动发布并切流到该 alias（如 prod/preview）')
     .option('--domain <domain>', '绑定完整自定义域名（如 api.your-domain.xyz）')
     .option('--domain-suffix <suffix>', '自动绑定固定子域名后缀（如 your-domain.xyz）')
-    .option('--enable-cdn', '域名绑定后自动接入 CDN 并将 DNS CNAME 切到 CDN（仅 API）')
-    .option('--ssl', '启用 HTTPS（使用 --domain 或 --enable-cdn 时默认自动开启；使用 --domain-suffix 需显式开启）')
+    .option('--enable-cdn', '域名绑定后自动接入 CDN 并将 DNS CNAME 切到 CDN（API 显式开启；Static 提供域名时默认开启）')
+    .option('--ssl', '启用 HTTPS（API: --domain/--enable-cdn 默认开启；Static: 提供域名时默认开启）')
     .option('--ssl-force-renew', '启用 HTTPS 时强制续签证书（忽略到期阈值）')
     .option('--acr-namespace <ns>', 'Docker 部署时使用的 ACR 命名空间（默认 licell）')
     .option('--enable-vpc', 'API 部署时启用 VPC 接入（默认启用）')
@@ -32,62 +63,99 @@ export function registerDeployCommand(cli: CAC) {
     .option('--timeout <seconds>', '函数超时时间（秒，默认 30）')
     .action(async (options: DeployCliOptions) => {
       intro(pc.bgBlue(pc.white(' ▲ Deploying to Aliyun ')));
-
-      const ctx = await resolveDeployContext(options);
-
       const s = spinner();
+      const interactiveTTY = isInteractiveTTY();
       try {
-        if (ctx.project.hooks?.preDeploy) {
-          s.start('执行 preDeploy hook...');
-          runHook('preDeploy', ctx.project.hooks.preDeploy);
-          s.stop(pc.green('✅ preDeploy hook 完成'));
-        }
+        await ensureAuthReadyForCommand({ commandLabel: 'licell deploy', interactiveTTY });
 
-        let url: string;
-        let promotedVersion: string | undefined;
-        let fixedDomain: string | undefined;
-        let healthCheckLogs: string[] = [];
-
-        if (ctx.type === 'api') {
-          const result = await executeApiDeploy(ctx, s);
-          if (!result) return;
-          ({ url, promotedVersion, fixedDomain, healthCheckLogs } = result);
-        } else {
-          const result = await executeStaticDeploy(ctx, s);
-          if (!result) return;
-          ({ url } = result);
-        }
-
-        s.stop(pc.green('✅ 部署成功!'));
-        console.log(`\n🎉 Production URL: ${pc.cyan(pc.underline(url))}\n`);
-        if (fixedDomain) {
-          const fixedDomainUrl = `${ctx.enableSSL ? 'https' : 'http'}://${fixedDomain}`;
-          console.log(`🌐 Fixed Domain: ${pc.cyan(pc.underline(fixedDomainUrl))}\n`);
-        }
-        if (ctx.releaseTarget && promotedVersion) {
-          console.log(`🏷️  alias=${pc.cyan(ctx.releaseTarget)} -> version=${pc.cyan(promotedVersion)}\n`);
-        }
-        if (healthCheckLogs.length > 0) {
-          console.log(`${healthCheckLogs.join('\n')}\n`);
-        }
-        const projectPatch = buildDeployProjectPatch({
-          deploySucceeded: true,
-          cliDomainSuffix: ctx.cliDomainSuffix,
-          projectDomainSuffix: ctx.projectDomainSuffix,
-          cliRuntime: ctx.cliRuntime,
-          projectRuntime: ctx.projectRuntime
-        });
-        if (Object.keys(projectPatch).length > 0) {
-          Config.setProject(projectPatch);
-        }
-        if (ctx.project.hooks?.postDeploy) {
+        let recoveredAuth = false;
+        while (true) {
+          const ctx = await resolveDeployContext(options);
+          const resolvedAuth = Config.getAuth();
+          const authFingerprint = resolvedAuth
+            ? `${resolvedAuth.accountId}|${resolvedAuth.region}|${resolvedAuth.ak}`
+            : '';
+          await ensureAuthCapabilityPreflight({
+            commandLabel: 'licell deploy',
+            interactiveTTY,
+            requiredCapabilities: resolveDeployRequiredCapabilities(ctx)
+          });
+          const currentAuth = Config.getAuth();
+          const currentFingerprint = currentAuth
+            ? `${currentAuth.accountId}|${currentAuth.region}|${currentAuth.ak}`
+            : '';
+          if (authFingerprint && currentFingerprint !== authFingerprint) {
+            // auth preflight may rotate/update credentials; reload deploy context with latest auth.
+            continue;
+          }
           try {
-            runHook('postDeploy', ctx.project.hooks.postDeploy);
+            if (ctx.project.hooks?.preDeploy) {
+              s.start('执行 preDeploy hook...');
+              runHook('preDeploy', ctx.project.hooks.preDeploy);
+              s.stop(pc.green('✅ preDeploy hook 完成'));
+            }
+
+            let url: string;
+            let promotedVersion: string | undefined;
+            let fixedDomain: string | undefined;
+            let healthCheckLogs: string[] = [];
+
+            if (ctx.type === 'api') {
+              const result = await executeApiDeploy(ctx, s);
+              if (!result) return;
+              ({ url, promotedVersion, fixedDomain, healthCheckLogs } = result);
+            } else {
+              const result = await executeStaticDeploy(ctx, s);
+              if (!result) return;
+              ({ url, fixedDomain, healthCheckLogs } = result);
+            }
+
+            s.stop(pc.green('✅ 部署成功!'));
+            console.log(`\n🎉 Production URL: ${pc.cyan(pc.underline(url))}\n`);
+            if (fixedDomain) {
+              const fixedDomainUrl = `${ctx.enableSSL ? 'https' : 'http'}://${fixedDomain}`;
+              console.log(`🌐 Fixed Domain: ${pc.cyan(pc.underline(fixedDomainUrl))}\n`);
+            }
+            if (ctx.releaseTarget && promotedVersion) {
+              console.log(`🏷️  alias=${pc.cyan(ctx.releaseTarget)} -> version=${pc.cyan(promotedVersion)}\n`);
+            }
+            if (healthCheckLogs.length > 0) {
+              console.log(`${healthCheckLogs.join('\n')}\n`);
+            }
+            const projectPatch = buildDeployProjectPatch({
+              deploySucceeded: true,
+              cliDomainSuffix: ctx.cliDomainSuffix,
+              projectDomainSuffix: ctx.projectDomainSuffix,
+              cliRuntime: ctx.cliRuntime,
+              projectRuntime: ctx.projectRuntime
+            });
+            if (Object.keys(projectPatch).length > 0) {
+              Config.setProject(projectPatch);
+            }
+            if (ctx.project.hooks?.postDeploy) {
+              try {
+                runHook('postDeploy', ctx.project.hooks.postDeploy);
+              } catch (err: unknown) {
+                console.warn(pc.yellow(`⚠️ postDeploy hook 执行失败，已忽略: ${formatErrorMessage(err)}`));
+              }
+            }
+            outro('Done!');
+            return;
           } catch (err: unknown) {
-            console.warn(pc.yellow(`⚠️ postDeploy hook 执行失败，已忽略: ${formatErrorMessage(err)}`));
+            if (!recoveredAuth) {
+              s.stop(pc.yellow('⚠️ 检测到鉴权/权限问题，正在尝试自动修复并重试...'));
+              const repaired = await tryRecoverAuthForError(err, {
+                commandLabel: 'licell deploy',
+                interactiveTTY
+              });
+              if (repaired) {
+                recoveredAuth = true;
+                continue;
+              }
+            }
+            throw err;
           }
         }
-        outro('Done!');
       } catch (err: unknown) {
         s.stop(pc.red('❌ 部署失败'));
         console.error(formatErrorMessage(err));

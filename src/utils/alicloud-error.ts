@@ -48,6 +48,20 @@ export function isAccessDeniedError(err: unknown): boolean {
   ]);
 }
 
+export function isAuthCredentialInvalidError(err: unknown): boolean {
+  return matchesAny(extractErrorText(err), [
+    'invalidaccesskeyid',
+    'invalidaccesskeyid.notfound',
+    'signaturedoesnotmatch',
+    'incompletesignature',
+    'authenticationfailed',
+    'invalidsecuritytoken',
+    'security token is invalid',
+    'access key id does not exist',
+    'accesskey secret not found'
+  ]);
+}
+
 export function isInvalidDomainNameError(err: unknown): boolean {
   return matchesAny(extractErrorText(err), [
     'invaliddomainname.format', 'invalid domain name'

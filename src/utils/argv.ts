@@ -21,6 +21,7 @@ const MULTI_WORD_COMMANDS = new Set([
   'release prune',
   'domain add',
   'domain rm',
+  'auth repair',
   'dns records list',
   'dns records add',
   'dns records rm',

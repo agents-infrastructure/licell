@@ -3,7 +3,21 @@ import pc from 'picocolors';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { runLicellMcpServer } from '../mcp/server';
+import { ensureAuthReadyForCommand, ensureAuthCapabilityPreflight, type AuthCapability } from '../utils/auth-recovery';
+import { isInteractiveTTY } from '../utils/cli-shared';
 import { resolveCliVersion } from '../utils/version';
+
+const MCP_OPERATION_CAPABILITIES: AuthCapability[] = [
+  'fc',
+  'dns',
+  'oss',
+  'rds',
+  'redis',
+  'cdn',
+  'vpc',
+  'cr',
+  'logs'
+];
 
 function readJsonFile(filePath: string): unknown {
   if (!existsSync(filePath)) return null;
@@ -54,8 +68,15 @@ export function registerMcpCommand(cli: CAC) {
       const serverName = typeof options.serverName === 'string' && options.serverName.trim()
         ? options.serverName.trim()
         : 'licell';
+      const interactiveTTY = isInteractiveTTY();
 
       if (!act) {
+        await ensureAuthReadyForCommand({ commandLabel: 'licell mcp', interactiveTTY });
+        await ensureAuthCapabilityPreflight({
+          commandLabel: 'licell mcp',
+          interactiveTTY,
+          requiredCapabilities: MCP_OPERATION_CAPABILITIES
+        });
         const { configPath, updated } = ensureMcpJsonConfig({ projectRoot, serverName });
         console.log(pc.green(`✅ MCP 配置已就绪: ${configPath}${updated ? ' (updated)' : ''}`));
         console.log(pc.gray('现在启动 MCP 服务（stdio）。用于 Claude Code/Cursor 等客户端时，请在 .mcp.json 中使用 args: ["mcp","serve"]。'));
@@ -77,6 +98,12 @@ export function registerMcpCommand(cli: CAC) {
       }
 
       if (act === 'serve') {
+        await ensureAuthReadyForCommand({ commandLabel: 'licell mcp serve', interactiveTTY });
+        await ensureAuthCapabilityPreflight({
+          commandLabel: 'licell mcp serve',
+          interactiveTTY,
+          requiredCapabilities: MCP_OPERATION_CAPABILITIES
+        });
         // IMPORTANT: In stdio transport, stdout must remain pure JSON-RPC messages.
         // Use stderr for logs.
         await runLicellMcpServer({

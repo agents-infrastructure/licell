@@ -1,0 +1,12 @@
+node_modules
+.licell/
+.ali/
+.env
+.DS_Store
+
+# This example intentionally commits `.licell/project.json` and static assets,
+# so we explicitly un-ignore them (root .gitignore ignores both patterns).
+!.licell/
+!.licell/project.json
+!dist/
+!dist/**

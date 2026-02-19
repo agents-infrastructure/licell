@@ -16,6 +16,7 @@ export interface ProbeHttpHealthOptions {
   maxAttempts?: number;
   intervalMs?: number;
   timeoutMs?: number;
+  allowClientError?: boolean;
   fetchImpl?: ProbeFetch;
 }
 
@@ -142,6 +143,7 @@ export async function probeHttpHealth(baseUrl: string, options: ProbeHttpHealthO
   const maxAttempts = Math.max(1, Math.floor(options.maxAttempts ?? DEFAULT_MAX_ATTEMPTS));
   const intervalMs = Math.max(0, Math.floor(options.intervalMs ?? DEFAULT_INTERVAL_MS));
   const timeoutMs = Math.max(1000, Math.floor(options.timeoutMs ?? DEFAULT_TIMEOUT_MS));
+  const successStatusUpperBoundExclusive = options.allowClientError === false ? 400 : 500;
   let lastError = '未知错误';
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
@@ -151,7 +153,7 @@ export async function probeHttpHealth(baseUrl: string, options: ProbeHttpHealthO
         const status = fetchImpl
           ? (await fetchWithTimeout(checkedUrl, timeoutMs, fetchImpl)).status
           : await requestStatusWithTimeout(checkedUrl, timeoutMs);
-        if (status < 500) {
+        if (status < successStatusUpperBoundExclusive) {
           if (path === '/healthz' && status === 404 && paths.includes('/')) {
             lastError = `GET ${checkedUrl} 返回 404`;
             continue;
@@ -164,7 +166,7 @@ export async function probeHttpHealth(baseUrl: string, options: ProbeHttpHealthO
       }
     }
     if (attempt < maxAttempts && intervalMs > 0) {
-      await sleep(intervalMs * attempt);
+      await sleep(intervalMs);
     }
   }
 

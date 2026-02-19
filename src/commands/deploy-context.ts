@@ -92,7 +92,6 @@ export async function resolveDeployContext(options: DeployCliOptions): Promise<D
   const cliDomainSuffix = options.domainSuffix ? normalizeDomainSuffix(options.domainSuffix) : undefined;
   const projectDomainSuffix = tryNormalizeDomainSuffix(project.domainSuffix);
   const envDomainSuffix = tryNormalizeDomainSuffix(readLicellEnv(process.env, 'DOMAIN_SUFFIX'));
-  const domainSuffix = cliDomain ? undefined : (cliDomainSuffix || projectDomainSuffix || envDomainSuffix);
   const runtimeSelection = parseDeployRuntimeOption(options.runtime);
   const cliRuntime = runtimeSelection.runtime;
   const projectRuntime = tryNormalizeFcRuntime(project.runtime);
@@ -120,13 +119,22 @@ export async function resolveDeployContext(options: DeployCliOptions): Promise<D
   } else {
     type = 'api';
   }
+  const domainSuffix = cliDomain
+    ? undefined
+    : type === 'static'
+      ? cliDomainSuffix
+      : (cliDomainSuffix || projectDomainSuffix || envDomainSuffix);
   const releaseTarget = options.target ? normalizeReleaseTarget(options.target) : undefined;
-  const enableCdn = Boolean(options.enableCdn);
-  const enableSSL = resolveDeploySslEnabled(options.ssl, cliDomain, enableCdn);
+  const staticDomainRequested = type === 'static' && Boolean(cliDomain || domainSuffix);
+  const enableCdn = type === 'static'
+    ? Boolean(options.enableCdn || staticDomainRequested)
+    : Boolean(options.enableCdn);
+  const enableSSL = type === 'static'
+    ? Boolean(options.ssl || staticDomainRequested || enableCdn)
+    : resolveDeploySslEnabled(options.ssl, cliDomain, enableCdn);
   const forceSslRenew = Boolean(options.sslForceRenew);
   if (cliDomain && cliDomainSuffix) throw new Error('--domain 与 --domain-suffix 不能同时使用');
   if (releaseTarget && type !== 'api') throw new Error('--target 仅适用于 API 部署');
-  if (enableCdn && type !== 'api') throw new Error('--enable-cdn 仅适用于 API 部署');
   if (options.enableVpc && options.disableVpc) throw new Error('--enable-vpc 与 --disable-vpc 不能同时使用');
   if (type !== 'api' && options.enableVpc) throw new Error('--enable-vpc 仅适用于 API 部署');
   if (type !== 'api' && options.disableVpc) throw new Error('--disable-vpc 仅适用于 API 部署');
@@ -135,9 +143,6 @@ export async function resolveDeployContext(options: DeployCliOptions): Promise<D
   }
   if (type !== 'api' && cliRuntime) throw new Error('--runtime 的 API 运行时仅适用于 API 部署；静态站请使用 --runtime static');
   if (type !== 'api' && cliAcrNamespace) throw new Error('--acr-namespace 仅适用于 API Docker 部署');
-  if (type !== 'api' && cliDomain) throw new Error('--domain 仅适用于 API 部署');
-  if (type !== 'api' && cliDomainSuffix) throw new Error('--domain-suffix 仅适用于 API 部署');
-  if (enableSSL && type !== 'api') throw new Error('--ssl 仅适用于 API 部署');
   if (forceSslRenew && !enableSSL) throw new Error('--ssl-force-renew 需要启用 HTTPS（请使用 --domain 或 --ssl）');
   if (enableSSL && !cliDomain && !domainSuffix) {
     throw new Error('--ssl 需要域名，请提供 --domain（完整域名）或 --domain-suffix');

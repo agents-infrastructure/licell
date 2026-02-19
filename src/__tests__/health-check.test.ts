@@ -74,6 +74,21 @@ describe('probeHttpHealth', () => {
     }
   });
 
+  it('treats 4xx as failure when allowClientError is false', async () => {
+    const result = await probeHttpHealth('https://example.com', {
+      maxAttempts: 2,
+      intervalMs: 0,
+      allowClientError: false,
+      fetchImpl: async () => new Response('forbidden', { status: 403 })
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.attempt).toBe(2);
+      expect(result.error).toContain('返回 403');
+    }
+  });
+
   it('returns timeout when fetch hangs without honoring abort', async () => {
     const startedAt = Date.now();
     const result = await probeHttpHealth('https://example.com', {

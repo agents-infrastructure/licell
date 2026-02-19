@@ -4,9 +4,11 @@ import pc from 'picocolors';
 import { normalizeReleaseTarget } from '../utils/cli-helpers';
 import { bindCustomDomain, unbindCustomDomain } from '../providers/domain';
 import { issueAndBindSSL } from '../providers/ssl';
+import { executeWithAuthRecovery } from '../utils/auth-recovery';
 import {
   ensureAuthOrExit,
   ensureDestructiveActionConfirmed,
+  isInteractiveTTY,
   requireAppName,
   toPromptValue,
   withSpinner
@@ -19,56 +21,74 @@ export function registerDomainCommands(cli: CAC) {
     .option('--ssl-force-renew', '配合 --ssl 强制续签证书（忽略到期阈值）')
     .option('--target <target>', '将域名路由到指定 FC alias（如 prod/preview）')
     .action(async (domain: string, options: { ssl?: boolean; sslForceRenew?: boolean; target?: string }) => {
-      intro(pc.bgCyan(pc.black(' 🌐 Domain & SSL Configuration ')));
-      const auth = ensureAuthOrExit();
-      const normalizedDomain = toPromptValue(domain, '域名');
-      const releaseTarget = options.target ? normalizeReleaseTarget(options.target) : undefined;
-      if (options.sslForceRenew && !options.ssl) throw new Error('--ssl-force-renew 需要与 --ssl 一起使用');
-      const project = Config.getProject();
-      requireAppName(project);
-
-      const s = spinner();
-      const finalUrl = await withSpinner(
-        s,
-        `正在配置云解析 DNS，将 ${normalizedDomain} 指向应用...`,
-        '❌ 配置流程中断',
+      await executeWithAuthRecovery(
+        {
+          commandLabel: 'licell domain add',
+          interactiveTTY: isInteractiveTTY(),
+          requiredCapabilities: ['fc', 'dns']
+        },
         async () => {
-          const targetFcDomain = `${auth.accountId}.${auth.region}.fc.aliyuncs.com`;
-          await bindCustomDomain(normalizedDomain, targetFcDomain, releaseTarget);
-          if (options.ssl) {
-            s.message('DNS CNAME 配置成功。正在接管 Let\'s Encrypt 签发流程...');
-            return issueAndBindSSL(normalizedDomain, s, { forceRenew: Boolean(options.sslForceRenew) });
+          intro(pc.bgCyan(pc.black(' 🌐 Domain & SSL Configuration ')));
+          const auth = ensureAuthOrExit();
+          const normalizedDomain = toPromptValue(domain, '域名');
+          const releaseTarget = options.target ? normalizeReleaseTarget(options.target) : undefined;
+          if (options.sslForceRenew && !options.ssl) throw new Error('--ssl-force-renew 需要与 --ssl 一起使用');
+          const project = Config.getProject();
+          requireAppName(project);
+
+          const s = spinner();
+          const finalUrl = await withSpinner(
+            s,
+            `正在配置云解析 DNS，将 ${normalizedDomain} 指向应用...`,
+            '❌ 配置流程中断',
+            async () => {
+              const targetFcDomain = `${auth.accountId}.${auth.region}.fc.aliyuncs.com`;
+              await bindCustomDomain(normalizedDomain, targetFcDomain, releaseTarget);
+              if (options.ssl) {
+                s.message('DNS CNAME 配置成功。正在接管 Let\'s Encrypt 签发流程...');
+                return issueAndBindSSL(normalizedDomain, s, { forceRenew: Boolean(options.sslForceRenew) });
+              }
+              return `http://${normalizedDomain}`;
+            }
+          );
+          if (!finalUrl) return;
+          s.stop(pc.green('✅ 域名绑定与网络平面配置大功告成！'));
+          if (releaseTarget) {
+            console.log(`\n🏷️  域名路由已绑定 alias=${pc.cyan(releaseTarget)}\n`);
           }
-          return `http://${normalizedDomain}`;
+          outro(`🔗 你的应用现在可通过安全的 ${pc.cyan(pc.underline(finalUrl))} 访问`);
         }
       );
-      if (!finalUrl) return;
-      s.stop(pc.green('✅ 域名绑定与网络平面配置大功告成！'));
-      if (releaseTarget) {
-        console.log(`\n🏷️  域名路由已绑定 alias=${pc.cyan(releaseTarget)}\n`);
-      }
-      outro(`🔗 你的应用现在可通过安全的 ${pc.cyan(pc.underline(finalUrl))} 访问`);
     });
 
   cli.command('domain rm <domain>', '解绑自定义域名并清理 DNS CNAME')
     .option('--yes', '跳过二次确认（危险）')
     .action(async (domain: string, options: { yes?: boolean }) => {
-      intro(pc.bgCyan(pc.black(' 🌐 Domain Removal ')));
-      ensureAuthOrExit();
-      const normalizedDomain = toPromptValue(domain, '域名').toLowerCase();
-      await ensureDestructiveActionConfirmed(`解绑域名 ${normalizedDomain}`, { yes: Boolean(options.yes) });
-      const s = spinner();
-      const removed = await withSpinner(
-        s,
-        `正在解绑域名 ${normalizedDomain}...`,
-        '❌ 域名解绑失败',
+      await executeWithAuthRecovery(
+        {
+          commandLabel: 'licell domain rm',
+          interactiveTTY: isInteractiveTTY(),
+          requiredCapabilities: ['fc', 'dns']
+        },
         async () => {
-          await unbindCustomDomain(normalizedDomain);
-          return true;
+          intro(pc.bgCyan(pc.black(' 🌐 Domain Removal ')));
+          ensureAuthOrExit();
+          const normalizedDomain = toPromptValue(domain, '域名').toLowerCase();
+          await ensureDestructiveActionConfirmed(`解绑域名 ${normalizedDomain}`, { yes: Boolean(options.yes) });
+          const s = spinner();
+          const removed = await withSpinner(
+            s,
+            `正在解绑域名 ${normalizedDomain}...`,
+            '❌ 域名解绑失败',
+            async () => {
+              await unbindCustomDomain(normalizedDomain);
+              return true;
+            }
+          );
+          if (!removed) return;
+          s.stop(pc.green('✅ 域名已解绑并完成 DNS 清理'));
+          outro('Done.');
         }
       );
-      if (!removed) return;
-      s.stop(pc.green('✅ 域名已解绑并完成 DNS 清理'));
-      outro('Done.');
     });
 }

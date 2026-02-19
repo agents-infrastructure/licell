@@ -36,6 +36,17 @@ describe('normalizeMultiWordCommandArgv', () => {
     ]);
   });
 
+  it('merges auth repair command', () => {
+    const argv = ['node', 'src/cli.ts', 'auth', 'repair', '--region', 'cn-hangzhou'];
+    expect(normalizeMultiWordCommandArgv(argv)).toEqual([
+      'node',
+      'src/cli.ts',
+      'auth repair',
+      '--region',
+      'cn-hangzhou'
+    ]);
+  });
+
   it('merges multi-word commands when command is last token', () => {
     const argv = ['node', 'src/cli.ts', 'fn', 'list'];
     expect(normalizeMultiWordCommandArgv(argv)).toEqual([

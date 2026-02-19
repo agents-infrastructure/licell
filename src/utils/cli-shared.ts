@@ -6,6 +6,7 @@ import { formatErrorMessage } from './errors';
 import { parseRootAndSubdomain } from './domain';
 import { normalizeFcRuntime } from '../providers/fc';
 import { listFunctionVersions } from '../providers/fc';
+import { isAccessDeniedError, isAuthCredentialInvalidError } from './alicloud-error';
 
 export function toPromptValue(input: unknown, fieldName: string) {
   if (isCancel(input)) process.exit(0);
@@ -41,6 +42,12 @@ export async function withSpinner<T>(
   try {
     return await fn();
   } catch (err: unknown) {
+    const message = formatErrorMessage(err).toLowerCase();
+    const authRelated = isAccessDeniedError(err)
+      || isAuthCredentialInvalidError(err)
+      || message.includes('未登录')
+      || message.includes('先执行 `licell login`');
+    if (authRelated) throw err;
     s.stop(pc.red(failMsg));
     console.error(formatErrorMessage(err));
     process.exitCode = 1;

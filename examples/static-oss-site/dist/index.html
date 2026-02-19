@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Licell Static OSS Demo</title>
+    <meta name="description" content="A tiny static site deployed to OSS via licell." />
+    <link rel="stylesheet" href="./assets/styles.css" />
+  </head>
+  <body>
+    <main class="wrap">
+      <header class="hero">
+        <div class="badge">licell • static</div>
+        <h1>Static Site Demo</h1>
+        <p class="lead">This site is pure static assets. Deploy it with <code>licell deploy --type static</code>.</p>
+
+        <div class="meta">
+          <div class="meta-row">
+            <div class="meta-key">URL</div>
+            <a id="site-url" class="meta-val" href="#" target="_blank" rel="noreferrer"></a>
+          </div>
+          <div class="meta-row">
+            <div class="meta-key">Loaded</div>
+            <div id="loaded-at" class="meta-val"></div>
+          </div>
+        </div>
+      </header>
+
+      <section class="grid">
+        <section class="card">
+          <div class="card-hd">
+            <h2>Todos</h2>
+            <div class="card-actions">
+              <button id="btn-seed" class="btn ghost" type="button">Seed</button>
+              <button id="btn-clear" class="btn ghost" type="button">Clear</button>
+            </div>
+          </div>
+
+          <form id="todo-form" class="row">
+            <input id="todo-input" class="input" placeholder="Add a todo..." maxlength="80" autocomplete="off" />
+            <button class="btn" type="submit">Add</button>
+          </form>
+
+          <ul id="todo-list" class="list" aria-label="todo list"></ul>
+
+          <p class="muted">
+            数据保存在浏览器 localStorage，仅用于演示静态站点交互能力。
+          </p>
+        </section>
+
+        <section class="card">
+          <div class="card-hd">
+            <h2>Meta</h2>
+            <div class="card-actions">
+              <button id="btn-theme" class="btn ghost" type="button">Toggle Theme</button>
+            </div>
+          </div>
+
+          <dl class="kv">
+            <div class="kv-row">
+              <dt>UA</dt>
+              <dd id="ua"></dd>
+            </div>
+            <div class="kv-row">
+              <dt>Lang</dt>
+              <dd id="lang"></dd>
+            </div>
+            <div class="kv-row">
+              <dt>Timezone</dt>
+              <dd id="tz"></dd>
+            </div>
+          </dl>
+
+          <div class="note">
+            <div class="note-title">Tip</div>
+            <div class="note-body">
+              OSS Bucket 名称是全局唯一的。如果你碰到 “bucket 已被占用且无权限访问”，请修改
+              <code>.licell/project.json</code> 的 <code>appName</code> 再部署。
+            </div>
+          </div>
+        </section>
+      </section>
+
+      <footer class="footer">
+        <span>Licell static deploy uploads files recursively and sets bucket ACL to public-read.</span>
+      </footer>
+    </main>
+
+    <script src="./assets/app.js"></script>
+  </body>
+</html>
+

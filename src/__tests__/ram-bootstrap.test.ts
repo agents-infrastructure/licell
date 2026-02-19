@@ -5,6 +5,7 @@ import {
   normalizeRamPolicyName,
   normalizeRamUserName
 } from '../providers/ram';
+import { resolveAuthCapabilityActions, type AuthCapability } from '../utils/auth-recovery';
 
 describe('ram bootstrap helpers', () => {
   it('normalizes default user/policy names', () => {
@@ -28,7 +29,7 @@ describe('ram bootstrap helpers', () => {
     expect(doc.Statement).toHaveLength(1);
     expect(doc.Statement[0].Effect).toBe('Allow');
     expect(doc.Statement[0].Resource).toBe('*');
-    expect(doc.Statement[0].Action).toEqual([...LICELL_POLICY_ACTIONS]);
+    expect(doc.Statement[0].Action).toEqual([...LICELL_POLICY_ACTIONS].sort());
     expect(doc.Statement[0].Action).toEqual(expect.arrayContaining([
       'fc:DeleteFunction',
       'fc:DeleteTrigger',
@@ -36,5 +37,13 @@ describe('ram bootstrap helpers', () => {
       'vpc:DescribeZones',
       'vpc:CreateVpc'
     ]));
+  });
+
+  it('covers all auth capability action hints in licell policy actions', () => {
+    const capabilities: AuthCapability[] = ['fc', 'dns', 'oss', 'rds', 'redis', 'cdn', 'vpc', 'cr', 'logs'];
+    const hintedActions = resolveAuthCapabilityActions(capabilities);
+    for (const action of hintedActions) {
+      expect(LICELL_POLICY_ACTIONS).toContain(action);
+    }
   });
 });

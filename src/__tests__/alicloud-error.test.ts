@@ -5,6 +5,7 @@ import {
   isTransientError,
   isInstanceClassError,
   isAccessDeniedError,
+  isAuthCredentialInvalidError,
   isInvalidDomainNameError,
   isRoleMissingError,
   isAlreadyExistsRoleError,
@@ -73,6 +74,18 @@ describe('alicloud-error unified error classification', () => {
     });
     it('detects Forbidden', () => {
       expect(isAccessDeniedError(makeError('', 'Forbidden'))).toBe(true);
+    });
+  });
+
+  describe('isAuthCredentialInvalidError', () => {
+    it('detects invalid access key', () => {
+      expect(isAuthCredentialInvalidError(makeError('InvalidAccessKeyId.NotFound', ''))).toBe(true);
+    });
+    it('detects signature mismatch', () => {
+      expect(isAuthCredentialInvalidError(makeError('', 'SignatureDoesNotMatch'))).toBe(true);
+    });
+    it('returns false for access denied', () => {
+      expect(isAuthCredentialInvalidError(makeError('AccessDenied', 'forbidden'))).toBe(false);
     });
   });
 

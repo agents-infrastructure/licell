@@ -225,20 +225,29 @@ licell init --runtime docker
 
 ## 4. 示例工程（推荐先跑通）
 
-在仓库中有 3 个对齐示例：
+在仓库中有 4 个对齐示例：
 
 - `examples/node22-express-api`
 - `examples/python313-flask-api`
 - `examples/docker-bun-hono-api`
+- `examples/static-oss-site`
 
 示例说明见 `examples/README.md`。
 
-快速试跑（任选其一）：
+快速试跑（API 示例，任选其一）：
 
 ```bash
 cd examples/node22-express-api
 licell login
 licell deploy --type api --runtime nodejs22 --entry src/index.ts --target preview
+```
+
+快速试跑（静态站示例）：
+
+```bash
+cd examples/static-oss-site
+licell login
+licell deploy --type static
 ```
 
 ## 5. 部署模型（API / Static）
@@ -290,6 +299,18 @@ licell deploy --runtime static --dist dist
 # 兼容别名：statis
 licell deploy --runtime statis --dist dist
 ```
+
+静态站绑定域名（自动 CDN + 默认 HTTPS）：
+
+```bash
+# 固定子域名
+licell deploy --type static --domain-suffix your-domain.xyz
+
+# 完整域名
+licell deploy --type static --domain static.your-domain.xyz
+```
+
+说明：`static` 模式下只要提供 `--domain` 或 `--domain-suffix`，会自动接入 CDN，并回源到 OSS 地址，同时默认启用 HTTPS 证书签发与 CDN 证书配置。
 
 `--dist` 省略时自动探测：
 
@@ -431,11 +452,9 @@ licell deploy --type api --target preview --domain api.your-domain.xyz
 说明：
 
 - `--domain` 与 `--domain-suffix` 不能同时使用
-- 使用 `--domain` 时默认自动开启 HTTPS（可不写 `--ssl`）
-- 使用 `--enable-cdn` 时默认自动开启 HTTPS（可不写 `--ssl`）
-- 使用 `--domain-suffix` 时，需带 `--ssl` 或 `--enable-cdn` 才会触发证书检查/续签
-- `--enable-cdn` 仅适用于 API 部署，且需要 `--domain` 或 `--domain-suffix`
-- 当前 `--enable-cdn` 只自动完成域名接入和 DNS CNAME 切换；若启用 HTTPS，CDN 边缘证书需在 CDN 控制台配置
+- API 部署：使用 `--domain` 或 `--enable-cdn` 时默认自动开启 HTTPS（`--domain-suffix` 需配合 `--ssl` 或 `--enable-cdn`）
+- Static 部署：提供 `--domain` 或 `--domain-suffix` 时，默认自动开启 HTTPS，并自动接入 CDN 回源 OSS
+- `--enable-cdn` 在 API 场景下表示显式开启；Static 提供域名时默认开启
 - 默认续签阈值 30 天
 - 域名需托管在阿里云 DNS
 

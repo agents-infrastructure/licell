@@ -2,6 +2,7 @@ import * as $OpenApi from '@alicloud/openapi-client';
 import * as $Util from '@alicloud/tea-util';
 import { Config } from '../utils/config';
 import { isConflictError, isNotFoundError, isTransientError } from '../utils/alicloud-error';
+import { formatErrorMessage } from '../utils/errors';
 import { withRetry } from '../utils/retry';
 import { ensureDomainCname, normalizeDnsValue } from './domain';
 import { resolveSdkCtor } from '../utils/sdk';
@@ -11,12 +12,25 @@ const RpcClientCtor = resolveSdkCtor<$OpenApi.default>($OpenApi.default, '@alicl
 interface CdnDomainDetail {
   domainName: string;
   cname?: string;
+  status?: string;
 }
 
 interface CdnEnableResult {
   cdnCname: string;
   created: boolean;
   httpsConfigured?: boolean;
+}
+
+type CdnSourceType = 'domain' | 'oss';
+type CdnScope = 'domestic' | 'overseas' | 'global';
+
+interface CdnEnableOptions {
+  certificate?: string;
+  privateKey?: string;
+  sourceType?: CdnSourceType;
+  scope?: CdnScope;
+  enablePrivateOssAuth?: boolean;
+  waitForOnline?: boolean;
 }
 
 function createCdnRpcClient() {
@@ -80,6 +94,27 @@ function normalizeOriginDomain(value: string) {
   return normalized;
 }
 
+function normalizeSourceType(value: CdnSourceType | undefined): CdnSourceType {
+  return value === 'oss' ? 'oss' : 'domain';
+}
+
+function inferDefaultScope(domainName: string): CdnScope {
+  // Keep current product behavior as domestic by default; CDN domain status may still take time to become online.
+  // Non-domestic acceleration strategies can be introduced via explicit CLI options in a future iteration.
+  void domainName;
+  return 'domestic';
+}
+
+function normalizeScope(value: CdnScope | undefined, domainName: string): CdnScope {
+  if (value === 'domestic' || value === 'overseas' || value === 'global') return value;
+  return inferDefaultScope(domainName);
+}
+
+function normalizeDomainStatus(value: unknown) {
+  const normalized = String(value || '').trim().toLowerCase();
+  return normalized || undefined;
+}
+
 function toCdnDomainRow(row: unknown): CdnDomainDetail | undefined {
   if (!row || typeof row !== 'object') return undefined;
   const item = row as Record<string, unknown>;
@@ -88,7 +123,8 @@ function toCdnDomainRow(row: unknown): CdnDomainDetail | undefined {
   const cnameRaw = String(item.Cname || item.cname || '').trim();
   return {
     domainName,
-    cname: cnameRaw ? normalizeDnsValue(cnameRaw) : undefined
+    cname: cnameRaw ? normalizeDnsValue(cnameRaw) : undefined,
+    status: normalizeDomainStatus(item.DomainStatus || item.domainStatus)
   };
 }
 
@@ -131,13 +167,19 @@ async function getCdnDomain(domainName: string): Promise<CdnDomainDetail | undef
   return undefined;
 }
 
-async function addCdnDomain(domainName: string, originDomain: string) {
+async function addCdnDomain(
+  domainName: string,
+  originDomain: string,
+  options: { sourceType?: CdnSourceType; scope?: CdnScope } = {}
+) {
   const normalizedDomain = normalizeDomain(domainName);
   const normalizedOrigin = normalizeOriginDomain(originDomain);
+  const sourceType = normalizeSourceType(options.sourceType);
+  const scope = normalizeScope(options.scope, normalizedDomain);
   const sources = JSON.stringify([
     {
       content: normalizedOrigin,
-      type: 'domain',
+      type: sourceType,
       port: 80,
       priority: '20',
       weight: '10'
@@ -146,6 +188,7 @@ async function addCdnDomain(domainName: string, originDomain: string) {
   await withRetry(() => callCdnRpc('AddCdnDomain', {
     DomainName: normalizedDomain,
     CdnType: 'web',
+    Scope: scope,
     Sources: sources
   }));
 }
@@ -183,7 +226,99 @@ async function configureCdnHttps(domainName: string, certificate: string, privat
   );
 }
 
-export async function ensureCdnDomain(domainName: string, originDomain: string): Promise<CdnEnableResult> {
+function isPrivateOssAuthBootstrapError(err: unknown) {
+  const text = formatErrorMessage(err).toLowerCase();
+  return (
+    text.includes('aliyuncdnaccessingprivateossrole') ||
+    text.includes('private oss') ||
+    text.includes('private_oss_auth') ||
+    text.includes('l2_oss_key') ||
+    text.includes('authorize')
+  );
+}
+
+async function configurePrivateOssOriginAuth(domainName: string) {
+  const normalizedDomain = normalizeDomain(domainName);
+  const functions = JSON.stringify([
+    {
+      functionName: 'l2_oss_key',
+      functionArgs: [
+        { argName: 'private_oss_auth', argValue: 'on' }
+      ]
+    }
+  ]);
+  try {
+    await withRetry(
+      () => callCdnRpc('BatchSetCdnDomainConfig', {
+        DomainNames: normalizedDomain,
+        Functions: functions
+      }),
+      {
+        maxAttempts: 12,
+        baseDelayMs: 2_000,
+        shouldRetry: (err: unknown) => isTransientError(err) || isCdnDomainNotReadyError(err)
+      }
+    );
+  } catch (err: unknown) {
+    if (!isPrivateOssAuthBootstrapError(err)) throw err;
+    throw new Error(
+      `CDN 私有 OSS 回源授权失败，请先在 CDN 控制台完成一次“私有 OSS Bucket 回源授权”，` +
+      `确保服务关联角色 AliyunCDNAccessingPrivateOSSRole 已创建。原始错误: ${formatErrorMessage(err)}`
+    );
+  }
+}
+
+async function configureStaticRootRewrite(domainName: string) {
+  const normalizedDomain = normalizeDomain(domainName);
+  const functions = JSON.stringify([
+    {
+      functionName: 'back_to_origin_url_rewrite',
+      functionArgs: [
+        { argName: 'source_url', argValue: '^/$' },
+        { argName: 'target_url', argValue: '/index.html' },
+        { argName: 'flag', argValue: 'break' }
+      ]
+    }
+  ]);
+  await withRetry(
+    () => callCdnRpc('BatchSetCdnDomainConfig', {
+      DomainNames: normalizedDomain,
+      Functions: functions
+    }),
+    {
+      maxAttempts: 12,
+      baseDelayMs: 2_000,
+      shouldRetry: (err: unknown) => isTransientError(err) || isCdnDomainNotReadyError(err)
+    }
+  );
+}
+
+function isCdnOnlineStatus(status: string | undefined) {
+  return status === 'online';
+}
+
+function isCdnFailedStatus(status: string | undefined) {
+  return status === 'configure_failed' || status === 'check_failed';
+}
+
+async function waitCdnDomainOnline(domainName: string, maxAttempts = 40, intervalMs = 3_000) {
+  const normalizedDomain = normalizeDomain(domainName);
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const detail = await getCdnDomain(normalizedDomain);
+    if (isCdnOnlineStatus(detail?.status)) return;
+    if (isCdnFailedStatus(detail?.status)) {
+      throw new Error(`CDN 域名状态异常: ${normalizedDomain} (${detail?.status})`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+  throw new Error(`CDN 域名长时间未就绪: ${normalizedDomain}`);
+}
+
+export async function ensureCdnDomain(
+  domainName: string,
+  originDomain: string,
+  options: { sourceType?: CdnSourceType; scope?: CdnScope } = {}
+): Promise<CdnEnableResult> {
   const normalizedDomain = normalizeDomain(domainName);
   const normalizedOrigin = normalizeOriginDomain(originDomain);
   let created = false;
@@ -191,7 +326,7 @@ export async function ensureCdnDomain(domainName: string, originDomain: string):
 
   if (!detail) {
     try {
-      await addCdnDomain(normalizedDomain, normalizedOrigin);
+      await addCdnDomain(normalizedDomain, normalizedOrigin, options);
       created = true;
     } catch (err: unknown) {
       if (!isConflictError(err)) throw err;
@@ -209,7 +344,7 @@ export async function ensureCdnDomain(domainName: string, originDomain: string):
 export async function removeCdnDomain(domainName: string) {
   const normalizedDomain = normalizeDomain(domainName);
   try {
-    await withRetry(() => callCdnRpc('DeleteUserCdnDomain', {
+    await withRetry(() => callCdnRpc('DeleteCdnDomain', {
       DomainName: normalizedDomain
     }));
   } catch (err: unknown) {
@@ -221,16 +356,28 @@ export async function removeCdnDomain(domainName: string) {
 export async function enableCdnForDomain(
   domainName: string,
   originDomain: string,
-  options: { certificate?: string; privateKey?: string } = {}
+  options: CdnEnableOptions = {}
 ): Promise<CdnEnableResult> {
   const normalizedDomain = normalizeDomain(domainName);
-  const result = await ensureCdnDomain(normalizedDomain, originDomain);
+  const sourceType = normalizeSourceType(options.sourceType);
+  const scope = normalizeScope(options.scope, normalizedDomain);
+  const result = await ensureCdnDomain(normalizedDomain, originDomain, {
+    sourceType,
+    scope
+  });
+  if (sourceType === 'oss' && options.enablePrivateOssAuth !== false) {
+    await configurePrivateOssOriginAuth(normalizedDomain);
+    await configureStaticRootRewrite(normalizedDomain);
+  }
   let httpsConfigured = false;
   if (options.certificate && options.privateKey) {
     await configureCdnHttps(normalizedDomain, options.certificate, options.privateKey);
     httpsConfigured = true;
   }
   await ensureDomainCname(normalizedDomain, result.cdnCname);
+  if (options.waitForOnline) {
+    await waitCdnDomainOnline(normalizedDomain);
+  }
   return { ...result, httpsConfigured };
 }
 

@@ -36,6 +36,12 @@ function createOssClient() {
   return { auth, client };
 }
 
+function isPublicBucketAclBlockedError(err: unknown) {
+  if (!isAccessDeniedError(err)) return false;
+  const message = String((err as { message?: unknown })?.message || '').toLowerCase();
+  return message.includes('put public bucket acl is not allowed');
+}
+
 export async function deployOSS(appName: string, distDir: string) {
   const { auth, client } = createOssClient();
   if (!existsSync(distDir) || !statSync(distDir).isDirectory()) {
@@ -56,13 +62,19 @@ export async function deployOSS(appName: string, distDir: string) {
       throw infoErr;
     }
   }
+  let skippedPublicAcl = false;
   try {
     await client.putBucketACL(bucket, 'public-read');
   } catch (err: unknown) {
-    if (isAccessDeniedError(err)) {
+    if (isPublicBucketAclBlockedError(err)) {
+      // Some accounts enforce "block public access". Keep bucket private and rely on CDN-origin access.
+      // Static deploy with custom domain can still work via CDN source type=oss.
+      skippedPublicAcl = true;
+    }
+    if (!skippedPublicAcl && isAccessDeniedError(err)) {
       throw new Error(`OSS Bucket 无权限修改 ACL: ${bucket}，请确认该 Bucket 属于当前账号并可写`);
     }
-    throw err;
+    if (!skippedPublicAcl) throw err;
   }
 
   client.useBucket(bucket);
