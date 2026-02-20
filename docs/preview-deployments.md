@@ -127,7 +127,7 @@ licell release promote [version] → 切 prod 别名到指定版本
 licell release prune --preview   → 清理旧预览域名
 ```
 
-## Static 部署的 Preview（Phase 2）
+## Static 部署的 Preview
 
 ### 现状
 
@@ -136,46 +136,90 @@ Static deploy 的架构与 API 完全不同：
 - 域名通过 CDN 回源 OSS
 - 没有版本/别名概念，每次 deploy 直接覆盖 bucket 根路径的文件
 
-### 挑战
+### 方案：FC 代理统一 Preview 机制
 
-- OSS 没有原生的版本快照机制（不像 FC 的 publishVersion）
-- CDN 回源路径切换不像 FC 别名那样秒级生效，有缓存刷新延迟
-- 每个 preview 需要独立的 CDN 域名 + 回源路径配置
+为了让 static 和 API 的 preview 体验完全一致，采用 **FC 代理函数** 方案：创建一个轻量的 FC 函数作为 OSS 代理，复用 FC 的版本/别名机制。
 
-### 方案：路径前缀隔离
+#### 架构
 
 ```
 OSS bucket 结构:
 ├── /                           ← 生产文件（CDN 域名回源这里）
-├── _preview/1708000000000/     ← preview 快照 1
-├── _preview/1708003600000/     ← preview 快照 2
-└── _preview/1708007200000/     ← preview 快照 3
+├── _preview/5/                 ← preview 快照 (version 5)
+├── _preview/6/                 ← preview 快照 (version 6)
+└── _preview/7/                 ← preview 快照 (version 7)
+
+FC 代理函数: {appName}-static-proxy
+├── version 5 (env: PREVIEW_PATH=_preview/5)
+├── version 6 (env: PREVIEW_PATH=_preview/6)
+└── version 7 (env: PREVIEW_PATH=_preview/7)
 ```
+
+#### 流程
 
 `licell deploy --preview`（static 类型）：
-1. 上传构建产物到 `_preview/{timestamp}/` 路径前缀
-2. 创建 CDN 域名 `{appName}-preview-{ts}.{domainSuffix}`，回源到该前缀路径
-3. 签发 SSL 证书
-4. 输出 Preview URL
-
-`licell release promote`（static 类型）：
-1. 将 preview 路径下的文件复制到 bucket 根路径
-2. 刷新 CDN 缓存
-
-### Phase 1 策略
-
-Phase 1 中 `--preview` 仅支持 API 类型。Static 类型使用 `--preview` 时报错提示：
 
 ```
---preview 暂不支持 static 部署类型。
-Static 部署后可直接通过 OSS URL 预览。
+  │
+  ├─ 1. 上传构建产物到 OSS `_preview/{N}/` 路径
+  ├─ 2. 创建/更新代理 FC 函数 {appName}-static-proxy
+  │     (简单 HTTP handler，读 OSS 对象 → 返回响应)
+  │     环境变量: PREVIEW_PATH=_preview/{N}
+  ├─ 3. publishFunctionVersion() → version N
+  ├─ 4. ensureWildcardCname()
+  ├─ 5. bindCustomDomain() → {appName}-preview-v{N}.{domainSuffix}
+  │     qualifier=N
+  ├─ 6. [可选] issueAndBindSSL()
+  └─ 7. 输出 Preview URL
 ```
 
-### Phase 2 实现要点
+#### 代理函数实现
 
-| 改动 | 说明 |
+```typescript
+// {appName}-static-proxy handler (伪代码)
+import { getObject } from './oss-client';
+
+export async function handler(req: Request) {
+  const previewPath = process.env.PREVIEW_PATH || '';
+  const objectKey = previewPath
+    ? `${previewPath}${req.path}`
+    : req.path.slice(1);
+
+  // 处理 index.html fallback
+  const finalKey = objectKey.endsWith('/') || !objectKey.includes('.')
+    ? `${objectKey.replace(/\/$/, '')}/index.html`
+    : objectKey;
+
+  const object = await getObject(finalKey);
+  return new Response(object.body, {
+    headers: { 'content-type': object.contentType }
+  });
+}
+```
+
+#### 优势
+
+- **统一体验**：API 和 static 的 preview 完全一致
+  - 同样的域名模式：`{appName}-preview-v{N}.{domainSuffix}`
+  - 同样的通配符 DNS 机制
+  - 同样的 `release prune --preview` 清理逻辑
+- **用户无感**：代理函数自动创建和管理
+- **性能可接受**：代理函数冷启动极快（只做 OSS 读取转发）
+- **生产不受影响**：生产域名仍然走 CDN 回源 OSS 根路径，不经过 FC 代理
+
+#### 清理
+
+`licell release prune --preview`（static 类型）：
+1. 删除旧的 FC 自定义域名绑定
+2. 删除 OSS `_preview/{N}/` 路径下的文件
+3. 旧版本的代理函数自动随 FC 版本清理
+
+#### 实现要点
+
+| 文件 | 改动 |
 |------|------|
 | `src/providers/oss.ts` | 支持上传到指定路径前缀 |
-| `src/commands/deploy-static.ts` | `--preview` 时上传到 `_preview/{ts}/` |
-| `src/providers/cdn.ts` | 支持创建回源到指定路径的 CDN 域名 |
-| `src/commands/release.ts` | static promote: 复制文件到根路径 + 刷新 CDN |
+| `src/providers/fc/static-proxy.ts` | 新增：代理函数模板和部署逻辑 |
+| `src/commands/deploy-static.ts` | `--preview` 时上传到 `_preview/{N}/` + 部署代理函数 |
+| `src/commands/release.ts` | static prune: 清理 OSS preview 路径 |
+| `src/__tests__/` | 对应测试 |
