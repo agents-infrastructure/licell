@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { buildOssObjectKey, collectOssUploadFiles, normalizeOssTargetDir } from '../providers/oss';
+import {
+  buildOssObjectKey,
+  collectOssUploadFiles,
+  normalizeOssTargetDir,
+  resolveOssContentType
+} from '../providers/oss';
 
 describe('oss upload helpers', () => {
   it('normalizes target directory', () => {
@@ -68,5 +73,19 @@ describe('oss upload helpers', () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
+  });
+
+  it('resolves content-type with charset for known types', () => {
+    expect(resolveOssContentType('/tmp/index.html', 'site/index.html')).toBe('text/html; charset=utf-8');
+    expect(resolveOssContentType('/tmp/main.js', 'site/main.js')).toBe('application/javascript; charset=utf-8');
+    expect(resolveOssContentType('/tmp/styles.css', 'site/styles.css')).toBe('text/css; charset=utf-8');
+  });
+
+  it('falls back to application/octet-stream for unknown extensions', () => {
+    expect(resolveOssContentType('/tmp/README', 'site/README')).toBe('application/octet-stream');
+  });
+
+  it('prefers objectName extension over sourceFile extension', () => {
+    expect(resolveOssContentType('/tmp/data.bin', 'site/index.html')).toBe('text/html; charset=utf-8');
   });
 });

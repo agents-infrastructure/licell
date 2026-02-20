@@ -15,6 +15,7 @@ const UPLOAD_CONCURRENCY = 10;
 const OSS_CONNECT_TIMEOUT_MS = 8_000;
 const OSS_READ_TIMEOUT_MS = 120_000;
 const OssClientCtor = resolveSdkCtor<OSSClient>(OSSClient, '@alicloud/oss20190517');
+const DEFAULT_OSS_CONTENT_TYPE = 'application/octet-stream';
 
 export interface OssBucketSummary {
   name: string;
@@ -274,6 +275,15 @@ export function collectOssUploadFiles(sourceDir: string, targetDir?: string): Co
   };
 }
 
+export function resolveOssContentType(sourceFile: string, objectName?: string) {
+  const byObjectName = objectName ? mime.lookup(objectName) : false;
+  const bySourceFile = mime.lookup(sourceFile);
+  const detected = byObjectName || bySourceFile;
+  if (!detected) return DEFAULT_OSS_CONTENT_TYPE;
+  const withCharset = mime.contentType(detected);
+  return withCharset ? String(withCharset) : String(detected);
+}
+
 export async function uploadDirectoryToBucket(
   bucketName: string,
   sourceDir: string,
@@ -291,7 +301,7 @@ export async function uploadDirectoryToBucket(
   const pool = createPool(concurrency);
   await Promise.all(
     collected.files.map((file) => pool(async () => {
-      const mimeType = mime.lookup(file.sourceFile) || 'application/octet-stream';
+      const contentType = resolveOssContentType(file.sourceFile, file.objectName);
       await withRetry(
         () => client.putObjectWithOptions(
           normalizedBucket,
@@ -301,7 +311,7 @@ export async function uploadDirectoryToBucket(
           }),
           new $OSS.PutObjectHeaders({
             commonHeaders: {
-              'Content-Type': String(mimeType)
+              'content-type': contentType
             }
           }),
           runtime
