@@ -20,6 +20,7 @@ import { registerShellCommands } from './commands/shell';
 import { registerSkillsCommands } from './commands/skills';
 import { registerSetupCommand } from './commands/setup';
 import { resolveCliVersion } from './utils/version';
+import { checkForUpdate, printUpdateTip } from './utils/update-check';
 import { formatErrorMessage } from './utils/errors';
 import {
   emitCliError,
@@ -33,8 +34,9 @@ import {
   parseGlobalOutputModeArgv
 } from './utils/output';
 
+const cliVersion = resolveCliVersion();
 const cli = cac('licell');
-cli.version(resolveCliVersion());
+cli.version(cliVersion);
 cli.option('--output <mode>', '输出格式：text|json（json 更适合 Agent/MCP 解析）', { default: 'text' });
 
 registerAuthCommands(cli);
@@ -147,6 +149,15 @@ process.once('beforeExit', (code) => {
   });
 });
 
+const isUpgradeCommand = argv.some((a) => a === 'upgrade');
+const updateCheckPromise = (!isJsonOutput() && !isUpgradeCommand)
+  ? checkForUpdate(cliVersion).catch(() => null)
+  : Promise.resolve(null);
+
 void Promise.resolve()
   .then(() => cli.parse(argv))
+  .then(async () => {
+    const result = await updateCheckPromise;
+    if (result) printUpdateTip(result);
+  })
   .catch(handleCliError);
