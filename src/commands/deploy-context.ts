@@ -93,6 +93,7 @@ export async function resolveDeployContext(options: DeployCliOptions): Promise<D
   const cliDomainSuffix = options.domainSuffix ? normalizeDomainSuffix(options.domainSuffix) : undefined;
   const projectDomainSuffix = tryNormalizeDomainSuffix(project.domainSuffix);
   const envDomainSuffix = tryNormalizeDomainSuffix(readLicellEnv(process.env, 'DOMAIN_SUFFIX'));
+  const globalDomainSuffix = tryNormalizeDomainSuffix(Config.getGlobalConfig().domainSuffix);
   const runtimeSelection = parseDeployRuntimeOption(options.runtime);
   const cliRuntime = runtimeSelection.runtime;
   const projectRuntime = tryNormalizeFcRuntime(project.runtime);
@@ -127,7 +128,7 @@ export async function resolveDeployContext(options: DeployCliOptions): Promise<D
     ? undefined
     : type === 'static'
       ? cliDomainSuffix
-      : (cliDomainSuffix || projectDomainSuffix || envDomainSuffix);
+      : (cliDomainSuffix || projectDomainSuffix || envDomainSuffix || globalDomainSuffix);
   const releaseTarget = options.target ? normalizeReleaseTarget(options.target) : undefined;
   const staticDomainRequested = type === 'static' && Boolean(cliDomain || domainSuffix);
   const enableCdn = type === 'static'

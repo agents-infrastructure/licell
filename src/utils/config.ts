@@ -5,6 +5,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, wri
 const GLOBAL_DIR = join(homedir(), '.licell-cli');
 const LEGACY_GLOBAL_DIR = join(homedir(), '.ali-cli');
 const GLOBAL_FILE = join(GLOBAL_DIR, 'auth.json');
+const GLOBAL_CONFIG_FILE = join(GLOBAL_DIR, 'config.json');
 const LEGACY_GLOBAL_FILE = join(LEGACY_GLOBAL_DIR, 'auth.json');
 function getLocalDir() { return join(process.cwd(), '.licell'); }
 function getLegacyLocalDir() { return join(process.cwd(), '.ali'); }
@@ -63,6 +64,10 @@ export interface ProjectConfig {
   network?: ProjectNetworkConfig;
   cache?: ProjectCacheConfig;
   [key: string]: unknown;
+}
+
+export interface GlobalConfig {
+  domainSuffix?: string;
 }
 
 interface SetProjectOptions {
@@ -329,5 +334,14 @@ export const Config = {
       envs: mergedEnvs
     });
     writeJsonSafely(getLocalFile(), next, true);
+  },
+  getGlobalConfig(): GlobalConfig {
+    return readJsonSafely<GlobalConfig>(GLOBAL_CONFIG_FILE, {});
+  },
+  setGlobalConfig(data: Partial<GlobalConfig>) {
+    ensureSecureDir(GLOBAL_DIR);
+    const current = this.getGlobalConfig();
+    const next: GlobalConfig = { ...current, ...data };
+    writeJsonSafely(GLOBAL_CONFIG_FILE, next);
   }
 };
