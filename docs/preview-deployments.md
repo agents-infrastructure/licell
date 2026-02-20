@@ -126,3 +126,56 @@ licell deploy --target prod      → 更新 $LATEST + 发版 + 切 prod（快捷
 licell release promote [version] → 切 prod 别名到指定版本
 licell release prune --preview   → 清理旧预览域名
 ```
+
+## Static 部署的 Preview（Phase 2）
+
+### 现状
+
+Static deploy 的架构与 API 完全不同：
+- 文件上传到 OSS bucket（`licell-{appName}-{accountId前4位}`）
+- 域名通过 CDN 回源 OSS
+- 没有版本/别名概念，每次 deploy 直接覆盖 bucket 根路径的文件
+
+### 挑战
+
+- OSS 没有原生的版本快照机制（不像 FC 的 publishVersion）
+- CDN 回源路径切换不像 FC 别名那样秒级生效，有缓存刷新延迟
+- 每个 preview 需要独立的 CDN 域名 + 回源路径配置
+
+### 方案：路径前缀隔离
+
+```
+OSS bucket 结构:
+├── /                           ← 生产文件（CDN 域名回源这里）
+├── _preview/1708000000000/     ← preview 快照 1
+├── _preview/1708003600000/     ← preview 快照 2
+└── _preview/1708007200000/     ← preview 快照 3
+```
+
+`licell deploy --preview`（static 类型）：
+1. 上传构建产物到 `_preview/{timestamp}/` 路径前缀
+2. 创建 CDN 域名 `{appName}-preview-{ts}.{domainSuffix}`，回源到该前缀路径
+3. 签发 SSL 证书
+4. 输出 Preview URL
+
+`licell release promote`（static 类型）：
+1. 将 preview 路径下的文件复制到 bucket 根路径
+2. 刷新 CDN 缓存
+
+### Phase 1 策略
+
+Phase 1 中 `--preview` 仅支持 API 类型。Static 类型使用 `--preview` 时报错提示：
+
+```
+--preview 暂不支持 static 部署类型。
+Static 部署后可直接通过 OSS URL 预览。
+```
+
+### Phase 2 实现要点
+
+| 改动 | 说明 |
+|------|------|
+| `src/providers/oss.ts` | 支持上传到指定路径前缀 |
+| `src/commands/deploy-static.ts` | `--preview` 时上传到 `_preview/{ts}/` |
+| `src/providers/cdn.ts` | 支持创建回源到指定路径的 CDN 域名 |
+| `src/commands/release.ts` | static promote: 复制文件到根路径 + 刷新 CDN |
