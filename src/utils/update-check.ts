@@ -93,7 +93,7 @@ export function printUpdateTip(result: UpdateCheckResult) {
   const msg = `新版本可用: ${result.currentVersion} → ${result.latestVersion}`;
   const cmd = 'licell upgrade';
   const inner = Math.max(msg.length, cmd.length + 4);
-  const pad = (s: string) => s + ' '.repeat(inner - s.length);
+  const pad = (s: string) => s + ' '.repeat(inner - s.replace(/\x1b\[[0-9;]*m/g, '').length);
   console.error('');
   console.error(pc.yellow(`╭${'─'.repeat(inner + 4)}╮`));
   console.error(pc.yellow(`│  ${pad(msg)}  │`));
