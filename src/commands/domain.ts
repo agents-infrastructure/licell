@@ -2,6 +2,7 @@ import type { CAC } from 'cac';
 import pc from 'picocolors';
 import { normalizeReleaseTarget } from '../utils/cli-helpers';
 import { bindCustomDomain, unbindCustomDomain } from '../providers/domain';
+import { publishFunctionVersion, promoteFunctionAlias } from '../providers/fc';
 import { issueAndBindSSL } from '../providers/ssl';
 import { executeWithAuthRecovery } from '../utils/auth-recovery';
 import {
@@ -9,6 +10,8 @@ import {
   ensureDestructiveActionConfirmed,
   createSpinner,
   isInteractiveTTY,
+  isNoChangesPublishError,
+  getLatestPublishedVersionId,
   showIntro,
   showOutro,
   requireAppName,
@@ -34,7 +37,7 @@ export function registerDomainCommands(cli: CAC) {
           showIntro(pc.bgCyan(pc.black(' 🌐 Domain & SSL Configuration ')));
           const auth = ensureAuthOrExit();
           const normalizedDomain = toPromptValue(domain, '域名');
-          const releaseTarget = options.target ? normalizeReleaseTarget(options.target) : undefined;
+          const releaseTarget = normalizeReleaseTarget(options.target);
           if (options.sslForceRenew && !options.ssl) throw new Error('--ssl-force-renew 需要与 --ssl 一起使用');
           const project = Config.getProject();
           requireAppName(project);
@@ -47,6 +50,29 @@ export function registerDomainCommands(cli: CAC) {
             async () => {
               const targetFcDomain = `${auth.accountId}.${auth.region}.fc.aliyuncs.com`;
               await bindCustomDomain(normalizedDomain, targetFcDomain, releaseTarget);
+              try {
+                s.message(`正在确保别名 ${releaseTarget} 存在...`);
+                let versionId: string;
+                try {
+                  versionId = await publishFunctionVersion(
+                    project.appName!,
+                    `domain bind ${releaseTarget} at ${new Date().toISOString()}`
+                  );
+                } catch (publishErr: unknown) {
+                  if (!isNoChangesPublishError(publishErr)) throw publishErr;
+                  versionId = await getLatestPublishedVersionId(project.appName!);
+                }
+                await promoteFunctionAlias(
+                  project.appName!,
+                  releaseTarget,
+                  versionId,
+                  `domain bind by licell at ${new Date().toISOString()}`
+                );
+              } catch {
+                if (!isJsonOutput()) {
+                  console.warn(pc.yellow(`⚠️ 未能自动创建别名 ${releaseTarget}，请先 deploy 后执行 licell release promote`));
+                }
+              }
               if (options.ssl) {
                 s.message('DNS CNAME 配置成功。正在接管 Let\'s Encrypt 签发流程...');
                 return issueAndBindSSL(normalizedDomain, s, { forceRenew: Boolean(options.sslForceRenew) });

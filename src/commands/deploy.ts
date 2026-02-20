@@ -311,6 +311,9 @@ export function registerDeployCommand(cli: CAC) {
             if (ctx.releaseTarget && promotedVersion) {
               console.log(`🏷️  alias=${pc.cyan(ctx.releaseTarget)} -> version=${pc.cyan(promotedVersion)}\n`);
             }
+            if (!ctx.releaseTarget && ctx.type === 'api' && !isJsonOutput()) {
+              console.log(pc.gray(`💡 代码已更新到预览环境。运行 ${pc.bold('licell release promote')} 发布到生产。\n`));
+            }
             if (healthCheckLogs.length > 0) {
               console.log(`${healthCheckLogs.join('\n')}\n`);
             }
@@ -340,7 +343,8 @@ export function registerDeployCommand(cli: CAC) {
                 fixedDomain: fixedDomain || null,
                 releaseTarget: ctx.releaseTarget || null,
                 promotedVersion: promotedVersion || null,
-                healthCheckLogs
+                healthCheckLogs,
+                ...(!ctx.releaseTarget && ctx.type === 'api' ? { hint: '运行 licell release promote 发布到生产' } : {})
               });
             } else {
               showOutro('Done!');
