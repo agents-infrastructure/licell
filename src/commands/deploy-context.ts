@@ -67,9 +67,10 @@ export interface DeployContext {
 export function resolveDeploySslEnabled(
   sslFlag: boolean | undefined,
   customDomain: string | undefined,
-  enableCdn: boolean | undefined
+  enableCdn: boolean | undefined,
+  domainSuffix?: string | undefined
 ) {
-  return Boolean(sslFlag || customDomain || enableCdn);
+  return Boolean(sslFlag || customDomain || enableCdn || domainSuffix);
 }
 
 export async function resolveDeployContext(options: DeployCliOptions): Promise<DeployContext> {
@@ -138,7 +139,7 @@ export async function resolveDeployContext(options: DeployCliOptions): Promise<D
     : Boolean(options.enableCdn);
   const enableSSL = type === 'static'
     ? Boolean(options.ssl || staticDomainRequested || enableCdn)
-    : resolveDeploySslEnabled(options.ssl, cliDomain, enableCdn);
+    : resolveDeploySslEnabled(options.ssl, cliDomain, enableCdn, domainSuffix);
   const forceSslRenew = Boolean(options.sslForceRenew);
   if (cliDomain && cliDomainSuffix) throw new Error('--domain 与 --domain-suffix 不能同时使用');
   if (releaseTarget && type !== 'api') throw new Error('--target 仅适用于 API 部署');

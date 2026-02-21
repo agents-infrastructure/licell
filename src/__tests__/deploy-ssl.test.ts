@@ -17,4 +17,8 @@ describe('resolveDeploySslEnabled', () => {
   it('disables ssl when neither --ssl nor --domain is provided', () => {
     expect(resolveDeploySslEnabled(false, undefined, false)).toBe(false);
   });
+
+  it('enables ssl when domainSuffix is provided', () => {
+    expect(resolveDeploySslEnabled(false, undefined, false, 'example.com')).toBe(true);
+  });
 });
