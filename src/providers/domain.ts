@@ -306,17 +306,18 @@ export async function ensureWildcardCname(
 ): Promise<WildcardCnameResult> {
   const normalizedSuffix = domainSuffix.trim().toLowerCase();
   const normalizedTarget = normalizeDnsValue(targetValue);
-  const { rootDomain } = parseRootAndSubdomain(normalizedSuffix);
-  const wildcardDomain = `*.${rootDomain}`;
+  const { rootDomain, subDomain } = parseRootAndSubdomain(normalizedSuffix);
+  const wildcardRR = subDomain ? `*.${subDomain}` : '*';
+  const wildcardDomain = subDomain ? `*.${subDomain}.${rootDomain}` : `*.${rootDomain}`;
   const dnsClient = createDnsClient();
 
-  const existing = await findCnameRecord(dnsClient, rootDomain, '*');
+  const existing = await findCnameRecord(dnsClient, rootDomain, wildcardRR);
   if (existing?.recordId) {
     const normalizedExisting = normalizeDnsValue(existing.value || '');
     if (normalizedExisting !== normalizedTarget) {
       await withRetry(() => dnsClient.updateDomainRecord(new $Alidns.UpdateDomainRecordRequest({
         recordId: existing.recordId,
-        RR: '*',
+        RR: wildcardRR,
         type: 'CNAME',
         value: normalizedTarget
       })));
@@ -340,7 +341,7 @@ export async function ensureWildcardCname(
 
   await withRetry(() => dnsClient.addDomainRecord(new $Alidns.AddDomainRecordRequest({
     domainName: rootDomain,
-    RR: '*',
+    RR: wildcardRR,
     type: 'CNAME',
     value: normalizedTarget
   })));
