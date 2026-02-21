@@ -7,13 +7,13 @@ import { issueAndBindSSLWithArtifacts } from '../providers/ssl';
 import { probeHttpHealth } from '../utils/health-check';
 import { detectStaticDistDir } from '../utils/static-dist';
 import { toPromptValue, withSpinner } from '../utils/cli-shared';
-import { ensureWildcardCname } from '../providers/domain';
+import { ensureWildcardCname } from '../providers/domain.js';
 import {
   deployStaticProxyFunction,
   publishStaticProxyVersion,
   resolveStaticProxyFunctionName
-} from '../providers/fc/static-proxy';
-import type { DeployContext } from './deploy-context';
+} from '../providers/fc/static-proxy.js';
+import type { DeployContext } from './deploy-context.js';
 
 export interface StaticDeployResult {
   url: string;

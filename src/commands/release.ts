@@ -24,8 +24,8 @@ import {
   withSpinner
 } from '../utils/cli-shared';
 import { Config } from '../utils/config';
-import { emitCliResult, isJsonOutput } from '../utils/output';
-import { prunePreviewDomains } from '../providers/fc/preview-cleanup';
+import { emitCliResult, isJsonOutput } from '../utils/output.js';
+import { prunePreviewDomains } from '../providers/fc/preview-cleanup.js';
 
 export function registerReleaseCommands(cli: CAC) {
   cli.command('release list', '查看函数版本列表')
