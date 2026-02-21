@@ -17,7 +17,12 @@ export async function ignoreConflict(task: () => Promise<unknown>): Promise<void
 
 export function formatErrorMessage(err: unknown): string {
   if (typeof err === 'object' && err !== null && 'message' in err) {
-    return String((err as { message: unknown }).message);
+    const msg = String((err as { message: unknown }).message);
+    const stack = (err as { stack?: unknown }).stack;
+    if (stack && typeof stack === 'string' && msg.includes('is not a function')) {
+      return `${msg}\n${stack}`;
+    }
+    return msg;
   }
   return String(err);
 }

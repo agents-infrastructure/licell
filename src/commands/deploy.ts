@@ -15,6 +15,7 @@ import { readLicellEnv } from '../utils/env';
 import {
   ensureAuthReadyForCommand,
   tryRecoverAuthForError,
+  detectAuthIssue,
   ensureAuthCapabilityPreflight,
   type AuthCapability
 } from '../utils/auth-recovery';
@@ -360,7 +361,7 @@ export function registerDeployCommand(cli: CAC) {
             }
             return;
           } catch (err: unknown) {
-            if (!recoveredAuth) {
+            if (!recoveredAuth && detectAuthIssue(err) !== 'unknown') {
               s.stop(pc.yellow('⚠️ 检测到鉴权/权限问题，正在尝试自动修复并重试...'));
               const repaired = await tryRecoverAuthForError(err, {
                 commandLabel: 'licell deploy',

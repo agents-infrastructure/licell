@@ -28,7 +28,15 @@ export function showOutro(message: string) {
 }
 
 export function createSpinner() {
-  if (!isJsonOutput()) return spinner();
+  if (!isJsonOutput()) {
+    const s = spinner();
+    let started = false;
+    return {
+      start: (msg?: string) => { started = true; s.start(msg); },
+      stop: (msg?: string) => { if (started) { started = false; s.stop(msg); } },
+      message: (msg?: string) => { if (started) s.message(msg); }
+    } as ReturnType<typeof spinner>;
+  }
   return {
     start: () => {},
     stop: () => {},
