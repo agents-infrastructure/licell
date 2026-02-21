@@ -12,7 +12,7 @@ import {
   publishFunctionVersion,
   promoteFunctionAlias
 } from '../providers/fc';
-import { bindCustomDomain } from '../providers/domain';
+import { bindCustomDomain, ensureWildcardCname } from '../providers/domain';
 import { enableCdnForDomain } from '../providers/cdn';
 import { issueAndBindSSLWithArtifacts } from '../providers/ssl';
 import { probeHttpHealth } from '../utils/health-check';
@@ -25,6 +25,8 @@ export interface ApiDeployResult {
   url: string;
   promotedVersion?: string;
   fixedDomain?: string;
+  previewDomain?: string;
+  previewVersion?: string;
   healthCheckLogs: string[];
 }
 
@@ -137,7 +139,54 @@ export async function executeApiDeploy(
       const fcOriginDomain = `${ctx.auth.accountId}.${ctx.auth.region}.fc.aliyuncs.com`;
       let nextPromotedVersion: string | undefined;
       let nextFixedDomain: string | undefined;
-      if (ctx.releaseTarget) {
+      let nextPreviewDomain: string | undefined;
+      let nextPreviewVersion: string | undefined;
+
+      if (ctx.preview && ctx.domainSuffix) {
+        s.message('函数部署完成，正在发布预览版本...');
+        nextPreviewVersion = await publishFunctionVersion(
+          ctx.appName,
+          `preview at ${new Date().toISOString()}`
+        );
+        nextPreviewDomain = `${ctx.appName}-preview-v${nextPreviewVersion}.${ctx.domainSuffix}`;
+
+        s.message(`正在确保通配符 DNS (*.${ctx.domainSuffix}) 存在...`);
+        const wildcardResult = await ensureWildcardCname(
+          ctx.domainSuffix,
+          fcOriginDomain,
+          {
+            interactiveTTY: ctx.interactiveTTY,
+            onConfirm: async () => {
+              const result = await confirm({
+                message: `检测到尚未配置通配符 DNS (*.${ctx.domainSuffix})。\n` +
+                  `创建后，所有 preview 子域名将自动解析到 FC 网关。\n` +
+                  `已有的精确 DNS 记录（如 ${ctx.appName}.${ctx.domainSuffix}）不受影响。\n` +
+                  `是否创建？`
+              });
+              if (isCancel(result)) return false;
+              return result;
+            }
+          }
+        );
+        if (wildcardResult.skipped) {
+          s.message(pc.yellow('⚠️ 已跳过通配符 DNS 创建，preview 域名可能无法访问'));
+        } else if (wildcardResult.created) {
+          s.message(`✅ 通配符 DNS 已创建: ${wildcardResult.wildcardDomain} → ${wildcardResult.targetValue}`);
+        }
+
+        s.message(`正在绑定预览域名 ${nextPreviewDomain}...`);
+        await bindCustomDomain(
+          nextPreviewDomain,
+          fcOriginDomain,
+          nextPreviewVersion,
+          { skipDnsBind: true }
+        );
+
+        if (ctx.enableSSL) {
+          s.message(`预览域名绑定完成，正在签发 HTTPS 证书 (${nextPreviewDomain})...`);
+          await issueAndBindSSLWithArtifacts(nextPreviewDomain, s, { forceRenew: ctx.forceSslRenew });
+        }
+      } else if (ctx.releaseTarget) {
         s.message(`函数部署完成，正在发布版本并切流到 ${ctx.releaseTarget}...`);
         nextPromotedVersion = await publishFunctionVersion(
           ctx.appName,
@@ -221,12 +270,14 @@ export async function executeApiDeploy(
       return {
         url: deployedUrl,
         promotedVersion: nextPromotedVersion,
-        fixedDomain: nextFixedDomain
+        fixedDomain: nextFixedDomain,
+        previewDomain: nextPreviewDomain,
+        previewVersion: nextPreviewVersion
       };
     }
   );
   if (!apiDeployResult) return undefined;
-  const { url, promotedVersion, fixedDomain } = apiDeployResult;
+  const { url, promotedVersion, fixedDomain, previewDomain, previewVersion } = apiDeployResult;
 
   s.message('🩺 部署完成，正在做可访问性检测...');
   const healthCheckLogs: string[] = [];
@@ -252,11 +303,26 @@ export async function executeApiDeploy(
       healthCheckLogs.push(`⚠️ 固定域名检测未通过（可能 DNS 传播中）: ${fixedProbe.error}`);
     }
   }
+  if (previewDomain) {
+    const previewDomainUrl = `${ctx.enableSSL ? 'https' : 'http'}://${previewDomain}`;
+    const previewProbe = await probeHttpHealth(previewDomainUrl, {
+      maxAttempts: 8,
+      intervalMs: 2000,
+      timeoutMs: 5000
+    });
+    if (previewProbe.ok) {
+      healthCheckLogs.push(`✅ 预览域名可访问 (${previewProbe.statusCode} ${previewProbe.checkedUrl})`);
+    } else {
+      healthCheckLogs.push(`⚠️ 预览域名检测未通过（可能 DNS 传播中）: ${previewProbe.error}`);
+    }
+  }
 
   return {
     url,
     promotedVersion,
     fixedDomain,
+    previewDomain,
+    previewVersion,
     healthCheckLogs
   };
 }

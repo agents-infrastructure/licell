@@ -221,6 +221,7 @@ export function registerDeployCommand(cli: CAC) {
     .option('--dist <dist>', '静态站点目录（默认 dist）')
     .option('--runtime <runtime>', '运行时（API: nodejs20/nodejs22/python3.12/python3.13/docker；静态站: static/statis）')
     .option('--target <target>', 'API 部署后自动发布并切流到该 alias（如 prod/preview）')
+    .option('--preview', '生成预览部署（自动发版 + 绑定预览域名，不影响生产）')
     .option('--domain <domain>', '绑定完整自定义域名（如 api.your-domain.xyz）')
     .option('--domain-suffix <suffix>', '自动绑定固定子域名后缀（如 your-domain.xyz）')
     .option('--enable-cdn', '域名绑定后自动接入 CDN 并将 DNS CNAME 切到 CDN（API 显式开启；Static 提供域名时默认开启）')
@@ -286,6 +287,8 @@ export function registerDeployCommand(cli: CAC) {
             let url: string;
             let promotedVersion: string | undefined;
             let fixedDomain: string | undefined;
+            let previewDomain: string | undefined;
+            let previewVersion: string | undefined;
             let healthCheckLogs: string[] = [];
 
             if (ctx.type === 'api') {
@@ -293,17 +296,23 @@ export function registerDeployCommand(cli: CAC) {
               const result = await executeApiDeploy(ctx, s);
               if (!result) return;
               emitCliEvent({ stage: 'deploy.api', action: 'execute', status: 'ok' });
-              ({ url, promotedVersion, fixedDomain, healthCheckLogs } = result);
+              ({ url, promotedVersion, fixedDomain, previewDomain, previewVersion, healthCheckLogs } = result);
             } else {
               emitCliEvent({ stage: 'deploy.static', action: 'execute', status: 'start' });
               const result = await executeStaticDeploy(ctx, s);
               if (!result) return;
               emitCliEvent({ stage: 'deploy.static', action: 'execute', status: 'ok' });
-              ({ url, fixedDomain, healthCheckLogs } = result);
+              ({ url, fixedDomain, previewDomain, previewVersion, healthCheckLogs } = result);
             }
 
             s.stop(pc.green('✅ 部署成功!'));
             console.log(`\n🎉 Production URL: ${pc.cyan(pc.underline(url))}\n`);
+            if (previewDomain) {
+              const previewDomainUrl = `${ctx.enableSSL ? 'https' : 'http'}://${previewDomain}`;
+              console.log(`🔍 Preview URL: ${pc.cyan(pc.underline(previewDomainUrl))}`);
+              console.log(`🏷️  version=${pc.cyan(previewVersion || 'unknown')}\n`);
+              console.log(pc.gray(`💡 验证后运行 ${pc.bold(`licell release promote ${previewVersion}`)} 发布到生产。\n`));
+            }
             if (fixedDomain) {
               const fixedDomainUrl = `${ctx.enableSSL ? 'https' : 'http'}://${fixedDomain}`;
               console.log(`🌐 Fixed Domain: ${pc.cyan(pc.underline(fixedDomainUrl))}\n`);
@@ -311,7 +320,7 @@ export function registerDeployCommand(cli: CAC) {
             if (ctx.releaseTarget && promotedVersion) {
               console.log(`🏷️  alias=${pc.cyan(ctx.releaseTarget)} -> version=${pc.cyan(promotedVersion)}\n`);
             }
-            if (!ctx.releaseTarget && ctx.type === 'api' && !isJsonOutput()) {
+            if (!ctx.releaseTarget && !ctx.preview && ctx.type === 'api' && !isJsonOutput()) {
               console.log(pc.gray(`💡 代码已更新到预览环境。运行 ${pc.bold('licell release promote')} 发布到生产。\n`));
             }
             if (healthCheckLogs.length > 0) {

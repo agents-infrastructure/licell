@@ -287,3 +287,63 @@ export async function removeDnsRecord(recordId: string) {
   const dnsClient = createDnsClient();
   await withRetry(() => dnsClient.deleteDomainRecord(new $Alidns.DeleteDomainRecordRequest({ recordId: normalized })));
 }
+
+export interface WildcardCnameResult {
+  created: boolean;
+  skipped: boolean;
+  wildcardDomain: string;
+  targetValue: string;
+}
+
+export async function ensureWildcardCname(
+  domainSuffix: string,
+  targetValue: string,
+  options: {
+    interactiveTTY: boolean;
+    skipConfirm?: boolean;
+    onConfirm?: () => Promise<boolean>;
+  }
+): Promise<WildcardCnameResult> {
+  const normalizedSuffix = domainSuffix.trim().toLowerCase();
+  const normalizedTarget = normalizeDnsValue(targetValue);
+  const { rootDomain } = parseRootAndSubdomain(normalizedSuffix);
+  const wildcardDomain = `*.${rootDomain}`;
+  const dnsClient = createDnsClient();
+
+  const existing = await findCnameRecord(dnsClient, rootDomain, '*');
+  if (existing?.recordId) {
+    const normalizedExisting = normalizeDnsValue(existing.value || '');
+    if (normalizedExisting !== normalizedTarget) {
+      await withRetry(() => dnsClient.updateDomainRecord(new $Alidns.UpdateDomainRecordRequest({
+        recordId: existing.recordId,
+        RR: '*',
+        type: 'CNAME',
+        value: normalizedTarget
+      })));
+    }
+    return { created: false, skipped: false, wildcardDomain, targetValue: normalizedTarget };
+  }
+
+  if (!options.skipConfirm) {
+    if (!options.interactiveTTY) {
+      // In non-interactive mode, skip creation and return skipped status
+      // This allows CI/CD and e2e tests to proceed without manual intervention
+      return { created: false, skipped: true, wildcardDomain, targetValue: normalizedTarget };
+    }
+    if (options.onConfirm) {
+      const confirmed = await options.onConfirm();
+      if (!confirmed) {
+        return { created: false, skipped: true, wildcardDomain, targetValue: normalizedTarget };
+      }
+    }
+  }
+
+  await withRetry(() => dnsClient.addDomainRecord(new $Alidns.AddDomainRecordRequest({
+    domainName: rootDomain,
+    RR: '*',
+    type: 'CNAME',
+    value: normalizedTarget
+  })));
+
+  return { created: true, skipped: false, wildcardDomain, targetValue: normalizedTarget };
+}

@@ -92,7 +92,10 @@ export const LICELL_POLICY_ACTIONS = [
   'cr:CreateRepository',
   'cr:GetAuthorizationToken',
   // SLS (Log Service, read-only)
-  'log:GetLogs'
+  'log:GetLogs',
+  // RAM (pass role to FC for service role)
+  'ram:PassRole',
+  'ram:GetRole'
 ] as const;
 
 export interface BootstrapRamAccessInput {
@@ -379,6 +382,9 @@ export async function bootstrapLicellRamAccess(input: BootstrapRamAccessInput): 
   await ensurePolicyAttachedToUser(client, policyName, userName);
   const key = await createRamAccessKey(client, userName);
 
+  // Ensure FC service role exists for static preview proxy
+  try { await ensureFcServiceRole(input.adminAuth); } catch { /* best-effort */ }
+
   return {
     userName,
     policyName,
@@ -394,6 +400,9 @@ export async function repairLicellRamAccess(input: RepairRamAccessInput): Promis
   const currentAuth = input.currentAuth || null;
   const policyName = normalizeRamPolicyName(input.policyName || currentAuth?.ramPolicy);
   const client = createRamClient(input.adminAuth);
+
+  // Ensure FC service role exists for static preview proxy
+  try { await ensureFcServiceRole(input.adminAuth); } catch { /* best-effort */ }
 
   let targetUserName = input.userName
     ? normalizeRamUserName(input.userName)
@@ -436,4 +445,51 @@ export async function repairLicellRamAccess(input: RepairRamAccessInput): Promis
     createdPolicy: policyResult.created,
     updatedPolicy: policyResult.updated
   };
+}
+
+const FC_SERVICE_ROLE_NAME = 'AliyunFCDefaultRole';
+const FC_ASSUME_ROLE_POLICY = JSON.stringify({
+  Statement: [{
+    Action: 'sts:AssumeRole',
+    Effect: 'Allow',
+    Principal: { Service: ['fc.aliyuncs.com'] }
+  }],
+  Version: '1'
+});
+const FC_ROLE_OSS_POLICIES = [
+  'AliyunOSSFullAccess'
+];
+
+export async function ensureFcServiceRole(adminAuth: AuthConfig): Promise<{ created: boolean }> {
+  const client = createRamClient(adminAuth);
+
+  // Check if role exists
+  try {
+    await client.getRole(new $RAM.GetRoleRequest({ roleName: FC_SERVICE_ROLE_NAME }));
+    return { created: false };
+  } catch (err: unknown) {
+    if (!isNotFoundError(err)) throw err;
+  }
+
+  // Create role
+  await client.createRole(new $RAM.CreateRoleRequest({
+    roleName: FC_SERVICE_ROLE_NAME,
+    assumeRolePolicyDocument: FC_ASSUME_ROLE_POLICY,
+    description: 'FC default service role for accessing OSS and other Alibaba Cloud services'
+  }));
+
+  // Attach OSS access policy
+  for (const policyName of FC_ROLE_OSS_POLICIES) {
+    try {
+      await client.attachPolicyToRole(new $RAM.AttachPolicyToRoleRequest({
+        policyType: 'System',
+        policyName,
+        roleName: FC_SERVICE_ROLE_NAME
+      }));
+    } catch {
+      // Policy may already be attached
+    }
+  }
+
+  return { created: true };
 }

@@ -64,7 +64,7 @@ export function isAuthCredentialInvalidError(err: unknown): boolean {
 
 export function isInvalidDomainNameError(err: unknown): boolean {
   return matchesAny(extractErrorText(err), [
-    'invaliddomainname.format', 'invalid domain name'
+    'invaliddomainname.format', 'invaliddomainname.noexist', 'invalid domain name', 'domain name does not exist'
   ]);
 }
 

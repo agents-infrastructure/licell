@@ -47,6 +47,7 @@ interface E2eRunOptions {
   cleanup?: unknown;
   yes?: unknown;
   workspace?: unknown;
+  preview?: unknown;
 }
 
 interface E2eCleanupOptions {
@@ -309,6 +310,10 @@ async function executeE2eRun(options: E2eRunOptions) {
   if (enableCdn && !domain && !domainSuffix) {
     throw new Error('--enable-cdn 需要配合 --domain 或 --domain-suffix');
   }
+  const enablePreview = Boolean(options.preview);
+  if (enablePreview && !domainSuffix) {
+    throw new Error('--preview 需要配合 --domain-suffix');
+  }
   const autoCleanup = Boolean(options.cleanup);
   const yes = Boolean(options.yes);
   const workspaceDir = resolve(
@@ -362,6 +367,7 @@ async function executeE2eRun(options: E2eRunOptions) {
     ...(domain ? [`fixed domain: ${domain}`] : []),
     ...(domainSuffix ? [`domain suffix: ${domainSuffix}`] : []),
     ...(enableCdn ? ['cdn: enabled'] : []),
+    ...(enablePreview ? ['preview deploy: enabled'] : []),
     ...(suite === 'full' && !skipStatic ? ['static deploy: enabled'] : ['static deploy: skipped'])
   ]);
 
@@ -435,6 +441,22 @@ async function executeE2eRun(options: E2eRunOptions) {
 
         runStep(ctx, 'release-list', ['release', 'list', '--limit', '5']);
         runStep(ctx, 'release-promote', ['release', 'promote', '--target', target]);
+
+        if (enablePreview && domainSuffix) {
+          const previewApiArgs = ['deploy', '--type', 'api', '--runtime', runtime, '--preview'];
+          previewApiArgs.push(useVpc ? '--enable-vpc' : '--disable-vpc');
+          previewApiArgs.push('--domain-suffix', domainSuffix);
+          runStep(ctx, 'deploy-api-preview', previewApiArgs);
+
+          if (suite === 'full' && !skipStatic) {
+            const staticDistDir = createStaticFixture(workspaceDir, `${runId}-preview`);
+            const previewStaticArgs = ['deploy', '--type', 'static', '--dist', staticDistDir, '--preview'];
+            previewStaticArgs.push('--domain-suffix', domainSuffix);
+            runStep(ctx, 'deploy-static-preview', previewStaticArgs);
+          }
+
+          runStep(ctx, 'release-prune-preview', ['release', 'prune', '--preview', '--keep', '2']);
+        }
 
         runStep(ctx, 'logs-once', ['logs', '--once', '--window', '180', '--lines', '200']);
         runStep(ctx, 'oss-list', ['oss', 'list', '--limit', '5']);
@@ -629,10 +651,25 @@ async function cleanupByManifest(
         runCleanupCommand('domain-rm', ['domain', 'rm', domain, '--yes']);
       }
       if (appName) {
+        // Clean up preview domains first
+        console.log(pc.gray(`清理 preview 域名: ${appName}`));
+        runCleanupCommand(
+          'release-prune-preview',
+          ['release', 'prune', '--preview', '--keep', '0', '--apply', '--yes'],
+          { ignoreErrorPatterns: ['not found', 'no preview'] }
+        );
         console.log(pc.gray(`清理 function: ${appName}`));
         runCleanupCommand(
           'fn-rm',
           ['fn', 'rm', appName, '--force', '--yes'],
+          { ignoreErrorPatterns: ['functionnotfound', 'does not exist', 'not found'] }
+        );
+        // Clean up static proxy function if exists
+        const staticProxyName = `${appName}-static-proxy`;
+        console.log(pc.gray(`清理 static proxy function: ${staticProxyName}`));
+        runCleanupCommand(
+          'fn-rm-static-proxy',
+          ['fn', 'rm', staticProxyName, '--force', '--yes'],
           { ignoreErrorPatterns: ['functionnotfound', 'does not exist', 'not found'] }
         );
       }
@@ -707,6 +744,7 @@ export function registerE2eCommands(cli: CAC) {
     .option('--cache-instance <instanceId>', 'full 套件时附加验证 cache info/connect（复用已有实例）')
     .option('--skip-static', 'full 套件时跳过 static + oss upload 场景')
     .option('--enable-cdn', '部署时启用 CDN（需配合 domain/domain-suffix）')
+    .option('--preview', '测试 preview 部署流程（需配合 --domain-suffix）')
     .option('--cleanup', '执行完后自动清理')
     .option('--workspace <dir>', '指定 E2E 工作目录（默认 .licell/e2e-work/<runId>）')
     .option('--yes', '自动清理时跳过二次确认')

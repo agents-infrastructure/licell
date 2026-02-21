@@ -36,6 +36,7 @@ export interface DeployCliOptions {
   vcpu?: string;
   instanceConcurrency?: string;
   timeout?: string;
+  preview?: boolean;
 }
 
 export interface DeployContext {
@@ -48,6 +49,7 @@ export interface DeployContext {
   useVpc: boolean;
   enableSSL: boolean;
   forceSslRenew: boolean;
+  preview: boolean;
   cliResources?: { memorySize?: number; timeout?: number; cpu?: number; instanceConcurrency?: number };
   cliAcrNamespace?: string;
   interactiveTTY: boolean;
@@ -153,6 +155,13 @@ export async function resolveDeployContext(options: DeployCliOptions): Promise<D
     throw new Error('--ssl 需要域名，请提供 --domain（完整域名）或 --domain-suffix');
   }
 
+  const preview = Boolean(options.preview);
+  if (preview && releaseTarget) throw new Error('--preview 与 --target 不能同时使用');
+  if (preview && !domainSuffix) {
+    throw new Error('--preview 需要域名后缀，请先执行 licell deploy --domain-suffix your-domain.com 或 licell config domain your-domain.com');
+  }
+  if (preview && cliDomain) throw new Error('--preview 与 --domain 不能同时使用，preview 会自动生成预览域名');
+
   const appName = project.appName;
   if (!appName) {
     throw new Error('appName 未设置，请检查项目配置');
@@ -182,6 +191,7 @@ export async function resolveDeployContext(options: DeployCliOptions): Promise<D
     useVpc,
     enableSSL,
     forceSslRenew,
+    preview,
     cliResources,
     cliAcrNamespace,
     interactiveTTY,

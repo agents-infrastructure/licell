@@ -1,6 +1,14 @@
 import OSSClient, * as $OSS from '@alicloud/oss20190517';
 import * as $OpenApi from '@alicloud/openapi-client';
-import openapiUtil from '@alicloud/openapi-util';
+import openapiUtilModule from '@alicloud/openapi-util';
+
+// Resolve CJS/ESM interop: bun bundler may wrap default export as { default: [class] }
+const openapiUtil = (() => {
+  const m = openapiUtilModule as unknown as Record<string, unknown>;
+  if (typeof m?.query === 'function') return m as unknown as typeof openapiUtilModule;
+  if (typeof (m?.default as Record<string, unknown>)?.query === 'function') return m.default as unknown as typeof openapiUtilModule;
+  throw new Error('Cannot resolve @alicloud/openapi-util');
+})();
 import * as $Util from '@alicloud/tea-util';
 import { createReadStream, existsSync, lstatSync, readdirSync, realpathSync, statSync } from 'fs';
 import { isAbsolute, join, relative } from 'path';
@@ -334,7 +342,7 @@ export async function uploadDirectoryToBucket(
   };
 }
 
-export async function deployOSS(appName: string, distDir: string) {
+export async function deployOSS(appName: string, distDir: string, options?: { targetDir?: string }) {
   const { auth, client, runtime } = createOssClient();
   const bucket = `licell-${appName}-${auth.accountId.substring(0, 4)}`.toLowerCase();
 
@@ -369,8 +377,13 @@ export async function deployOSS(appName: string, distDir: string) {
     if (!skippedPublicAcl) throw err;
   }
 
-  const uploadResult = await uploadDirectoryToBucket(bucket, distDir);
+  const uploadResult = await uploadDirectoryToBucket(bucket, distDir, { targetDir: options?.targetDir });
   return uploadResult.baseUrl;
+}
+
+export function resolveOssBucketName(appName: string) {
+  const auth = Config.requireAuth();
+  return `licell-${appName}-${auth.accountId.substring(0, 4)}`.toLowerCase();
 }
 
 export async function listOssBuckets(limit = 200): Promise<OssBucketSummary[]> {

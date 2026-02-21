@@ -25,6 +25,7 @@ import {
 } from '../utils/cli-shared';
 import { Config } from '../utils/config';
 import { emitCliResult, isJsonOutput } from '../utils/output';
+import { prunePreviewDomains } from '../providers/fc/preview-cleanup';
 
 export function registerReleaseCommands(cli: CAC) {
   cli.command('release list', '查看函数版本列表')
@@ -198,21 +199,71 @@ export function registerReleaseCommands(cli: CAC) {
     .option('--keep <n>', '保留最近 N 个版本，默认 10')
     .option('--apply', '执行删除，未传则仅预览')
     .option('--yes', '跳过二次确认（危险）')
-    .action(async (options: { keep?: string; apply?: boolean; yes?: boolean }) => {
+    .option('--preview', '清理预览域名绑定（而非函数版本）')
+    .action(async (options: { keep?: string; apply?: boolean; yes?: boolean; preview?: boolean }) => {
       await executeWithAuthRecovery(
         {
           commandLabel: 'licell release prune',
           interactiveTTY: isInteractiveTTY(),
-          requiredCapabilities: ['fc']
+          requiredCapabilities: options.preview ? ['fc', 'dns'] : ['fc']
         },
         async () => {
-          showIntro(pc.bgBlue(pc.white(' 🧹 Prune Function Versions ')));
+          showIntro(pc.bgBlue(pc.white(options.preview ? ' 🧹 Prune Preview Domains ' : ' 🧹 Prune Function Versions ')));
           ensureAuthOrExit();
           const project = Config.getProject();
           requireAppName(project);
 
-          const keep = parseOptionalPositiveInt(options.keep, 'keep') || 10;
+          const keep = parseOptionalPositiveInt(options.keep, 'keep') || (options.preview ? 3 : 10);
           const apply = Boolean(options.apply);
+
+          if (options.preview) {
+            if (apply) {
+              await ensureDestructiveActionConfirmed(`清理预览域名绑定（保留最近 ${keep} 个）`, { yes: Boolean(options.yes) });
+            }
+            const s = createSpinner();
+            const result = await withSpinner(
+              s,
+              apply ? '正在清理预览域名...' : '正在预览可清理的预览域名...',
+              '❌ 清理失败',
+              () => prunePreviewDomains(project.appName, keep, apply)
+            );
+            if (!result) return;
+            if (!isJsonOutput()) {
+              s.stop(pc.green(apply ? '✅ 清理任务完成' : '✅ 预览完成'));
+            }
+            if (isJsonOutput()) {
+              emitCliResult({
+                stage: 'release.prune.preview',
+                appName: project.appName,
+                keepRequested: keep,
+                applyRequested: apply,
+                ...result
+              });
+              return;
+            }
+            console.log(`\n保留数量: ${pc.cyan(String(result.keep))}`);
+            console.log(`发现预览域名: ${pc.cyan(String(result.totalPreviewDomains))}`);
+            console.log(`候选删除: ${pc.cyan(String(result.candidates.length))}`);
+            if (result.candidates.length > 0) {
+              console.log(`候选: ${result.candidates.join(', ')}`);
+            }
+            if (apply) {
+              console.log(`已删除域名绑定: ${pc.cyan(String(result.deletedDomains.length))}`);
+              console.log(`已删除 OSS 路径: ${pc.cyan(String(result.deletedOssPaths.length))}`);
+              if (result.failed.length > 0) {
+                console.log(pc.yellow(`删除失败: ${result.failed.length}`));
+                for (const item of result.failed) {
+                  console.log(pc.yellow(`- ${item.domain}: ${item.reason}`));
+                }
+              }
+            } else {
+              console.log(pc.gray('\n提示: 加上 --apply 才会执行实际删除'));
+            }
+            console.log('');
+            showOutro('Done.');
+            return;
+          }
+
           if (apply) {
             await ensureDestructiveActionConfirmed(`清理函数历史版本（保留最近 ${keep} 个）`, { yes: Boolean(options.yes) });
           }
