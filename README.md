@@ -6,7 +6,23 @@
 - 一套项目配置：`.licell/project.json`
 - 一条从开发到发布的路径：`init -> deploy -> release -> rollback`
 
-默认面向中国区生产环境，默认地域 `cn-hangzhou` （建议结合Agent使用的时候可以用一个独立的区域，不和生产放在同一个地域）。
+默认面向中国区生产环境，默认地域 `cn-hangzhou`
+（建议结合Agent使用的时候可以用一个独立的区域，不和生产放在同一个地域）。
+
+---
+
+### 🌟 核心亮点与最佳实践
+
+1. **🚀 一键安装，开箱即用**：拒绝繁琐配置，极简的初始化与部署流程，最快 3
+   行命令完成代码上线。
+2. **🔌 原生支持 MCP 与 Skills**：内置 MCP (Model Context Protocol)
+   Server，并支持为 Agent 生成专属的结构化指令文档 (Skills)。
+3. **🪄 推荐使用 AI Coding Agent 托管部署**：强烈推荐在 **Cursor**、**Claude
+   Code** 或 **Codex** 等 AI Coding Agent 中结合使用！利用 `licell mcp` 和
+   `licell skills`，赋予 AI 操作阿里云环境的能力，让 AI
+   帮你自动规划、执行并接管整个部署工作流。
+
+---
 
 ## 你可以先看这 3 行
 
@@ -18,7 +34,8 @@ licell init --runtime nodejs22 && licell deploy --type api --target preview
 
 ## MCP（让 Agent 驱动 licell）
 
-Licell 内置 MCP（Model Context Protocol）stdio server，方便 Claude Code 等 Agent 直接调用 `licell` 执行部署/发布/查询/清理（默认仍以 `deploy` 为主线）。
+Licell 内置 MCP（Model Context Protocol）stdio server，方便 Claude Code 等 Agent
+直接调用 `licell` 执行部署/发布/查询/清理（默认仍以 `deploy` 为主线）。
 
 ### 一键 setup（推荐）
 
@@ -35,6 +52,7 @@ licell setup --agent claude --global
 ```
 
 `setup` 配置 MCP 时，按 Agent 写入对应配置文件：
+
 - Claude 全局：`~/.claude/settings.local.json`
 - Codex 全局：`~/.codex/config.toml`
 - 项目级（Claude/Codex 通用）：`<project>/.mcp.json`
@@ -66,7 +84,8 @@ licell mcp serve
 
 ### Agent 部署前置（FC API Spec / Check）
 
-为了避免“部署成功但运行失败”（如 Python 缺少 `handler`），建议 Agent 在调用 `deploy` 前固定执行两步：
+为了避免“部署成功但运行失败”（如 Python 缺少 `handler`），建议 Agent 在调用
+`deploy` 前固定执行两步：
 
 ```bash
 # 1) 读取 runtime 规格（entry / handler / 资源约束）
@@ -81,6 +100,7 @@ licell deploy check --runtime nodejs22 --entry src/index.ts
 说明：`deploy check` 仅做只读检测，不会自动修改项目文件。
 
 `deploy spec --output json` 会返回适合 Agent 解析的字段：
+
 - `handlerContract`（导出要求、签名、容器端口约束）
 - `eventSchema` / `responseSchema`（请求事件与返回格式）
 - `examples`（最小可通过示例、常见失败示例、修复提示）
@@ -104,15 +124,20 @@ licell deploy --type api --output json
 
 - 前缀：`@@LICELL_JSON@@`
 - 记录类型：`event` / `result` / `error`
-- 字段：`schemaVersion`、`stage`、`error.code`、`error.category`、`retryable`、`provider.requestId` 等
-- 覆盖范围：除 `licell mcp serve`（stdio 协议保留原样）外，所有命令均支持 `--output json`
-- 安全默认：涉及凭证/环境变量时，默认输出脱敏值；仅在显式参数下返回完整值（如 `env list --show-values`）
+- 字段：`schemaVersion`、`stage`、`error.code`、`error.category`、`retryable`、`provider.requestId`
+  等
+- 覆盖范围：除 `licell mcp serve`（stdio 协议保留原样）外，所有命令均支持
+  `--output json`
+- 安全默认：涉及凭证/环境变量时，默认输出脱敏值；仅在显式参数下返回完整值（如
+  `env list --show-values`）
 
-`licell mcp` 在调用 CLI 时会默认附加 `--output json`，并在 MCP 的 `structuredContent.records` 返回这些结构化记录。
+`licell mcp` 在调用 CLI 时会默认附加 `--output json`，并在 MCP 的
+`structuredContent.records` 返回这些结构化记录。
 
 ### Agent Skills（让 Agent 了解 licell 命令）
 
-MCP 让 Agent 能"调用" licell，而 Skills 让 Agent 能"理解" licell —— 生成一份结构化的命令参考文档，Agent 可以据此规划和执行部署任务。
+MCP 让 Agent 能"调用" licell，而 Skills 让 Agent 能"理解" licell ——
+生成一份结构化的命令参考文档，Agent 可以据此规划和执行部署任务。
 
 ```bash
 # Claude Code
@@ -229,11 +254,14 @@ licell login \
 
 说明：
 
-- `--bootstrap-ram` 会用你提供的高权限 AK/SK 自动创建 licell 专用 RAM 用户、策略和 AccessKey
+- `--bootstrap-ram` 会用你提供的高权限 AK/SK 自动创建 licell 专用 RAM
+  用户、策略和 AccessKey
 - 本地只保存新创建的 licell 专用 key，不保存输入的高权限 key
 - bootstrap 成功后即完成登录，不需要再执行一次 `licell login`
-- 高权限（超级）AK/SK 可在 `https://ram.console.aliyun.com/profile/access-keys` 获取
-- Docker 部署遇到 ACR 个人版未注册场景时，licell 会自动为当前 RAM 用户初始化 ACR 用户信息再继续部署
+- 高权限（超级）AK/SK 可在 `https://ram.console.aliyun.com/profile/access-keys`
+  获取
+- Docker 部署遇到 ACR 个人版未注册场景时，licell 会自动为当前 RAM 用户初始化 ACR
+  用户信息再继续部署
 - 如需自定义命名：`--bootstrap-user <name>` `--bootstrap-policy <name>`
 
 ### 2.3 部署 API（FC）
@@ -297,11 +325,11 @@ licell deploy \
 
 `init` 现在生成的是“可直接展示能力”的完整模板，不是 hello world。
 
-| runtime | 模板 | 主要内容 |
-| --- | --- | --- |
-| `nodejs20` / `nodejs22` | Express | `/healthz` `/meta` `/todos` `/math/sum` + FC handler 适配 |
-| `python3.12` / `python3.13` | Flask | 同等 API + FC handler 适配 |
-| `docker` | Bun + Hono | 同等 API + Dockerfile |
+| runtime                     | 模板       | 主要内容                                                  |
+| --------------------------- | ---------- | --------------------------------------------------------- |
+| `nodejs20` / `nodejs22`     | Express    | `/healthz` `/meta` `/todos` `/math/sum` + FC handler 适配 |
+| `python3.12` / `python3.13` | Flask      | 同等 API + FC handler 适配                                |
+| `docker`                    | Bun + Hono | 同等 API + Dockerfile                                     |
 
 常用初始化方式：
 
@@ -381,7 +409,8 @@ licell deploy --type api --runtime nodejs22 \
 
 网络参数：
 
-- API 部署默认启用 VPC（会自动创建/复用 `licell-vpc` 与 `licell-vsw` 并写入 `.licell/project.json`）
+- API 部署默认启用 VPC（会自动创建/复用 `licell-vpc` 与 `licell-vsw` 并写入
+  `.licell/project.json`）
 - 如需公网模式可显式关闭：`licell deploy --type api --disable-vpc`
 
 支持运行时：
@@ -412,12 +441,14 @@ licell deploy --type static --domain-suffix your-domain.xyz
 licell deploy --type static --domain static.your-domain.xyz
 ```
 
-说明：`static` 模式下只要提供 `--domain` 或 `--domain-suffix`，会自动接入 CDN，并回源到 OSS 地址，同时默认启用 HTTPS 证书签发与 CDN 证书配置。
+说明：`static` 模式下只要提供 `--domain` 或 `--domain-suffix`，会自动接入
+CDN，并回源到 OSS 地址，同时默认启用 HTTPS 证书签发与 CDN 证书配置。
 
 `--dist` 省略时自动探测：
 
 - 当前目录有 `index.html` -> 用当前目录 `.`
-- 否则按常见目录探测：`dist` `build` `out` `public` `www` `site` `.output/public`
+- 否则按常见目录探测：`dist` `build` `out` `public` `www` `site`
+  `.output/public`
 - 未命中时回退 `dist`
 
 ### 5.3 在哪个目录执行命令
@@ -539,7 +570,8 @@ licell oss upload <bucket> --source-dir dist --target-dir mysite
 licell oss bucket --bucket <bucket> --source-dir dist --target-dir mysite
 ```
 
-说明：`oss upload` 与 `oss bucket` 等价；`--target-dir` 不传时上传到 Bucket 根目录。
+说明：`oss upload` 与 `oss bucket` 等价；`--target-dir` 不传时上传到 Bucket
+根目录。
 
 ## 7. 进阶：运行时细节
 
@@ -557,7 +589,8 @@ licell oss bucket --bucket <bucket> --source-dir dist --target-dir mysite
 ### 7.2 Python 3.13 (`python3.13`)
 
 - 映射到 FC `custom.debian12`
-- 自动下载并缓存 Python3.13 Linux x64 运行时到：`~/.licell-cli/runtimes/python313`
+- 自动下载并缓存 Python3.13 Linux x64
+  运行时到：`~/.licell-cli/runtimes/python313`
 - 入口必须是 `.py` 且包含 `handler(event, context)`
 
 可用环境变量：
@@ -609,8 +642,10 @@ licell deploy --type api --target preview --domain api.your-domain.xyz
 说明：
 
 - `--domain` 与 `--domain-suffix` 不能同时使用
-- API 部署：使用 `--domain` 或 `--enable-cdn` 时默认自动开启 HTTPS（`--domain-suffix` 需配合 `--ssl` 或 `--enable-cdn`）
-- Static 部署：提供 `--domain` 或 `--domain-suffix` 时，默认自动开启 HTTPS，并自动接入 CDN 回源 OSS
+- API 部署：使用 `--domain` 或 `--enable-cdn` 时默认自动开启
+  HTTPS（`--domain-suffix` 需配合 `--ssl` 或 `--enable-cdn`）
+- Static 部署：提供 `--domain` 或 `--domain-suffix` 时，默认自动开启
+  HTTPS，并自动接入 CDN 回源 OSS
 - `--enable-cdn` 在 API 场景下表示显式开启；Static 提供域名时默认开启
 - 默认续签阈值 30 天
 - 域名需托管在阿里云 DNS
@@ -710,31 +745,31 @@ licell deploy \
 
 ## 12. 常用环境变量
 
-| 变量 | 作用 | 默认值 |
-| --- | --- | --- |
-| `LICELL_ACCOUNT_ID` | 非交互登录 Account ID | - |
-| `LICELL_ACCESS_KEY_ID` | 非交互登录 AK | - |
-| `LICELL_ACCESS_KEY_SECRET` | 非交互登录 SK | - |
-| `LICELL_REGION` | 默认地域 | `cn-hangzhou` |
-| `LICELL_DOMAIN_SUFFIX` | 默认固定域名后缀 | - |
-| `LICELL_FC_RUNTIME` | 默认 FC runtime | `nodejs20` |
-| `LICELL_BINARY_URL` | 安装脚本指定二进制地址 | latest release 资产 |
-| `LICELL_ARCHIVE_URL` | 安装脚本源码回退地址 | repo main tarball |
-| `LICELL_GITHUB_TOKEN` | 安装脚本访问私有源 token | - |
-| `LICELL_FC_CONNECT_TIMEOUT_MS` | FC API 连接超时 | `60000` |
-| `LICELL_FC_READ_TIMEOUT_MS` | FC API 读超时 | `600000` |
-| `LICELL_SSL_RENEW_BEFORE_DAYS` | SSL 续签阈值天数 | `30` |
-| `LICELL_SSL_DNS_READY_TIMEOUT_MS` | DNS TXT 生效等待超时 | `180000` |
-| `LICELL_SSL_SKIP_CHALLENGE_VERIFY` | 设为 `0` 启用本地 challenge verify | `1` |
-| `LICELL_RUNTIME_CACHE_DIR` | 自定义运行时缓存目录 | `~/.licell-cli/runtimes` |
-| `LICELL_PYTHON_REQUIREMENTS` | 指定 Python 依赖文件 | 自动探测 |
-| `LICELL_PYTHON_PIP` | 指定 pip 对应解释器 | `python3` |
-| `LICELL_PYTHON_ALLOW_SOURCE` | wheel 失败后允许源码安装 | `0` |
-| `LICELL_PYTHON_SKIP_VENDOR` | 跳过 Python 依赖自动打包 | `0` |
-| `LICELL_NODE22_SHASUMS_URL` | Node22 SHASUMS 覆盖地址 | 官方+镜像 |
-| `LICELL_PYTHON313_RELEASE_API_URL` | Python3.13 runtime release API 覆盖地址 | 官方地址 |
-| `LICELL_PYTHON313_TARBALL_URL` | Python3.13 runtime 包地址 | - |
-| `LICELL_PYTHON313_SHA256` | Python3.13 runtime 包校验 | - |
+| 变量                               | 作用                                    | 默认值                   |
+| ---------------------------------- | --------------------------------------- | ------------------------ |
+| `LICELL_ACCOUNT_ID`                | 非交互登录 Account ID                   | -                        |
+| `LICELL_ACCESS_KEY_ID`             | 非交互登录 AK                           | -                        |
+| `LICELL_ACCESS_KEY_SECRET`         | 非交互登录 SK                           | -                        |
+| `LICELL_REGION`                    | 默认地域                                | `cn-hangzhou`            |
+| `LICELL_DOMAIN_SUFFIX`             | 默认固定域名后缀                        | -                        |
+| `LICELL_FC_RUNTIME`                | 默认 FC runtime                         | `nodejs20`               |
+| `LICELL_BINARY_URL`                | 安装脚本指定二进制地址                  | latest release 资产      |
+| `LICELL_ARCHIVE_URL`               | 安装脚本源码回退地址                    | repo main tarball        |
+| `LICELL_GITHUB_TOKEN`              | 安装脚本访问私有源 token                | -                        |
+| `LICELL_FC_CONNECT_TIMEOUT_MS`     | FC API 连接超时                         | `60000`                  |
+| `LICELL_FC_READ_TIMEOUT_MS`        | FC API 读超时                           | `600000`                 |
+| `LICELL_SSL_RENEW_BEFORE_DAYS`     | SSL 续签阈值天数                        | `30`                     |
+| `LICELL_SSL_DNS_READY_TIMEOUT_MS`  | DNS TXT 生效等待超时                    | `180000`                 |
+| `LICELL_SSL_SKIP_CHALLENGE_VERIFY` | 设为 `0` 启用本地 challenge verify      | `1`                      |
+| `LICELL_RUNTIME_CACHE_DIR`         | 自定义运行时缓存目录                    | `~/.licell-cli/runtimes` |
+| `LICELL_PYTHON_REQUIREMENTS`       | 指定 Python 依赖文件                    | 自动探测                 |
+| `LICELL_PYTHON_PIP`                | 指定 pip 对应解释器                     | `python3`                |
+| `LICELL_PYTHON_ALLOW_SOURCE`       | wheel 失败后允许源码安装                | `0`                      |
+| `LICELL_PYTHON_SKIP_VENDOR`        | 跳过 Python 依赖自动打包                | `0`                      |
+| `LICELL_NODE22_SHASUMS_URL`        | Node22 SHASUMS 覆盖地址                 | 官方+镜像                |
+| `LICELL_PYTHON313_RELEASE_API_URL` | Python3.13 runtime release API 覆盖地址 | 官方地址                 |
+| `LICELL_PYTHON313_TARBALL_URL`     | Python3.13 runtime 包地址               | -                        |
+| `LICELL_PYTHON313_SHA256`          | Python3.13 runtime 包校验               | -                        |
 
 兼容性：仍兼容读取旧前缀 `ALI_*`，建议迁移到 `LICELL_*`。
 
@@ -766,7 +801,8 @@ bun run build:standalone
 说明：
 
 - standalone 产物基于 Node 官方 SEA（Single Executable Applications）链路构建
-- 兼容新链路：优先 `node --build-sea`，低版本 Node 自动回退 `--experimental-sea-config + postject`
+- 兼容新链路：优先 `node --build-sea`，低版本 Node 自动回退
+  `--experimental-sea-config + postject`
 - 本地构建需 Node >= 20
 
 产物：
@@ -804,7 +840,8 @@ git push origin v1.0.0
 
 - 可以直接使用 `licell login --bootstrap-ram`
 - licell 会自动创建专用 RAM 用户和策略，并切换到新 key
-- 需要你提供一次可创建 RAM 资源的高权限 AK/SK（获取地址：`https://ram.console.aliyun.com/profile/access-keys`）
+- 需要你提供一次可创建 RAM 资源的高权限
+  AK/SK（获取地址：`https://ram.console.aliyun.com/profile/access-keys`）
 - licell 不会保存你输入的高权限 key，只保存新创建的 licell 专用 key
 - bootstrap 完成后无需再次 `login`
 
