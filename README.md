@@ -24,10 +24,19 @@
 
 ---
 
+## 安装
+
+```bash
+# 方式一：npm 全局安装（推荐）
+npm install -g licell
+
+# 方式二：脚本安装
+curl -fsSL https://github.com/agents-infrastructure/licell/releases/latest/download/install.sh | bash
+```
+
 ## 你可以先看这 3 行
 
 ```bash
-curl -fsSL https://github.com/agents-infrastructure/licell/releases/latest/download/install.sh | bash
 licell login --region cn-hangzhou
 licell init --runtime nodejs22 && licell deploy --type api --target preview
 ```
