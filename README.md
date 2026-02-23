@@ -45,6 +45,17 @@ licell login --region cn-hangzhou
 licell init --runtime nodejs22 && licell deploy --type api --target preview
 ```
 
+## 📖 场景实战教程 (Tutorials)
+
+如果您想全方位发掘 Licell 的能力，我们提供了 5
+篇从零入门到高阶架构的场景实战系列：
+
+1. [**[入门] 5分钟极速上线：从零部署你的第一个应用**](./docs/scenarios/01-quick-start.md)
+2. [**[核心] 让 AI 为你打工：结合 Cursor / Claude 实现全自动运维**](./docs/scenarios/02-ai-driven-deployment.md)
+3. [**[网络] 告别繁琐控制台：一行命令搞定自定义域名与 HTTPS**](./docs/scenarios/03-domain-and-https.md)
+4. [**[数据] 告别工单：一键创建 Serverless 数据库与缓存**](./docs/scenarios/04-database-and-cache.md)
+5. [**[进阶] 环境与隔离：像 Vercel 一样管理 Preview 与 Prod**](./docs/scenarios/05-environments-and-releases.md)
+
 ## MCP（让 Agent 驱动 licell）
 
 Licell 内置 MCP（Model Context Protocol）stdio server，方便 Claude Code 等 Agent
