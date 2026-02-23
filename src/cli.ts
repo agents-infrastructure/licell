@@ -23,6 +23,9 @@ import { registerConfigCommands } from './commands/config';
 import { resolveCliVersion } from './utils/version';
 import { checkForUpdate, printUpdateTip } from './utils/update-check';
 import { formatErrorMessage } from './utils/errors';
+import { Config } from './utils/config';
+import { isInteractiveTTY } from './utils/cli-shared';
+import { runWelcomeSetupFlow } from './utils/first-run';
 import {
   emitCliError,
   emitCliResult,
@@ -88,25 +91,7 @@ try {
   process.exit(1);
 }
 
-if (argv.length <= 2) {
-  if (getOutputMode() === 'json') {
-    emitCliResult({
-      stage: 'help',
-      help: '请执行 licell <command> --help 查看命令说明'
-    });
-    process.exit(0);
-  }
 
-  const { Config } = await import('./utils/config');
-  const { isInteractiveTTY } = await import('./utils/cli-shared');
-  if (isInteractiveTTY() && !isJsonOutput() && !Config.getAuth()) {
-    const { runWelcomeSetupFlow } = await import('./utils/first-run');
-    await runWelcomeSetupFlow();
-  } else {
-    cli.outputHelp();
-  }
-  process.exit(0);
-}
 
 function handleCliError(err: unknown): never {
   const message = formatErrorMessage(err);
@@ -165,6 +150,23 @@ const updateCheckPromise = (!isJsonOutput() && !isUpgradeCommand)
   : Promise.resolve(null);
 
 void Promise.resolve()
+  .then(async () => {
+    if (argv.length <= 2) {
+      if (getOutputMode() === 'json') {
+        emitCliResult({
+          stage: 'help',
+          help: '请执行 licell <command> --help 查看命令说明'
+        });
+        process.exit(0);
+      }
+      if (isInteractiveTTY() && !isJsonOutput() && !Config.getAuth()) {
+        await runWelcomeSetupFlow();
+      } else {
+        cli.outputHelp();
+      }
+      process.exit(0);
+    }
+  })
   .then(() => cli.parse(argv))
   .then(async () => {
     const result = await updateCheckPromise;
