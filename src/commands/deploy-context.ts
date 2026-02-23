@@ -74,7 +74,7 @@ export function resolveDeploySslEnabled(
 }
 
 export async function resolveDeployContext(options: DeployCliOptions): Promise<DeployContext> {
-  const auth = ensureAuthOrExit();
+  const auth = await ensureAuthOrExit();
   const interactiveTTY = isInteractiveTTY();
 
   let project = Config.getProject();

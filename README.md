@@ -34,9 +34,13 @@ npm install -g licell
 curl -fsSL https://github.com/agents-infrastructure/licell/releases/latest/download/install.sh | bash
 ```
 
-## 你可以先看这 3 行
+## 你可以先看这 3 行（或直接敲 `licell`）
 
 ```bash
+# 方式 A：直接运行 licell，将自动进入交互式的新手引导（登录 + Agent 设置）
+licell
+
+# 方式 B：手动执行
 licell login --region cn-hangzhou
 licell init --runtime nodejs22 && licell deploy --type api --target preview
 ```

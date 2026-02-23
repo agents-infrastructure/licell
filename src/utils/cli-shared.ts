@@ -44,12 +44,31 @@ export function createSpinner() {
   } as ReturnType<typeof spinner>;
 }
 
-export function ensureAuthOrExit() {
+export async function ensureAuthOrExit() {
   const auth = Config.getAuth();
   if (!auth) {
     if (isJsonOutput()) {
       throw new Error('未登录，请先执行 `licell login`');
     }
+
+    if (isInteractiveTTY()) {
+      outro(pc.red('检测到您尚未登录阿里云凭证'));
+      const wantLogin = await confirm({
+        message: '是否现在进行登录以继续执行命令？',
+        initialValue: true
+      });
+      if (wantLogin && !isCancel(wantLogin)) {
+        // require() inline to avoid circular dependencies
+        const { runInteractiveLogin } = require('../commands/auth');
+        await runInteractiveLogin();
+        const newAuth = Config.getAuth();
+        if (newAuth) {
+          console.log(pc.green('继续执行原来的命令...\n'));
+          return newAuth;
+        }
+      }
+    }
+
     outro(pc.red('未登录，请先执行 `licell login`'));
     process.exit(1);
   }

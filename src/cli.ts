@@ -96,7 +96,15 @@ if (argv.length <= 2) {
     });
     process.exit(0);
   }
-  cli.outputHelp();
+
+  const { Config } = await import('./utils/config');
+  const { isInteractiveTTY } = await import('./utils/cli-shared');
+  if (isInteractiveTTY() && !isJsonOutput() && !Config.getAuth()) {
+    const { runWelcomeSetupFlow } = await import('./utils/first-run');
+    await runWelcomeSetupFlow();
+  } else {
+    cli.outputHelp();
+  }
   process.exit(0);
 }
 

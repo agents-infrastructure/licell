@@ -35,7 +35,7 @@ export function registerDomainCommands(cli: CAC) {
         },
         async () => {
           showIntro(pc.bgCyan(pc.black(' 🌐 Domain & SSL Configuration ')));
-          const auth = ensureAuthOrExit();
+          const auth = await ensureAuthOrExit();
           const normalizedDomain = toPromptValue(domain, '域名');
           const releaseTarget = normalizeReleaseTarget(options.target);
           if (options.sslForceRenew && !options.ssl) throw new Error('--ssl-force-renew 需要与 --ssl 一起使用');
@@ -113,7 +113,7 @@ export function registerDomainCommands(cli: CAC) {
         },
         async () => {
           showIntro(pc.bgCyan(pc.black(' 🌐 Domain Removal ')));
-          ensureAuthOrExit();
+          await ensureAuthOrExit();
           const normalizedDomain = toPromptValue(domain, '域名').toLowerCase();
           await ensureDestructiveActionConfirmed(`解绑域名 ${normalizedDomain}`, { yes: Boolean(options.yes) });
           const s = createSpinner();
