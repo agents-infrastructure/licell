@@ -204,3 +204,8 @@ export async function resolveCacheConnectInfo(explicitInstanceId?: string): Prom
     } : {})
   };
 }
+
+export async function deleteCacheInstance(instanceId: string) {
+  const redisClient = createRedisClient();
+  await redisClient.deleteInstance(new $Kvstore.DeleteInstanceRequest({ instanceId }));
+}

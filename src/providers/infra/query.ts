@@ -165,3 +165,8 @@ export async function resolveDatabaseConnectInfo(explicitInstanceId?: string): P
     publicConnectionString
   };
 }
+
+export async function deleteDatabaseInstance(instanceId: string) {
+  const { client } = createRdsClient();
+  await client.deleteDBInstance(new $Rds.DeleteDBInstanceRequest({ DBInstanceId: instanceId }));
+}

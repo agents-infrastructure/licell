@@ -12,6 +12,10 @@ const DB_WAIT_TIMEOUT_MS = 20 * 60 * 1000;
 const DB_WAIT_INTERVAL_MS = 5000;
 const DB_NETINFO_WAIT_TIMEOUT_MS = 5 * 60 * 1000;
 const CREATE_DB_MAX_ATTEMPTS = 5;
+const POSTPAID_PG_CLASS_FALLBACK = 'pg.n1e.1c.1m';
+const POSTPAID_PG_STORAGE_FALLBACK = 20;
+const POSTPAID_PG_ENGINE_VERSION = '18.0';
+
 const SERVERLESS_DB_CLASS_FALLBACK = {
   postgres: 'pg.n2.serverless.1c',
   mysql: 'mysql.n2.serverless.1c'
@@ -184,12 +188,35 @@ export async function provisionDatabase(
   const dbUser = normalizeDbUser(project.appName || 'licell_app');
   const dbPassword = randomStrongPassword();
   const engine = dbType === 'postgres' ? 'PostgreSQL' : 'MySQL';
-  const engineVersion = options.engineVersion?.trim() || (dbType === 'postgres' ? '18.0' : '8.0');
-  const category = options.category?.trim() || 'serverless_basic';
+  const isPostPaidPg = dbType === 'postgres';
+  const engineVersion = options.engineVersion?.trim()
+    || (isPostPaidPg ? POSTPAID_PG_ENGINE_VERSION : (dbType === 'postgres' ? '18.0' : '8.0'));
+  const category = isPostPaidPg
+    ? (options.category?.trim() || 'Basic')
+    : (options.category?.trim() || 'serverless_basic');
   const storageType = options.storageType?.trim() || 'cloud_essd';
 
-  spinner.message('🔎 正在查询 RDS Serverless 可用区...');
-  const serverlessZones = await resolveServerlessZoneIds(rdsClient, auth.region, engine, engineVersion);
+  if (isPostPaidPg) {
+    spinner.message('🔎 正在查询 RDS PostgreSQL 可用区...');
+  } else {
+    spinner.message('🔎 正在查询 RDS Serverless 可用区...');
+  }
+  let preferredZones: string[];
+  if (isPostPaidPg) {
+    try {
+      const zoneRes = await rdsClient.describeAvailableZones(new $Rds.DescribeAvailableZonesRequest({
+        regionId: auth.region, engine, engineVersion, category
+      }));
+      preferredZones = (zoneRes.body?.availableZones || [])
+        .map((z) => z.zoneId)
+        .filter((id): id is string => typeof id === 'string' && id.length > 0);
+      preferredZones = [...new Set(preferredZones)];
+    } catch {
+      preferredZones = [];
+    }
+  } else {
+    preferredZones = await resolveServerlessZoneIds(rdsClient, auth.region, engine, engineVersion);
+  }
   spinner.message('🔍 正在探测/拉起专属私有网络平面 (VPC & VSwitch)...');
   const manualZoneId = options.zoneId?.trim();
   const manualVpcId = options.vpcId?.trim();
@@ -208,19 +235,21 @@ export async function provisionDatabase(
       zoneId: manualZoneId
     });
   } else {
-    const preferredZones = manualZoneId ? [manualZoneId] : serverlessZones;
-    net = await ensureDefaultNetwork({ preferredZoneIds: preferredZones });
+    const netPreferredZones = manualZoneId ? [manualZoneId] : preferredZones;
+    net = await ensureDefaultNetwork({ preferredZoneIds: netPreferredZones });
   }
 
-  let dbInstanceClass: string = options.instanceClass?.trim() || SERVERLESS_DB_CLASS_FALLBACK[dbType];
-  let dbInstanceStorage: number = options.storageGb || SERVERLESS_DB_STORAGE_FALLBACK[dbType];
+  let dbInstanceClass: string = options.instanceClass?.trim()
+    || (isPostPaidPg ? POSTPAID_PG_CLASS_FALLBACK : SERVERLESS_DB_CLASS_FALLBACK[dbType]);
+  let dbInstanceStorage: number = options.storageGb
+    || (isPostPaidPg ? POSTPAID_PG_STORAGE_FALLBACK : SERVERLESS_DB_STORAGE_FALLBACK[dbType]);
   try {
     const classesRes = await rdsClient.describeAvailableClasses(new $Rds.DescribeAvailableClassesRequest({
       regionId: auth.region,
       zoneId: net.zoneId,
       engine,
       engineVersion,
-      instanceChargeType: 'Serverless',
+      instanceChargeType: isPostPaidPg ? 'PostPaid' : 'Serverless',
       category,
       DBInstanceStorageType: storageType
     }));
@@ -243,11 +272,13 @@ export async function provisionDatabase(
   spinner.message('🔐 正在确保 RDS 服务关联角色已就绪...');
   await ensureRdsServiceLinkedRole(rdsClient, auth.region, dbType);
 
-  spinner.message(`📦 正在拉起 Serverless ${dbType.toUpperCase()} (按量计费)...`);
+  spinner.message(isPostPaidPg
+    ? `📦 正在拉起 PostgreSQL (按量付费)...`
+    : `📦 正在拉起 Serverless ${dbType.toUpperCase()} (按量计费)...`);
   const createReqPayload: Record<string, unknown> = {
     engine,
     engineVersion,
-    payType: 'Serverless',
+    payType: isPostPaidPg ? 'Postpaid' : 'Serverless',
     category,
     regionId: auth.region,
     zoneId: net.zoneId,
@@ -258,14 +289,16 @@ export async function provisionDatabase(
     instanceNetworkType: 'VPC',
     DBInstanceNetType: 'Intranet',
     DBInstanceDescription: options.description?.trim() || `${project.appName || 'licell-app'}-${dbType}`,
-    serverlessConfig: {
-      minCapacity: options.minCapacity ?? SERVERLESS_DB_CONFIG_FALLBACK[dbType].minCapacity,
-      maxCapacity: options.maxCapacity ?? SERVERLESS_DB_CONFIG_FALLBACK[dbType].maxCapacity,
-      autoPause: options.autoPause ?? SERVERLESS_DB_CONFIG_FALLBACK[dbType].autoPause
-    },
     VPCId: net.vpcId,
     vSwitchId: net.vswId,
   };
+  if (!isPostPaidPg) {
+    createReqPayload.serverlessConfig = {
+      minCapacity: options.minCapacity ?? SERVERLESS_DB_CONFIG_FALLBACK[dbType].minCapacity,
+      maxCapacity: options.maxCapacity ?? SERVERLESS_DB_CONFIG_FALLBACK[dbType].maxCapacity,
+      autoPause: options.autoPause ?? SERVERLESS_DB_CONFIG_FALLBACK[dbType].autoPause
+    };
+  }
   const zoneIdSlave1 = options.zoneIdSlave1?.trim();
   const zoneIdSlave2 = options.zoneIdSlave2?.trim();
   if (zoneIdSlave1) createReqPayload.zoneIdSlave1 = zoneIdSlave1;

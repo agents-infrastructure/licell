@@ -1,5 +1,5 @@
 import type { CAC } from 'cac';
-import { select, isCancel } from '@clack/prompts';
+import { select, confirm, isCancel } from '@clack/prompts';
 import pc from 'picocolors';
 import { maskConnectionString } from '../utils/cli-helpers';
 import { executeWithAuthRecovery } from '../utils/auth-recovery';
@@ -8,6 +8,7 @@ import {
   listDatabaseInstances,
   provisionDatabase,
   resolveDatabaseConnectInfo,
+  deleteDatabaseInstance,
   allocateDbPublicConnection,
   applyDbPublicWhitelist
 } from '../providers/infra';
@@ -370,6 +371,46 @@ export function registerDbCommands(cli: CAC) {
           }
           console.log(`\n白名单 IP: ${pc.cyan(`${publicIp}/32`)} (分组: licell_public)`);
           showOutro('Done.');
+        }
+      );
+    });
+
+  cli.command('db rm <instanceId>', '删除数据库实例')
+    .option('--yes', '跳过确认')
+    .action(async (instanceId: string, options: { yes?: boolean }) => {
+      await executeWithAuthRecovery(
+        {
+          commandLabel: 'licell db rm',
+          interactiveTTY: isInteractiveTTY(),
+          requiredCapabilities: ['rds']
+        },
+        async () => {
+          showIntro(pc.bgRed(pc.white(' 🗑️ Delete Database ')));
+          ensureAuthOrExit();
+          const id = instanceId.trim();
+          if (!id) throw new Error('请提供 instanceId');
+
+          if (!options.yes && isInteractiveTTY()) {
+            const ok = await confirm({ message: `确认删除数据库实例 ${pc.red(id)}？此操作不可恢复。` });
+            if (isCancel(ok) || !ok) {
+              showOutro('已取消');
+              return;
+            }
+          }
+
+          const s = createSpinner();
+          await withSpinner(
+            s,
+            `正在删除实例 ${id}...`,
+            '❌ 删除失败',
+            () => deleteDatabaseInstance(id)
+          );
+
+          if (isJsonOutput()) {
+            emitCliResult({ stage: 'db.rm', instanceId: id });
+            return;
+          }
+          showOutro(`实例 ${id} 已删除`);
         }
       );
     });
