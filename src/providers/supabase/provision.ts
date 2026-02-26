@@ -1,5 +1,6 @@
 import { randomInt, randomUUID } from 'crypto';
 import * as $RdsAi from '@alicloud/rdsai20250507';
+import * as $OpenApi from '@alicloud/openapi-client';
 import { Config } from '../../utils/config';
 import { type Spinner } from '../../utils/errors';
 import { sleep } from '../../utils/runtime';
@@ -43,6 +44,8 @@ export async function provisionSupabase(spinner: Spinner, options: ProvisionSupa
   const dashboardPassword = options.dashboardPassword?.trim() || generateSupabasePassword();
   const databasePassword = options.databasePassword?.trim() || generateSupabasePassword();
   const instanceClass = options.instanceClass?.trim() || DEFAULT_SUPABASE_CLASS;
+  const dbInstanceClass = options.dbInstanceClass?.trim() || 'pg.n2.2c.1m';
+  const dbInstanceStorage = options.dbInstanceStorage ?? 20;
   const clientToken = randomUUID();
 
   spinner.message('🚀 正在创建 Supabase 实例...');
@@ -58,7 +61,12 @@ export async function provisionSupabase(spinner: Spinner, options: ProvisionSupa
     publicEndpointEnabled: options.publicEndpointEnabled ?? true,
     publicNetworkAccessEnabled: options.publicNetworkAccessEnabled ?? false,
     dBInstanceName: options.dbInstanceName?.trim() || undefined,
-    clientToken
+    clientToken,
+    DBInstanceConfig: new $RdsAi.CreateAppInstanceRequestDBInstanceConfig({
+      DBInstanceClass: dbInstanceClass,
+      DBInstanceStorage: dbInstanceStorage,
+      payType: 'Postpaid'
+    })
   }));
 
   const instanceName = createRes.body?.instanceName;

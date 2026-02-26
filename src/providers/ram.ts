@@ -1,10 +1,12 @@
 import RAM, * as $RAM from '@alicloud/ram20150501';
-import * as $OpenApi from '@alicloud/openapi-client';
+import OpenApiClient, * as $OpenApi from '@alicloud/openapi-client';
+import * as $Util from '@alicloud/tea-util';
 import type { AuthConfig } from '../utils/config';
 import { resolveSdkCtor } from '../utils/sdk';
 import { isNotFoundError } from '../utils/alicloud-error';
 
 const RamClientCtor = resolveSdkCtor<RAM>(RAM, '@alicloud/ram20150501');
+const OpenApiCtor = resolveSdkCtor<OpenApiClient>(OpenApiClient, '@alicloud/openapi-client');
 
 export const DEFAULT_BOOTSTRAP_USER = 'licell-operator';
 export const DEFAULT_BOOTSTRAP_POLICY = 'LicellOperatorPolicy';
@@ -45,6 +47,27 @@ export const LICELL_POLICY_ACTIONS = [
   'rds:GrantAccountPrivilege',
   'rds:CheckServiceLinkedRole',
   'rds:CreateServiceLinkedRole',
+  // RDS AI (Supabase)
+  'rdsai:CreateAppInstance',
+  'rdsai:DeleteAppInstance',
+  'rdsai:DescribeAppInstances',
+  'rdsai:DescribeAppInstanceAttribute',
+  'rdsai:DescribeInstanceEndpoints',
+  'rdsai:DescribeInstanceAuthInfo',
+  'rdsai:ModifyInstanceAuthConfig',
+  'rdsai:ModifyInstanceStorageConfig',
+  'rdsai:ModifyInstanceRAGConfig',
+  'rdsai:ModifyInstanceIpWhitelist',
+  'rdsai:ModifyInstanceConfig',
+  'rdsai:ModifyInstanceSSL',
+  'rdsai:DescribeInstanceIpWhitelist',
+  'rdsai:DescribeInstanceSSL',
+  'rdsai:DescribeInstanceStorageConfig',
+  'rdsai:DescribeInstanceRAGConfig',
+  'rdsai:ResetInstancePassword',
+  'rdsai:RestartInstance',
+  'rdsai:StopInstance',
+  'rdsai:StartInstance',
   // KVStore (Redis/Tair)
   'kvstore:DescribeInstances',
   'kvstore:DescribeAccounts',
@@ -93,9 +116,10 @@ export const LICELL_POLICY_ACTIONS = [
   'cr:GetAuthorizationToken',
   // SLS (Log Service, read-only)
   'log:GetLogs',
-  // RAM (pass role to FC for service role)
+  // RAM (pass role to FC for service role + SLR creation)
   'ram:PassRole',
-  'ram:GetRole'
+  'ram:GetRole',
+  'ram:CreateServiceLinkedRole'
 ] as const;
 
 export interface BootstrapRamAccessInput {
@@ -384,6 +408,8 @@ export async function bootstrapLicellRamAccess(input: BootstrapRamAccessInput): 
 
   // Ensure FC service role exists for static preview proxy
   try { await ensureFcServiceRole(input.adminAuth); } catch { /* best-effort */ }
+  // Ensure Supabase service linked role exists
+  try { await ensureSupabaseServiceLinkedRole(input.adminAuth); } catch { /* best-effort */ }
 
   return {
     userName,
@@ -403,6 +429,8 @@ export async function repairLicellRamAccess(input: RepairRamAccessInput): Promis
 
   // Ensure FC service role exists for static preview proxy
   try { await ensureFcServiceRole(input.adminAuth); } catch { /* best-effort */ }
+  // Ensure Supabase service linked role exists
+  try { await ensureSupabaseServiceLinkedRole(input.adminAuth); } catch { /* best-effort */ }
 
   let targetUserName = input.userName
     ? normalizeRamUserName(input.userName)
@@ -492,4 +520,36 @@ export async function ensureFcServiceRole(adminAuth: AuthConfig): Promise<{ crea
   }
 
   return { created: true };
+}
+
+const SUPABASE_SLR_SERVICE_NAME = 'supabase.rdsai.aliyuncs.com';
+
+export async function ensureSupabaseServiceLinkedRole(adminAuth: AuthConfig): Promise<{ created: boolean }> {
+  const client = new OpenApiCtor(new $OpenApi.Config({
+    accessKeyId: adminAuth.ak,
+    accessKeySecret: adminAuth.sk,
+    endpoint: 'resourcemanager.aliyuncs.com'
+  }));
+  const params = new $OpenApi.Params({
+    action: 'CreateServiceLinkedRole',
+    version: '2020-03-31',
+    protocol: 'HTTPS',
+    pathname: '/',
+    method: 'POST',
+    authType: 'AK',
+    style: 'RPC',
+    reqBodyType: 'formData',
+    bodyType: 'json'
+  });
+  const request = new $OpenApi.OpenApiRequest({
+    query: { ServiceName: SUPABASE_SLR_SERVICE_NAME }
+  });
+  try {
+    await client.callApi(params, request, new $Util.RuntimeOptions({ readTimeout: 15_000, connectTimeout: 8_000 }));
+    return { created: true };
+  } catch (err: unknown) {
+    const code = String((err as { code?: unknown })?.code || '');
+    if (code === 'AlreadyExists' || code.includes('AlreadyExists')) return { created: false };
+    throw err;
+  }
 }

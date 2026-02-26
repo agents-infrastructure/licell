@@ -7,13 +7,14 @@ import { Config, DEFAULT_ALI_REGION, type AuthConfig } from './config';
 import { readEnvWithFallback } from './env';
 
 export type AuthIssueKind = 'missing_auth' | 'access_denied' | 'invalid_credentials' | 'unknown';
-export type AuthCapability = 'fc' | 'dns' | 'oss' | 'rds' | 'redis' | 'cdn' | 'vpc' | 'cr' | 'logs';
+export type AuthCapability = 'fc' | 'dns' | 'oss' | 'rds' | 'rdsai' | 'redis' | 'cdn' | 'vpc' | 'cr' | 'logs';
 
 const CAPABILITY_LABELS: Record<AuthCapability, string> = {
   fc: '函数计算',
   dns: '云解析 DNS',
   oss: 'OSS',
   rds: 'RDS',
+  rdsai: 'RDS AI (Supabase)',
   redis: 'Redis/Tair',
   cdn: 'CDN',
   vpc: 'VPC',
@@ -26,6 +27,7 @@ const CAPABILITY_ACTIONS: Record<AuthCapability, string[]> = {
   dns: ['alidns:DescribeDomainRecords', 'alidns:AddDomainRecord', 'alidns:DeleteDomainRecord'],
   oss: ['oss:ListBuckets', 'oss:GetBucketInfo', 'oss:PutObject'],
   rds: ['rds:DescribeDBInstances', 'rds:CreateDBInstance', 'rds:CreateDatabase'],
+  rdsai: ['rdsai:CreateAppInstance', 'rdsai:DescribeAppInstances', 'rdsai:DeleteAppInstance'],
   redis: ['kvstore:DescribeInstances', 'kvstore:CreateTairKVCacheVNode', 'kvstore:ResetAccountPassword'],
   cdn: ['cdn:DescribeUserDomains', 'cdn:AddCdnDomain', 'cdn:BatchSetCdnDomainConfig'],
   vpc: ['vpc:DescribeVpcs', 'vpc:CreateVpc', 'vpc:CreateVSwitch'],

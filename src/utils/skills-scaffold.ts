@@ -10,7 +10,7 @@ export interface SkillFile {
 }
 
 const AGENTS_MD_LICELL_ENTRY =
-  '- licell: Deploy and manage Alibaba Cloud Serverless applications using the licell CLI. Covers deploy, release, functions, env vars, domains, DNS, logs, OSS, database, cache, and MCP. (file: .claude/skills/licell/SKILL.md)';
+  '- licell: Deploy and manage Alibaba Cloud Serverless applications using the licell CLI. Covers deploy, release, functions, env vars, domains, DNS, logs, OSS, database, cache, Supabase, and MCP. (file: .claude/skills/licell/SKILL.md)';
 
 /* ------------------------------------------------------------------ */
 /*  SKILL content                                                      */
@@ -21,7 +21,7 @@ function getSkillContent(): string {
 name: licell
 description: >-
   Deploy and manage Alibaba Cloud Serverless applications using the licell CLI.
-  Covers deploy, release, functions, env vars, domains, DNS, logs, OSS, database, cache, and MCP.
+  Covers deploy, release, functions, env vars, domains, DNS, logs, OSS, database, cache, Supabase, and MCP.
 metadata:
   author: licell
   version: "1.0"
@@ -197,6 +197,28 @@ licell deploy --type api --runtime docker --target preview
 
 \`cache add\` 高级选项：\`--instance\`、\`--password\`、\`--class\`、\`--zone\`、\`--vpc\`、\`--vsw\`、\`--security-ip-list\`
 
+### Supabase (\`licell supa\`)
+
+| 命令 | 说明 |
+|------|------|
+| \`licell supa list [--limit <n>]\` | 查看 Supabase 实例列表 |
+| \`licell supa add [--name <name>]\` | 创建 Supabase 实例（含 PG、等待就绪、保存凭证） |
+| \`licell supa info <instanceName>\` | 查看实例详情 |
+| \`licell supa connect <instanceName>\` | 查看连接信息（Endpoints、API Keys） |
+| \`licell supa config <instanceName>\` | 查看/修改配置（Auth/Storage/RAG） |
+| \`licell supa whitelist <instanceName>\` | 查看/修改 IP 白名单 |
+| \`licell supa reset-password <instanceName>\` | 重置 Dashboard 或数据库密码 |
+| \`licell supa restart <instanceName>\` | 重启实例 |
+| \`licell supa stop <instanceName>\` | 停止实例 |
+| \`licell supa start <instanceName>\` | 启动实例 |
+| \`licell supa rm <instanceName> [--yes]\` | 删除实例（不可恢复） |
+
+\`supa add\` 高级选项：\`--vsw\`、\`--class\`、\`--db-instance\`、\`--dashboard-user\`、\`--dashboard-password\`、\`--db-password\`、\`--public-network\`
+
+\`supa config\` 修改选项：\`--set-auth KEY=VALUE\`、\`--set-storage KEY=VALUE\`、\`--rag on|off\`、\`--set-rag KEY=VALUE\`
+
+\`supa whitelist\` 修改选项：\`--set <ips>\`（覆盖）、\`--add <ips>\`（追加）、\`--remove <ips>\`（删除）、\`--group <name>\`
+
 ### MCP Server (\`licell mcp\`)
 
 | 命令 | 说明 |
@@ -251,6 +273,14 @@ licell deploy --type api --target prod --domain api.example.com --ssl --enable-c
 \`\`\`bash
 licell db add --type postgres
 licell cache add --type redis
+licell deploy --type api --target preview --enable-vpc
+\`\`\`
+
+### Supabase 全栈部署
+
+\`\`\`bash
+licell supa add --name my-app
+licell supa connect <instanceName>    # 获取 URL 和 API Keys
 licell deploy --type api --target preview --enable-vpc
 \`\`\`
 

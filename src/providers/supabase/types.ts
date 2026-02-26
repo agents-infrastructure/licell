@@ -61,6 +61,8 @@ export interface ProvisionSupabaseOptions {
   vSwitchId?: string;
   instanceClass?: string;
   dbInstanceName?: string;
+  dbInstanceClass?: string;
+  dbInstanceStorage?: number;
   dashboardUsername?: string;
   dashboardPassword?: string;
   databasePassword?: string;

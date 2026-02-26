@@ -56,7 +56,7 @@ export function registerSupaCommands(cli: CAC) {
       publicNetwork?: boolean;
     }) => {
       await executeWithAuthRecovery(
-        { commandLabel: 'licell supa add', interactiveTTY: isInteractiveTTY(), requiredCapabilities: ['rds'] },
+        { commandLabel: 'licell supa add', interactiveTTY: isInteractiveTTY(), requiredCapabilities: ['rdsai', 'vpc'] },
         async () => {
           showIntro(pc.bgGreen(pc.black(' 🟢 Supabase Provisioning ')));
           ensureAuthOrExit();
@@ -100,7 +100,7 @@ export function registerSupaCommands(cli: CAC) {
     .option('--limit <n>', '返回数量，默认 20')
     .action(async (options: { limit?: unknown }) => {
       await executeWithAuthRecovery(
-        { commandLabel: 'licell supa list', interactiveTTY: isInteractiveTTY(), requiredCapabilities: ['rds'] },
+        { commandLabel: 'licell supa list', interactiveTTY: isInteractiveTTY(), requiredCapabilities: ['rdsai'] },
         async () => {
           ensureAuthOrExit();
           const limit = parseListLimit(options.limit, 20, 200);
@@ -128,7 +128,7 @@ export function registerSupaCommands(cli: CAC) {
   cli.command('supa info <instanceName>', '查看 Supabase 实例详情')
     .action(async (instanceName: string) => {
       await executeWithAuthRecovery(
-        { commandLabel: 'licell supa info', interactiveTTY: isInteractiveTTY(), requiredCapabilities: ['rds'] },
+        { commandLabel: 'licell supa info', interactiveTTY: isInteractiveTTY(), requiredCapabilities: ['rdsai'] },
         async () => {
           ensureAuthOrExit();
           const name = instanceName.trim();
@@ -156,7 +156,7 @@ export function registerSupaCommands(cli: CAC) {
   cli.command('supa connect <instanceName>', '查看 Supabase 连接信息和 API Keys')
     .action(async (instanceName: string) => {
       await executeWithAuthRecovery(
-        { commandLabel: 'licell supa connect', interactiveTTY: isInteractiveTTY(), requiredCapabilities: ['rds'] },
+        { commandLabel: 'licell supa connect', interactiveTTY: isInteractiveTTY(), requiredCapabilities: ['rdsai'] },
         async () => {
           ensureAuthOrExit();
           const name = instanceName.trim();
@@ -207,7 +207,7 @@ export function registerSupaCommands(cli: CAC) {
       setRag?: string;
     }) => {
       await executeWithAuthRecovery(
-        { commandLabel: 'licell supa config', interactiveTTY: isInteractiveTTY(), requiredCapabilities: ['rds'] },
+        { commandLabel: 'licell supa config', interactiveTTY: isInteractiveTTY(), requiredCapabilities: ['rdsai'] },
         async () => {
           ensureAuthOrExit();
           const name = instanceName.trim();
@@ -296,7 +296,7 @@ export function registerSupaCommands(cli: CAC) {
       group?: string;
     }) => {
       await executeWithAuthRecovery(
-        { commandLabel: 'licell supa whitelist', interactiveTTY: isInteractiveTTY(), requiredCapabilities: ['rds'] },
+        { commandLabel: 'licell supa whitelist', interactiveTTY: isInteractiveTTY(), requiredCapabilities: ['rdsai'] },
         async () => {
           ensureAuthOrExit();
           const name = instanceName.trim();
@@ -340,7 +340,7 @@ export function registerSupaCommands(cli: CAC) {
     .option('--db-password <password>', '新的数据库密码')
     .action(async (instanceName: string, options: { dashboardPassword?: string; dbPassword?: string }) => {
       await executeWithAuthRecovery(
-        { commandLabel: 'licell supa reset-password', interactiveTTY: isInteractiveTTY(), requiredCapabilities: ['rds'] },
+        { commandLabel: 'licell supa reset-password', interactiveTTY: isInteractiveTTY(), requiredCapabilities: ['rdsai'] },
         async () => {
           ensureAuthOrExit();
           const name = instanceName.trim();
@@ -366,7 +366,7 @@ export function registerSupaCommands(cli: CAC) {
     cli.command(`${cmd} <instanceName>`, `${label} Supabase 实例`)
       .action(async (instanceName: string) => {
         await executeWithAuthRecovery(
-          { commandLabel: `licell ${cmd}`, interactiveTTY: isInteractiveTTY(), requiredCapabilities: ['rds'] },
+          { commandLabel: `licell ${cmd}`, interactiveTTY: isInteractiveTTY(), requiredCapabilities: ['rdsai'] },
           async () => {
             ensureAuthOrExit();
             const name = instanceName.trim();
@@ -385,7 +385,7 @@ export function registerSupaCommands(cli: CAC) {
     .option('--yes', '跳过确认')
     .action(async (instanceName: string, options: { yes?: boolean }) => {
       await executeWithAuthRecovery(
-        { commandLabel: 'licell supa rm', interactiveTTY: isInteractiveTTY(), requiredCapabilities: ['rds'] },
+        { commandLabel: 'licell supa rm', interactiveTTY: isInteractiveTTY(), requiredCapabilities: ['rdsai'] },
         async () => {
           showIntro(pc.bgRed(pc.white(' 🗑️ Delete Supabase Instance ')));
           ensureAuthOrExit();

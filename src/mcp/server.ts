@@ -577,6 +577,170 @@ export async function runLicellMcpServer(options: { projectRoot: string; serverT
         required: ['recordId']
       },
       annotations: { destructiveHint: true }
+    },
+
+    // ── Supabase (RDS AI) ──
+
+    licell_supa_list: {
+      name: 'licell_supa_list',
+      title: 'List Supabase instances',
+      description: 'List RDS Supabase instances in current region.',
+      inputSchema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          limit: { type: 'number', description: 'Max items (default 20).' },
+          cwd: { type: 'string' },
+          timeoutMs: { type: 'number' }
+        }
+      }
+    },
+
+    licell_supa_add: {
+      name: 'licell_supa_add',
+      title: 'Create Supabase instance',
+      description: 'Provision a new RDS Supabase instance (creates PG, waits until Running, saves env vars). Long-running (~5-10 min).',
+      inputSchema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          name: { type: 'string', description: 'App name for the instance.' },
+          vsw: { type: 'string', description: 'VSwitch ID (auto-detected if omitted).' },
+          class: { type: 'string', description: 'Instance class (default rdsai.supabase.basic).' },
+          dbInstance: { type: 'string', description: 'Existing RDS PostgreSQL instance ID to associate.' },
+          dashboardUser: { type: 'string', description: 'Dashboard username (default supabase).' },
+          dashboardPassword: { type: 'string', description: 'Dashboard password (auto-generated if omitted).' },
+          dbPassword: { type: 'string', description: 'Database password (auto-generated if omitted).' },
+          publicNetwork: { type: 'boolean', description: 'Enable public NAT gateway.' },
+          cwd: { type: 'string' },
+          timeoutMs: { type: 'number', description: 'Command timeout in milliseconds (default 900000 for long provision).' }
+        }
+      }
+    },
+
+    licell_supa_info: {
+      name: 'licell_supa_info',
+      title: 'Get Supabase instance details',
+      description: 'Get detailed attributes of a Supabase instance.',
+      inputSchema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          instanceName: { type: 'string', description: 'Supabase instance name.' },
+          cwd: { type: 'string' },
+          timeoutMs: { type: 'number' }
+        },
+        required: ['instanceName']
+      }
+    },
+
+    licell_supa_connect: {
+      name: 'licell_supa_connect',
+      title: 'Get Supabase connection info',
+      description: 'Get Supabase endpoints, DB endpoints, and API keys (anon key, service key, JWT secret).',
+      inputSchema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          instanceName: { type: 'string', description: 'Supabase instance name.' },
+          cwd: { type: 'string' },
+          timeoutMs: { type: 'number' }
+        },
+        required: ['instanceName']
+      }
+    },
+
+    licell_supa_config: {
+      name: 'licell_supa_config',
+      title: 'View/modify Supabase config',
+      description: 'View or modify Supabase instance configuration (auth/storage/RAG). Without modification flags, shows current config.',
+      inputSchema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          instanceName: { type: 'string', description: 'Supabase instance name.' },
+          setAuth: { type: 'string', description: 'Set auth config: KEY=VALUE (e.g. GOTRUE_SITE_URL=http://example.com).' },
+          setStorage: { type: 'string', description: 'Set storage config: KEY=VALUE.' },
+          rag: { type: 'string', enum: ['on', 'off'], description: 'Enable/disable RAG Agent.' },
+          setRag: { type: 'string', description: 'Set RAG config: KEY=VALUE.' },
+          cwd: { type: 'string' },
+          timeoutMs: { type: 'number' }
+        },
+        required: ['instanceName']
+      }
+    },
+
+    licell_supa_whitelist: {
+      name: 'licell_supa_whitelist',
+      title: 'Manage Supabase IP whitelist',
+      description: 'View or modify Supabase instance IP whitelist. Without modification flags, shows current whitelist.',
+      inputSchema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          instanceName: { type: 'string', description: 'Supabase instance name.' },
+          set: { type: 'string', description: 'Set whitelist IPs (cover mode, comma-separated).' },
+          add: { type: 'string', description: 'Append whitelist IPs (comma-separated).' },
+          remove: { type: 'string', description: 'Remove whitelist IPs (comma-separated).' },
+          group: { type: 'string', description: 'Whitelist group name (default: default).' },
+          cwd: { type: 'string' },
+          timeoutMs: { type: 'number' }
+        },
+        required: ['instanceName']
+      }
+    },
+
+    licell_supa_reset_password: {
+      name: 'licell_supa_reset_password',
+      title: 'Reset Supabase password',
+      description: 'Reset Supabase dashboard or database password.',
+      inputSchema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          instanceName: { type: 'string', description: 'Supabase instance name.' },
+          dashboardPassword: { type: 'string', description: 'New dashboard password.' },
+          dbPassword: { type: 'string', description: 'New database password.' },
+          cwd: { type: 'string' },
+          timeoutMs: { type: 'number' }
+        },
+        required: ['instanceName']
+      }
+    },
+
+    licell_supa_lifecycle: {
+      name: 'licell_supa_lifecycle',
+      title: 'Restart/stop/start Supabase instance',
+      description: 'Manage Supabase instance lifecycle: restart, stop, or start.',
+      inputSchema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          instanceName: { type: 'string', description: 'Supabase instance name.' },
+          action: { type: 'string', enum: ['restart', 'stop', 'start'], description: 'Lifecycle action.' },
+          cwd: { type: 'string' },
+          timeoutMs: { type: 'number' }
+        },
+        required: ['instanceName', 'action']
+      }
+    },
+
+    licell_supa_rm: {
+      name: 'licell_supa_rm',
+      title: 'Delete Supabase instance (dangerous)',
+      description: 'Delete a Supabase instance. Destructive and irreversible (requires yes=true). Associated PG instance and NAT gateway need manual cleanup.',
+      inputSchema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          instanceName: { type: 'string', description: 'Supabase instance name.' },
+          yes: { type: 'boolean', description: 'Required in non-interactive mode.' },
+          cwd: { type: 'string' },
+          timeoutMs: { type: 'number' }
+        },
+        required: ['instanceName']
+      },
+      annotations: { destructiveHint: true }
     }
   } as const;
 
@@ -842,6 +1006,81 @@ export async function runLicellMcpServer(options: { projectRoot: string; serverT
           const yes = toOptionalBoolean(toolArgs.yes);
           assertTrue(yes, 'dns records rm is destructive; set yes=true to confirm');
           argv = ['dns', 'records', 'rm', recordId, '--yes'];
+        } else if (name === 'licell_supa_list') {
+          argv = ['supa', 'list'];
+          const limit = toOptionalNumber(toolArgs.limit);
+          if (limit !== undefined) argv.push('--limit', String(limit));
+        } else if (name === 'licell_supa_add') {
+          argv = ['supa', 'add'];
+          const appName = toOptionalString(toolArgs.name);
+          const vsw = toOptionalString(toolArgs.vsw);
+          const cls = toOptionalString(toolArgs.class);
+          const dbInstance = toOptionalString(toolArgs.dbInstance);
+          const dashboardUser = toOptionalString(toolArgs.dashboardUser);
+          const dashboardPassword = toOptionalString(toolArgs.dashboardPassword);
+          const dbPassword = toOptionalString(toolArgs.dbPassword);
+          const publicNetwork = toOptionalBoolean(toolArgs.publicNetwork);
+          if (appName) argv.push('--name', appName);
+          if (vsw) argv.push('--vsw', vsw);
+          if (cls) argv.push('--class', cls);
+          if (dbInstance) argv.push('--db-instance', dbInstance);
+          if (dashboardUser) argv.push('--dashboard-user', dashboardUser);
+          if (dashboardPassword) argv.push('--dashboard-password', dashboardPassword);
+          if (dbPassword) argv.push('--db-password', dbPassword);
+          if (publicNetwork) argv.push('--public-network');
+        } else if (name === 'licell_supa_info') {
+          const instanceName = toOptionalString(toolArgs.instanceName);
+          if (!instanceName) throw new Error('instanceName is required');
+          argv = ['supa', 'info', instanceName];
+        } else if (name === 'licell_supa_connect') {
+          const instanceName = toOptionalString(toolArgs.instanceName);
+          if (!instanceName) throw new Error('instanceName is required');
+          argv = ['supa', 'connect', instanceName];
+        } else if (name === 'licell_supa_config') {
+          const instanceName = toOptionalString(toolArgs.instanceName);
+          if (!instanceName) throw new Error('instanceName is required');
+          argv = ['supa', 'config', instanceName];
+          const setAuth = toOptionalString(toolArgs.setAuth);
+          const setStorage = toOptionalString(toolArgs.setStorage);
+          const rag = toOptionalString(toolArgs.rag);
+          const setRag = toOptionalString(toolArgs.setRag);
+          if (setAuth) argv.push('--set-auth', setAuth);
+          if (setStorage) argv.push('--set-storage', setStorage);
+          if (rag) argv.push('--rag', rag);
+          if (setRag) argv.push('--set-rag', setRag);
+        } else if (name === 'licell_supa_whitelist') {
+          const instanceName = toOptionalString(toolArgs.instanceName);
+          if (!instanceName) throw new Error('instanceName is required');
+          argv = ['supa', 'whitelist', instanceName];
+          const set = toOptionalString(toolArgs.set);
+          const add = toOptionalString(toolArgs.add);
+          const remove = toOptionalString(toolArgs.remove);
+          const group = toOptionalString(toolArgs.group);
+          if (set) argv.push('--set', set);
+          if (add) argv.push('--add', add);
+          if (remove) argv.push('--remove', remove);
+          if (group) argv.push('--group', group);
+        } else if (name === 'licell_supa_reset_password') {
+          const instanceName = toOptionalString(toolArgs.instanceName);
+          if (!instanceName) throw new Error('instanceName is required');
+          argv = ['supa', 'reset-password', instanceName];
+          const dashboardPassword = toOptionalString(toolArgs.dashboardPassword);
+          const dbPassword = toOptionalString(toolArgs.dbPassword);
+          if (!dashboardPassword && !dbPassword) throw new Error('Provide dashboardPassword or dbPassword');
+          if (dashboardPassword) argv.push('--dashboard-password', dashboardPassword);
+          if (dbPassword) argv.push('--db-password', dbPassword);
+        } else if (name === 'licell_supa_lifecycle') {
+          const instanceName = toOptionalString(toolArgs.instanceName);
+          const action = toOptionalString(toolArgs.action);
+          if (!instanceName) throw new Error('instanceName is required');
+          if (action !== 'restart' && action !== 'stop' && action !== 'start') throw new Error('action must be restart, stop, or start');
+          argv = ['supa', action, instanceName];
+        } else if (name === 'licell_supa_rm') {
+          const instanceName = toOptionalString(toolArgs.instanceName);
+          if (!instanceName) throw new Error('instanceName is required');
+          const yes = toOptionalBoolean(toolArgs.yes);
+          assertTrue(yes, 'supa rm is destructive; set yes=true to confirm');
+          argv = ['supa', 'rm', instanceName, '--yes'];
         } else {
           throw new Error(`Unknown tool: ${name}`);
         }
