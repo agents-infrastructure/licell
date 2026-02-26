@@ -190,7 +190,7 @@ export async function provisionDatabase(
   const engine = dbType === 'postgres' ? 'PostgreSQL' : 'MySQL';
   const isPostPaidPg = dbType === 'postgres';
   const engineVersion = options.engineVersion?.trim()
-    || (isPostPaidPg ? POSTPAID_PG_ENGINE_VERSION : (dbType === 'postgres' ? '18.0' : '8.0'));
+    || (isPostPaidPg ? POSTPAID_PG_ENGINE_VERSION : '8.0');
   const category = isPostPaidPg
     ? (options.category?.trim() || 'Basic')
     : (options.category?.trim() || 'serverless_basic');

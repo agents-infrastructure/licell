@@ -87,7 +87,7 @@ export function registerDbCommands(cli: CAC) {
               { value: 'serverless-postgresql' as const, label: '🐘 RDS Serverless PostgreSQL（即将上线）' }
             ]});
             if (isCancel(selected)) process.exit(0);
-            type = selected;
+            type = selected as DbTypeInput;
           } else {
             throw new Error('非交互模式下请传入 --type postgresql|mysql');
           }

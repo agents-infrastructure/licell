@@ -206,6 +206,7 @@ export async function resolveCacheConnectInfo(explicitInstanceId?: string): Prom
 }
 
 export async function deleteCacheInstance(instanceId: string) {
-  const redisClient = createRedisClient();
+  const auth = Config.requireAuth();
+  const redisClient = createRedisClient(auth);
   await redisClient.deleteInstance(new $Kvstore.DeleteInstanceRequest({ instanceId }));
 }
