@@ -1,3 +1,12 @@
+// Suppress DEP0169 (url.parse) from Alibaba Cloud SDK dependency chain (httpx)
+// See: https://github.com/JacksonTian/httpx — unfixed upstream
+const _emit = process.emit;
+// @ts-ignore -- overriding emit signature for warning filtering
+process.emit = function (event: string, ...args: unknown[]) {
+  if (event === 'warning' && (args[0] as { code?: string })?.code === 'DEP0169') return false;
+  return _emit.apply(this, [event, ...args] as Parameters<typeof _emit>);
+};
+
 import { cac } from 'cac';
 import pc from 'picocolors';
 import { normalizeMultiWordCommandArgv } from './utils/argv';
