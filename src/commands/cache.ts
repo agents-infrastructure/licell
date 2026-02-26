@@ -8,7 +8,9 @@ import {
   listCacheInstances,
   provisionRedis,
   resolveCacheConnectInfo,
-  rotateRedisPassword
+  rotateRedisPassword,
+  allocateCachePublicConnection,
+  applyCachePublicWhitelist
 } from '../providers/redis';
 import {
   ensureAuthOrExit,
@@ -246,6 +248,13 @@ export function registerCacheCommands(cli: CAC) {
           console.log(`username:   ${pc.cyan(info.username || '<none>')}`);
           console.log(`password:   ${pc.cyan(info.passwordKnown ? '<known in project>' : '<unknown, please provide manually>')}`);
           console.log(`url:        ${pc.cyan(info.connectionString)}`);
+          if (info.publicHost) {
+            console.log('');
+            console.log(pc.yellow('── 公网访问 ──'));
+            console.log(`public host: ${pc.cyan(info.publicHost)}`);
+            console.log(`public port: ${pc.cyan(String(info.publicPort))}`);
+            console.log(`public url:  ${pc.cyan(info.publicConnectionString!)}`);
+          }
           console.log('');
           showOutro('Done.');
         }
@@ -287,6 +296,83 @@ export function registerCacheCommands(cli: CAC) {
           }
           console.log(`\n🔑 新连接串: ${pc.cyan(maskConnectionString(redisUrl))}\n`);
           showOutro('已同步更新 .licell/project.json 的 REDIS_* 环境变量');
+        }
+      );
+    });
+
+  cli.command('cache public-access [instanceId]', '开通 Redis 公网访问并添加当前 IP 到白名单')
+    .option('--ip <ip>', '手动指定公网 IP（不传则自动获取）')
+    .action(async (instanceId: string | undefined, options: { ip?: string }) => {
+      await executeWithAuthRecovery(
+        {
+          commandLabel: 'licell cache public-access',
+          interactiveTTY: isInteractiveTTY(),
+          requiredCapabilities: ['redis']
+        },
+        async () => {
+          const { resolvePublicIp } = await import('../utils/public-ip');
+          showIntro(pc.bgGreen(pc.black(' 🌐 Cache Public Access ')));
+          ensureAuthOrExit();
+          const resolvedId = toOptionalString(instanceId);
+          const s = createSpinner();
+
+          s.start('正在获取公网 IP...');
+          const publicIp = options.ip?.trim() || await resolvePublicIp();
+          s.stop(`公网 IP: ${pc.cyan(publicIp)}`);
+
+          const info = await withSpinner(
+            s,
+            '正在解析缓存连接信息...',
+            '❌ 连接信息解析失败',
+            () => resolveCacheConnectInfo(resolvedId)
+          );
+          if (!info) return;
+
+          await withSpinner(
+            s,
+            `正在将 ${publicIp}/32 添加到白名单 (licell_public)...`,
+            '❌ 白名单设置失败',
+            () => applyCachePublicWhitelist(info.instanceId, publicIp, s)
+          );
+
+          const pub = await withSpinner(
+            s,
+            '正在开通公网访问...',
+            '❌ 公网访问开通失败',
+            () => allocateCachePublicConnection(info.instanceId, s)
+          );
+
+          if (!isJsonOutput()) {
+            s.stop(pc.green('✅ 公网访问已开通'));
+          } else {
+            emitCliResult({
+              stage: 'cache.public-access',
+              instanceId: info.instanceId,
+              publicIp,
+              publicHost: pub?.host || null,
+              publicPort: pub?.port || null
+            });
+            return;
+          }
+
+          console.log('');
+          console.log(pc.yellow('── 内网访问 ──'));
+          console.log(`host: ${pc.cyan(info.host)}`);
+          console.log(`port: ${pc.cyan(String(info.port))}`);
+          console.log(`url:  ${pc.cyan(info.connectionString)}`);
+          if (pub) {
+            console.log('');
+            console.log(pc.yellow('── 公网访问 ──'));
+            console.log(`host: ${pc.cyan(pub.host)}`);
+            console.log(`port: ${pc.cyan(String(pub.port))}`);
+            const password = info.passwordKnown ? '<password>' : '<password>';
+            const userPart = info.username ? `${info.username}:${password}@` : '';
+            console.log(`url:  ${pc.cyan(`redis://${userPart}${pub.host}:${pub.port}`)}`);
+          } else {
+            console.log(pc.yellow('\n⚠️ 公网地址尚未就绪，请稍后通过 cache connect 查看'));
+          }
+          console.log(`\n白名单 IP: ${pc.cyan(`${publicIp}/32`)} (分组: licell_public)`);
+          showOutro('Done.');
         }
       );
     });

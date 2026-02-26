@@ -130,6 +130,8 @@ export async function resolveDatabaseConnectInfo(explicitInstanceId?: string): P
   const port = Number(endpoint?.port || (protocol === 'postgresql' ? '5432' : '3306'));
   if (!Number.isFinite(port) || port <= 0) throw new Error(`实例 ${instanceId} 返回了无效端口`);
 
+  const publicEndpoint = detail.endpoints.find((item) => item.ipType === 'Public' && item.host);
+
   const isSameProjectInstance = projectDatabase.instanceId === instanceId;
   const parsedProjectUrl = isSameProjectInstance ? parseDatabaseUrl(project.envs?.DATABASE_URL) : null;
   const username = parsedProjectUrl?.username || projectDatabase.user || '<username>';
@@ -140,6 +142,15 @@ export async function resolveDatabaseConnectInfo(explicitInstanceId?: string): P
   const renderedUser = username === '<username>' ? username : encodeURIComponent(username);
   const connectionString = `${protocol}://${renderedUser}:${renderedPassword}@${host}:${port}/${database}`;
 
+  let publicHost: string | undefined;
+  let publicPort: number | undefined;
+  let publicConnectionString: string | undefined;
+  if (publicEndpoint?.host) {
+    publicHost = publicEndpoint.host.trim();
+    publicPort = Number(publicEndpoint.port || port);
+    publicConnectionString = `${protocol}://${renderedUser}:${renderedPassword}@${publicHost}:${publicPort}/${database}`;
+  }
+
   return {
     instanceId,
     engine: protocol,
@@ -148,6 +159,9 @@ export async function resolveDatabaseConnectInfo(explicitInstanceId?: string): P
     database,
     username,
     passwordKnown,
-    connectionString
+    connectionString,
+    publicHost,
+    publicPort,
+    publicConnectionString
   };
 }

@@ -37,6 +37,9 @@ export interface DatabaseConnectInfo {
   username: string;
   passwordKnown: boolean;
   connectionString: string;
+  publicHost?: string;
+  publicPort?: number;
+  publicConnectionString?: string;
 }
 
 export interface ProvisionDatabaseOptions {

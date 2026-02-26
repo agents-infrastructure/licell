@@ -71,12 +71,14 @@ const COMMAND_OPTIONS: Record<string, string[]> = {
     '--security-ip-list', '--description'
   ],
   'db list': ['--limit'],
+  'db public-access': ['--ip'],
   'cache add': [
     '--type', '--instance', '--password', '--username', '--engine-version', '--class', '--node-type',
     '--capacity', '--vk-name', '--compute-unit', '--zone', '--vpc', '--vsw', '--security-ip-list'
   ],
   'cache list': ['--limit'],
   'cache rotate-password': ['--instance'],
+  'cache public-access': ['--ip'],
   'e2e run': [
     '--suite', '--run-id', '--runtime', '--target', '--enable-vpc', '--domain', '--domain-suffix',
     '--db-instance', '--cache-instance', '--skip-static',

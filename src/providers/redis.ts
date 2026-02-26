@@ -8,3 +8,4 @@ export type {
 export { provisionRedis } from './redis/provision';
 export { rotateRedisPassword } from './redis/rotate';
 export { listCacheInstances, getCacheInstanceDetail, resolveCacheConnectInfo } from './redis/query';
+export { allocateCachePublicConnection, applyCachePublicWhitelist } from './redis/public-access';

@@ -11,7 +11,10 @@ export function createRedisClient(auth: AuthConfig) {
   return new RedisClientCtor(new $OpenApi.Config({
     accessKeyId: auth.ak,
     accessKeySecret: auth.sk,
-    regionId: auth.region
+    regionId: auth.region,
+    endpoint: 'r-kvstore.aliyuncs.com',
+    connectTimeout: 30_000,
+    readTimeout: 60_000
   }));
 }
 

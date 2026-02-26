@@ -16,6 +16,23 @@ import {
 } from './internals';
 import type { CacheConnectInfo, CacheInstanceDetail, CacheInstanceSummary } from './types';
 
+async function resolvePublicEndpoint(
+  redisClient: Kvstore,
+  instanceId: string
+): Promise<{ host: string; port: number } | null> {
+  try {
+    const netRes = await redisClient.describeDBInstanceNetInfo(
+      new $Kvstore.DescribeDBInstanceNetInfoRequest({ instanceId })
+    );
+    const infos = netRes.body?.netInfoItems?.instanceNetInfo || [];
+    const pub = infos.find((i) => i.IPType === 'Public');
+    if (pub?.connectionString) {
+      return { host: pub.connectionString, port: Number(pub.port) || 6379 };
+    }
+  } catch { /* public endpoint not available */ }
+  return null;
+}
+
 export async function listCacheInstances(limit = 200): Promise<CacheInstanceSummary[]> {
   const auth = Config.requireAuth();
   const redisClient = createRedisClient(auth);
@@ -126,6 +143,9 @@ export async function resolveCacheConnectInfo(explicitInstanceId?: string): Prom
       port,
       passwordKnown
     );
+
+    const publicEndpoint = await resolvePublicEndpoint(redisClient, instanceId);
+
     return {
       instanceId,
       host,
@@ -133,7 +153,18 @@ export async function resolveCacheConnectInfo(explicitInstanceId?: string): Prom
       username: username === '<username>' ? undefined : username,
       passwordKnown,
       connectionString,
-      mode: 'classic-redis'
+      mode: 'classic-redis',
+      ...(publicEndpoint ? {
+        publicHost: publicEndpoint.host,
+        publicPort: publicEndpoint.port,
+        publicConnectionString: formatRedisUrlWithMask(
+          username === '<username>' ? undefined : username,
+          password,
+          publicEndpoint.host,
+          publicEndpoint.port,
+          passwordKnown
+        )
+      } : {})
     };
   }
 
@@ -156,6 +187,8 @@ export async function resolveCacheConnectInfo(explicitInstanceId?: string): Prom
   const passwordKnown = password.length > 0;
   const connectionString = formatRedisUrlWithMask(username, password, parsed.host, parsed.port, passwordKnown);
 
+  const publicEndpoint = await resolvePublicEndpoint(redisClient, instanceId);
+
   return {
     instanceId,
     host: parsed.host,
@@ -163,6 +196,11 @@ export async function resolveCacheConnectInfo(explicitInstanceId?: string): Prom
     username,
     passwordKnown,
     connectionString,
-    mode: 'tair-serverless-kv'
+    mode: 'tair-serverless-kv',
+    ...(publicEndpoint ? {
+      publicHost: publicEndpoint.host,
+      publicPort: publicEndpoint.port,
+      publicConnectionString: formatRedisUrlWithMask(username, password, publicEndpoint.host, publicEndpoint.port, passwordKnown)
+    } : {})
   };
 }

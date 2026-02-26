@@ -79,4 +79,7 @@ export interface CacheConnectInfo {
   passwordKnown: boolean;
   connectionString: string;
   mode: 'classic-redis' | 'tair-serverless-kv';
+  publicHost?: string;
+  publicPort?: number;
+  publicConnectionString?: string;
 }

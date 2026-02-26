@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import { type AuthConfig, Config } from '../../utils/config';
 import { randomStrongPassword } from '../../utils/crypto';
 import { formatErrorMessage, type Spinner } from '../../utils/errors';
+import { sleep } from '../../utils/runtime';
 import { ensureDefaultNetwork, resolveProvidedNetwork } from '../vpc';
 import { createRedisClient } from './client';
 import {
@@ -256,13 +257,8 @@ export async function provisionRedis(spinner: Spinner, options: ProvisionRedisOp
   const inferInstances = await listTairKVCacheInstances(redisClient, auth.region);
   const vkName = selectVkName(inferInstances, net, options.vkName);
   if (!vkName) {
-    if (inferCreateError) {
-      throw new Error(
-        `OpenAPI 直连创建失败（${formatErrorMessage(inferCreateError)}），且当前账号下未找到可用 vkName。` +
-        '请先在控制台创建一个 Tair Serverless KV 实例后重试，或执行 `licell cache add --type redis --instance <tt-或tk-实例ID> --password <实例密码>` 直接绑定。'
-      );
-    }
-    throw new Error('未找到可用 vkName。请先在阿里云控制台创建 Tair Serverless KV 实例，并通过 --instance <tt-或tk-实例ID> 直接绑定');
+    spinner.message('⚠️ Tair Serverless KV 不可用，正在兜底创建云原生 Redis 社区版...');
+    return createClassicRedisInstance(spinner, redisClient, auth, project, net, options);
   }
 
   const instanceClass = options.instanceClass?.trim() || DEFAULT_TAIR_KVCACHE_CLASS;
@@ -354,4 +350,88 @@ export async function provisionRedis(spinner: Spinner, options: ProvisionRedisOp
   };
   Config.setProject(project);
   return redisUrl;
+}
+
+const CLASSIC_REDIS_WAIT_TIMEOUT_MS = 10 * 60 * 1000;
+const CLASSIC_REDIS_WAIT_INTERVAL_MS = 5000;
+const DEFAULT_CLASSIC_REDIS_CLASS = 'redis.master.small.default';
+
+async function createClassicRedisInstance(
+  spinner: Spinner,
+  redisClient: Kvstore,
+  auth: AuthConfig,
+  project: ReturnType<typeof Config.getProject>,
+  net: { vpcId: string; vswId: string; zoneId?: string; cidrBlock?: string },
+  options: ProvisionRedisOptions
+) {
+  const instanceName = `${project.appName || 'licell-app'}-redis`;
+  const password = randomStrongPassword();
+  const instanceClass = options.instanceClass?.trim() || DEFAULT_CLASSIC_REDIS_CLASS;
+
+  spinner.message(`📦 正在创建云原生 Redis 社区版 (${instanceClass}, 按量付费)...`);
+  const createRes = await redisClient.createInstance(new $Kvstore.CreateInstanceRequest({
+    regionId: auth.region,
+    instanceType: 'Redis',
+    engineVersion: '5.0',
+    instanceClass,
+    instanceName,
+    chargeType: 'PostPaid',
+    nodeType: 'double',
+    networkType: 'VPC',
+    vpcId: net.vpcId,
+    vSwitchId: net.vswId,
+    zoneId: net.zoneId,
+    password,
+    token: randomUUID()
+  }));
+
+  const instanceId = createRes.body?.instanceId;
+  if (!instanceId) throw new Error('Redis 创建失败：未返回 instanceId');
+
+  const host = createRes.body?.connectionDomain || '';
+  const port = createRes.body?.port || 6379;
+
+  const waitStart = Date.now();
+  while (true) {
+    if (Date.now() - waitStart > CLASSIC_REDIS_WAIT_TIMEOUT_MS) {
+      throw new Error('Redis 实例创建超时');
+    }
+    await sleep(CLASSIC_REDIS_WAIT_INTERVAL_MS);
+    const attrRes = await redisClient.describeInstanceAttribute(
+      new $Kvstore.DescribeInstanceAttributeRequest({ instanceId })
+    );
+    const attr = attrRes.body?.instances?.DBInstanceAttribute?.[0];
+    const status = attr?.instanceStatus || 'Creating';
+    if (status === 'Normal') {
+      const resolvedHost = attr?.connectionDomain || host;
+      const resolvedPort = attr?.port || port;
+      if (!resolvedHost) throw new Error('Redis 实例已就绪但未获取到连接地址');
+
+      const securityIps = options.securityIpList?.trim() || net.cidrBlock || '10.0.0.0/8';
+      spinner.message('🔐 正在配置 Redis 内网白名单...');
+      await tryApplySecurityIps(redisClient, instanceId, securityIps, spinner);
+
+      const redisUrl = formatRedisUrl(undefined, password, resolvedHost, resolvedPort);
+      project.envs = {
+        ...project.envs,
+        REDIS_URL: redisUrl,
+        REDIS_HOST: resolvedHost,
+        REDIS_PORT: String(resolvedPort),
+        REDIS_PASSWORD: password,
+        REDIS_USERNAME: ''
+      };
+      project.network = mergeProjectNetwork(project.network, net);
+      project.cache = {
+        type: 'redis',
+        instanceId,
+        host: resolvedHost,
+        port: resolvedPort,
+        accountName: undefined,
+        mode: 'classic-redis'
+      };
+      Config.setProject(project);
+      return redisUrl;
+    }
+    spinner.message(`☕ Redis 实例初始化中，请稍候... [${status}]`);
+  }
 }
