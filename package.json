@@ -46,6 +46,7 @@
     "@alicloud/r-kvstore20150101": "^6.0.0",
     "@alicloud/ram20150501": "^1.2.0",
     "@alicloud/rds20140815": "^3.0.0",
+    "@alicloud/rdsai20250507": "^2.2.0",
     "@alicloud/sls20201230": "^3.0.0",
     "@alicloud/tea-util": "^1.4.11",
     "@alicloud/vpc20160428": "^3.0.0",

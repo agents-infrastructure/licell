@@ -40,7 +40,18 @@ const MULTI_WORD_COMMANDS = new Set([
   'env pull',
   'skills init',
   'deploy spec',
-  'deploy check'
+  'deploy check',
+  'supa add',
+  'supa list',
+  'supa info',
+  'supa connect',
+  'supa config',
+  'supa whitelist',
+  'supa reset-password',
+  'supa restart',
+  'supa stop',
+  'supa start',
+  'supa rm'
 ]);
 
 function isOptionLike(token: string | undefined) {

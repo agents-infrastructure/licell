@@ -20,6 +20,7 @@ import { registerShellCommands } from './commands/shell';
 import { registerSkillsCommands } from './commands/skills';
 import { registerSetupCommand } from './commands/setup';
 import { registerConfigCommands } from './commands/config';
+import { registerSupaCommands } from './commands/supa';
 import { resolveCliVersion } from './utils/version';
 import { checkForUpdate, printUpdateTip } from './utils/update-check';
 import { formatErrorMessage } from './utils/errors';
@@ -62,6 +63,7 @@ registerShellCommands(cli);
 registerSkillsCommands(cli);
 registerSetupCommand(cli);
 registerConfigCommands(cli);
+registerSupaCommands(cli);
 
 cli.help();
 cli.on('command:*', () => {
