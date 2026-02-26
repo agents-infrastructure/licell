@@ -211,10 +211,14 @@ export function normalizeDeployType(input: string): DeployType {
   return value;
 }
 
-export function normalizeDbType(input: string) {
-  const value = input.trim().toLowerCase();
-  if (value !== 'postgres' && value !== 'mysql') throw new Error('--type 仅支持 postgres 或 mysql');
-  return value;
+export type DbTypeInput = 'postgres' | 'mysql' | 'serverless-postgresql';
+
+export function normalizeDbType(input: string): DbTypeInput {
+  const value = input.trim().toLowerCase().replace(/_/g, '-');
+  if (value === 'postgresql' || value === 'postgres') return 'postgres';
+  if (value === 'mysql') return 'mysql';
+  if (value === 'serverless-postgresql' || value === 'serverless-postgres') return 'serverless-postgresql';
+  throw new Error('--type 仅支持 postgresql 或 mysql（serverless-postgresql 即将上线）');
 }
 
 export function toOptionalString(input: unknown) {

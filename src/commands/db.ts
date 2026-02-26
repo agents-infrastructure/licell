@@ -24,13 +24,14 @@ import {
   parseOptionalNumber,
   parseOptionalPositiveInt,
   normalizeAutoPause,
-  withSpinner
+  withSpinner,
+  type DbTypeInput
 } from '../utils/cli-shared';
 import { emitCliResult, isJsonOutput } from '../utils/output';
 
 export function registerDbCommands(cli: CAC) {
-  cli.command('db add', '分配 Serverless 数据库')
-    .option('--type <type>', '数据库类型：postgres 或 mysql（CI 场景建议显式传入）')
+  cli.command('db add', '分配数据库实例')
+    .option('--type <type>', '数据库类型：postgresql 或 mysql（默认 serverless-postgresql，即将上线）')
     .option('--engine-version <version>', '数据库引擎版本（postgres 默认 18.0，mysql 默认 8.0）')
     .option('--category <category>', 'RDS Category（默认 serverless_basic）')
     .option('--class <instanceClass>', '实例规格（如 pg.n2.serverless.1c）')
@@ -74,21 +75,30 @@ export function registerDbCommands(cli: CAC) {
           showIntro(pc.bgMagenta(pc.white(' 🗄️ Database Provisioning (IaC) ')));
           ensureAuthOrExit();
           const interactiveTTY = isInteractiveTTY();
-          let type: 'postgres' | 'mysql';
+          let type: DbTypeInput;
           const dbTypeOption = toOptionalString(options.type);
           if (dbTypeOption) {
             type = normalizeDbType(dbTypeOption);
           } else if (interactiveTTY) {
             const selected = await select({ message: '选择数据库引擎:', options: [
-              { value: 'postgres', label: '🐘 RDS Serverless PostgreSQL' },
-              { value: 'mysql', label: '🐬 RDS Serverless MySQL' }
+              { value: 'postgres' as const, label: '🐘 RDS PostgreSQL（按量付费）' },
+              { value: 'mysql' as const, label: '🐬 RDS Serverless MySQL' },
+              { value: 'serverless-postgresql' as const, label: '🐘 RDS Serverless PostgreSQL（即将上线）' }
             ]});
             if (isCancel(selected)) process.exit(0);
-            if (selected !== 'postgres' && selected !== 'mysql') throw new Error('未知数据库类型');
             type = selected;
           } else {
-            throw new Error('非交互模式下请传入 --type postgres|mysql');
+            throw new Error('非交互模式下请传入 --type postgresql|mysql');
           }
+
+          if (type === 'serverless-postgresql') {
+            console.log(pc.yellow('⏳ Serverless PostgreSQL 即将上线，敬请期待。'));
+            console.log(pc.gray(`当前支持的类型：${pc.bold('postgresql')}（按量付费）和 ${pc.bold('mysql')}（Serverless）`));
+            showOutro('');
+            return;
+          }
+
+          const dbType = type as 'postgres' | 'mysql';
 
           const storageGb = parseOptionalPositiveInt(options.storage, 'storage');
           const minCapacity = parseOptionalNumber(options.minRcu, 'min-rcu');
@@ -105,7 +115,7 @@ export function registerDbCommands(cli: CAC) {
             s,
             '正在初始化基础设施编排引擎...',
             '❌ 拉起失败',
-            () => provisionDatabase(type, s, {
+            () => provisionDatabase(dbType, s, {
               engineVersion: toOptionalString(options.engineVersion),
               category: toOptionalString(options.category),
               instanceClass: toOptionalString(options.class),
