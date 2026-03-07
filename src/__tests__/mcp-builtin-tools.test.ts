@@ -25,4 +25,13 @@ describe('getBuiltinMcpTools', () => {
     expect(result.text).toContain('root=deploy');
     expect((result.structuredContent as { rootCommands: string[] }).rootCommands).toEqual(['deploy']);
   });
+
+  it('exposes mcp subcommands in the shared command catalog', () => {
+    const tools = getBuiltinMcpTools();
+    const result = tools.licell_command_catalog.execute({ rootCommand: 'mcp' });
+    expect(result.kind).toBe('data');
+    if (result.kind !== 'data') throw new Error('expected data result');
+    const catalog = result.structuredContent as { commands: Array<{ key: string }> };
+    expect(catalog.commands.map((command) => command.key)).toEqual(expect.arrayContaining(['mcp', 'mcp init', 'mcp serve']));
+  });
 });

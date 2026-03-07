@@ -1,4 +1,5 @@
 import type { CAC } from 'cac';
+import type { CommandMetadataMap } from './module';
 import { select, confirm, isCancel } from '@clack/prompts';
 import pc from 'picocolors';
 import { createSpinner, isInteractiveTTY, showIntro, showOutro } from '../utils/cli-shared';
@@ -185,3 +186,10 @@ export function registerSetupCommand(cli: CAC) {
       await runInteractiveSetup(options);
     });
 }
+
+export const setupCommandMetadata: CommandMetadataMap = {
+  setup: {
+    summary: '安装后的一站式引导：配置 Skills 与 MCP。',
+    examples: ['licell setup', 'licell setup --output json']
+  }
+};

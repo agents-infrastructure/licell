@@ -1,4 +1,5 @@
 import type { CAC } from 'cac';
+import type { CommandMetadataMap } from './module';
 import { text } from '@clack/prompts';
 import pc from 'picocolors';
 import { getOssBucketInfo, listOssBuckets, listOssObjects, uploadDirectoryToBucket } from '../providers/oss';
@@ -221,3 +222,10 @@ export function registerOssCommands(cli: CAC) {
   registerUploadCommand('oss upload [bucket]', '上传本地目录到 OSS Bucket 指定目录');
   registerUploadCommand('oss bucket [bucket]', '上传本地目录到 OSS Bucket 指定目录（兼容命令，等同 oss upload）');
 }
+
+export const ossCommandMetadata: CommandMetadataMap = {
+  oss: {
+    summary: 'OSS Bucket 与对象上传/查看。',
+    examples: ['licell oss list', 'licell oss info my-bucket', 'licell oss upload my-bucket --source-dir dist']
+  }
+};

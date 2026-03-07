@@ -1,4 +1,5 @@
 import type { CAC } from 'cac';
+import type { CommandMetadataMap } from './module';
 import pc from 'picocolors';
 import { tailLogs } from '../providers/logs';
 import { executeWithAuthRecovery } from '../utils/auth-recovery';
@@ -55,3 +56,10 @@ export function registerLogsCommand(cli: CAC) {
     );
   });
 }
+
+export const logsCommandMetadata: CommandMetadataMap = {
+  logs: {
+    summary: '查看云端实时或历史日志。',
+    examples: ['licell logs', 'licell logs --output json']
+  }
+};

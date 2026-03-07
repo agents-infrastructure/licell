@@ -1,4 +1,5 @@
 import type { CAC } from 'cac';
+import type { CommandMetadataMap } from './module';
 import { text, isCancel } from '@clack/prompts';
 import pc from 'picocolors';
 import { addDnsRecord, listDnsRecords, removeDnsRecord } from '../providers/domain';
@@ -172,3 +173,15 @@ export function registerDnsCommands(cli: CAC) {
       );
     });
 }
+
+export const dnsCommandMetadata: CommandMetadataMap = {
+  dns: {
+    summary: 'DNS 解析工作流入口。',
+    examples: ['licell dns records --help', 'licell dns records list example.com']
+  },
+  'dns records': {
+    summary: 'DNS 解析记录的查看、添加与删除。',
+    examples: ['licell dns records list example.com', 'licell dns records add example.com', 'licell dns records rm <recordId>'],
+    agentTips: ['修改解析前，先 `list --output json` 获取现状，避免误删记录。']
+  }
+};

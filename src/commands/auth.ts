@@ -1,4 +1,5 @@
 import type { CAC } from 'cac';
+import type { CommandMetadataMap } from './module';
 import { text, password, confirm, isCancel } from '@clack/prompts';
 import pc from 'picocolors';
 import { Config, DEFAULT_ALI_REGION } from '../utils/config';
@@ -290,3 +291,11 @@ export function registerAuthCommands(cli: CAC) {
       }
     });
 }
+
+export const authCommandMetadata: CommandMetadataMap = {
+  auth: {
+    summary: '授权修复与凭证治理。',
+    notes: ['首次配置凭证通常使用 `licell login`；`licell auth repair` 用于补齐 RAM 权限。'],
+    examples: ['licell login', 'licell auth repair', 'licell whoami --output json']
+  }
+};

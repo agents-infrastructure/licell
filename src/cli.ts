@@ -16,6 +16,7 @@ import { formatErrorMessage } from './utils/errors';
 import { Config } from './utils/config';
 import { isInteractiveTTY } from './utils/cli-shared';
 import { runWelcomeSetupFlow } from './utils/first-run';
+import { buildHelpDocument, resolveHelpRequest, shouldRenderCustomHelp, stripArgsFromUsage, suggestCommands, type HelpDocument } from './utils/help';
 import {
   emitCliError,
   emitCliResult,
@@ -30,19 +31,6 @@ import {
 
 const cliVersion = resolveCliVersion();
 const cli = createLicellCliApp({ name: 'licell', version: cliVersion });
-cli.on('command:*', () => {
-  const command = cli.args.join(' ');
-  if (isJsonOutput()) {
-    emitCliError(new Error(`未知命令: ${command}`), {
-      stage: 'parse',
-      details: { command }
-    });
-    process.exit(1);
-  }
-  console.error(`未知命令: ${command}`);
-  cli.outputHelp();
-  process.exit(1);
-});
 
 const normalizedArgv = normalizeCliArgv(process.argv);
 let argv = normalizedArgv;
@@ -57,7 +45,63 @@ try {
   process.exit(1);
 }
 
+function emitHelpDocument(help: HelpDocument, exitCode = 0): never {
+  if (isJsonOutput()) {
+    emitCliResult({
+      stage: 'help',
+      scope: help.scope,
+      key: help.key,
+      help
+    });
+  } else {
+    process.stdout.write(help.text);
+  }
+  process.exit(exitCode);
+}
 
+function emitRootHelp(exitCode = 0): never {
+  const help = buildHelpDocument({
+    argv: [argv[0] || 'node', argv[1] || 'licell'],
+    version: cliVersion
+  });
+  if (!help) {
+    process.exit(exitCode);
+  }
+  return emitHelpDocument(help, exitCode);
+}
+
+function renderSuggestionText(command: string) {
+  const suggestions = suggestCommands(command);
+  if (suggestions.length === 0) return '';
+  return ['你是不是想找：', ...suggestions.map((suggestion) => `  ${suggestion}`), ''].join('\n');
+}
+
+cli.on('command:*', () => {
+  const command = cli.args.join(' ');
+  const suggestions = suggestCommands(command);
+  if (isJsonOutput()) {
+    emitCliError(new Error(`未知命令: ${command}`), {
+      stage: 'parse',
+      details: {
+        command,
+        ...(suggestions.length > 0 ? { suggestions } : {})
+      }
+    });
+    process.exit(1);
+  }
+  console.error(pc.red(`未知命令: ${command}`));
+  const suggestionText = renderSuggestionText(command);
+  if (suggestionText) {
+    process.stderr.write('\n');
+    process.stderr.write(`${suggestionText}\n`);
+  }
+  process.stderr.write('\n');
+  process.stderr.write(buildHelpDocument({
+    argv: [argv[0] || 'node', argv[1] || 'licell'],
+    version: cliVersion
+  })?.text || '');
+  process.exit(1);
+});
 
 function handleCliError(err: unknown): never {
   const message = formatErrorMessage(err);
@@ -74,8 +118,17 @@ function handleCliError(err: unknown): never {
   if (missingArgsMatch) {
     console.error(pc.red('命令参数不完整。'));
     console.error(pc.gray(`用法: licell ${missingArgsMatch[1]}`));
-    cli.outputHelp();
-    process.exit(1);
+    const commandKey = stripArgsFromUsage(missingArgsMatch[1]);
+    const help = buildHelpDocument({
+      argv: [argv[0] || 'node', argv[1] || 'licell', ...commandKey.split(/\s+/), '--help'],
+      version: cliVersion
+    });
+    if (help) {
+      process.stderr.write('\n');
+      process.stderr.write(help.text);
+      process.exit(1);
+    }
+    emitRootHelp(1);
   }
   console.error(pc.red(message));
   process.exit(1);
@@ -110,27 +163,58 @@ process.once('beforeExit', (code) => {
   });
 });
 
+const helpResolution = resolveHelpRequest(argv);
+const shouldHandleHelp = shouldRenderCustomHelp(argv);
 const isUpgradeCommand = argv.some((a) => a === 'upgrade');
-const updateCheckPromise = (!isJsonOutput() && !isUpgradeCommand)
+const updateCheckPromise = (!isJsonOutput() && !isUpgradeCommand && !shouldHandleHelp && argv.length > 2)
   ? checkForUpdate(cliVersion).catch(() => null)
   : Promise.resolve(null);
 
 void Promise.resolve()
   .then(async () => {
     if (argv.length <= 2) {
-      if (getOutputMode() === 'json') {
-        emitCliResult({
-          stage: 'help',
-          help: '请执行 licell <command> --help 查看命令说明'
-        });
-        process.exit(0);
+      const help = buildHelpDocument({ argv, version: cliVersion });
+      if (help && (getOutputMode() === 'json' || !isInteractiveTTY() || Config.getAuth())) {
+        emitHelpDocument(help, 0);
       }
       if (isInteractiveTTY() && !isJsonOutput() && !Config.getAuth()) {
         await runWelcomeSetupFlow();
       } else {
-        cli.outputHelp();
+        emitRootHelp(0);
       }
       process.exit(0);
+    }
+
+    if (shouldHandleHelp) {
+      const help = buildHelpDocument({ argv, version: cliVersion });
+      if (help) emitHelpDocument(help, 0);
+    }
+
+    if (helpResolution.helpRequested && !shouldHandleHelp) {
+      const command = helpResolution.key || 'help';
+      const suggestions = suggestCommands(command);
+      if (isJsonOutput()) {
+        emitCliError(new Error(`未知命令: ${command}`), {
+          stage: 'parse',
+          details: {
+            command,
+            ...(suggestions.length > 0 ? { suggestions } : {})
+          }
+        });
+        process.exit(1);
+      }
+      console.error(pc.red(`未知命令: ${command}`));
+      const suggestionText = renderSuggestionText(command);
+      if (suggestionText) {
+        process.stderr.write('\n');
+        process.stderr.write(`${suggestionText}\n`);
+      }
+      process.stderr.write('\n');
+      process.stderr.write(buildHelpDocument({
+        argv: [argv[0] || 'node', argv[1] || 'licell'],
+        version: cliVersion
+      })?.text || '');
+      process.exit(1);
     }
   })
   .then(() => cli.parse(argv))

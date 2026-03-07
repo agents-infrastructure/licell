@@ -76,6 +76,18 @@ describe('resolveCompletionCandidates', () => {
     expect(candidates).toContain('spec');
     expect(candidates).toContain('check');
   });
+
+
+  it('suggests mcp real subcommands from command graph', () => {
+    const candidates = resolveCompletionCandidates({
+      compWords: 'licell mcp ',
+      compCword: 2,
+      compCur: ''
+    });
+
+    expect(candidates).toContain('init');
+    expect(candidates).toContain('serve');
+  });
 });
 
 describe('shell helpers', () => {

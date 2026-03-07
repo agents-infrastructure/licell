@@ -1,4 +1,5 @@
 import type { CAC } from 'cac';
+import type { CommandMetadataMap } from './module';
 import { emitCliResult, isJsonOutput } from '../utils/output';
 
 interface CompletionOptions {
@@ -44,3 +45,10 @@ export function registerShellCommands(cli: CAC) {
       }
     });
 }
+
+export const completionCommandMetadata: CommandMetadataMap = {
+  completion: {
+    summary: '生成 shell 补全脚本，或调用内部补全引擎。',
+    examples: ['licell completion bash', 'licell completion zsh', 'licell completion --engine --output json']
+  }
+};

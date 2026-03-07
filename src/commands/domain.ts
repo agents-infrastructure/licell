@@ -1,4 +1,5 @@
 import type { CAC } from 'cac';
+import type { CommandMetadataMap } from './module';
 import pc from 'picocolors';
 import { normalizeReleaseTarget } from '../utils/cli-helpers';
 import { bindCustomDomain, unbindCustomDomain } from '../providers/domain';
@@ -141,3 +142,16 @@ export function registerDomainCommands(cli: CAC) {
       );
     });
 }
+
+export const domainCommandMetadata: CommandMetadataMap = {
+  domain: {
+    summary: '自定义域名绑定与解绑。',
+    examples: ['licell domain add api.example.com', 'licell domain rm api.example.com']
+  },
+  'domain rm': {
+    safety: {
+      level: 'destructive',
+      reason: '会解绑域名并清理对应 DNS CNAME。'
+    }
+  }
+};

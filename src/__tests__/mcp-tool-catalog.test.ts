@@ -21,6 +21,7 @@ describe('buildMcpToolCatalog', () => {
     expect(curatedDeploy?.docsSummary).toContain('正式部署');
     expect(generatedDeployCheck?.commandKey).toBe('deploy check');
     expect(generatedDeployCheck?.sectionTitle).toBe('Delivery Workflow');
+    expect(generatedDeployCheck?.docsSummary).toContain('预检');
     expect(generatedDeployCheck?.tags).toEqual([]);
   });
 });

@@ -4,15 +4,18 @@ import {
   type CommandCatalog,
   type CatalogOption
 } from './command-catalog';
+import {
+  COMMAND_SECTION_CONFIG,
+  buildCommandOptionInsights,
+  buildCommandSafetyMetadata,
+  buildExplicitRecommendedFlow,
+  getCommandMetadata,
+  type CommandActionHint,
+  type CommandFlowStep,
+  type CommandOptionInsight,
+  type CommandSafetyMetadata
+} from './command-metadata';
 import { canExposeCommandAsGeneratedMcpTool, toGeneratedMcpToolName } from './command-surface-ids';
-
-interface CommandSectionConfig {
-  id: string;
-  title: string;
-  roots: string[];
-  summary?: string;
-  notes?: string[];
-}
 
 export interface CommandReferenceSection {
   id: string;
@@ -36,11 +39,21 @@ export interface AgentCommandCatalogEntry {
   rawName: string;
   invocation: string;
   description: string;
+  summary?: string;
   rootCommand: string;
   args: CatalogCommand['args'];
   aliases: string[];
   options: CatalogOption[];
   subcommands: string[];
+  notes: string[];
+  examples: string[];
+  agentTips: string[];
+  actionHints: CommandActionHint[];
+  argumentHints: Record<string, string>;
+  relatedCommands: string[];
+  safety?: CommandSafetyMetadata;
+  optionInsights: CommandOptionInsight[];
+  recommendedFlow: CommandFlowStep[];
   sectionId: string;
   sectionTitle: string;
   generatedMcpToolName?: string;
@@ -56,41 +69,6 @@ export interface AgentCommandCatalogDocument {
   commands: AgentCommandCatalogEntry[];
 }
 
-const COMMAND_SECTION_CONFIG: CommandSectionConfig[] = [
-  {
-    id: 'setup',
-    title: 'Setup & Identity',
-    roots: ['login', 'auth', 'logout', 'whoami', 'switch', 'init', 'config'],
-    summary: '认证、项目初始化与默认配置相关命令。'
-  },
-  {
-    id: 'delivery',
-    title: 'Delivery Workflow',
-    roots: ['deploy', 'release', 'logs', 'fn', 'env', 'domain', 'dns', 'oss'],
-    summary: '围绕应用部署、发布、函数管理、环境变量、域名、DNS、日志和对象存储的交付链路。',
-    notes: [
-      'Agent 在 FC API 部署前，优先执行 `licell deploy spec` 与 `licell deploy check`。',
-      '涉及删除或清理的命令通常需要显式传入 `--yes`。'
-    ]
-  },
-  {
-    id: 'data',
-    title: 'Data Services',
-    roots: ['db', 'cache', 'supa'],
-    summary: '数据库、缓存与 Supabase 实例的创建、连接、白名单和生命周期管理。'
-  },
-  {
-    id: 'automation',
-    title: 'Automation & Tooling',
-    roots: ['mcp', 'skills', 'setup', 'completion', 'upgrade', 'e2e'],
-    summary: '面向 Agent、开发体验与 CLI 生命周期的自动化命令。',
-    notes: [
-      '`licell skills init` 与 `licell mcp` 都基于同一套 CLI 命令目录生成外部表面。',
-      '`licell completion` 的候选命令同样来自共享命令目录。'
-    ]
-  }
-];
-
 function unique<T>(values: T[]) {
   return [...new Set(values)];
 }
@@ -102,6 +80,10 @@ function escapeMarkdownCell(value: string) {
 
 function toInvocation(command: CatalogCommand) {
   return `licell ${command.rawName}`;
+}
+
+function getCommandDisplayDescription(command: CatalogCommand) {
+  return getCommandMetadata(command.key).summary || command.description;
 }
 
 function summarizeKeyOptions(command: CatalogCommand) {
@@ -126,7 +108,8 @@ function sortCommands(commands: CatalogCommand[], roots: string[]) {
 
 function renderCommandTable(commands: CatalogCommand[]) {
   const rows = commands.map((command) => {
-    const description = command.description ? escapeMarkdownCell(command.description) : '—';
+    const display = getCommandDisplayDescription(command);
+    const description = display ? escapeMarkdownCell(display) : '—';
     return `| \`${toInvocation(command)}\` | ${description} | ${summarizeKeyOptions(command)} |`;
   });
 
@@ -218,22 +201,35 @@ export function buildAgentCommandCatalog(catalog: CommandCatalog = getCommandCat
       summary: section.summary,
       commandKeys: section.commands.map((command) => command.key)
     })),
-    commands: sections.flatMap((section) => section.commands.map((command) => ({
-      key: command.key,
-      rawName: command.rawName,
-      invocation: toInvocation(command),
-      description: command.description,
-      rootCommand: command.rootCommand,
-      args: command.args.map((arg) => ({ ...arg })),
-      aliases: [...command.aliases],
-      options: command.options.map((option) => ({ ...option, flags: [...option.flags] })),
-      subcommands: [...(catalog.childCommands[command.key] || [])],
-      sectionId: sectionByRoot.get(command.rootCommand)?.id || section.id,
-      sectionTitle: sectionByRoot.get(command.rootCommand)?.title || section.title,
-      generatedMcpToolName: canExposeCommandAsGeneratedMcpTool(command.rootCommand)
-        ? toGeneratedMcpToolName(command.key)
-        : undefined
-    })))
+    commands: sections.flatMap((section) => section.commands.map((command) => {
+      const metadata = getCommandMetadata(command.key);
+      return {
+        key: command.key,
+        rawName: command.rawName,
+        invocation: toInvocation(command),
+        description: metadata.summary || command.description,
+        summary: metadata.summary,
+        rootCommand: command.rootCommand,
+        args: command.args.map((arg) => ({ ...arg })),
+        aliases: [...command.aliases],
+        options: command.options.map((option) => ({ ...option, flags: [...option.flags] })),
+        subcommands: [...(catalog.childCommands[command.key] || [])],
+        notes: [...(metadata.notes || [])],
+        examples: [...(metadata.examples || [])],
+        agentTips: [...(metadata.agentTips || [])],
+        actionHints: [...(metadata.actionHints || [])],
+        argumentHints: { ...(metadata.argumentHints || {}) },
+        relatedCommands: [...(metadata.related || [])],
+        safety: buildCommandSafetyMetadata(metadata),
+        optionInsights: buildCommandOptionInsights(command.options, metadata),
+        recommendedFlow: buildExplicitRecommendedFlow(metadata),
+        sectionId: sectionByRoot.get(command.rootCommand)?.id || section.id,
+        sectionTitle: sectionByRoot.get(command.rootCommand)?.title || section.title,
+        generatedMcpToolName: canExposeCommandAsGeneratedMcpTool(command.rootCommand)
+          ? toGeneratedMcpToolName(command.key)
+          : undefined
+      };
+    }))
   };
 }
 
@@ -253,7 +249,18 @@ export function filterAgentCommandCatalog(
     args: command.args.map((arg) => ({ ...arg })),
     aliases: [...command.aliases],
     options: command.options.map((option) => ({ ...option, flags: [...option.flags] })),
-    subcommands: [...command.subcommands]
+    subcommands: [...command.subcommands],
+    notes: [...command.notes],
+    examples: [...command.examples],
+    agentTips: [...command.agentTips],
+    actionHints: command.actionHints.map((hint) => ({ ...hint })),
+    argumentHints: { ...command.argumentHints },
+    relatedCommands: [...command.relatedCommands],
+    safety: command.safety
+      ? { ...command.safety, confirmFlags: [...command.safety.confirmFlags] }
+      : undefined,
+    optionInsights: command.optionInsights.map((insight) => ({ ...insight, cautions: [...insight.cautions] })),
+    recommendedFlow: command.recommendedFlow.map((step) => ({ ...step }))
   }));
 
   const allowedKeys = new Set(commands.map((command) => command.key));
@@ -325,17 +332,40 @@ export function renderSkillCommandReference(catalog: CommandCatalog = getCommand
       if ((catalog.childCommands[command.key] || []).length > 0) {
         metadata.push(`子命令：${catalog.childCommands[command.key].map((child) => `\`${child}\``).join(', ')}`);
       }
-      const generatedMcpToolName = agentCommandByKey.get(command.key)?.generatedMcpToolName;
+      const agentCommand = agentCommandByKey.get(command.key);
+      const generatedMcpToolName = agentCommand?.generatedMcpToolName;
       if (generatedMcpToolName) {
         metadata.push(`生成 MCP Tool：\`${generatedMcpToolName}\``);
       }
 
       parts.push('', `#### \`${toInvocation(command)}\``);
-      if (command.description) {
-        parts.push('', command.description);
+      if (agentCommand?.description || command.description) {
+        parts.push('', agentCommand?.description || command.description);
       }
       if (metadata.length > 0) {
         parts.push('', metadata.join(' · '));
+      }
+      if (agentCommand?.notes.length) {
+        parts.push('', '说明：');
+        for (const note of agentCommand.notes) parts.push(`- ${note}`);
+      }
+      if (agentCommand?.optionInsights.length) {
+        parts.push('', '关键选项建议：');
+        for (const insight of agentCommand.optionInsights) {
+          const caution = insight.cautions.length > 0 ? ` 注意：${insight.cautions.join(' ')}` : '';
+          parts.push(`- \`${insight.flag}\`：${insight.whenToUse}${caution}`);
+        }
+      }
+      if (agentCommand?.recommendedFlow.length) {
+        parts.push('', '推荐流程：');
+        for (const [index, step] of agentCommand.recommendedFlow.entries()) {
+          const commandText = step.command ? ` → \`${step.command}\`` : '';
+          parts.push(`- ${index + 1}. ${step.title}${commandText}：${step.reason}`);
+        }
+      }
+      if (agentCommand?.agentTips.length) {
+        parts.push('', 'Agent Tips：');
+        for (const tip of agentCommand.agentTips) parts.push(`- ${tip}`);
       }
 
       const optionTable = renderOptionTable(command);

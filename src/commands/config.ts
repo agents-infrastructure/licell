@@ -1,4 +1,5 @@
 import type { CAC } from 'cac';
+import type { CommandMetadataMap } from './module';
 import pc from 'picocolors';
 import { Config } from '../utils/config';
 import { showIntro, showOutro, toOptionalString } from '../utils/cli-shared';
@@ -48,3 +49,10 @@ export function registerConfigCommands(cli: CAC) {
       }
     });
 }
+
+export const configCommandMetadata: CommandMetadataMap = {
+  config: {
+    summary: '全局默认配置管理。',
+    examples: ['licell config domain', 'licell config domain example.com']
+  }
+};

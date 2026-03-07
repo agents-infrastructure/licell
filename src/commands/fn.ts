@@ -1,4 +1,5 @@
 import type { CAC } from 'cac';
+import type { CommandMetadataMap } from './module';
 import pc from 'picocolors';
 import { readFileSync, realpathSync } from 'fs';
 import { resolve, relative, isAbsolute } from 'path';
@@ -269,3 +270,10 @@ export function registerFnCommands(cli: CAC) {
       );
     });
 }
+
+export const fnCommandMetadata: CommandMetadataMap = {
+  fn: {
+    summary: '函数的查看、详情、调用与删除。',
+    examples: ['licell fn list', 'licell fn info hello-world', 'licell fn invoke hello-world --output json']
+  }
+};

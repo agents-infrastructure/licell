@@ -1,4 +1,5 @@
 import type { CAC } from 'cac';
+import type { CommandMetadataMap } from './module';
 import pc from 'picocolors';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
@@ -167,87 +168,132 @@ export function ensureGlobalCodexMcpConfig(options?: { serverName?: string }) {
   return { configPath, updated: true };
 }
 
+function resolveMcpOptions(options: { projectRoot?: unknown; serverName?: unknown }) {
+  const projectRoot = typeof options.projectRoot === 'string' && options.projectRoot.trim()
+    ? options.projectRoot.trim()
+    : process.cwd();
+  const serverName = typeof options.serverName === 'string' && options.serverName.trim()
+    ? options.serverName.trim()
+    : 'licell';
+  return { projectRoot, serverName };
+}
+
+async function runMcpInit(options: { projectRoot?: unknown; serverName?: unknown }) {
+  const { projectRoot, serverName } = resolveMcpOptions(options);
+  const { configPath, updated } = ensureMcpJsonConfig({ projectRoot, serverName });
+  if (isJsonOutput()) {
+    emitCliResult({
+      stage: 'mcp',
+      action: 'init',
+      configPath,
+      updated
+    });
+  } else {
+    console.log(pc.green(`✅ 已写入 MCP 配置: ${configPath}${updated ? '' : ' (no changes)'}`));
+    console.log(pc.gray('下一步：在支持 MCP 的客户端中启用该项目的 .mcp.json（例如 Claude Code）。'));
+  }
+}
+
+async function runMcpServe(options: { projectRoot?: unknown }) {
+  if (isJsonOutput()) {
+    throw new Error('mcp serve 使用 stdio JSON-RPC 协议，不支持 --output json');
+  }
+  const { runLicellMcpServer } = await import('../mcp/server');
+  const projectRoot = typeof options.projectRoot === 'string' && options.projectRoot.trim()
+    ? options.projectRoot.trim()
+    : process.cwd();
+  const interactiveTTY = isInteractiveTTY();
+  await ensureAuthReadyForCommand({ commandLabel: 'licell mcp serve', interactiveTTY });
+  await ensureAuthCapabilityPreflight({
+    commandLabel: 'licell mcp serve',
+    interactiveTTY,
+    requiredCapabilities: MCP_OPERATION_CAPABILITIES
+  });
+  await runLicellMcpServer({
+    projectRoot,
+    serverVersion: resolveCliVersion(),
+    serverTitle: `licell ${resolveCliVersion()}`
+  });
+}
+
+async function runMcpBootstrap(options: { projectRoot?: unknown; serverName?: unknown }) {
+  const { projectRoot, serverName } = resolveMcpOptions(options);
+  const interactiveTTY = isInteractiveTTY();
+  await ensureAuthReadyForCommand({ commandLabel: 'licell mcp', interactiveTTY });
+  await ensureAuthCapabilityPreflight({
+    commandLabel: 'licell mcp',
+    interactiveTTY,
+    requiredCapabilities: MCP_OPERATION_CAPABILITIES
+  });
+  const { configPath, updated } = ensureMcpJsonConfig({ projectRoot, serverName });
+  if (isJsonOutput()) {
+    emitCliResult({
+      stage: 'mcp',
+      action: 'init',
+      configPath,
+      updated,
+      next: 'run `licell mcp serve` without --output json to start stdio server'
+    });
+    return;
+  }
+  console.log(pc.green(`✅ MCP 配置已就绪: ${configPath}${updated ? ' (updated)' : ''}`));
+  console.log(pc.gray('现在启动 MCP 服务（stdio）。用于 Claude Code/Cursor 等客户端时，请在 .mcp.json 中使用 args: ["mcp","serve"]。'));
+  console.log(pc.gray('提示：删除/清理类命令在 MCP 非交互模式下仍需要显式传 --yes。'));
+  console.log('');
+  await runMcpServe({ projectRoot });
+}
+
 export function registerMcpCommand(cli: CAC) {
-  cli.command('mcp [action]', 'MCP：让 Agent 通过 licell 执行部署/发布/运维（初始化 .mcp.json 或启动 stdio server）')
+  cli.command('mcp', 'MCP：让 Agent 通过 licell 执行部署/发布/运维（默认先初始化，再启动 stdio server）')
     .option('--project-root <path>', '项目根目录（默认当前目录）')
     .option('--server-name <name>', '写入 .mcp.json 的 server 名称（默认 licell）')
-    .action(async (action: string | undefined, options: { projectRoot?: unknown; serverName?: unknown }) => {
-      const { runLicellMcpServer } = await import('../mcp/server');
-      const act = (action || '').trim().toLowerCase();
-      const projectRoot = typeof options.projectRoot === 'string' && options.projectRoot.trim()
-        ? options.projectRoot.trim()
-        : process.cwd();
-      const serverName = typeof options.serverName === 'string' && options.serverName.trim()
-        ? options.serverName.trim()
-        : 'licell';
-      const interactiveTTY = isInteractiveTTY();
+    .action(async (options: { projectRoot?: unknown; serverName?: unknown }) => {
+      await runMcpBootstrap(options);
+    });
 
-      if (!act) {
-        await ensureAuthReadyForCommand({ commandLabel: 'licell mcp', interactiveTTY });
-        await ensureAuthCapabilityPreflight({
-          commandLabel: 'licell mcp',
-          interactiveTTY,
-          requiredCapabilities: MCP_OPERATION_CAPABILITIES
-        });
-        const { configPath, updated } = ensureMcpJsonConfig({ projectRoot, serverName });
-        if (isJsonOutput()) {
-          emitCliResult({
-            stage: 'mcp',
-            action: 'init',
-            configPath,
-            updated,
-            next: 'run `licell mcp serve` without --output json to start stdio server'
-          });
-          return;
-        }
-        console.log(pc.green(`✅ MCP 配置已就绪: ${configPath}${updated ? ' (updated)' : ''}`));
-        console.log(pc.gray('现在启动 MCP 服务（stdio）。用于 Claude Code/Cursor 等客户端时，请在 .mcp.json 中使用 args: ["mcp","serve"]。'));
-        console.log(pc.gray('提示：删除/清理类命令在 MCP 非交互模式下仍需要显式传 --yes。'));
-        console.log('');
-        await runLicellMcpServer({
-          projectRoot,
-          serverVersion: resolveCliVersion(),
-          serverTitle: `licell ${resolveCliVersion()}`
-        });
-        return;
-      }
+  cli.command('mcp init', '写入/更新项目内 `.mcp.json` 配置')
+    .option('--project-root <path>', '项目根目录（默认当前目录）')
+    .option('--server-name <name>', '写入 .mcp.json 的 server 名称（默认 licell）')
+    .action(async (options: { projectRoot?: unknown; serverName?: unknown }) => {
+      await runMcpInit(options);
+    });
 
-      if (act === 'init') {
-        const { configPath, updated } = ensureMcpJsonConfig({ projectRoot, serverName });
-        if (isJsonOutput()) {
-          emitCliResult({
-            stage: 'mcp',
-            action: 'init',
-            configPath,
-            updated
-          });
-        } else {
-          console.log(pc.green(`✅ 已写入 MCP 配置: ${configPath}${updated ? '' : ' (no changes)'}`));
-          console.log(pc.gray('下一步：在支持 MCP 的客户端中启用该项目的 .mcp.json（例如 Claude Code）。'));
-        }
-        return;
-      }
-
-      if (act === 'serve') {
-        if (isJsonOutput()) {
-          throw new Error('mcp serve 使用 stdio JSON-RPC 协议，不支持 --output json');
-        }
-        await ensureAuthReadyForCommand({ commandLabel: 'licell mcp serve', interactiveTTY });
-        await ensureAuthCapabilityPreflight({
-          commandLabel: 'licell mcp serve',
-          interactiveTTY,
-          requiredCapabilities: MCP_OPERATION_CAPABILITIES
-        });
-        // IMPORTANT: In stdio transport, stdout must remain pure JSON-RPC messages.
-        // Use stderr for logs.
-        await runLicellMcpServer({
-          projectRoot,
-          serverVersion: resolveCliVersion(),
-          serverTitle: `licell ${resolveCliVersion()}`
-        });
-        return;
-      }
-
-      throw new Error(`未知 mcp action: ${action || ''}（支持: init / serve）`);
+  cli.command('mcp serve', '以 stdio 方式启动 licell MCP server')
+    .option('--project-root <path>', '项目根目录（默认当前目录）')
+    .action(async (options: { projectRoot?: unknown }) => {
+      await runMcpServe(options);
     });
 }
+
+export const mcpCommandMetadata: CommandMetadataMap = {
+  mcp: {
+    summary: '为 Agent 生成 MCP 配置，或启动 licell MCP stdio server。',
+    notes: ['裸 `licell mcp` 会先准备 `.mcp.json`，再直接启动 stdio server。'],
+    optionInsights: {
+      '--project-root': { whenToUse: '目标项目不是当前目录时使用。', cautions: ['`.mcp.json` 会写入该目录。'] },
+      '--server-name': { whenToUse: '需要在 `.mcp.json` 中使用自定义 server key 时使用。', cautions: ['仅对 `mcp` / `mcp init` 生效。'] }
+    },
+    recommendedFlow: [
+      { title: '写入项目配置', command: 'licell mcp init', reason: '先生成或更新 `.mcp.json`。' },
+      { title: '在支持的客户端启用配置', reason: '例如 Claude Code / Codex 读取项目 MCP 配置。' },
+      { title: '需要手动调试时再启动', command: 'licell mcp serve', reason: '以 stdio JSON-RPC 模式启动 server。' }
+    ],
+    examples: ['licell mcp init', 'licell mcp serve', 'licell mcp --project-root .'],
+    agentTips: ['查看帮助或执行 `mcp init` 时可用 `--output json` 获取结构化结果。']
+  },
+  'mcp init': {
+    summary: '写入/更新项目内 `.mcp.json` 配置。',
+    optionInsights: {
+      '--project-root': { whenToUse: '目标项目不是当前目录时使用。', cautions: ['`.mcp.json` 会写入该目录。'] },
+      '--server-name': { whenToUse: '需要在 `.mcp.json` 中使用自定义 server key 时使用。', cautions: ['应与调用方的 MCP client 配置保持一致。'] }
+    },
+    examples: ['licell mcp init', 'licell mcp init --project-root .', 'licell mcp init --server-name licell-preview'],
+    agentTips: ['推荐在自动化场景下用 `--output json` 获取 configPath / updated 状态。']
+  },
+  'mcp serve': {
+    summary: '以 stdio JSON-RPC 方式启动 licell MCP server。',
+    notes: ['`mcp serve` 使用 stdio JSON-RPC 协议，不支持 `--output json`。'],
+    examples: ['licell mcp serve', 'licell mcp serve --project-root .'],
+    agentTips: ['真正启动 MCP server 时不要传 `--output json`，否则会破坏 stdio JSON-RPC 输出。']
+  }
+};

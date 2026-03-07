@@ -35,6 +35,7 @@ export interface CommandCatalog {
   childCommands: Record<string, string[]>;
   commandOptions: Record<string, string[]>;
   globalOptions: string[];
+  globalOptionDetails: CatalogOption[];
 }
 
 const STATIC_GLOBAL_OPTIONS = ['-h', '--help', '-v', '--version'];
@@ -117,12 +118,19 @@ function buildCommandCatalog(): CommandCatalog {
     }
   }
 
+  const globalOptionDetails = unique((cli.globalCommand?.options || [])
+    .map((option) => parseOption(option.rawName, option.description || ''))
+    .filter((option): option is CatalogOption => Boolean(option))
+    .map((option) => option.primaryFlag)).map((flag) => {
+      return (cli.globalCommand?.options || [])
+        .map((option) => parseOption(option.rawName, option.description || ''))
+        .filter((option): option is CatalogOption => Boolean(option))
+        .find((option) => option.primaryFlag === flag)!;
+    });
+
   const globalOptions = unique([
     ...STATIC_GLOBAL_OPTIONS,
-    ...((cli.globalCommand?.options || [])
-      .map((option) => parseOption(option.rawName, option.description || ''))
-      .filter((option): option is CatalogOption => Boolean(option))
-      .flatMap((option) => option.flags))
+    ...globalOptionDetails.flatMap((option) => option.flags)
   ]);
 
   return {
@@ -131,7 +139,8 @@ function buildCommandCatalog(): CommandCatalog {
     rootCommands,
     childCommands,
     commandOptions,
-    globalOptions
+    globalOptions,
+    globalOptionDetails
   };
 }
 

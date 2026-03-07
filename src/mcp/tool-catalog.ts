@@ -90,7 +90,7 @@ export function buildMcpToolCatalog(): McpToolCatalogDocument {
       destructive: Boolean(tool.annotations?.destructiveHint),
       openWorld: false,
       tags: [],
-      docsSummary: undefined,
+      docsSummary: command?.summary || command?.description || undefined,
       commandKey: tool.commandKey,
       commandSignature: tool.commandKey,
       rootCommand: command?.rootCommand,

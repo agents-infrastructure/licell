@@ -32,6 +32,9 @@ describe('buildAgentCommandCatalog', () => {
     expect(deploy?.subcommands).toContain('spec');
     expect(deploy?.subcommands).toContain('check');
     expect(deploy?.options.some((option) => option.primaryFlag === '--type')).toBe(true);
+    expect(deploy?.summary).toContain('一键部署 API / Static');
+    expect(deploy?.optionInsights.some((insight) => insight.flag.includes('--runtime'))).toBe(true);
+    expect(deploy?.recommendedFlow[0]?.command).toBe('licell deploy spec');
   });
 
   it('filters by root command without hardcoded command lists', () => {
@@ -55,5 +58,8 @@ describe('renderSkillCommandReference', () => {
     expect(markdown).toContain('licell setup');
     expect(markdown).toContain('licell upgrade');
     expect(markdown).toContain('licell auth repair');
+    expect(markdown).toContain('关键选项建议：');
+    expect(markdown).toContain('推荐流程：');
+    expect(markdown).toContain('licell deploy spec');
   });
 });

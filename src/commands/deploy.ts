@@ -1,4 +1,5 @@
 import type { CAC } from 'cac';
+import type { CommandMetadataMap } from './module';
 import pc from 'picocolors';
 import { Config } from '../utils/config';
 import {
@@ -386,3 +387,45 @@ export function registerDeployCommand(cli: CAC) {
       }
     });
 }
+
+export const deployCommandMetadata: CommandMetadataMap = {
+  deploy: {
+    summary: '一键部署 API / Static，并提供 spec / check 辅助子命令。',
+    notes: ['FC API 部署前，建议先执行 `licell deploy spec` 与 `licell deploy check`。'],
+    safety: {
+      level: 'mutating',
+      reason: '会创建或更新函数、域名、SSL、CDN 等云端资源。'
+    },
+    optionInsights: {
+      '--type': { whenToUse: '在 CI / Agent 非交互场景下显式指定 `api` 或 `static`。', cautions: ['不指定时可能依赖当前项目上下文或交互提示。'] },
+      '--entry': { whenToUse: 'API 入口不是默认的 `src/index.ts` / `src/main.py` 时使用。', cautions: ['建议先运行 `licell deploy check` 验证入口与 runtime 约束。'] },
+      '--runtime': { whenToUse: '需要强制指定运行时，例如 `nodejs22`、`python3.13`、`docker`。', cautions: ['部分 runtime 有地域限制；先查看 `licell deploy spec`。'] },
+      '--preview': { whenToUse: '需要生成预览版本且不影响生产流量时使用。', cautions: ['预览版本通常还需要后续 `licell release promote` 才会进入生产。'] },
+      '--domain': { whenToUse: '希望直接绑定完整自定义域名时使用。', cautions: ['可能联动 SSL / CDN / DNS 变更。'] },
+      '--domain-suffix': { whenToUse: '希望按固定后缀自动生成子域名时使用。', cautions: ['适合标准化环境，不适合完全自定义主机名。'] },
+      '--enable-cdn': { whenToUse: '希望流量走 CDN、获得缓存/加速能力时使用。', cautions: ['会改写 DNS CNAME 指向 CDN。'] },
+      '--ssl': { whenToUse: '需要 HTTPS 证书自动签发与绑定时使用。', cautions: ['依赖域名解析正确；必要时结合 `--ssl-force-renew`。'] },
+      '--target': { whenToUse: 'API 部署后需要自动发布到指定 alias（如 `prod` / `preview`）时使用。', cautions: ['会影响 alias 指向的流量入口。'] }
+    },
+    recommendedFlow: [
+      { title: '确认部署规格', command: 'licell deploy spec', reason: '先看可用 runtime、资源约束和推荐姿势。' },
+      { title: '本地预检入口', command: 'licell deploy check', reason: '避免入口文件、runtime、打包形态不匹配。' },
+      { title: '执行部署', command: 'licell deploy --output json', reason: '让 Agent 拿到结构化部署结果。' },
+      { title: '必要时发布预览版本', command: 'licell release promote <versionId>', reason: '预览验证通过后再切到稳定 alias。' }
+    ],
+    examples: [
+      'licell deploy spec nodejs22',
+      'licell deploy check',
+      'licell deploy --type api --entry src/index.ts',
+      'licell deploy --output json'
+    ],
+    agentTips: ['生成或修改部署前配置时，优先调用 `deploy spec` 与 `deploy check`。'],
+    related: ['release promote', 'logs']
+  },
+  'deploy spec': {
+    examples: ['licell deploy spec', 'licell deploy spec nodejs22', 'licell deploy spec python3.13 --output json']
+  },
+  'deploy check': {
+    examples: ['licell deploy check', 'licell deploy check --output json']
+  }
+};

@@ -1,4 +1,5 @@
 import type { CAC } from 'cac';
+import type { CommandMetadataMap } from './module';
 import pc from 'picocolors';
 import { mkdirSync, existsSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { basename, join, resolve } from 'path';
@@ -884,3 +885,10 @@ export function registerE2eCommands(cli: CAC) {
       showOutro('Done.');
     });
 }
+
+export const e2eCommandMetadata: CommandMetadataMap = {
+  e2e: {
+    summary: '运行、查看与清理 licell E2E 套件。',
+    examples: ['licell e2e run', 'licell e2e list', 'licell e2e cleanup <runId>']
+  }
+};

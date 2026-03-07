@@ -1,4 +1,5 @@
 import type { CAC } from 'cac';
+import type { CommandMetadataMap } from './module';
 import pc from 'picocolors';
 import { writeFileSync } from 'fs';
 import { escapeEnvValue, normalizeReleaseTarget } from '../utils/cli-helpers';
@@ -213,3 +214,37 @@ export function registerEnvCommands(cli: CAC) {
       );
     });
 }
+
+export const envCommandMetadata: CommandMetadataMap = {
+  env: {
+    summary: '云端环境变量的查看、设置、删除与回拉。',
+    examples: ['licell env list', 'licell env set API_KEY secret', 'licell env pull --output json']
+  },
+  'env set': {
+    examples: ['licell env set API_BASE_URL https://api.example.com', 'licell env set NODE_ENV production --output json'],
+    argumentHints: {
+      key: '环境变量名，例如 `API_KEY`、`NODE_ENV`。',
+      value: '变量值；如包含空格，请使用引号。'
+    },
+    recommendedFlow: [
+      { title: '先查看现状', command: 'licell env list --output json', reason: '避免覆盖已有变量或拼错 key。' },
+      { title: '设置变量', command: 'licell env set <key> <value> --output json', reason: '同时更新云端与本地项目配置。' },
+      { title: '必要时回拉确认', command: 'licell env pull --output json', reason: '确保云端状态与本地项目配置一致。' }
+    ],
+    safety: {
+      level: 'mutating',
+      reason: '会更新云端环境变量，并同步本地 `.licell/project.json`。'
+    }
+  },
+  'env rm': {
+    notes: ['会同时删除云端环境变量与本地 `.licell/project.json` 中对应项。'],
+    examples: ['licell env rm API_KEY', 'licell env rm API_KEY --output json'],
+    argumentHints: {
+      key: '待删除的环境变量名。'
+    },
+    safety: {
+      level: 'destructive',
+      reason: '会删除已有环境变量，执行前建议先 `licell env list` 确认。'
+    }
+  }
+};

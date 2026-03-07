@@ -1,4 +1,5 @@
 import type { CAC } from 'cac';
+import type { CommandMetadataMap } from './module';
 import { select, confirm, isCancel } from '@clack/prompts';
 import pc from 'picocolors';
 import { maskConnectionString } from '../utils/cli-helpers';
@@ -415,3 +416,24 @@ export function registerDbCommands(cli: CAC) {
       );
     });
 }
+
+export const dbCommandMetadata: CommandMetadataMap = {
+  db: {
+    summary: 'RDS 数据库实例的创建、查看、连接、公网访问与删除。',
+    notes: ['公网访问与删除属于高影响操作，自动化执行前应先确认。'],
+    examples: ['licell db list', 'licell db info <instanceId>', 'licell db connect <instanceId> --output json'],
+    agentTips: ['优先从 `licell db list --output json` 获取实例，再执行 connect / public-access / rm。']
+  },
+  'db rm': {
+    safety: {
+      level: 'destructive',
+      reason: '会删除数据库实例，请确认实例 ID 与备份策略。'
+    }
+  },
+  'db public-access': {
+    safety: {
+      level: 'destructive',
+      reason: '会开启数据库公网访问并修改白名单。'
+    }
+  }
+};

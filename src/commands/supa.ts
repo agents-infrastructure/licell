@@ -1,4 +1,5 @@
 import type { CAC } from 'cac';
+import type { CommandMetadataMap } from './module';
 import { confirm, isCancel } from '@clack/prompts';
 import pc from 'picocolors';
 import { executeWithAuthRecovery } from '../utils/auth-recovery';
@@ -405,3 +406,16 @@ export function registerSupaCommands(cli: CAC) {
       );
     });
 }
+
+export const supaCommandMetadata: CommandMetadataMap = {
+  supa: {
+    summary: 'Supabase 实例的创建、配置、连接、生命周期与白名单管理。',
+    examples: ['licell supa list', 'licell supa info <instanceName>', 'licell supa config <instanceName> --output json']
+  },
+  'supa rm': {
+    safety: {
+      level: 'destructive',
+      reason: '会删除 Supabase 实例及其相关配置。'
+    }
+  }
+};

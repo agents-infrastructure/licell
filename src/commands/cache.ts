@@ -1,4 +1,5 @@
 import type { CAC } from 'cac';
+import type { CommandMetadataMap } from './module';
 import { select, confirm, isCancel } from '@clack/prompts';
 import pc from 'picocolors';
 import { maskConnectionString } from '../utils/cli-helpers';
@@ -418,3 +419,28 @@ export function registerCacheCommands(cli: CAC) {
       );
     });
 }
+export const cacheCommandMetadata: CommandMetadataMap = {
+  cache: {
+    summary: 'Redis 缓存实例的创建、查看、连接、密码轮换、公网访问与删除。',
+    examples: ['licell cache list', 'licell cache connect <instanceId>', 'licell cache rotate-password --output json'],
+    agentTips: ['执行公网访问、密码轮换、删除前，先向用户确认影响面。']
+  },
+  'cache rm': {
+    safety: {
+      level: 'destructive',
+      reason: '会删除缓存实例，请确认实例 ID。'
+    }
+  },
+  'cache public-access': {
+    safety: {
+      level: 'destructive',
+      reason: '会开启缓存公网访问并修改白名单。'
+    }
+  },
+  'cache rotate-password': {
+    safety: {
+      level: 'destructive',
+      reason: '会轮换 Redis 密码，现有连接配置可能立即失效。'
+    }
+  }
+};

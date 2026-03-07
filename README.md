@@ -589,7 +589,9 @@ CDN，并回源到 OSS 地址，同时默认启用 HTTPS 证书签发与 CDN 证
 
 | 命令 | 说明 | 关键选项 |
 |------|------|----------|
-| `licell mcp [action]` | MCP：让 Agent 通过 licell 执行部署/发布/运维（初始化 .mcp.json 或启动 stdio server） | `--project-root`, `--server-name` |
+| `licell mcp` | MCP：让 Agent 通过 licell 执行部署/发布/运维（默认先初始化，再启动 stdio server） | `--project-root`, `--server-name` |
+| `licell mcp init` | 写入/更新项目内 `.mcp.json` 配置 | `--project-root`, `--server-name` |
+| `licell mcp serve` | 以 stdio 方式启动 licell MCP server | `--project-root` |
 | `licell skills init [agent]` | 为 AI Agent 生成 licell skills（claude / codex） | `--project-root`, `--force` |
 | `licell setup` | 安装后引导：配置 AI Agent Skills 和 MCP | `--agent`, `--global`, `--project-root` |
 | `licell completion [shell]` | 输出 shell 补全脚本（bash/zsh） | `--engine` |

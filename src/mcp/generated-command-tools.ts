@@ -131,9 +131,12 @@ export function buildGeneratedMcpCommandTools() {
     properties.timeoutMs = { type: 'number', description: 'Command timeout in milliseconds.' };
 
     const descriptionSuffix = 'Auto-generated from the shared licell CLI registry.';
+    const safetyHint = command.safety
+      ? ` Safety: ${command.safety.level} — ${command.safety.reason}`
+      : '';
     const description = command.description
-      ? `${command.description} ${descriptionSuffix}`
-      : descriptionSuffix;
+      ? `${command.description}${safetyHint} ${descriptionSuffix}`
+      : `${safetyHint.trim()} ${descriptionSuffix}`.trim();
 
     const tool: GeneratedMcpCommandTool = {
       name: toGeneratedMcpToolName(command.key),

@@ -1,4 +1,5 @@
 import type { CAC } from 'cac';
+import type { CommandMetadataMap } from './module';
 import pc from 'picocolors';
 import { normalizeReleaseTarget } from '../utils/cli-helpers';
 import { executeWithAuthRecovery } from '../utils/auth-recovery';
@@ -312,3 +313,43 @@ export function registerReleaseCommands(cli: CAC) {
       );
     });
 }
+
+export const releaseCommandMetadata: CommandMetadataMap = {
+  release: {
+    summary: '函数版本管理、切流、回滚与清理。',
+    examples: ['licell release list', 'licell release promote <versionId>', 'licell release rollback <versionId>']
+  },
+  'release prune': {
+    notes: ['默认仅预览；传 `--apply` 才会真正删除。'],
+    optionInsights: {
+      '--keep': { whenToUse: '需要显式控制保留最近多少个版本时使用。', cautions: ['数值过小可能导致缺少可回滚版本。'] },
+      '--apply': { whenToUse: '确认预览结果后，再加上它执行真实删除。', cautions: ['不加时仅预览；加上后会真正删除。'] },
+      '--yes': { whenToUse: '非交互自动化场景下跳过二次确认时使用。', cautions: ['建议仅在前一步已经做过预览时使用。'] },
+      '--preview': { whenToUse: '你想清理预览域名绑定，而不是函数版本时使用。', cautions: ['不要和函数版本清理目标混淆。'] }
+    },
+    recommendedFlow: [
+      { title: '先预览', command: 'licell release prune --output json', reason: '先看待删除项，避免误删历史版本。' },
+      { title: '调整保留数', command: 'licell release prune --keep <n>', reason: '根据回滚需求决定最小保留版本数量。' },
+      { title: '确认后执行', command: 'licell release prune --apply --yes', reason: '在非交互场景下执行真实清理。' }
+    ],
+    examples: ['licell release prune', 'licell release prune --keep 5', 'licell release prune --apply --yes'],
+    agentTips: ['Agent 先执行默认预览，再决定是否加 `--apply`。'],
+    safety: {
+      level: 'destructive',
+      reason: '可能删除历史函数版本或预览域名绑定，建议先预览并确认保留策略。',
+      confirmFlags: ['--apply', '--yes']
+    }
+  },
+  'release rollback': {
+    safety: {
+      level: 'destructive',
+      reason: '会将线上流量回滚到旧版本，执行前请确认目标版本。'
+    }
+  },
+  'release promote': {
+    safety: {
+      level: 'mutating',
+      reason: '会切换 alias 指向的线上版本。'
+    }
+  }
+};

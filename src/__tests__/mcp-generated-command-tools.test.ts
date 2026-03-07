@@ -22,6 +22,7 @@ describe('buildGeneratedMcpCommandTools', () => {
     expect(deployCheck.inputSchema.properties).toHaveProperty('cwd');
     expect(deployCheck.inputSchema.properties).toHaveProperty('timeoutMs');
     expect(deployCheck.description).toContain('Auto-generated from the shared licell CLI registry.');
+    expect(tools.licell_cmd_release_prune.description).toContain('Safety: destructive');
   });
 
   it('builds argv from generated positional and option bindings', () => {

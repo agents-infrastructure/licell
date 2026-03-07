@@ -1,4 +1,5 @@
 import type { CAC } from 'cac';
+import type { CommandMetadataMap } from './module';
 import { select, isCancel } from '@clack/prompts';
 import pc from 'picocolors';
 import { createSpinner, isInteractiveTTY, showIntro, showOutro } from '../utils/cli-shared';
@@ -101,3 +102,26 @@ export function registerSkillsCommands(cli: CAC) {
       }
     });
 }
+
+export const skillsCommandMetadata: CommandMetadataMap = {
+  skills: {
+    summary: '为 Claude / Codex 生成 licell skills 与 AGENTS 接入文件。',
+    examples: ['licell skills init codex', 'licell skills init claude']
+  },
+  'skills init': {
+    notes: ['未传 `[agent]` 且在交互终端下时，会提示选择 `claude` 或 `codex`。'],
+    optionInsights: {
+      '--project-root': { whenToUse: '要把 skills 写入其它项目目录时使用。', cautions: ['会写入目标项目的技能/AGENTS 文件。'] },
+      '--force': { whenToUse: '已有目标文件，且你明确希望覆盖时使用。', cautions: ['可能覆盖已有定制内容。'] }
+    },
+    recommendedFlow: [
+      { title: '选择目标 Agent', command: 'licell skills init codex', reason: '根据实际使用的 Agent 选择 codex 或 claude。' },
+      { title: '检查生成结果', reason: '确认 skills 文件与 AGENTS 入口已写入预期目录。' },
+      { title: '必要时配合 MCP', command: 'licell mcp init', reason: '让 Agent 既了解命令，也能实际执行 licell。' }
+    ],
+    examples: ['licell skills init codex', 'licell skills init claude', 'licell skills init codex --project-root .'],
+    argumentHints: {
+      agent: '支持 `claude` | `codex`。'
+    }
+  }
+};
