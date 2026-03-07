@@ -188,14 +188,15 @@ export async function executeApiDeploy(
         }
       } else if (ctx.releaseTarget) {
         s.message(`函数部署完成，正在发布版本并切流到 ${ctx.releaseTarget}...`);
-        nextPromotedVersion = await publishFunctionVersion(
+        const promotedVersion = await publishFunctionVersion(
           ctx.appName,
           `deploy ${ctx.releaseTarget} at ${new Date().toISOString()}`
         );
+        nextPromotedVersion = promotedVersion;
         await promoteFunctionAlias(
           ctx.appName,
           ctx.releaseTarget,
-          nextPromotedVersion,
+          promotedVersion,
           `deployed by licell at ${new Date().toISOString()}`
         );
       }

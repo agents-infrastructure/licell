@@ -61,11 +61,10 @@ licell setup
 
 如果 AI 不确定当前代码能否运行，它能主动调用我们提供的 MCP Tool：
 
-1. `licell_fc_deploy_spec`: 获取某个语言对应的官方配置限制和签名模板，AI
-   会参考着修改你的 `index.ts`。
-2. `licell_fc_deploy_check`: 提前拦截运行错误！AI
-   把配置丢到这个沙盒中预演报错，甚至在本地就会自动发现：“哦！你少导出
-   `handler`” 或 “入口文件不对应“，并提前修复而不会浪费阿里云资源。
+<!-- BEGIN GENERATED:SCENARIO_AI_PRECHECK_WORKFLOW -->
+1. `licell_fc_deploy_spec`：读取 FC API runtime 的 entry / handler / 资源约束，帮助 Agent 先理解限制与签名模板。
+2. `licell_fc_deploy_check`：只读预检当前项目，提前发现 handler、入口文件或 Docker 环境问题，并给出可执行修复建议。
+<!-- END GENERATED:SCENARIO_AI_PRECHECK_WORKFLOW -->
 
 ## 4. 典型场景体验对话
 

@@ -5,8 +5,8 @@ import { tmpdir } from 'os';
 import { isAbsolute, join, relative, resolve } from 'path';
 import { spawnSync } from 'child_process';
 import { Config, type ProjectNetworkConfig, type ProjectResourcesConfig } from '../../utils/config';
-import { isConflictError } from '../../utils/errors';
-import { withRetry } from '../../utils/retry';
+import { isConflictError } from '../../utils/alicloud-error';
+import { formatErrorMessage } from '../../utils/errors';
 import { createFcClient } from './client';
 import { ensureFunctionHttpUrl } from './http';
 import { validateRuntimeEntrypoint } from './runtime-utils';
@@ -18,6 +18,11 @@ import {
   resolveFunctionVpcConfig,
   resolveRuntimeConfig
 } from './runtime';
+import {
+  callFcWithGuard,
+  isFcOperationTimeoutError,
+  waitForFcFunctionReadable
+} from './request-guard';
 import { DEFAULT_FC_RUNTIME, type FcRuntime } from './types';
 
 export function packageCodeAsBase64(outdir: string) {
@@ -50,8 +55,6 @@ const DEFAULT_INSTANCE_CONCURRENCY = 10;
 const DEFAULT_CPU = 0.5;
 
 function validateCpuMemoryRatio(memorySizeMb: number, cpu: number) {
-  // FC requires memory (GB) : vCPU ratio in [1, 4].
-  // Equivalent: cpu*1024 <= memorySizeMb <= cpu*4096
   if (!Number.isFinite(memorySizeMb) || memorySizeMb <= 0) {
     throw new Error(`无效的 memorySize: ${String(memorySizeMb)}`);
   }
@@ -101,6 +104,148 @@ export function resolveFunctionResources(
     ...(cpu !== undefined ? { cpu } : {}),
     instanceConcurrency: resources.instanceConcurrency ?? inferredInstanceConcurrency
   };
+}
+
+function normalizeStringRecord(input: unknown) {
+  const entries = Object.entries((input || {}) as Record<string, unknown>)
+    .map(([key, value]) => [key, String(value)] as const)
+    .sort(([left], [right]) => left.localeCompare(right));
+  return Object.fromEntries(entries);
+}
+
+function normalizeVpcConfig(input: unknown) {
+  const vpc = input as { vpcId?: unknown; vSwitchIds?: unknown; securityGroupId?: unknown } | null | undefined;
+  return {
+    vpcId: typeof vpc?.vpcId === 'string' ? vpc.vpcId : undefined,
+    vSwitchIds: Array.isArray(vpc?.vSwitchIds) ? [...vpc.vSwitchIds].map(String).sort() : [],
+    securityGroupId: typeof vpc?.securityGroupId === 'string' ? vpc.securityGroupId : undefined
+  };
+}
+
+function normalizeCustomRuntimeConfig(input: unknown) {
+  const config = input as { command?: unknown; args?: unknown; port?: unknown } | null | undefined;
+  return {
+    command: Array.isArray(config?.command) ? config.command.map(String) : [],
+    args: Array.isArray(config?.args) ? config.args.map(String) : [],
+    port: config?.port === undefined || config?.port === null ? undefined : Number(config.port)
+  };
+}
+
+function normalizeCustomContainerConfig(input: unknown) {
+  const config = input as { image?: unknown; command?: unknown; args?: unknown } | null | undefined;
+  return {
+    image: typeof config?.image === 'string' ? config.image : undefined,
+    command: Array.isArray(config?.command) ? config.command.map(String) : [],
+    args: Array.isArray(config?.args) ? config.args.map(String) : []
+  };
+}
+
+function buildComparableFunctionState(body: Record<string, unknown>) {
+  return {
+    runtime: typeof body.runtime === 'string' ? body.runtime : undefined,
+    handler: typeof body.handler === 'string' ? body.handler : undefined,
+    memorySize: typeof body.memorySize === 'number' ? body.memorySize : Number(body.memorySize),
+    diskSize: typeof body.diskSize === 'number' ? body.diskSize : Number(body.diskSize),
+    timeout: typeof body.timeout === 'number' ? body.timeout : Number(body.timeout),
+    cpu: body.cpu === undefined ? undefined : Number(body.cpu),
+    instanceConcurrency: body.instanceConcurrency === undefined ? undefined : Number(body.instanceConcurrency),
+    environmentVariables: normalizeStringRecord(body.environmentVariables),
+    vpcConfig: normalizeVpcConfig(body.vpcConfig),
+    customRuntimeConfig: normalizeCustomRuntimeConfig(body.customRuntimeConfig),
+    customContainerConfig: normalizeCustomContainerConfig(body.customContainerConfig)
+  };
+}
+
+function buildObservedFunctionState(fn: $FC.Function) {
+  return {
+    runtime: fn.runtime || undefined,
+    handler: fn.handler || undefined,
+    memorySize: fn.memorySize === undefined ? undefined : Number(fn.memorySize),
+    diskSize: fn.diskSize === undefined ? undefined : Number(fn.diskSize),
+    timeout: fn.timeout === undefined ? undefined : Number(fn.timeout),
+    cpu: (fn as { cpu?: unknown }).cpu === undefined ? undefined : Number((fn as { cpu?: unknown }).cpu),
+    instanceConcurrency: (fn as { instanceConcurrency?: unknown }).instanceConcurrency === undefined
+      ? undefined
+      : Number((fn as { instanceConcurrency?: unknown }).instanceConcurrency),
+    environmentVariables: normalizeStringRecord(fn.environmentVariables),
+    vpcConfig: normalizeVpcConfig((fn as { vpcConfig?: unknown }).vpcConfig),
+    customRuntimeConfig: normalizeCustomRuntimeConfig((fn as { customRuntimeConfig?: unknown }).customRuntimeConfig),
+    customContainerConfig: normalizeCustomContainerConfig((fn as { customContainerConfig?: unknown }).customContainerConfig)
+  };
+}
+
+function functionStateMatches(fn: $FC.Function, expectedBody: Record<string, unknown>) {
+  return JSON.stringify(buildObservedFunctionState(fn)) === JSON.stringify(buildComparableFunctionState(expectedBody));
+}
+
+async function waitForFunctionState(
+  appName: string,
+  expectedBody: Record<string, unknown>,
+  client: ReturnType<typeof createFcClient>['client']
+) {
+  const fn = await waitForFcFunctionReadable(appName, client);
+  return functionStateMatches(fn, expectedBody);
+}
+
+async function callCreateFunction(
+  appName: string,
+  client: ReturnType<typeof createFcClient>['client'],
+  request: $FC.CreateFunctionRequest,
+  expectedBody: Record<string, unknown>
+) {
+  try {
+    await callFcWithGuard(
+      client as unknown as Record<string, unknown>,
+      'createFunction',
+      [request],
+      {
+        operation: `createFunction(${appName})`,
+        profile: 'mutation'
+      }
+    );
+    await waitForFcFunctionReadable(appName, client);
+    return;
+  } catch (err: unknown) {
+    if (isConflictError(err)) throw err;
+    if (isFcOperationTimeoutError(err) && await waitForFunctionState(appName, expectedBody, client)) {
+      return;
+    }
+    throw err;
+  }
+}
+
+async function callUpdateFunction(
+  appName: string,
+  client: ReturnType<typeof createFcClient>['client'],
+  request: $FC.UpdateFunctionRequest,
+  expectedBody: Record<string, unknown>
+) {
+  const before = await waitForFcFunctionReadable(appName, client);
+  try {
+    await callFcWithGuard(
+      client as unknown as Record<string, unknown>,
+      'updateFunction',
+      [appName, request],
+      {
+        operation: `updateFunction(${appName})`,
+        profile: 'mutation'
+      }
+    );
+    await waitForFcFunctionReadable(appName, client);
+    return;
+  } catch (err: unknown) {
+    if (isFcOperationTimeoutError(err)) {
+      const after = await waitForFcFunctionReadable(appName, client);
+      const changed = after.lastModifiedTime && before.lastModifiedTime
+        ? after.lastModifiedTime !== before.lastModifiedTime
+        : true;
+      if (changed && functionStateMatches(after, expectedBody)) {
+        return;
+      }
+      throw new Error(`更新函数超时，且云端状态未收敛到期望配置: ${formatErrorMessage(err)}`);
+    }
+    throw err;
+  }
 }
 
 export async function deployFC(appName: string, entryFile: string, runtime: FcRuntime = DEFAULT_FC_RUNTIME, options: DeployFCOptions = {}) {
@@ -170,7 +315,7 @@ export async function deployFC(appName: string, entryFile: string, runtime: FcRu
   });
 
   try {
-    await withRetry(() => client.createFunction(req));
+    await callCreateFunction(appName, client, req, createBody);
   } catch (err: unknown) {
     if (isConflictError(err)) {
       const updateBody: Record<string, unknown> = {
@@ -189,9 +334,9 @@ export async function deployFC(appName: string, entryFile: string, runtime: FcRu
       if (runtimeConfig.customContainerConfig) updateBody.customContainerConfig = runtimeConfig.customContainerConfig;
 
       try {
-        await withRetry(() => client.updateFunction(appName, new $FC.UpdateFunctionRequest({
+        await callUpdateFunction(appName, client, new $FC.UpdateFunctionRequest({
           body: new $FC.UpdateFunctionInput(updateBody)
-        })));
+        }), updateBody);
       } catch (updateErr: unknown) {
         if (isInvalidRuntimeValueError(updateErr)) {
           throw new Error(buildUnsupportedRuntimeMessage(runtime));

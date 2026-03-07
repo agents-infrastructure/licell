@@ -24,19 +24,39 @@ describe('getSkillFiles', () => {
     expect(files[0].content).toContain('# licell CLI Skill');
   });
 
-  it('content includes all major command sections', () => {
+  it('content follows the shared command catalog', () => {
     const [file] = getSkillFiles('claude');
     const sections = [
-      'licell deploy', 'licell release', 'licell fn',
-      'licell env', 'licell domain', 'licell dns',
-      'licell logs', 'licell oss', 'licell db',
-      'licell cache', 'licell mcp'
+      '### Setup & Identity',
+      '### Delivery Workflow',
+      '### Data Services',
+      '### Automation & Tooling'
     ];
     for (const section of sections) {
       expect(file.content).toContain(section);
     }
-    expect(file.content).toContain('licell deploy spec');
-    expect(file.content).toContain('licell deploy check');
+
+    const commands = [
+      'licell login',
+      'licell deploy spec [runtime]',
+      'licell deploy check',
+      'licell mcp [action]',
+      'licell completion [shell]',
+      'licell upgrade',
+      'licell auth repair',
+      'licell skills init [agent]'
+    ];
+    for (const command of commands) {
+      expect(file.content).toContain(command);
+    }
+
+    expect(file.content).toContain('follows the current installation source');
+    expect(file.content).toContain('project-local `node_modules`');
+    expect(file.content).toContain('`licell upgrade --dry-run`');
+    expect(file.content).toContain('licell CLI 注册表自动生成');
+    expect(file.content).toContain('## MCP Tool Reference');
+    expect(file.content).toContain('`licell_cli`');
+    expect(file.content).toContain('`licell_deploy`');
   });
 });
 

@@ -18,6 +18,28 @@ describe('withRetry', () => {
     expect(attempt).toBe(3);
   });
 
+  it('reports retry context through onRetry', async () => {
+    const onRetry = vi.fn();
+    let attempt = 0;
+    const result = await withRetry(async () => {
+      attempt += 1;
+      if (attempt < 2) throw { code: 'ConnectTimeout', message: 'connect failed' };
+      return 'done';
+    }, {
+      maxAttempts: 2,
+      baseDelayMs: 1,
+      onRetry
+    });
+
+    expect(result).toBe('done');
+    expect(onRetry).toHaveBeenCalledTimes(1);
+    expect(onRetry.mock.calls[0]?.[1]).toMatchObject({
+      attempt: 1,
+      nextAttempt: 2,
+      maxAttempts: 2
+    });
+  });
+
   it('throws immediately on non-transient error', async () => {
     let attempt = 0;
     await expect(

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeMultiWordCommandArgv } from '../utils/argv';
+import { normalizeCliArgv, normalizeCompatOptionArgv, normalizeMultiWordCommandArgv } from '../utils/argv';
 
 describe('normalizeMultiWordCommandArgv', () => {
   it('merges a standard multi-word command', () => {
@@ -121,12 +121,69 @@ describe('normalizeMultiWordCommandArgv', () => {
   });
 
   it('does not touch single-word commands', () => {
-    const argv = ['node', 'src/cli.ts', 'deploy', '--type', 'api'];
+    const argv = ['node', 'src/cli.ts', 'deploy', '--entry', 'src/index.ts'];
     expect(normalizeMultiWordCommandArgv(argv)).toEqual(argv);
   });
 
   it('does not merge argument values after options', () => {
     const argv = ['node', 'src/cli.ts', 'deploy', '--entry', 'release', 'list'];
     expect(normalizeMultiWordCommandArgv(argv)).toEqual(argv);
+  });
+});
+
+describe('normalizeCompatOptionArgv', () => {
+  it('rewrites legacy upgrade --version flag', () => {
+    expect(normalizeCompatOptionArgv([
+      'node',
+      'src/cli.ts',
+      'upgrade',
+      '--version',
+      'v1.2.3'
+    ])).toEqual([
+      'node',
+      'src/cli.ts',
+      'upgrade',
+      '--target-version',
+      'v1.2.3'
+    ]);
+  });
+
+  it('rewrites legacy upgrade --version=value form', () => {
+    expect(normalizeCompatOptionArgv([
+      'node',
+      'src/cli.ts',
+      'upgrade',
+      '--version=v1.2.3',
+      '--dry-run'
+    ])).toEqual([
+      'node',
+      'src/cli.ts',
+      'upgrade',
+      '--target-version=v1.2.3',
+      '--dry-run'
+    ]);
+  });
+
+  it('does not rewrite root version flag', () => {
+    const argv = ['node', 'src/cli.ts', '--version'];
+    expect(normalizeCompatOptionArgv(argv)).toEqual(argv);
+  });
+});
+
+describe('normalizeCliArgv', () => {
+  it('combines multi-word normalization and compatibility rewrites', () => {
+    expect(normalizeCliArgv([
+      'node',
+      'bootstrap.js',
+      'upgrade',
+      '--version',
+      'v1.2.3'
+    ])).toEqual([
+      'node',
+      'bootstrap.js',
+      'upgrade',
+      '--target-version',
+      'v1.2.3'
+    ]);
   });
 });

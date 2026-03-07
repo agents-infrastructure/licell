@@ -1,6 +1,9 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
-import { dirname, join, isAbsolute } from 'path';
+import { dirname, isAbsolute, join } from 'path';
 import { homedir } from 'os';
+import { renderSkillCommandReference } from './command-reference';
+import { renderSkillMcpToolReference } from './agent-surface-docs';
+import { renderSkillUpgradeNotes } from './install-upgrade-docs';
 
 export type AgentType = 'claude' | 'codex';
 
@@ -11,10 +14,6 @@ export interface SkillFile {
 
 const AGENTS_MD_LICELL_ENTRY =
   '- licell: Deploy and manage Alibaba Cloud Serverless applications using the licell CLI. Covers deploy, release, functions, env vars, domains, DNS, logs, OSS, database, cache, Supabase, and MCP. (file: .claude/skills/licell/SKILL.md)';
-
-/* ------------------------------------------------------------------ */
-/*  SKILL content                                                      */
-/* ------------------------------------------------------------------ */
 
 function getSkillContent(): string {
   return `---
@@ -37,6 +36,10 @@ Deploy and manage Alibaba Cloud Serverless (FC 3.0) applications from the comman
 - Authenticated via \`licell login\` (credentials stored in \`~/.licell-cli/auth.json\`)
 - Project initialized via \`licell init\` (config in \`.licell/project.json\`)
 
+## Install / Upgrade Notes
+
+${renderSkillUpgradeNotes().trim()}
+
 ## Quick Start Workflow
 
 \`\`\`bash
@@ -50,225 +53,25 @@ licell release promote --target prod                  # 发布到生产
 `;
 }
 
-/* ------------------------------------------------------------------ */
-/*  Command reference (split for chunked writing)                      */
-/* ------------------------------------------------------------------ */
+function getWorkflowAppendix(): string {
+  return `
+## Recommended Patterns
 
-function getCommandReference(): string {
-  return `## Command Reference
-
-### Deploy (\`licell deploy\`)
-
-一键打包部署到阿里云函数计算。
-
-| 选项 | 说明 |
-|------|------|
-| \`--type <type>\` | 部署类型：\`api\` 或 \`static\` |
-| \`--entry <entry>\` | API 入口文件（Node 默认 src/index.ts；Python 默认 src/main.py） |
-| \`--dist <dist>\` | 静态站点目录（默认 dist） |
-| \`--runtime <runtime>\` | 运行时：nodejs20/nodejs22/python3.12/python3.13/docker/static |
-| \`--target <target>\` | 部署后自动发布到指定 alias（如 prod/preview） |
-| \`--domain <domain>\` | 绑定完整自定义域名（如 api.example.com） |
-| \`--domain-suffix <suffix>\` | 自动绑定子域名后缀（如 example.com） |
-| \`--enable-cdn\` | 接入 CDN 并将 DNS CNAME 切到 CDN |
-| \`--ssl\` | 启用 HTTPS（Let's Encrypt 自动证书） |
-| \`--enable-vpc\` / \`--disable-vpc\` | 启用/禁用 VPC 接入 |
-| \`--memory <mb>\` | 函数内存（MB，默认 512） |
-| \`--vcpu <n>\` | vCPU 核数（默认 0.5） |
-| \`--instance-concurrency <n>\` | 单实例并发数 |
-| \`--timeout <seconds>\` | 函数超时（秒，默认 30） |
-| \`--acr-namespace <ns>\` | Docker 部署的 ACR 命名空间（默认 licell） |
-
-### FC API Spec & Precheck（Agent 推荐）
-
-| 命令 | 说明 |
-|------|------|
-| \`licell deploy spec [runtime]\` | 查看 FC API runtime 规格（entry/handler/资源约束） |
-| \`licell deploy spec --all\` | 查看全部 runtime 规格 |
-| \`licell deploy check --runtime <runtime> --entry <entry>\` | 部署前本地预检（缺少 handler/入口错误会提前报出） |
-| \`licell deploy check --runtime docker --docker-daemon\` | Docker 预检并检测本机 Docker daemon |
-
-**Agent 最佳实践：**
+### FC API Deploy
 
 \`\`\`bash
-# 1) 先读规格（知道该 runtime 的硬性要求）
 licell deploy spec nodejs22
-
-# 2) 再做预检（拿到可执行修复建议）
 licell deploy check --runtime nodejs22 --entry src/index.ts
-
-# 3) 预检通过后再部署
 licell deploy --type api --runtime nodejs22 --entry src/index.ts --target preview
 \`\`\`
 
-\`deploy spec --output json\` 包含 \`handlerContract\`、\`eventSchema\`、\`responseSchema\`、\`examples\`、\`validationRules\`，可直接供 Agent 规划与校验。
-
-**常见用法：**
+### Static Site Deploy
 
 \`\`\`bash
-# API 部署到 preview
-licell deploy --type api --target preview
-
-# 静态站点部署
 licell deploy --type static --dist dist --domain-suffix example.com
-
-# Docker 部署
-licell deploy --type api --runtime docker --target preview
 \`\`\`
 
-### Release Management (\`licell release\`)
-
-| 命令 | 说明 |
-|------|------|
-| \`licell release list [--limit <n>]\` | 查看函数版本列表 |
-| \`licell release promote [versionId] --target <alias>\` | 发布并切流到目标别名（默认 prod） |
-| \`licell release prune --keep <n> [--apply]\` | 清理历史版本（不传 --apply 仅预览） |
-
-### Function Management (\`licell fn\`)
-
-| 命令 | 说明 |
-|------|------|
-| \`licell fn list [--limit <n>] [--prefix <p>]\` | 查看函数列表 |
-| \`licell fn info [name] [--target <alias>]\` | 查看函数详情 |
-| \`licell fn invoke [name] [--target <alias>] [--payload <json>]\` | 调用云端函数 |
-| \`licell fn rm <name> [--force] [--yes]\` | 删除函数（--force 级联删除触发器/alias/版本） |
-
-### Environment Variables (\`licell env\`)
-
-| 命令 | 说明 |
-|------|------|
-| \`licell env list [--target <alias>] [--show-values]\` | 查看云端环境变量 |
-| \`licell env set <key> <value>\` | 设置环境变量（同步本地配置） |
-| \`licell env rm <key> [--yes]\` | 删除环境变量 |
-| \`licell env pull [--target <alias>]\` | 拉取云端环境变量到本地 |
-
-### Domain (\`licell domain\`)
-
-| 命令 | 说明 |
-|------|------|
-| \`licell domain add <domain> [--ssl] [--target <alias>]\` | 绑定自定义域名 |
-| \`licell domain rm <domain> [--yes]\` | 解绑域名并清理 DNS |
-
-### DNS Records (\`licell dns\`)
-
-| 命令 | 说明 |
-|------|------|
-| \`licell dns records list [domain] [--limit <n>]\` | 查看解析记录 |
-| \`licell dns records add <domain> --rr <rr> --type <type> --value <val>\` | 添加解析记录 |
-| \`licell dns records rm <recordId> [--yes]\` | 删除解析记录 |
-
-### Logs (\`licell logs\`)
-
-| 选项 | 说明 |
-|------|------|
-| \`--once\` | 仅拉取一次最近日志并退出 |
-| \`--window <seconds>\` | 一次拉取的时间窗（默认 120 秒） |
-| \`--lines <n>\` | 每次最大日志条数（默认 1000） |
-
-### OSS (\`licell oss\`)
-
-| 命令 | 说明 |
-|------|------|
-| \`licell oss list [--limit <n>]\` | 查看 Bucket 列表 |
-| \`licell oss info <bucket>\` | 查看 Bucket 详情 |
-| \`licell oss objects [bucket] [--prefix <p>] [--limit <n>]\` | 查看对象列表 |
-| \`licell oss upload [bucket] --source-dir <dir> [--target-dir <dir>]\` | 上传目录到 OSS |
-
-### Database (\`licell db\`)
-
-| 命令 | 说明 |
-|------|------|
-| \`licell db add --type <postgres\\|mysql>\` | 分配 Serverless 数据库 |
-| \`licell db list [--limit <n>]\` | 查看数据库实例列表 |
-| \`licell db info [instanceId]\` | 查看实例详情 |
-| \`licell db connect [instanceId]\` | 输出连接信息 |
-
-\`db add\` 高级选项：\`--engine-version\`、\`--class\`、\`--storage\`、\`--min-rcu\`、\`--max-rcu\`、\`--auto-pause\`、\`--zone\`、\`--vpc\`、\`--vsw\`、\`--security-ip-list\`
-
-### Cache (\`licell cache\`)
-
-| 命令 | 说明 |
-|------|------|
-| \`licell cache add --type redis\` | 分配 Redis/Tair 缓存 |
-| \`licell cache list [--limit <n>]\` | 查看实例列表 |
-| \`licell cache info [instanceId]\` | 查看实例详情 |
-| \`licell cache connect [instanceId]\` | 输出连接信息 |
-| \`licell cache rotate-password [--instance <id>]\` | 轮换 Redis 密码 |
-
-\`cache add\` 高级选项：\`--instance\`、\`--password\`、\`--class\`、\`--zone\`、\`--vpc\`、\`--vsw\`、\`--security-ip-list\`
-
-### Supabase (\`licell supa\`)
-
-| 命令 | 说明 |
-|------|------|
-| \`licell supa list [--limit <n>]\` | 查看 Supabase 实例列表 |
-| \`licell supa add [--name <name>]\` | 创建 Supabase 实例（含 PG、等待就绪、保存凭证） |
-| \`licell supa info <instanceName>\` | 查看实例详情 |
-| \`licell supa connect <instanceName>\` | 查看连接信息（Endpoints、API Keys） |
-| \`licell supa config <instanceName>\` | 查看/修改配置（Auth/Storage/RAG） |
-| \`licell supa whitelist <instanceName>\` | 查看/修改 IP 白名单 |
-| \`licell supa reset-password <instanceName>\` | 重置 Dashboard 或数据库密码 |
-| \`licell supa restart <instanceName>\` | 重启实例 |
-| \`licell supa stop <instanceName>\` | 停止实例 |
-| \`licell supa start <instanceName>\` | 启动实例 |
-| \`licell supa rm <instanceName> [--yes]\` | 删除实例（不可恢复） |
-
-\`supa add\` 高级选项：\`--vsw\`、\`--class\`、\`--db-instance\`、\`--dashboard-user\`、\`--dashboard-password\`、\`--db-password\`、\`--public-network\`
-
-\`supa config\` 修改选项：\`--set-auth KEY=VALUE\`、\`--set-storage KEY=VALUE\`、\`--rag on|off\`、\`--set-rag KEY=VALUE\`
-
-\`supa whitelist\` 修改选项：\`--set <ips>\`（覆盖）、\`--add <ips>\`（追加）、\`--remove <ips>\`（删除）、\`--group <name>\`
-
-### MCP Server (\`licell mcp\`)
-
-| 命令 | 说明 |
-|------|------|
-| \`licell mcp\` | 初始化 .mcp.json 并启动 stdio server |
-| \`licell mcp init\` | 仅写入 .mcp.json 配置 |
-| \`licell mcp serve\` | 启动 MCP stdio server |
-
-### Auth (\`licell login\` / \`licell whoami\` / \`licell switch\`)
-
-| 命令 | 说明 |
-|------|------|
-| \`licell login\` | 配置阿里云凭证（交互式或 --ak/--sk/--account-id） |
-| \`licell login --bootstrap-ram\` | 自动创建最小权限 RAM 用户 |
-| \`licell whoami\` | 查看当前登录信息 |
-| \`licell switch --region <region>\` | 切换默认 region |
-
-## Common Patterns
-
-### 典型部署流程
-
-\`\`\`bash
-# 1. 部署到 preview 环境
-licell deploy --type api --target preview
-
-# 2. 验证 preview 环境
-licell fn invoke --target preview --payload '{"path":"/health"}'
-
-# 3. 发布到生产
-licell release promote --target prod
-
-# 4. 如有问题，回滚
-licell release rollback --target prod
-\`\`\`
-
-### 环境变量管理
-
-\`\`\`bash
-licell env set DATABASE_URL "postgresql://..."
-licell env set REDIS_URL "redis://..."
-licell deploy --type api --target preview    # 重新部署使变量生效
-\`\`\`
-
-### 自定义域名 + HTTPS + CDN
-
-\`\`\`bash
-licell deploy --type api --target prod --domain api.example.com --ssl --enable-cdn
-\`\`\`
-
-### 数据库 + 缓存 + VPC 全栈部署
+### Data + App Stack
 
 \`\`\`bash
 licell db add --type postgres
@@ -276,11 +79,11 @@ licell cache add --type redis
 licell deploy --type api --target preview --enable-vpc
 \`\`\`
 
-### Supabase 全栈部署
+### Supabase Stack
 
 \`\`\`bash
 licell supa add --name my-app
-licell supa connect <instanceName>    # 获取 URL 和 API Keys
+licell supa connect <instanceName>
 licell deploy --type api --target preview --enable-vpc
 \`\`\`
 
@@ -294,9 +97,14 @@ licell deploy --type api --target preview --enable-vpc
 `;
 }
 
-/* ------------------------------------------------------------------ */
-/*  Public API                                                         */
-/* ------------------------------------------------------------------ */
+function getSkillBody() {
+  return getSkillContent().replace('<!-- PLACEHOLDER_COMMAND_REFERENCE -->\n', '')
+    + renderSkillCommandReference()
+    + '\n'
+    + renderSkillMcpToolReference()
+    + getWorkflowAppendix();
+}
+
 
 export function getGlobalSkillsDir(agent: AgentType): string {
   const home = homedir();
@@ -305,18 +113,17 @@ export function getGlobalSkillsDir(agent: AgentType): string {
 }
 
 export function getSkillFiles(agent: AgentType): SkillFile[] {
-  const body = getSkillContent().replace('<!-- PLACEHOLDER_COMMAND_REFERENCE -->\n', '') + getCommandReference();
+  const body = getSkillBody();
 
   if (agent === 'claude') {
     return [{ path: '.claude/skills/licell/SKILL.md', content: body }];
   }
 
-  // codex: standalone instruction file at project root
   return [{ path: 'codex.md', content: body }];
 }
 
 export function getGlobalSkillFiles(agent: AgentType): SkillFile[] {
-  const body = getSkillContent().replace('<!-- PLACEHOLDER_COMMAND_REFERENCE -->\n', '') + getCommandReference();
+  const body = getSkillBody();
   const dir = getGlobalSkillsDir(agent);
   return [{ path: join(dir, 'SKILL.md'), content: body }];
 }
@@ -335,7 +142,6 @@ export function ensureAgentsMdEntry(projectRoot: string): { filePath: string; up
     return { filePath, updated: false };
   }
 
-  // Insert after "### Available skills" or "## Available Skills" header
   const headerPattern = /^(#{2,3}\s+Available\s+[Ss]kills\s*)$/m;
   const match = headerPattern.exec(existing);
   if (match && match.index !== undefined) {
@@ -345,7 +151,6 @@ export function ensureAgentsMdEntry(projectRoot: string): { filePath: string; up
     return { filePath, updated: true };
   }
 
-  // Fallback: append to end
   const updated = `${existing.trimEnd()}\n\n## Available Skills\n\n${AGENTS_MD_LICELL_ENTRY}\n`;
   writeFileSync(filePath, updated, 'utf8');
   return { filePath, updated: true };

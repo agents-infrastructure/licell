@@ -27,10 +27,7 @@
 ## 安装
 
 ```bash
-# 方式一：npm 全局安装（推荐）
-npm install -g licell
-
-# 方式二：脚本安装
+# 脚本一键安装
 curl -fsSL https://github.com/agents-infrastructure/licell/releases/latest/download/install.sh | bash
 ```
 
@@ -130,11 +127,17 @@ licell deploy check --runtime nodejs22 --entry src/index.ts
 - `examples`（最小可通过示例、常见失败示例、修复提示）
 - `validationRules`（对应预检规则 ID）
 
-`licell mcp` 已提供对应 MCP tools：
+<!-- BEGIN GENERATED:README_MCP_FC_API_WORKFLOW -->
+`licell mcp` 已提供这组 FC API 部署工作流工具（由共享 MCP 注册表自动生成）：
 
-- `licell_fc_deploy_spec`
-- `licell_fc_deploy_check`
-- `licell_deploy`（建议在前两步通过后再调用）
+| Tool | 对应 CLI | 用途 |
+|------|----------|------|
+| `licell_fc_deploy_spec` | `licell deploy spec` | 读取 FC API runtime 的 entry / handler / 资源约束，帮助 Agent 先理解限制与签名模板。 |
+| `licell_fc_deploy_check` | `licell deploy check` | 只读预检当前项目，提前发现 handler、入口文件或 Docker 环境问题，并给出可执行修复建议。 |
+| `licell_deploy` | `licell deploy` | 在前两步通过后执行正式部署，将当前项目发布到阿里云。 |
+
+- 建议顺序：`licell_fc_deploy_spec` → `licell_fc_deploy_check` → `licell_deploy`
+<!-- END GENERATED:README_MCP_FC_API_WORKFLOW -->
 
 ### Agent 可读输出（`--output json`）
 
@@ -223,7 +226,7 @@ licell skills init codex
 curl -fsSL https://github.com/agents-infrastructure/licell/releases/latest/download/install.sh | bash
 ```
 
-如果 shell 还没包含 `~/.local/bin`：
+安装脚本会尝试把 `~/.local/bin` 写入当前 shell 的启动文件；当前这个终端会话仍需重新打开，或手动执行：
 
 ```bash
 export PATH="$HOME/.local/bin:$PATH"
@@ -235,14 +238,21 @@ licell --version
 ```bash
 licell upgrade
 # 或指定版本
-licell upgrade --version vX.Y.Z
+licell upgrade --target-version vX.Y.Z
+# 或显式指定升级渠道
+licell upgrade --channel release
 ```
 
 安装逻辑说明：
 
-- 安装脚本和二进制都来自同一个 `releases/latest`
-- 优先下载预构建单文件可执行（无需本机 Node/npm/pnpm）
-- 若当前平台暂无预构建资产，自动回退源码安装
+<!-- BEGIN GENERATED:README_UPGRADE_GUIDANCE -->
+- `licell upgrade` 会优先按“当前正在执行的安装来源”升级
+- 如果当前是 `npm` / `pnpm` / `yarn` / `bun` 全局安装，会调用对应包管理器执行全局升级
+- 如果当前是项目内依赖、`node_modules/.bin/licell` 或开发链接，默认不会自动做全局升级
+- 安装脚本和二进制都来自同一个 `releases/latest`，优先下载预构建单文件可执行；若当前平台暂无预构建资产，自动回退源码安装
+- 如显式传入 `--repo` 或 `--script-url`，则强制走 GitHub release 升级渠道
+- 可通过 `--channel auto|release|npm|pnpm|yarn|bun` 显式覆盖升级渠道；推荐先用 `licell upgrade --dry-run` 预览计划
+<!-- END GENERATED:README_UPGRADE_GUIDANCE -->
 
 开发调试可用（不建议生产）：
 
@@ -484,41 +494,113 @@ CDN，并回源到 OSS 地址，同时默认启用 HTTPS 证书签发与 CDN 证
 
 ## 6. 日常命令速查
 
-认证与环境：
+<!-- BEGIN GENERATED:README_QUICK_REFERENCE -->
+> 本节由 licell CLI 注册表自动生成；命令变更会同步到 README / docs/reference/agent-surfaces.md / Skills / MCP / Shell Completion。
 
-```bash
-licell login
-licell whoami
-licell switch --region cn-shanghai
-licell logout
-```
+### 命令总览
 
-固定 E2E 套件（发布前建议）：
+#### Setup & Identity
 
-```bash
-# 执行 smoke 套件（默认）
-licell e2e run
+认证、项目初始化与默认配置相关命令。
 
-# 执行 full 套件（包含 static + oss upload）
-licell e2e run --suite full
+| 命令 | 说明 | 关键选项 |
+|------|------|----------|
+| `licell login` | 配置阿里云凭证 | `--account-id`, `--ak`, `--sk` |
+| `licell auth repair` | 修复凭证权限（推荐：用超级 AK/SK 自动补齐 licell 最小权限并继续使用） | `--account-id`, `--ak`, `--sk` |
+| `licell logout` | 清除本地凭证 | — |
+| `licell whoami` | 查看当前登录身份 | — |
+| `licell switch` | 切换默认 region | `--region` |
+| `licell init` | 初始化 FC 项目（空目录生成脚手架，已有项目写入 licell 配置） | `--runtime`, `--app`, `--force` |
+| `licell config domain [suffix]` | 查看或设置全局默认域名后缀 | `--unset` |
 
-# e2e 默认使用公网模式（便于完全清理）；需要验证 VPC 时显式开启
-licell e2e run --enable-vpc
+#### Delivery Workflow
 
-# 指定 runtime + 域名后缀 + CDN，执行后自动清理
-licell e2e run --runtime nodejs22 --domain-suffix your-domain.xyz --enable-cdn --cleanup
+围绕应用部署、发布、函数管理、环境变量、域名、DNS、日志和对象存储的交付链路。
 
-# full 套件复用已有数据资源做 connect/info 校验（不新建 DB/Cache）
-licell e2e run --suite full --db-instance rm-xxx --cache-instance r-xxx
+- Agent 在 FC API 部署前，优先执行 `licell deploy spec` 与 `licell deploy check`。
+- 涉及删除或清理的命令通常需要显式传入 `--yes`。
 
-# 查看历史 run
-licell e2e list
+| 命令 | 说明 | 关键选项 |
+|------|------|----------|
+| `licell deploy` | 一键极速打包部署 | `--type`, `--entry`, `--dist` |
+| `licell deploy check` | 本地预检 FC API 入口与 runtime 约束（建议 deploy 前执行） | `--runtime`, `--entry`, `--docker-daemon` |
+| `licell deploy spec [runtime]` | 查看 FC API 部署规格（给 Agent/开发者在 deploy 前对照） | `--all` |
+| `licell release list` | 查看函数版本列表 | `--limit` |
+| `licell release promote [versionId]` | 发布并切流到目标别名 | `--target` |
+| `licell release prune` | 清理历史函数版本（默认仅预览） | `--keep`, `--apply`, `--yes` |
+| `licell release rollback <versionId>` | 回滚到指定函数版本 | `--target` |
+| `licell logs` | 查看云端日志（默认实时流式） | `--once`, `--window`, `--lines` |
+| `licell fn info [name]` | 查看函数详情 | `--target` |
+| `licell fn invoke [name]` | 调用函数（同步） | `--target`, `--payload`, `--file` |
+| `licell fn list` | 查看函数列表 | `--limit`, `--prefix` |
+| `licell fn rm [name]` | 删除函数 | `--force`, `--yes` |
+| `licell env list` | 查看云端环境变量 | `--target`, `--show-values` |
+| `licell env pull` | 拉取云端环境变量 | `--target` |
+| `licell env rm <key>` | 删除云端环境变量（并同步本地 .licell/project.json） | `--yes` |
+| `licell env set <key> <value>` | 设置云端环境变量（并同步本地 .licell/project.json） | — |
+| `licell domain add <domain>` | 绑定自定义域名 | `--ssl`, `--ssl-force-renew`, `--target` |
+| `licell domain rm <domain>` | 解绑自定义域名并清理 DNS CNAME | `--yes` |
+| `licell dns records add <domain>` | 添加域名解析记录 | `--rr`, `--type`, `--value` |
+| `licell dns records list [domain]` | 查看域名解析记录 | `--limit` |
+| `licell dns records rm <recordId>` | 删除域名解析记录 | `--yes` |
+| `licell oss bucket [bucket]` | 上传本地目录到 OSS Bucket 指定目录（兼容命令，等同 oss upload） | `--bucket`, `--source-dir`, `--target-dir` |
+| `licell oss info <bucket>` | 查看 OSS Bucket 详情 | — |
+| `licell oss list` | 查看 OSS Bucket 列表 | `--limit` |
+| `licell oss ls <bucket> [prefix]` | 列出 Bucket 对象 | `--limit` |
+| `licell oss upload [bucket]` | 上传本地目录到 OSS Bucket 指定目录 | `--bucket`, `--source-dir`, `--target-dir` |
 
-# 按 runId 清理
-licell e2e cleanup <runId>
-```
+#### Data Services
 
-Shell 补全（bash / zsh）：
+数据库、缓存与 Supabase 实例的创建、连接、白名单和生命周期管理。
+
+| 命令 | 说明 | 关键选项 |
+|------|------|----------|
+| `licell db add` | 分配数据库实例 | `--type`, `--engine-version`, `--category` |
+| `licell db connect [instanceId]` | 输出数据库连接信息 | — |
+| `licell db info <instanceId>` | 查看数据库实例详情 | — |
+| `licell db list` | 查看数据库实例列表 | `--limit` |
+| `licell db public-access [instanceId]` | 开通数据库公网访问并添加当前 IP 到白名单 | `--ip` |
+| `licell db rm <instanceId>` | 删除数据库实例 | `--yes` |
+| `licell cache add` | 分配 Redis 缓存 | `--type`, `--instance`, `--password` |
+| `licell cache connect [instanceId]` | 输出缓存连接信息 | — |
+| `licell cache info <instanceId>` | 查看缓存实例详情 | — |
+| `licell cache list` | 查看缓存实例列表 | `--limit` |
+| `licell cache public-access [instanceId]` | 开通 Redis 公网访问并添加当前 IP 到白名单 | `--ip` |
+| `licell cache rm <instanceId>` | 删除缓存实例 | `--yes` |
+| `licell cache rotate-password` | 轮换 Redis 密码 | `--instance` |
+| `licell supa add` | 创建 RDS Supabase 实例 | `--name`, `--vsw`, `--class` |
+| `licell supa config <instanceName>` | 查看 Supabase 实例配置（auth/storage/rag） | `--set-auth`, `--set-storage`, `--rag` |
+| `licell supa connect <instanceName>` | 查看 Supabase 连接信息和 API Keys | — |
+| `licell supa info <instanceName>` | 查看 Supabase 实例详情 | — |
+| `licell supa list` | 查看 Supabase 实例列表 | `--limit` |
+| `licell supa reset-password <instanceName>` | 重置 Supabase Dashboard 或数据库密码 | `--dashboard-password`, `--db-password` |
+| `licell supa restart <instanceName>` | 重启 Supabase 实例 | — |
+| `licell supa rm <instanceName>` | 删除 Supabase 实例 | `--yes` |
+| `licell supa start <instanceName>` | 启动 Supabase 实例 | — |
+| `licell supa stop <instanceName>` | 暂停 Supabase 实例 | — |
+| `licell supa whitelist <instanceName>` | 查看/修改 Supabase IP 白名单 | `--set`, `--add`, `--remove` |
+
+#### Automation & Tooling
+
+面向 Agent、开发体验与 CLI 生命周期的自动化命令。
+
+- `licell skills init` 与 `licell mcp` 都基于同一套 CLI 命令目录生成外部表面。
+- `licell completion` 的候选命令同样来自共享命令目录。
+
+| 命令 | 说明 | 关键选项 |
+|------|------|----------|
+| `licell mcp [action]` | MCP：让 Agent 通过 licell 执行部署/发布/运维（初始化 .mcp.json 或启动 stdio server） | `--project-root`, `--server-name` |
+| `licell skills init [agent]` | 为 AI Agent 生成 licell skills（claude / codex） | `--project-root`, `--force` |
+| `licell setup` | 安装后引导：配置 AI Agent Skills 和 MCP | `--agent`, `--global`, `--project-root` |
+| `licell completion [shell]` | 输出 shell 补全脚本（bash/zsh） | `--engine` |
+| `licell upgrade` | 按当前安装来源升级 licell | `--channel`, `--target-version`, `--repo` |
+| `licell e2e cleanup [runId]` | 清理指定 E2E run 产生的资源 | `--manifest`, `--keep-workspace`, `--yes` |
+| `licell e2e list` | 查看本项目 e2e 运行记录 | — |
+| `licell e2e run` | 执行固定 E2E 套件（默认 smoke） | `--suite`, `--run-id`, `--runtime` |
+
+### 常用工作流片段
+
+**Shell 补全（bash / zsh）**
 
 ```bash
 mkdir -p ~/.local/share/licell/completions
@@ -532,70 +614,23 @@ licell completion zsh > ~/.local/share/licell/completions/_licell
 echo '[[ -f "$HOME/.local/share/licell/completions/_licell" ]] && source "$HOME/.local/share/licell/completions/_licell"' >> ~/.zshrc
 ```
 
-函数与调试：
+**固定 E2E 套件（发布前建议）**
 
 ```bash
-# 先看 runtime 规格，再做入口预检（推荐 Agent 固定执行）
-licell deploy spec nodejs22
-licell deploy check --runtime nodejs22 --entry src/index.ts
-
-licell fn list
-licell fn info [name] --target preview
-licell fn invoke [name] --target preview --payload '{"ping":"pong"}'
-licell fn rm [name]
-licell fn rm [name] --force
-# 非交互/CI 场景删除需显式确认
-licell fn rm [name] --yes
-licell fn rm [name] --force --yes
+licell e2e run
+licell e2e run --suite full
+licell e2e run --enable-vpc
+licell e2e run --runtime nodejs22 --domain-suffix your-domain.xyz --enable-cdn --cleanup
+licell e2e list
+licell e2e cleanup <runId>
 ```
 
-环境变量：
+**删除 / 清理说明**
 
-```bash
-licell env list --target preview
-licell env set KEY VALUE
-licell env rm KEY
-licell env pull --target preview
-```
-
-域名与 DNS：
-
-```bash
-licell domain add api.your-domain.xyz --target preview --ssl
-licell domain rm api.your-domain.xyz
-licell domain rm api.your-domain.xyz --yes
-licell dns records list your-domain.xyz
-licell dns records add your-domain.xyz --rr preview --type CNAME --value target.example.com
-licell dns records rm <recordId>
-licell dns records rm <recordId> --yes
-```
-
-发布：
-
-```bash
-licell release list --limit 20
-licell release promote --target prod
-licell release rollback <versionId> --target prod
-licell release prune --keep 10
-licell release prune --keep 10 --apply
-licell release prune --keep 10 --apply --yes
-```
-
-说明：涉及删除/清理的命令在非交互模式下需要 `--yes`（交互模式会二次确认）。
-
-日志与对象存储：
-
-```bash
-licell logs
-licell oss list
-licell oss info <bucket>
-licell oss ls <bucket> [prefix]
-licell oss upload <bucket> --source-dir dist --target-dir mysite
-licell oss bucket --bucket <bucket> --source-dir dist --target-dir mysite
-```
-
-说明：`oss upload` 与 `oss bucket` 等价；`--target-dir` 不传时上传到 Bucket
-根目录。
+- 涉及删除、解绑、清理的命令在非交互模式下通常需要显式传入 `--yes`。
+- API 部署前建议固定执行 `licell deploy spec` 与 `licell deploy check`。
+- `licell upgrade --dry-run` 可先查看当前安装来源与升级计划。
+<!-- END GENERATED:README_QUICK_REFERENCE -->
 
 ## 7. 进阶：运行时细节
 
@@ -853,7 +888,8 @@ git push origin v1.0.0
 `zsh: command not found: licell`
 
 - 重新执行安装脚本
-- 确认 `~/.local/bin` 在 `PATH`
+- 安装脚本会尝试写入 shell 启动文件，但不会修改当前父 shell 的环境变量
+- 重新打开终端，或执行 `export PATH="$HOME/.local/bin:$PATH"`
 
 `licell login` 在哪执行？
 

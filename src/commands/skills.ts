@@ -4,12 +4,8 @@ import pc from 'picocolors';
 import { createSpinner, isInteractiveTTY, showIntro, showOutro } from '../utils/cli-shared';
 import { formatErrorMessage } from '../utils/errors';
 import { emitCliError, emitCliEvent, emitCliResult, isJsonOutput } from '../utils/output';
-import {
-  type AgentType,
-  getSkillFiles,
-  writeSkillFiles,
-  ensureAgentsMdEntry
-} from '../utils/skills-scaffold';
+
+type AgentType = 'claude' | 'codex';
 
 const SUPPORTED_AGENTS = new Set<AgentType>(['claude', 'codex']);
 
@@ -33,6 +29,7 @@ export function registerSkillsCommands(cli: CAC) {
       const projectRoot = typeof options.projectRoot === 'string' && options.projectRoot.trim()
         ? options.projectRoot.trim()
         : process.cwd();
+      const { getSkillFiles, writeSkillFiles, ensureAgentsMdEntry } = await import('../utils/skills-scaffold');
 
       try {
         let agent: AgentType;

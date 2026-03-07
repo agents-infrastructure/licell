@@ -112,6 +112,11 @@ export function resolveDefaultE2eManifestRunId(projectRoot = process.cwd()) {
   return list[0];
 }
 
+export function hasSuccessfulE2eStep(manifest: E2eManifest, stepNames: string[]) {
+  const names = new Set(stepNames);
+  return manifest.steps.some((step) => step.status === 'ok' && names.has(step.name));
+}
+
 export function ensureEmptyOrMissingDir(path: string) {
   if (!existsSync(path)) return;
   const stats = statSync(path);
@@ -132,6 +137,7 @@ export interface CliSelfInvocation {
 export function resolveSelfCliInvocation(
   processArgv = process.argv,
   execPath = process.execPath,
+  execArgv = process.execArgv,
   cwd = process.cwd(),
   existsFn: (path: string) => boolean = existsSync
 ): CliSelfInvocation {
@@ -141,7 +147,7 @@ export function resolveSelfCliInvocation(
     if (existsFn(scriptPath)) {
       return {
         command: execPath,
-        prefixArgs: [scriptPath]
+        prefixArgs: [...execArgv, scriptPath]
       };
     }
   }

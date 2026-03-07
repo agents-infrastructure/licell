@@ -1,109 +1,13 @@
+import { getCommandCatalog } from './command-catalog';
+
 export type CompletionShell = 'bash' | 'zsh';
-
-const ROOT_OPTIONS = ['-h', '--help', '-v', '--version', '--output'];
-
-const ROOT_COMMANDS = [
-  'login',
-  'logout',
-  'whoami',
-  'switch',
-  'init',
-  'deploy',
-  'fn',
-  'oss',
-  'db',
-  'cache',
-  'e2e',
-  'release',
-  'domain',
-  'dns',
-  'env',
-  'logs',
-  'upgrade',
-  'mcp',
-  'auth',
-  'completion'
-];
-
-const SUBCOMMANDS: Record<string, string[]> = {
-  auth: ['repair'],
-  deploy: ['spec', 'check'],
-  fn: ['list', 'info', 'invoke', 'rm'],
-  oss: ['list', 'info', 'ls', 'upload', 'bucket'],
-  db: ['add', 'list', 'info', 'connect'],
-  cache: ['add', 'list', 'info', 'connect', 'rotate-password'],
-  e2e: ['run', 'cleanup', 'list'],
-  release: ['list', 'promote', 'rollback', 'prune'],
-  domain: ['add', 'rm'],
-  dns: ['records'],
-  env: ['list', 'set', 'rm', 'pull'],
-  mcp: ['init', 'serve'],
-  completion: ['bash', 'zsh']
-};
-
-const NESTED_SUBCOMMANDS: Record<string, string[]> = {
-  'dns records': ['list', 'add', 'rm']
-};
-
-const COMMAND_OPTIONS: Record<string, string[]> = {
-  login: ['--account-id', '--ak', '--sk', '--region', '--bootstrap-ram', '--bootstrap-user', '--bootstrap-policy'],
-  'auth repair': ['--account-id', '--ak', '--sk', '--region', '--bootstrap-user', '--bootstrap-policy'],
-  switch: ['--region'],
-  init: ['--runtime', '--app', '--force', '--yes'],
-  deploy: [
-    '--type', '--entry', '--dist', '--runtime', '--target', '--domain', '--domain-suffix',
-    '--enable-cdn', '--ssl', '--ssl-force-renew', '--acr-namespace', '--enable-vpc',
-    '--disable-vpc', '--memory', '--vcpu', '--instance-concurrency', '--timeout'
-  ],
-  'deploy spec': ['--all'],
-  'deploy check': ['--runtime', '--entry', '--docker-daemon'],
-  'fn list': ['--limit', '--prefix'],
-  'fn info': ['--target'],
-  'fn invoke': ['--target', '--payload', '--file'],
-  'fn rm': ['--force', '--yes'],
-  'oss list': ['--limit'],
-  'oss ls': ['--limit'],
-  'oss upload': ['--bucket', '--source-dir', '--target-dir'],
-  'oss bucket': ['--bucket', '--source-dir', '--target-dir'],
-  'db add': [
-    '--type', '--engine-version', '--category', '--class', '--storage', '--storage-type', '--min-rcu',
-    '--max-rcu', '--auto-pause', '--zone', '--zone-slave1', '--zone-slave2', '--vpc', '--vsw',
-    '--security-ip-list', '--description'
-  ],
-  'db list': ['--limit'],
-  'db public-access': ['--ip'],
-  'cache add': [
-    '--type', '--instance', '--password', '--username', '--engine-version', '--class', '--node-type',
-    '--capacity', '--vk-name', '--compute-unit', '--zone', '--vpc', '--vsw', '--security-ip-list'
-  ],
-  'cache list': ['--limit'],
-  'cache rotate-password': ['--instance'],
-  'cache public-access': ['--ip'],
-  'e2e run': [
-    '--suite', '--run-id', '--runtime', '--target', '--enable-vpc', '--domain', '--domain-suffix',
-    '--db-instance', '--cache-instance', '--skip-static',
-    '--enable-cdn', '--cleanup', '--workspace', '--yes'
-  ],
-  'e2e cleanup': ['--manifest', '--keep-workspace', '--yes'],
-  'release list': ['--limit'],
-  'release promote': ['--target'],
-  'release rollback': ['--target'],
-  'release prune': ['--keep', '--apply', '--yes'],
-  'domain add': ['--ssl', '--ssl-force-renew', '--target'],
-  'domain rm': ['--yes'],
-  'dns records list': ['--limit'],
-  'dns records add': ['--rr', '--type', '--value', '--ttl', '--line'],
-  'dns records rm': ['--yes'],
-  'env list': ['--target', '--show-values'],
-  'env rm': ['--yes'],
-  'env pull': ['--target'],
-  mcp: ['--project-root', '--server-name'],
-  upgrade: ['--version', '--repo', '--script-url', '--skip-checksum', '--dry-run'],
-  completion: ['--engine']
-};
 
 function unique(values: string[]) {
   return [...new Set(values)];
+}
+
+function getCompletionCatalog() {
+  return getCommandCatalog();
 }
 
 function normalizeCompWords(rawWords: string | undefined) {
@@ -114,52 +18,33 @@ function normalizeCompWords(rawWords: string | undefined) {
 }
 
 function resolvePathFromTokens(tokensBeforeCursor: string[]) {
-  const first = tokensBeforeCursor[0];
-  if (!first || first.startsWith('-')) return [];
+  const catalog = getCompletionCatalog();
+  const pathTokens: string[] = [];
 
-  const firstLevel = SUBCOMMANDS[first];
-  if (!firstLevel) return [first];
+  for (const token of tokensBeforeCursor) {
+    if (!token || token.startsWith('-')) break;
+    const parentKey = pathTokens.join(' ');
+    const candidates = pathTokens.length === 0
+      ? catalog.rootCommands
+      : (catalog.childCommands[parentKey] || []);
+    if (!candidates.includes(token)) break;
+    pathTokens.push(token);
+  }
 
-  const second = tokensBeforeCursor[1];
-  if (!second || second.startsWith('-') || !firstLevel.includes(second)) return [first];
-
-  const key2 = `${first} ${second}`;
-  const secondLevel = NESTED_SUBCOMMANDS[key2];
-  if (!secondLevel) return [first, second];
-
-  const third = tokensBeforeCursor[2];
-  if (!third || third.startsWith('-') || !secondLevel.includes(third)) return [first, second];
-
-  return [first, second, third];
+  return pathTokens;
 }
 
 function resolveCandidatesByPath(pathTokens: string[]) {
+  const catalog = getCompletionCatalog();
   if (pathTokens.length === 0) {
-    return unique([...ROOT_COMMANDS, ...ROOT_OPTIONS]);
+    return unique([...catalog.rootCommands, ...catalog.globalOptions]);
   }
 
-  if (pathTokens.length === 1) {
-    const key = pathTokens[0];
-    return unique([
-      ...(SUBCOMMANDS[key] || []),
-      ...(COMMAND_OPTIONS[key] || []),
-      ...ROOT_OPTIONS
-    ]);
-  }
-
-  if (pathTokens.length === 2) {
-    const key = `${pathTokens[0]} ${pathTokens[1]}`;
-    return unique([
-      ...(NESTED_SUBCOMMANDS[key] || []),
-      ...(COMMAND_OPTIONS[key] || []),
-      ...ROOT_OPTIONS
-    ]);
-  }
-
-  const key = `${pathTokens[0]} ${pathTokens[1]} ${pathTokens[2]}`;
+  const key = pathTokens.join(' ');
   return unique([
-    ...(COMMAND_OPTIONS[key] || []),
-    ...ROOT_OPTIONS
+    ...(catalog.childCommands[key] || []),
+    ...(catalog.commandOptions[key] || []),
+    ...catalog.globalOptions
   ]);
 }
 

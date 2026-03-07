@@ -6,6 +6,7 @@ import {
   ensureEmptyOrMissingDir,
   generateE2eRunId,
   getE2eManifestPath,
+  hasSuccessfulE2eStep,
   listE2eManifestRunIds,
   loadE2eManifest,
   normalizeE2eSuite,
@@ -69,22 +70,30 @@ describe('e2e utils', () => {
     }
   });
 
+  it('detects whether e2e steps succeeded', () => {
+    expect(hasSuccessfulE2eStep({ steps: [{ name: 'deploy-api', status: 'ok', startedAt: 'a', endedAt: 'b' }] } as never, ['deploy-api'])).toBe(true);
+    expect(hasSuccessfulE2eStep({ steps: [{ name: 'deploy-api', status: 'failed', startedAt: 'a', endedAt: 'b' }] } as never, ['deploy-api'])).toBe(false);
+    expect(hasSuccessfulE2eStep({ steps: [{ name: 'deploy-static-preview', status: 'ok', startedAt: 'a', endedAt: 'b' }] } as never, ['deploy-api-preview', 'deploy-static-preview'])).toBe(true);
+  });
+
   it('resolves self cli invocation for script mode and binary mode', () => {
     const script = '/repo/src/cli.ts';
     const scriptInvocation = resolveSelfCliInvocation(
-      ['bun', 'src/cli.ts', 'e2e', 'run'],
-      '/usr/local/bin/bun',
+      ['node', 'src/cli.ts', 'e2e', 'run'],
+      '/usr/local/bin/node',
+      ['--require', '/tmp/tsx/preflight.cjs', '--import', 'file:///tmp/tsx/loader.mjs'],
       '/repo',
       (path) => path === script
     );
     expect(scriptInvocation).toEqual({
-      command: '/usr/local/bin/bun',
-      prefixArgs: ['/repo/src/cli.ts']
+      command: '/usr/local/bin/node',
+      prefixArgs: ['--require', '/tmp/tsx/preflight.cjs', '--import', 'file:///tmp/tsx/loader.mjs', '/repo/src/cli.ts']
     });
 
     const binaryInvocation = resolveSelfCliInvocation(
       ['/usr/local/bin/licell', 'e2e', 'run'],
       '/usr/local/bin/licell',
+      [],
       '/repo',
       () => false
     );

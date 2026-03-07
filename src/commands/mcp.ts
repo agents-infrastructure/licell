@@ -3,7 +3,6 @@ import pc from 'picocolors';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { homedir } from 'os';
-import { runLicellMcpServer } from '../mcp/server';
 import { ensureAuthReadyForCommand, ensureAuthCapabilityPreflight, type AuthCapability } from '../utils/auth-recovery';
 import { isInteractiveTTY } from '../utils/cli-shared';
 import { resolveCliVersion } from '../utils/version';
@@ -173,6 +172,7 @@ export function registerMcpCommand(cli: CAC) {
     .option('--project-root <path>', '项目根目录（默认当前目录）')
     .option('--server-name <name>', '写入 .mcp.json 的 server 名称（默认 licell）')
     .action(async (action: string | undefined, options: { projectRoot?: unknown; serverName?: unknown }) => {
+      const { runLicellMcpServer } = await import('../mcp/server');
       const act = (action || '').trim().toLowerCase();
       const projectRoot = typeof options.projectRoot === 'string' && options.projectRoot.trim()
         ? options.projectRoot.trim()

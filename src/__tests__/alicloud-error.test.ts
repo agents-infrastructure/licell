@@ -60,6 +60,11 @@ describe('alicloud-error unified error classification', () => {
     it('detects connection timeout', () => {
       expect(isTransientError(makeError('', 'ConnectTimeout'))).toBe(true);
     });
+    it('detects connection timeout by error name', () => {
+      const err = makeError('', 'Connect HTTPS://example.com failed');
+      err.name = 'ConnectTimeout';
+      expect(isTransientError(err)).toBe(true);
+    });
     it('detects ECONNRESET', () => {
       expect(isTransientError(makeError('', 'ECONNRESET'))).toBe(true);
     });

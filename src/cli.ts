@@ -7,29 +7,9 @@ process.emit = function (event: string, ...args: unknown[]) {
   return _emit.apply(this, [event, ...args] as Parameters<typeof _emit>);
 };
 
-import { cac } from 'cac';
 import pc from 'picocolors';
-import { normalizeMultiWordCommandArgv } from './utils/argv';
-import { registerAuthCommands } from './commands/auth';
-import { registerInitCommand } from './commands/init';
-import { registerDeployCommand } from './commands/deploy';
-import { registerFnCommands } from './commands/fn';
-import { registerOssCommands } from './commands/oss';
-import { registerDbCommands } from './commands/db';
-import { registerCacheCommands } from './commands/cache';
-import { registerE2eCommands } from './commands/e2e';
-import { registerReleaseCommands } from './commands/release';
-import { registerDomainCommands } from './commands/domain';
-import { registerDnsCommands } from './commands/dns';
-import { registerEnvCommands } from './commands/env';
-import { registerLogsCommand } from './commands/logs';
-import { registerUpgradeCommand } from './commands/upgrade';
-import { registerMcpCommand } from './commands/mcp';
-import { registerShellCommands } from './commands/shell';
-import { registerSkillsCommands } from './commands/skills';
-import { registerSetupCommand } from './commands/setup';
-import { registerConfigCommands } from './commands/config';
-import { registerSupaCommands } from './commands/supa';
+import { createLicellCliApp } from './cli/app';
+import { normalizeCliArgv } from './utils/argv';
 import { resolveCliVersion } from './utils/version';
 import { checkForUpdate, printUpdateTip } from './utils/update-check';
 import { formatErrorMessage } from './utils/errors';
@@ -49,32 +29,7 @@ import {
 } from './utils/output';
 
 const cliVersion = resolveCliVersion();
-const cli = cac('licell');
-cli.version(cliVersion);
-cli.option('--output <mode>', '输出格式：text|json（json 更适合 Agent/MCP 解析）', { default: 'text' });
-
-registerAuthCommands(cli);
-registerInitCommand(cli);
-registerDeployCommand(cli);
-registerFnCommands(cli);
-registerOssCommands(cli);
-registerDbCommands(cli);
-registerCacheCommands(cli);
-registerE2eCommands(cli);
-registerReleaseCommands(cli);
-registerDomainCommands(cli);
-registerDnsCommands(cli);
-registerEnvCommands(cli);
-registerLogsCommand(cli);
-registerUpgradeCommand(cli);
-registerMcpCommand(cli);
-registerShellCommands(cli);
-registerSkillsCommands(cli);
-registerSetupCommand(cli);
-registerConfigCommands(cli);
-registerSupaCommands(cli);
-
-cli.help();
+const cli = createLicellCliApp({ name: 'licell', version: cliVersion });
 cli.on('command:*', () => {
   const command = cli.args.join(' ');
   if (isJsonOutput()) {
@@ -89,7 +44,7 @@ cli.on('command:*', () => {
   process.exit(1);
 });
 
-const normalizedArgv = normalizeMultiWordCommandArgv(process.argv);
+const normalizedArgv = normalizeCliArgv(process.argv);
 let argv = normalizedArgv;
 try {
   const parsedOutput = parseGlobalOutputModeArgv(normalizedArgv);

@@ -1,6 +1,7 @@
 import FC20230330, * as $FC from '@alicloud/fc20230330';
 import { isConflictError } from '../../utils/alicloud-error';
 import { createFcClient } from './client';
+import { callFcWithGuard } from './request-guard';
 
 const DEFAULT_HTTP_TRIGGER_NAME = 'licell-http';
 
@@ -24,10 +25,18 @@ async function listAllTriggers(appName: string, fcClient: FC20230330) {
   const MAX_PAGES = 50;
 
   for (let page = 0; page < MAX_PAGES; page += 1) {
-    const response = await fcClient.listTriggers(appName, new $FC.ListTriggersRequest({
-      limit: 100,
-      nextToken
-    }));
+    const response = await callFcWithGuard<$FC.ListTriggersResponse>(
+      fcClient as unknown as Record<string, unknown>,
+      'listTriggers',
+      [appName, new $FC.ListTriggersRequest({
+        limit: 100,
+        nextToken
+      })],
+      {
+        operation: `listTriggers(${appName})`,
+        profile: 'read'
+      }
+    );
     const rows = response.body?.triggers || [];
     triggers.push(...rows);
     nextToken = response.body?.nextToken;
@@ -48,24 +57,40 @@ function pickPublicHttpTriggerUrl(triggers: $FC.Trigger[]) {
 async function upsertDefaultHttpTrigger(appName: string, fcClient: FC20230330, authType: HttpTriggerAuthType = 'anonymous') {
   const triggerConfig = buildHttpTriggerConfig(authType);
   try {
-    await fcClient.createTrigger(appName, new $FC.CreateTriggerRequest({
-      body: new $FC.CreateTriggerInput({
-        triggerName: DEFAULT_HTTP_TRIGGER_NAME,
-        triggerType: 'http',
-        description: 'managed by licell',
-        triggerConfig
-      })
-    }));
+    await callFcWithGuard(
+      fcClient as unknown as Record<string, unknown>,
+      'createTrigger',
+      [appName, new $FC.CreateTriggerRequest({
+        body: new $FC.CreateTriggerInput({
+          triggerName: DEFAULT_HTTP_TRIGGER_NAME,
+          triggerType: 'http',
+          description: 'managed by licell',
+          triggerConfig
+        })
+      })],
+      {
+        operation: `createTrigger(${appName}/${DEFAULT_HTTP_TRIGGER_NAME})`,
+        profile: 'mutation'
+      }
+    );
     return;
   } catch (err: unknown) {
     if (!isConflictError(err)) throw err;
   }
 
-  await fcClient.updateTrigger(appName, DEFAULT_HTTP_TRIGGER_NAME, new $FC.UpdateTriggerRequest({
-    body: new $FC.UpdateTriggerInput({
-      triggerConfig
-    })
-  }));
+  await callFcWithGuard(
+    fcClient as unknown as Record<string, unknown>,
+    'updateTrigger',
+    [appName, DEFAULT_HTTP_TRIGGER_NAME, new $FC.UpdateTriggerRequest({
+      body: new $FC.UpdateTriggerInput({
+        triggerConfig
+      })
+    })],
+    {
+      operation: `updateTrigger(${appName}/${DEFAULT_HTTP_TRIGGER_NAME})`,
+      profile: 'mutation'
+    }
+  );
 }
 
 export interface EnsureHttpUrlOptions {

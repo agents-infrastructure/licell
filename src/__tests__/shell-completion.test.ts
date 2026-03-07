@@ -55,6 +55,17 @@ describe('resolveCompletionCandidates', () => {
     expect(candidates).not.toContain('auth');
   });
 
+  it('suggests upgrade channel option', () => {
+    const candidates = resolveCompletionCandidates({
+      compWords: 'licell upgrade --',
+      compCword: 2,
+      compCur: '--'
+    });
+
+    expect(candidates).toContain('--channel');
+    expect(candidates).toContain('--target-version');
+  });
+
   it('suggests deploy subcommands for agent precheck flow', () => {
     const candidates = resolveCompletionCandidates({
       compWords: 'licell deploy ',

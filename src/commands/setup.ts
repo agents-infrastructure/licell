@@ -4,16 +4,10 @@ import pc from 'picocolors';
 import { createSpinner, isInteractiveTTY, showIntro, showOutro } from '../utils/cli-shared';
 import { formatErrorMessage } from '../utils/errors';
 import { emitCliError, emitCliEvent, emitCliResult, isJsonOutput } from '../utils/output';
-import {
-  type AgentType,
-  getSkillFiles,
-  getGlobalSkillFiles,
-  writeSkillFiles,
-  ensureAgentsMdEntry
-} from '../utils/skills-scaffold';
 import { ensureMcpJsonConfig, ensureGlobalClaudeMcpConfig, ensureGlobalCodexMcpConfig } from './mcp';
 
 type Scope = 'global' | 'project';
+type AgentType = 'claude' | 'codex';
 
 import { type SetupOptions } from './setup.options';
 
@@ -26,6 +20,12 @@ export async function runInteractiveSetup(options: SetupOptions = {}) {
   const projectRoot = typeof options.projectRoot === 'string' && options.projectRoot.trim()
     ? options.projectRoot.trim()
     : process.cwd();
+  const {
+    getSkillFiles,
+    getGlobalSkillFiles,
+    writeSkillFiles,
+    ensureAgentsMdEntry
+  } = await import('../utils/skills-scaffold');
 
   try {
     const cancelFlow = () => {

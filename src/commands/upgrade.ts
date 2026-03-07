@@ -2,14 +2,302 @@ import type { CAC } from 'cac';
 import pc from 'picocolors';
 import { createHash } from 'crypto';
 import { spawnSync } from 'child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'fs';
-import { join } from 'path';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
+import { dirname, join, resolve } from 'path';
 import { tmpdir } from 'os';
 import { createSpinner, showIntro, showOutro, toOptionalString } from '../utils/cli-shared';
 import { emitCliEvent, emitCliResult, isJsonOutput } from '../utils/output';
 
 const DEFAULT_UPGRADE_REPO = 'agents-infrastructure/licell';
+const DEFAULT_PACKAGE_NAME = 'licell';
 const REPO_SLUG_RE = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
+const UPGRADE_CHANNELS = ['auto', 'release', 'npm', 'pnpm', 'yarn', 'bun'] as const;
+
+export type PackageManagerName = 'npm' | 'pnpm' | 'yarn' | 'bun';
+export type UpgradeChannel = typeof UPGRADE_CHANNELS[number];
+
+export interface InstallSourceInfo {
+  kind: 'release' | 'package-manager' | 'project' | 'unknown';
+  packageManager?: PackageManagerName;
+  runtimePath: string | null;
+  execPath: string;
+}
+
+export type UpgradePlan =
+  | {
+    mode: 'release';
+    scriptUrl: string;
+  }
+  | {
+    mode: 'package-manager';
+    packageManager: PackageManagerName;
+    command: string;
+    args: string[];
+    displayCommand: string;
+  };
+
+export function formatInstallSourceDisplay(source: InstallSourceInfo) {
+  switch (source.kind) {
+    case 'package-manager':
+      return source.packageManager ? `package-manager (${source.packageManager})` : 'package-manager';
+    case 'project':
+      return source.packageManager ? `project (${source.packageManager})` : 'project';
+    case 'release':
+      return 'release';
+    default:
+      return 'unknown';
+  }
+}
+
+export function formatUpgradeDryRunText(input: {
+  installSource: InstallSourceInfo;
+  channel: UpgradeChannel;
+  plan: UpgradePlan;
+}) {
+  const lines = [
+    `detected install source: ${formatInstallSourceDisplay(input.installSource)}`,
+    `requested channel: ${input.channel}`
+  ];
+
+  if (input.plan.mode === 'release') {
+    lines.push(`release installer: ${input.plan.scriptUrl}`);
+  } else {
+    lines.push(`package manager command: ${input.plan.displayCommand}`);
+  }
+
+  return lines.join('\n');
+}
+
+function normalizePathForMatch(value: string | null | undefined) {
+  if (typeof value !== 'string' || value.length === 0) return '';
+  return value.replace(/\\/g, '/').toLowerCase();
+}
+
+function getRuntimePath(argv: string[]) {
+  const candidate = argv[1];
+  if (typeof candidate !== 'string' || candidate.length === 0) return null;
+  if (candidate.endsWith('.js') || candidate.includes('/') || candidate.includes('\\')) return candidate;
+  return null;
+}
+
+function inferPackageManagerFromPath(runtimePathNormalized: string): PackageManagerName {
+  if (runtimePathNormalized.includes('/.pnpm/') || runtimePathNormalized.includes('/pnpm/global/')) return 'pnpm';
+  if (
+    runtimePathNormalized.includes('/.config/yarn/global/')
+    || runtimePathNormalized.includes('/yarn/global/')
+    || runtimePathNormalized.includes('/.yarn/')
+  ) return 'yarn';
+  if (runtimePathNormalized.includes('/.bun/install/global/')) return 'bun';
+  return 'npm';
+}
+
+function isGlobalPackageManagerRuntimePath(runtimePathNormalized: string) {
+  return runtimePathNormalized.includes('/usr/local/lib/node_modules/')
+    || runtimePathNormalized.includes('/usr/lib/node_modules/')
+    || runtimePathNormalized.includes('/opt/homebrew/lib/node_modules/')
+    || runtimePathNormalized.includes('/lib/node_modules/')
+    || runtimePathNormalized.includes('/pnpm/global/')
+    || runtimePathNormalized.includes('/.config/yarn/global/')
+    || runtimePathNormalized.includes('/.bun/install/global/')
+    || runtimePathNormalized.includes('/appdata/roaming/npm/node_modules/');
+}
+
+function readPackageNameNearRuntime(runtimePath: string | null) {
+  if (!runtimePath) return null;
+  const packagePath = resolve(dirname(runtimePath), '..', 'package.json');
+  if (!existsSync(packagePath)) return null;
+  try {
+    const raw = JSON.parse(readFileSync(packagePath, 'utf-8')) as { name?: unknown };
+    return typeof raw.name === 'string' ? raw.name.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeUpgradeChannel(value: string | undefined): UpgradeChannel {
+  const normalized = value?.trim().toLowerCase() || 'auto';
+  if ((UPGRADE_CHANNELS as readonly string[]).includes(normalized)) return normalized as UpgradeChannel;
+  throw new Error(`无效的升级渠道: ${value || ''}（支持: ${UPGRADE_CHANNELS.join('/')})`);
+}
+
+function isPackageManagerChannel(channel: UpgradeChannel): channel is PackageManagerName {
+  return channel === 'npm' || channel === 'pnpm' || channel === 'yarn' || channel === 'bun';
+}
+
+function resolveProjectInstallMessage(packageManager?: PackageManagerName) {
+  const forceCommand = packageManager
+    ? `licell upgrade --channel ${packageManager}`
+    : 'licell upgrade --channel npm';
+  return '检测到当前 licell 来自项目内依赖或开发链接，默认不会自动执行全局升级。'
+    + '请在当前项目中更新依赖，'
+    + `或显式执行 \`${forceCommand}\` / \`licell upgrade --channel release\`。`;
+}
+
+export function detectInstallSource(input?: {
+  argv?: string[];
+  execPath?: string;
+}) : InstallSourceInfo {
+  const argv = input?.argv ?? process.argv;
+  const execPath = input?.execPath ?? process.execPath;
+  const runtimePath = getRuntimePath(argv);
+  const runtimePathNormalized = normalizePathForMatch(runtimePath);
+  const execPathNormalized = normalizePathForMatch(execPath);
+  const packageManager = inferPackageManagerFromPath(runtimePathNormalized);
+
+  if (runtimePathNormalized.includes('/.local/share/licell/')) {
+    return { kind: 'release', runtimePath, execPath };
+  }
+
+  if (runtimePathNormalized.includes('/node_modules/licell/')) {
+    if (isGlobalPackageManagerRuntimePath(runtimePathNormalized)) {
+      return {
+        kind: 'package-manager',
+        packageManager,
+        runtimePath,
+        execPath
+      };
+    }
+    return {
+      kind: 'project',
+      packageManager,
+      runtimePath,
+      execPath
+    };
+  }
+
+  if (runtimePathNormalized.endsWith('/dist/licell.js')) {
+    return {
+      kind: 'project',
+      packageManager,
+      runtimePath,
+      execPath
+    };
+  }
+
+  if (execPathNormalized.includes('/node_modules/.bin/licell')) {
+    return {
+      kind: 'project',
+      packageManager,
+      runtimePath,
+      execPath
+    };
+  }
+
+  if (readPackageNameNearRuntime(runtimePath) === DEFAULT_PACKAGE_NAME) {
+    return {
+      kind: 'project',
+      packageManager,
+      runtimePath,
+      execPath
+    };
+  }
+
+  if (/(^|\/)(licell|ali)(\.exe)?$/.test(execPathNormalized)) {
+    return { kind: 'release', runtimePath, execPath };
+  }
+
+  return { kind: 'unknown', runtimePath, execPath };
+}
+
+function normalizePackageVersion(version: string | undefined) {
+  const trimmed = version?.trim();
+  if (!trimmed) return 'latest';
+  return trimmed.replace(/^v(?=\d)/i, '');
+}
+
+function quoteShellArg(value: string) {
+  if (/^[A-Za-z0-9_@%+=:,./-]+$/.test(value)) return value;
+  return `'${value.replace(/'/g, `'"'"'`)}'`;
+}
+
+export function buildPackageManagerUpgradeCommand(input: {
+  packageManager: PackageManagerName;
+  version?: string;
+}) {
+  const version = normalizePackageVersion(input.version);
+  const packageSpec = `${DEFAULT_PACKAGE_NAME}@${version}`;
+
+  switch (input.packageManager) {
+    case 'pnpm':
+      return {
+        command: 'pnpm',
+        args: ['add', '-g', packageSpec],
+        displayCommand: `pnpm add -g ${quoteShellArg(packageSpec)}`
+      };
+    case 'yarn':
+      return {
+        command: 'yarn',
+        args: ['global', 'add', packageSpec],
+        displayCommand: `yarn global add ${quoteShellArg(packageSpec)}`
+      };
+    case 'bun':
+      return {
+        command: 'bun',
+        args: ['add', '-g', packageSpec],
+        displayCommand: `bun add -g ${quoteShellArg(packageSpec)}`
+      };
+    case 'npm':
+    default:
+      return {
+        command: 'npm',
+        args: ['install', '-g', packageSpec],
+        displayCommand: `npm install -g ${quoteShellArg(packageSpec)}`
+      };
+  }
+}
+
+export function resolveUpgradePlan(input: {
+  repo?: string;
+  version?: string;
+  scriptUrl?: string;
+  channel?: UpgradeChannel;
+  installSource?: InstallSourceInfo;
+}): UpgradePlan {
+  const installSource = input.installSource ?? detectInstallSource();
+  const channel = input.channel ?? 'auto';
+
+  if (channel === 'release') {
+    return {
+      mode: 'release',
+      scriptUrl: resolveUpgradeScriptUrl(input)
+    };
+  }
+
+  if (isPackageManagerChannel(channel)) {
+    const command = buildPackageManagerUpgradeCommand({
+      packageManager: channel,
+      version: input.version
+    });
+    return {
+      mode: 'package-manager',
+      packageManager: channel,
+      ...command
+    };
+  }
+
+  const releaseOverride = Boolean(input.scriptUrl) || (Boolean(input.repo) && input.repo !== DEFAULT_UPGRADE_REPO);
+
+  if (!releaseOverride && installSource.kind === 'package-manager' && installSource.packageManager) {
+    const command = buildPackageManagerUpgradeCommand({
+      packageManager: installSource.packageManager,
+      version: input.version
+    });
+    return {
+      mode: 'package-manager',
+      packageManager: installSource.packageManager,
+      ...command
+    };
+  }
+
+  if (!releaseOverride && installSource.kind === 'project') {
+    throw new Error(resolveProjectInstallMessage(installSource.packageManager));
+  }
+
+  return {
+    mode: 'release',
+    scriptUrl: resolveUpgradeScriptUrl(input)
+  };
+}
 
 export function resolveUpgradeScriptUrl(input: { repo?: string; version?: string; scriptUrl?: string }) {
   if (input.scriptUrl) return input.scriptUrl;
@@ -53,28 +341,37 @@ function downloadText(url: string, label: string) {
 }
 
 export function registerUpgradeCommand(cli: CAC) {
-  cli.command('upgrade', '升级到最新 release 版本')
-    .option('--version <tag>', '指定版本（如 v0.9.6）')
-    .option('--repo <owner/repo>', `GitHub 仓库（默认 ${DEFAULT_UPGRADE_REPO}）`)
-    .option('--script-url <url>', '覆盖 install.sh 地址（调试用途，需配合 --skip-checksum）')
-    .option('--skip-checksum', '跳过 SHA256 完整性校验（不推荐）')
-    .option('--dry-run', '只输出将使用的安装脚本地址')
-    .action(async (options: { version?: unknown; repo?: unknown; scriptUrl?: unknown; skipChecksum?: unknown; dryRun?: unknown }) => {
+  cli.command('upgrade', '按当前安装来源升级 licell')
+    .option('--channel <channel>', `升级渠道：${UPGRADE_CHANNELS.join('/')}（默认 auto）`)
+    .option('--target-version <tag>', '指定升级目标版本（release tag 如 v0.9.6；兼容旧写法：`upgrade --version <tag>`）')
+    .option('--repo <owner/repo>', `GitHub 仓库（仅 release 渠道生效，默认 ${DEFAULT_UPGRADE_REPO}）`)
+    .option('--script-url <url>', '覆盖 install.sh 地址（仅 release 渠道，需配合 --skip-checksum）')
+    .option('--skip-checksum', '跳过 SHA256 完整性校验（仅 release 渠道，不推荐）')
+    .option('--dry-run', '只输出将执行的升级计划（脚本地址或包管理器命令）')
+    .action(async (options: { channel?: unknown; targetVersion?: unknown; repo?: unknown; scriptUrl?: unknown; skipChecksum?: unknown; dryRun?: unknown }) => {
       showIntro(pc.bgBlue(pc.white(' ⬆ Licell Upgrade ')));
 
-      const version = toOptionalString(options.version);
+      const channel = normalizeUpgradeChannel(toOptionalString(options.channel));
+      const version = toOptionalString(options.targetVersion);
       const repo = toOptionalString(options.repo) || DEFAULT_UPGRADE_REPO;
       const customScriptUrl = toOptionalString(options.scriptUrl);
       const skipChecksum = Boolean(options.skipChecksum);
 
-      if (customScriptUrl && !skipChecksum) {
+      if (isPackageManagerChannel(channel) && (customScriptUrl || repo !== DEFAULT_UPGRADE_REPO || skipChecksum)) {
+        throw new Error(`--channel ${channel} 不支持 --repo / --script-url / --skip-checksum；这些选项仅适用于 release 渠道`);
+      }
+
+      if ((channel === 'auto' || channel === 'release') && customScriptUrl && !skipChecksum) {
         throw new Error('使用 --script-url 时必须同时指定 --skip-checksum 以确认跳过完整性校验');
       }
 
-      const scriptUrl = resolveUpgradeScriptUrl({
+      const installSource = detectInstallSource();
+      const plan = resolveUpgradePlan({
+        channel,
         repo,
         version,
-        scriptUrl: customScriptUrl
+        scriptUrl: customScriptUrl,
+        installSource
       });
 
       if (Boolean(options.dryRun)) {
@@ -82,22 +379,89 @@ export function registerUpgradeCommand(cli: CAC) {
           emitCliResult({
             stage: 'upgrade',
             dryRun: true,
-            scriptUrl
+            channel,
+            installSource: installSource.kind,
+            mode: plan.mode,
+            ...(plan.mode === 'release'
+              ? { scriptUrl: plan.scriptUrl }
+              : {
+                packageManager: plan.packageManager,
+                command: plan.displayCommand
+              })
           });
         } else {
-          console.log(scriptUrl);
+          console.log(formatUpgradeDryRunText({
+            installSource,
+            channel,
+            plan
+          }));
           showOutro('Done.');
         }
         return;
       }
 
       const s = createSpinner();
+      if (plan.mode === 'package-manager') {
+        s.start(`正在通过 ${plan.packageManager} 执行升级...`);
+        if (!isJsonOutput()) {
+          s.stop(pc.green(`✅ 已检测到 ${plan.packageManager} 安装，开始执行升级`));
+        }
+
+        const install = spawnSync(plan.command, plan.args, {
+          stdio: isJsonOutput() ? 'pipe' : 'inherit',
+          encoding: 'utf8',
+          env: process.env
+        });
+
+        if (isJsonOutput()) {
+          const stdout = typeof install.stdout === 'string' ? install.stdout.trim() : '';
+          const stderr = typeof install.stderr === 'string' ? install.stderr.trim() : '';
+          if (stdout) {
+            emitCliEvent({
+              stage: 'upgrade.install',
+              action: 'stdout',
+              status: 'info',
+              message: stdout
+            });
+          }
+          if (stderr) {
+            emitCliEvent({
+              stage: 'upgrade.install',
+              action: 'stderr',
+              status: 'info',
+              message: stderr
+            });
+          }
+        }
+
+        if (install.error) {
+          throw new Error(`执行 ${plan.command} 失败: ${install.error.message}`);
+        }
+        if (install.status !== 0) {
+          throw new Error(`升级安装失败（command=${plan.command}, exit=${install.status ?? 'unknown'}）`);
+        }
+
+        if (isJsonOutput()) {
+          emitCliResult({
+            stage: 'upgrade',
+            dryRun: false,
+            channel,
+            mode: plan.mode,
+            packageManager: plan.packageManager,
+            command: plan.displayCommand
+          });
+        } else {
+          showOutro(pc.green(`✅ 升级完成（${plan.packageManager}）`));
+        }
+        return;
+      }
+
       s.start('正在下载升级脚本...');
 
-      const installScript = downloadText(scriptUrl, '安装脚本');
+      const installScript = downloadText(plan.scriptUrl, '安装脚本');
 
       if (!skipChecksum) {
-        const checksumUrl = resolveChecksumUrl(scriptUrl);
+        const checksumUrl = resolveChecksumUrl(plan.scriptUrl);
         if (checksumUrl) {
           s.message('正在校验脚本完整性...');
           try {
@@ -170,6 +534,9 @@ export function registerUpgradeCommand(cli: CAC) {
           }
         }
 
+        if (install.error) {
+          throw new Error(`执行 bash 安装脚本失败: ${install.error.message}`);
+        }
         if (install.status !== 0) {
           throw new Error(`升级安装失败（exit=${install.status ?? 'unknown'}）`);
         }
@@ -178,8 +545,11 @@ export function registerUpgradeCommand(cli: CAC) {
           emitCliResult({
             stage: 'upgrade',
             dryRun: false,
-            scriptUrl,
-            checksumSkipped: skipChecksum
+            channel,
+            mode: plan.mode,
+            scriptUrl: plan.scriptUrl,
+            checksumSkipped: skipChecksum,
+            installSource: installSource.kind
           });
         } else {
           showOutro(pc.green('✅ 升级完成'));

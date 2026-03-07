@@ -1,11 +1,12 @@
 import type { CAC } from 'cac';
 import pc from 'picocolors';
 import { mkdirSync, existsSync, readFileSync, rmSync, writeFileSync } from 'fs';
-import { join, resolve } from 'path';
+import { basename, join, resolve } from 'path';
 import { spawnSync } from 'child_process';
 import { executeWithAuthRecovery } from '../utils/auth-recovery';
 import { Config } from '../utils/config';
 import { deleteOssBucketRecursively } from '../providers/oss';
+import { getRuntime } from '../providers/fc/runtime';
 import {
   ensureDestructiveActionConfirmed,
   isInteractiveTTY,
@@ -26,7 +27,8 @@ import {
   resolveDefaultE2eManifestRunId,
   resolveSelfCliInvocation,
   saveE2eManifest,
-  listE2eManifestRunIds
+  listE2eManifestRunIds,
+  hasSuccessfulE2eStep
 } from '../utils/e2e';
 import { parseRootAndSubdomain } from '../utils/domain';
 import { formatErrorMessage } from '../utils/errors';
@@ -76,6 +78,34 @@ function printSection(title: string, lines: string[]) {
   console.log('');
 }
 
+function resolveDefaultRuntimeEntry(runtime: string) {
+  const defaultEntry = getRuntime(runtime).defaultEntry.trim();
+  return defaultEntry.length > 0 ? defaultEntry : null;
+}
+
+export function buildE2eApiDeployArgs(options: {
+  runtime: string;
+  target?: string;
+  useVpc: boolean;
+  domain?: string;
+  domainSuffix?: string;
+  enableCdn: boolean;
+  preview?: boolean;
+}) {
+  const args = ['deploy', '--type', 'api', '--runtime', options.runtime];
+  if (options.preview) args.push('--preview');
+  else if (options.target) args.push('--target', options.target);
+
+  const defaultEntry = resolveDefaultRuntimeEntry(options.runtime);
+  if (defaultEntry) args.push('--entry', defaultEntry);
+
+  args.push(options.useVpc ? '--enable-vpc' : '--disable-vpc');
+  if (options.domain) args.push('--domain', options.domain);
+  if (options.domainSuffix) args.push('--domain-suffix', options.domainSuffix);
+  if (options.enableCdn) args.push('--enable-cdn');
+  return args;
+}
+
 function readProjectAppName(workspaceDir: string) {
   const paths = [join(workspaceDir, '.licell', 'project.json'), join(workspaceDir, '.ali', 'project.json')];
   for (const path of paths) {
@@ -120,6 +150,28 @@ function readProjectNetwork(workspaceDir: string) {
   return undefined;
 }
 
+function getE2eTempDir(cwd: string) {
+  const tempDir = join('/tmp', 'licell-e2e-tmp', basename(cwd));
+  mkdirSync(tempDir, { recursive: true });
+  return tempDir;
+}
+
+function getE2eBunCacheDir(cwd: string) {
+  const cacheDir = join('/tmp', 'licell-e2e-bun-cache', basename(cwd));
+  mkdirSync(cacheDir, { recursive: true });
+  return cacheDir;
+}
+
+function buildE2eChildEnv(cwd: string) {
+  const tempDir = getE2eTempDir(cwd);
+  return {
+    ...process.env,
+    TMPDIR: tempDir,
+    TMP: tempDir,
+    TEMP: tempDir
+  };
+}
+
 function runCliCommand(
   invocation: ReturnType<typeof resolveSelfCliInvocation>,
   args: string[],
@@ -129,7 +181,7 @@ function runCliCommand(
   const result = spawnSync(invocation.command, argv, {
     cwd,
     stdio: 'inherit',
-    env: process.env
+    env: buildE2eChildEnv(cwd)
   });
   if (result.status !== 0) {
     const signal = result.signal ? ` signal=${result.signal}` : '';
@@ -141,7 +193,7 @@ function runSystemCommand(command: string, args: string[], cwd: string) {
   const result = spawnSync(command, args, {
     cwd,
     stdio: 'inherit',
-    env: process.env
+    env: buildE2eChildEnv(cwd)
   });
   if (result.status !== 0) {
     const signal = result.signal ? ` signal=${result.signal}` : '';
@@ -402,7 +454,7 @@ async function executeE2eRun(options: E2eRunOptions) {
         const appNameFromConfig = readProjectAppName(workspaceDir);
         if (!appNameFromConfig) throw new Error('init 成功后未检测到 appName');
         if (runtime.startsWith('nodejs')) {
-          runExternalStep(ctx, 'bun-install', 'bun', ['install']);
+          runExternalStep(ctx, 'bun-install', 'bun', ['install', '--cache-dir', getE2eBunCacheDir(workspaceDir), '--backend', 'copyfile']);
         }
         manifest.resources.appName = appNameFromConfig;
         if (!manifest.resources.domain && manifest.resources.domainSuffix) {
@@ -415,11 +467,14 @@ async function executeE2eRun(options: E2eRunOptions) {
           ...(manifest.resources.domain ? [`domain: ${manifest.resources.domain}`] : [])
         ]);
 
-        const deployArgs = ['deploy', '--type', 'api', '--runtime', runtime, '--target', target];
-        deployArgs.push(useVpc ? '--enable-vpc' : '--disable-vpc');
-        if (domain) deployArgs.push('--domain', domain);
-        if (domainSuffix) deployArgs.push('--domain-suffix', domainSuffix);
-        if (enableCdn) deployArgs.push('--enable-cdn');
+        const deployArgs = buildE2eApiDeployArgs({
+          runtime,
+          target,
+          useVpc,
+          domain,
+          domainSuffix,
+          enableCdn
+        });
         runStep(ctx, 'deploy-api', deployArgs);
         ctx.state.hasDeployedApi = true;
         const networkFromConfig = readProjectNetwork(workspaceDir);
@@ -435,16 +490,20 @@ async function executeE2eRun(options: E2eRunOptions) {
         runStep(ctx, 'fn-invoke', ['fn', 'invoke', appNameFromConfig, '--target', target, '--payload', JSON.stringify({ runId, ping: 'pong' })]);
 
         runStep(ctx, 'env-set', ['env', 'set', 'LICELL_E2E_RUN_ID', runId]);
-        runStep(ctx, 'env-list', ['env', 'list', '--target', target]);
-        runStep(ctx, 'env-pull', ['env', 'pull', '--target', target]);
+        runStep(ctx, 'env-list', ['env', 'list']);
+        runStep(ctx, 'env-pull', ['env', 'pull']);
         runStep(ctx, 'env-rm', ['env', 'rm', 'LICELL_E2E_RUN_ID', '--yes']);
 
         runStep(ctx, 'release-list', ['release', 'list', '--limit', '5']);
         runStep(ctx, 'release-promote', ['release', 'promote', '--target', target]);
 
         if (enablePreview && domainSuffix) {
-          const previewApiArgs = ['deploy', '--type', 'api', '--runtime', runtime, '--preview'];
-          previewApiArgs.push(useVpc ? '--enable-vpc' : '--disable-vpc');
+          const previewApiArgs = buildE2eApiDeployArgs({
+            runtime,
+            useVpc,
+            enableCdn: false,
+            preview: true
+          });
           previewApiArgs.push('--domain-suffix', domainSuffix);
           runStep(ctx, 'deploy-api-preview', previewApiArgs);
 
@@ -587,6 +646,8 @@ async function cleanupByManifest(
   const staticBucket = manifest.resources.staticBucket;
   const vpcId = manifest.resources.vpcId;
   const vswId = manifest.resources.vswId;
+  const hasApiDeploy = hasSuccessfulE2eStep(manifest, ['deploy-api', 'deploy-api-preview']);
+  const hasStaticDeploy = hasSuccessfulE2eStep(manifest, ['deploy-static', 'deploy-static-preview']);
 
   const runCleanupCommand = (
     name: string,
@@ -650,21 +711,24 @@ async function cleanupByManifest(
         console.log(pc.gray(`清理 domain: ${domain}`));
         runCleanupCommand('domain-rm', ['domain', 'rm', domain, '--yes']);
       }
-      if (appName) {
-        // Clean up preview domains first
-        console.log(pc.gray(`清理 preview 域名: ${appName}`));
-        runCleanupCommand(
-          'release-prune-preview',
-          ['release', 'prune', '--preview', '--keep', '0', '--apply', '--yes'],
-          { ignoreErrorPatterns: ['not found', 'no preview'] }
-        );
+      if (appName && hasApiDeploy) {
+        // Clean up preview domains first when preview resources were actually created.
+        if (hasSuccessfulE2eStep(manifest, ['deploy-api-preview', 'deploy-static-preview'])) {
+          console.log(pc.gray(`清理 preview 域名: ${appName}`));
+          runCleanupCommand(
+            'release-prune-preview',
+            ['release', 'prune', '--preview', '--keep', '1', '--apply', '--yes'],
+            { ignoreErrorPatterns: ['not found', 'no preview'] }
+          );
+        }
         console.log(pc.gray(`清理 function: ${appName}`));
         runCleanupCommand(
           'fn-rm',
           ['fn', 'rm', appName, '--force', '--yes'],
           { ignoreErrorPatterns: ['functionnotfound', 'does not exist', 'not found'] }
         );
-        // Clean up static proxy function if exists
+      }
+      if (appName && hasStaticDeploy) {
         const staticProxyName = `${appName}-static-proxy`;
         console.log(pc.gray(`清理 static proxy function: ${staticProxyName}`));
         runCleanupCommand(

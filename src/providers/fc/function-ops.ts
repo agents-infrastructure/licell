@@ -1,12 +1,34 @@
 import * as $FC from '@alicloud/fc20230330';
 import { Readable } from 'stream';
 import { createFcClient } from './client';
-import { isNotFoundError } from '../../utils/alicloud-error';
+import { isNotFoundError, isTransientError } from '../../utils/alicloud-error';
+import {
+  callFcWithGuard,
+  waitForFcFunctionReadable
+} from './request-guard';
 import type { FunctionInvokeResult, FunctionSummary, RemoveFunctionResult } from './types';
 
+function shouldRetryFcRead(err: unknown, allowNotFound = false) {
+  return isTransientError(err) || (allowNotFound && isNotFoundError(err));
+}
+
 export async function pullFunctionEnvs(appName: string, qualifier?: string) {
+  const normalizedQualifier = qualifier?.trim() || undefined;
   const { client } = createFcClient();
-  const response = await client.getFunction(appName, new $FC.GetFunctionRequest({ qualifier }));
+  if (normalizedQualifier) {
+    const fn = await waitForFcFunctionReadable(appName, client, { qualifier: normalizedQualifier });
+    return fn.environmentVariables || {};
+  }
+  const response = await callFcWithGuard<$FC.GetFunctionResponse>(
+    client as unknown as Record<string, unknown>,
+    'getFunction',
+    [appName, new $FC.GetFunctionRequest({})],
+    {
+      operation: `getFunction(${appName})`,
+      profile: 'read',
+      shouldRetry: (err: unknown) => shouldRetryFcRead(err)
+    }
+  );
   return response.body?.environmentVariables || {};
 }
 
@@ -29,12 +51,21 @@ export async function listFunctions(limit = 100, prefix?: string): Promise<Funct
   let nextToken: string | undefined;
 
   while (results.length < safeLimit) {
-    const response = await client.listFunctions(new $FC.ListFunctionsRequest({
-      limit: Math.min(100, safeLimit - results.length),
-      nextToken,
-      prefix,
-      fcVersion: 'v3'
-    }));
+    const response = await callFcWithGuard<$FC.ListFunctionsResponse>(
+      client as unknown as Record<string, unknown>,
+      'listFunctions',
+      [new $FC.ListFunctionsRequest({
+        limit: Math.min(100, safeLimit - results.length),
+        nextToken,
+        prefix,
+        fcVersion: 'v3'
+      })],
+      {
+        operation: 'listFunctions',
+        profile: 'read',
+        shouldRetry: (err: unknown) => shouldRetryFcRead(err)
+      }
+    );
     const rows = response.body?.functions || [];
     for (const row of rows) {
       const summary = toFunctionSummary(row);
@@ -52,8 +83,23 @@ export async function listFunctions(limit = 100, prefix?: string): Promise<Funct
 export async function getFunctionInfo(functionName: string, qualifier?: string) {
   const normalizedName = functionName.trim();
   if (!normalizedName) throw new Error('functionName 不能为空');
+  const normalizedQualifier = qualifier?.trim() || undefined;
   const { client } = createFcClient();
-  const response = await client.getFunction(normalizedName, new $FC.GetFunctionRequest({ qualifier }));
+  if (normalizedQualifier) {
+    const fn = await waitForFcFunctionReadable(normalizedName, client, { qualifier: normalizedQualifier });
+    if (!fn.functionName) throw new Error(`未找到函数: ${normalizedName}`);
+    return fn;
+  }
+  const response = await callFcWithGuard<$FC.GetFunctionResponse>(
+    client as unknown as Record<string, unknown>,
+    'getFunction',
+    [normalizedName, new $FC.GetFunctionRequest({})],
+    {
+      operation: `getFunction(${normalizedName})`,
+      profile: 'read',
+      shouldRetry: (err: unknown) => shouldRetryFcRead(err)
+    }
+  );
   const fn = response.body;
   if (!fn?.functionName) throw new Error(`未找到函数: ${normalizedName}`);
   return fn;
@@ -65,10 +111,19 @@ async function listAllTriggers(functionName: string, client: ReturnType<typeof c
   const MAX_PAGES = 50;
 
   for (let page = 0; page < MAX_PAGES; page += 1) {
-    const response = await client.listTriggers(functionName, new $FC.ListTriggersRequest({
-      limit: 100,
-      nextToken
-    }));
+    const response = await callFcWithGuard<$FC.ListTriggersResponse>(
+      client as unknown as Record<string, unknown>,
+      'listTriggers',
+      [functionName, new $FC.ListTriggersRequest({
+        limit: 100,
+        nextToken
+      })],
+      {
+        operation: `listTriggers(${functionName})`,
+        profile: 'read',
+        shouldRetry: (err: unknown) => shouldRetryFcRead(err)
+      }
+    );
     const rows = response.body?.triggers || [];
     triggers.push(...rows);
     nextToken = response.body?.nextToken;
@@ -84,10 +139,19 @@ async function listAllAliases(functionName: string, client: ReturnType<typeof cr
   const MAX_PAGES = 50;
 
   for (let page = 0; page < MAX_PAGES; page += 1) {
-    const response = await client.listAliases(functionName, new $FC.ListAliasesRequest({
-      limit: 100,
-      nextToken
-    }));
+    const response = await callFcWithGuard<$FC.ListAliasesResponse>(
+      client as unknown as Record<string, unknown>,
+      'listAliases',
+      [functionName, new $FC.ListAliasesRequest({
+        limit: 100,
+        nextToken
+      })],
+      {
+        operation: `listAliases(${functionName})`,
+        profile: 'read',
+        shouldRetry: (err: unknown) => shouldRetryFcRead(err)
+      }
+    );
     const rows = response.body?.aliases || [];
     aliases.push(...rows);
     nextToken = response.body?.nextToken;
@@ -103,11 +167,20 @@ async function listAllFunctionVersions(functionName: string, client: ReturnType<
   const MAX_PAGES = 50;
 
   for (let page = 0; page < MAX_PAGES; page += 1) {
-    const response = await client.listFunctionVersions(functionName, new $FC.ListFunctionVersionsRequest({
-      direction: 'BACKWARD',
-      limit: 100,
-      nextToken
-    }));
+    const response = await callFcWithGuard<$FC.ListFunctionVersionsResponse>(
+      client as unknown as Record<string, unknown>,
+      'listFunctionVersions',
+      [functionName, new $FC.ListFunctionVersionsRequest({
+        direction: 'BACKWARD',
+        limit: 100,
+        nextToken
+      })],
+      {
+        operation: `listFunctionVersions(${functionName})`,
+        profile: 'read',
+        shouldRetry: (err: unknown) => shouldRetryFcRead(err)
+      }
+    );
     const rows = response.body?.versions || [];
     versions.push(...rows);
     nextToken = response.body?.nextToken;
@@ -125,7 +198,15 @@ export async function removeFunction(
   if (!normalizedName) throw new Error('functionName 不能为空');
   const { client } = createFcClient();
   if (!options.force) {
-    await client.deleteFunction(normalizedName);
+    await callFcWithGuard(
+      client as unknown as Record<string, unknown>,
+      'deleteFunction',
+      [normalizedName],
+      {
+        operation: `deleteFunction(${normalizedName})`,
+        profile: 'mutation'
+      }
+    );
     return {
       forced: false,
       deletedTriggers: [],
@@ -143,7 +224,15 @@ export async function removeFunction(
     const triggerName = trigger.triggerName;
     if (!triggerName) continue;
     try {
-      await client.deleteTrigger(normalizedName, triggerName);
+      await callFcWithGuard(
+        client as unknown as Record<string, unknown>,
+        'deleteTrigger',
+        [normalizedName, triggerName],
+        {
+          operation: `deleteTrigger(${normalizedName}/${triggerName})`,
+          profile: 'mutation'
+        }
+      );
       deletedTriggers.push(triggerName);
     } catch (err: unknown) {
       if (!isNotFoundError(err)) throw err;
@@ -155,7 +244,15 @@ export async function removeFunction(
     const aliasName = alias.aliasName;
     if (!aliasName) continue;
     try {
-      await client.deleteAlias(normalizedName, aliasName);
+      await callFcWithGuard(
+        client as unknown as Record<string, unknown>,
+        'deleteAlias',
+        [normalizedName, aliasName],
+        {
+          operation: `deleteAlias(${normalizedName}/${aliasName})`,
+          profile: 'mutation'
+        }
+      );
       deletedAliases.push(aliasName);
     } catch (err: unknown) {
       if (!isNotFoundError(err)) throw err;
@@ -167,14 +264,30 @@ export async function removeFunction(
     const versionId = version.versionId || '';
     if (!/^\d+$/.test(versionId)) continue;
     try {
-      await client.deleteFunctionVersion(normalizedName, versionId);
+      await callFcWithGuard(
+        client as unknown as Record<string, unknown>,
+        'deleteFunctionVersion',
+        [normalizedName, versionId],
+        {
+          operation: `deleteFunctionVersion(${normalizedName}/${versionId})`,
+          profile: 'mutation'
+        }
+      );
       deletedVersions.push(versionId);
     } catch (err: unknown) {
       if (!isNotFoundError(err)) throw err;
     }
   }
 
-  await client.deleteFunction(normalizedName);
+  await callFcWithGuard(
+    client as unknown as Record<string, unknown>,
+    'deleteFunction',
+    [normalizedName],
+    {
+      operation: `deleteFunction(${normalizedName})`,
+      profile: 'mutation'
+    }
+  );
   return {
     forced: true,
     deletedTriggers,
@@ -200,11 +313,29 @@ export async function invokeFunction(
   const normalizedName = functionName.trim();
   if (!normalizedName) throw new Error('functionName 不能为空');
   const { client } = createFcClient();
-  const body = typeof options.payload === 'string' ? Readable.from([Buffer.from(options.payload)]) : undefined;
-  const response = await client.invokeFunction(normalizedName, new $FC.InvokeFunctionRequest({
-    qualifier: options.qualifier,
-    body
-  }));
+  const qualifier = options.qualifier?.trim() || undefined;
+  if (qualifier) {
+    await waitForFcFunctionReadable(normalizedName, client, { qualifier });
+  }
+  const response = await callFcWithGuard<$FC.InvokeFunctionResponse>(
+    client as unknown as Record<string, unknown>,
+    'invokeFunction',
+    () => {
+      const body = typeof options.payload === 'string'
+        ? Readable.from([Buffer.from(options.payload)])
+        : undefined;
+      return [normalizedName, new $FC.InvokeFunctionRequest({
+        qualifier,
+        body
+      })];
+    },
+    {
+      operation: `invokeFunction(${normalizedName}${qualifier ? `@${qualifier}` : ''})`,
+      headers: new $FC.InvokeFunctionHeaders({}),
+      profile: 'read',
+      shouldRetry: (err: unknown) => shouldRetryFcRead(err, Boolean(qualifier))
+    }
+  );
   const content = await readInvokeBody(response.body);
   return {
     statusCode: response.statusCode || 0,
@@ -215,11 +346,20 @@ export async function invokeFunction(
 
 async function replaceFunctionEnvs(appName: string, envs: Record<string, string>) {
   const { client } = createFcClient();
-  await client.updateFunction(appName, new $FC.UpdateFunctionRequest({
-    body: new $FC.UpdateFunctionInput({
-      environmentVariables: envs
-    })
-  }));
+  await callFcWithGuard(
+    client as unknown as Record<string, unknown>,
+    'updateFunction',
+    [appName, new $FC.UpdateFunctionRequest({
+      body: new $FC.UpdateFunctionInput({
+        environmentVariables: envs
+      })
+    })],
+    {
+      operation: `updateFunctionEnvs(${appName})`,
+      profile: 'mutation',
+      shouldRetry: (err: unknown) => shouldRetryFcRead(err)
+    }
+  );
 }
 
 export async function setFunctionEnv(appName: string, key: string, value: string) {

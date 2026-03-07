@@ -1,10 +1,18 @@
 import { sleep } from './runtime';
 import { isTransientError } from './alicloud-error';
 
+export interface RetryContext {
+  attempt: number;
+  nextAttempt: number;
+  maxAttempts: number;
+  delayMs: number;
+}
+
 export interface RetryOptions {
   maxAttempts?: number;
   baseDelayMs?: number;
   shouldRetry?: (err: unknown) => boolean;
+  onRetry?: (err: unknown, context: RetryContext) => void | Promise<void>;
 }
 
 const DEFAULT_MAX_ATTEMPTS = 3;
@@ -25,7 +33,14 @@ export async function withRetry<T>(
     } catch (err: unknown) {
       lastError = err;
       if (attempt === maxAttempts || !shouldRetry(err)) throw err;
-      await sleep(baseDelayMs * attempt * (0.5 + Math.random() * 0.5));
+      const delayMs = baseDelayMs * attempt * (0.5 + Math.random() * 0.5);
+      await options.onRetry?.(err, {
+        attempt,
+        nextAttempt: attempt + 1,
+        maxAttempts,
+        delayMs
+      });
+      await sleep(delayMs);
     }
   }
   throw lastError;

@@ -61,7 +61,6 @@ function isOptionLike(token: string | undefined) {
 export function normalizeMultiWordCommandArgv(argv: string[]) {
   if (argv.length < 4) return argv;
 
-  // Command tokens should appear before the first option token.
   let searchEnd = argv.length;
   for (let i = 2; i < argv.length; i += 1) {
     if (!isOptionLike(argv[i])) continue;
@@ -81,4 +80,30 @@ export function normalizeMultiWordCommandArgv(argv: string[]) {
   }
 
   return argv;
+}
+
+export function normalizeCompatOptionArgv(argv: string[]) {
+  const upgradeIndex = argv.findIndex((token, index) => index >= 2 && token === 'upgrade');
+  if (upgradeIndex < 0) return argv;
+
+  let changed = false;
+  const normalized = [...argv];
+  for (let index = upgradeIndex + 1; index < normalized.length; index += 1) {
+    const token = normalized[index];
+    if (token === '--version') {
+      normalized[index] = '--target-version';
+      changed = true;
+      continue;
+    }
+    if (typeof token === 'string' && token.startsWith('--version=')) {
+      normalized[index] = `--target-version=${token.slice('--version='.length)}`;
+      changed = true;
+    }
+  }
+
+  return changed ? normalized : argv;
+}
+
+export function normalizeCliArgv(argv: string[]) {
+  return normalizeCompatOptionArgv(normalizeMultiWordCommandArgv(argv));
 }

@@ -1,6 +1,8 @@
 import FC20230330, * as $FC from '@alicloud/fc20230330';
-import { formatErrorMessage, isConflictError } from '../../utils/errors';
+import { isConflictError } from '../../utils/alicloud-error';
+import { formatErrorMessage } from '../../utils/errors';
 import { createFcClient } from './client';
+import { callFcWithGuard, waitForFcFunctionReadable } from './request-guard';
 import type { PruneFunctionVersionsResult } from './types';
 
 function toVersionSortValue(versionId: string) {
@@ -16,11 +18,19 @@ export async function listFunctionVersions(appName: string, limit = 20, fcClient
 
   while (remaining > 0) {
     const pageLimit = Math.min(remaining, 100);
-    const response = await client.listFunctionVersions(appName, new $FC.ListFunctionVersionsRequest({
-      direction: 'BACKWARD',
-      limit: pageLimit,
-      nextToken
-    }));
+    const response = await callFcWithGuard<$FC.ListFunctionVersionsResponse>(
+      client as unknown as Record<string, unknown>,
+      'listFunctionVersions',
+      [appName, new $FC.ListFunctionVersionsRequest({
+        direction: 'BACKWARD',
+        limit: pageLimit,
+        nextToken
+      })],
+      {
+        operation: `listFunctionVersions(${appName})`,
+        profile: 'read'
+      }
+    );
     const page = response.body?.versions || [];
     versions.push(...page);
     remaining -= page.length;
@@ -34,9 +44,17 @@ export async function listFunctionVersions(appName: string, limit = 20, fcClient
 
 export async function publishFunctionVersion(appName: string, description?: string) {
   const { client } = createFcClient();
-  const response = await client.publishFunctionVersion(appName, new $FC.PublishFunctionVersionRequest({
-    body: new $FC.PublishVersionInput({ description })
-  }));
+  const response = await callFcWithGuard<$FC.PublishFunctionVersionResponse>(
+    client as unknown as Record<string, unknown>,
+    'publishFunctionVersion',
+    [appName, new $FC.PublishFunctionVersionRequest({
+      body: new $FC.PublishVersionInput({ description })
+    })],
+    {
+      operation: `publishFunctionVersion(${appName})`,
+      profile: 'mutation'
+    }
+  );
   const versionId = response.body?.versionId;
   if (!versionId) throw new Error('发布函数版本失败：未返回 versionId');
   return versionId;
@@ -56,16 +74,34 @@ export async function promoteFunctionAlias(
   });
 
   try {
-    await client.createAlias(appName, new $FC.CreateAliasRequest({ body }));
+    await callFcWithGuard(
+      client as unknown as Record<string, unknown>,
+      'createAlias',
+      [appName, new $FC.CreateAliasRequest({ body })],
+      {
+        operation: `createAlias(${appName}/${aliasName})`,
+        profile: 'mutation'
+      }
+    );
   } catch (err: unknown) {
     if (!isConflictError(err)) throw err;
-    await client.updateAlias(appName, aliasName, new $FC.UpdateAliasRequest({
-      body: new $FC.UpdateAliasInput({
-        versionId,
-        description
-      })
-    }));
+    await callFcWithGuard(
+      client as unknown as Record<string, unknown>,
+      'updateAlias',
+      [appName, aliasName, new $FC.UpdateAliasRequest({
+        body: new $FC.UpdateAliasInput({
+          versionId,
+          description
+        })
+      })],
+      {
+        operation: `updateAlias(${appName}/${aliasName})`,
+        profile: 'mutation'
+      }
+    );
   }
+
+  await waitForFcFunctionReadable(appName, client, { qualifier: aliasName });
 }
 
 async function listAllAliases(appName: string, fcClient: FC20230330) {
@@ -74,10 +110,18 @@ async function listAllAliases(appName: string, fcClient: FC20230330) {
   const MAX_PAGES = 50;
 
   for (let page = 0; page < MAX_PAGES; page += 1) {
-    const response = await fcClient.listAliases(appName, new $FC.ListAliasesRequest({
-      limit: 100,
-      nextToken
-    }));
+    const response = await callFcWithGuard<$FC.ListAliasesResponse>(
+      fcClient as unknown as Record<string, unknown>,
+      'listAliases',
+      [appName, new $FC.ListAliasesRequest({
+        limit: 100,
+        nextToken
+      })],
+      {
+        operation: `listAliases(${appName})`,
+        profile: 'read'
+      }
+    );
     const rows = response.body?.aliases || [];
     aliases.push(...rows);
     nextToken = response.body?.nextToken;
@@ -106,7 +150,7 @@ export async function pruneFunctionVersions(
   for (const alias of aliases) {
     if (alias.versionId) aliasProtectedSet.add(alias.versionId);
     const weighted = alias.additionalVersionWeight || {};
-    for (const versionId of Object.keys(weighted)) aliasProtectedSet.add(versionId);
+    for (const weightedVersionId of Object.keys(weighted)) aliasProtectedSet.add(weightedVersionId);
   }
 
   const publishedVersions = versions
@@ -126,13 +170,21 @@ export async function pruneFunctionVersions(
 
   if (!apply || candidates.length === 0) return result;
 
-  for (const versionId of candidates) {
+  for (const candidateVersionId of candidates) {
     try {
-      await client.deleteFunctionVersion(appName, versionId);
-      result.deleted.push(versionId);
+      await callFcWithGuard(
+        client as unknown as Record<string, unknown>,
+        'deleteFunctionVersion',
+        [appName, candidateVersionId],
+        {
+          operation: `deleteFunctionVersion(${appName}/${candidateVersionId})`,
+          profile: 'mutation'
+        }
+      );
+      result.deleted.push(candidateVersionId);
     } catch (err: unknown) {
       const reason = formatErrorMessage(err);
-      result.failed.push({ versionId, reason });
+      result.failed.push({ versionId: candidateVersionId, reason });
     }
   }
   return result;

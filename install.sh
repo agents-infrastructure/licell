@@ -64,9 +64,99 @@ EOF
 
 show_path_hint() {
   if [[ ":$PATH:" != *":${BIN_DIR}:"* ]]; then
-    log "add ${BIN_DIR} to PATH:"
+    log "current shell PATH does not include ${BIN_DIR} yet"
+    log "open a new shell, or run:"
     log "  export PATH=\"${BIN_DIR}:\$PATH\""
   fi
+}
+
+detect_shell_rc_file() {
+  local shell_name os
+  shell_name="$(basename "${SHELL:-}")"
+  os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+
+  case "$shell_name" in
+    zsh)
+      echo "$HOME/.zshrc"
+      ;;
+    bash)
+      if [[ "$os" == "darwin" ]]; then
+        echo "$HOME/.bash_profile"
+      else
+        echo "$HOME/.bashrc"
+      fi
+      ;;
+    fish)
+      echo "$HOME/.config/fish/config.fish"
+      ;;
+    *)
+      echo "$HOME/.profile"
+      ;;
+  esac
+}
+
+append_path_block_if_needed() {
+  if [[ ":$PATH:" == *":${BIN_DIR}:"* ]]; then
+    return 0
+  fi
+
+  local shell_name rc_file rc_dir marker_start marker_end
+  shell_name="$(basename "${SHELL:-}")"
+  rc_file="$(detect_shell_rc_file)"
+  rc_dir="$(dirname "$rc_file")"
+  marker_start="# >>> licell PATH >>>"
+  marker_end="# <<< licell PATH <<<"
+
+  if [[ -e "$rc_file" && ! -w "$rc_file" ]]; then
+    log "warning: cannot write ${rc_file}; please add ${BIN_DIR} to PATH manually"
+    return 1
+  fi
+
+  mkdir -p "$rc_dir" 2>/dev/null || {
+    log "warning: cannot create ${rc_dir}; please add ${BIN_DIR} to PATH manually"
+    return 1
+  }
+
+  if [[ -f "$rc_file" ]]; then
+    if grep -Fq "$marker_start" "$rc_file"; then
+      log "PATH setup already exists in ${rc_file}"
+      return 0
+    fi
+    if grep -Fq "${BIN_DIR}" "$rc_file"; then
+      log "${BIN_DIR} already appears in ${rc_file}"
+      return 0
+    fi
+  fi
+
+  {
+    if [[ -f "$rc_file" ]]; then
+      cat "$rc_file"
+    fi
+    if [[ -s "$rc_file" ]]; then
+      printf '\n'
+    fi
+    if [[ "$shell_name" == "fish" ]]; then
+      cat <<EOF
+${marker_start}
+if not contains -- "${BIN_DIR}" \$PATH
+    set -gx PATH "${BIN_DIR}" \$PATH
+end
+${marker_end}
+EOF
+    else
+      cat <<EOF
+${marker_start}
+export PATH="${BIN_DIR}:\$PATH"
+${marker_end}
+EOF
+    fi
+    printf '\n'
+  } > "$TMP_DIR/licell-pathrc"
+
+  mv "$TMP_DIR/licell-pathrc" "$rc_file"
+  log "persisted ${BIN_DIR} to PATH in ${rc_file}"
+  log "future shells will load it automatically"
+  return 0
 }
 
 show_setup_hint() {
@@ -142,6 +232,7 @@ EOF
   fi
 
   log "installed prebuilt runtime package to ${prebuilt_dir}"
+  append_path_block_if_needed || true
   show_path_hint
   show_setup_hint
   return 0
@@ -195,6 +286,7 @@ install_from_binary_archive() {
   fi
 
   log "installed prebuilt standalone binary to ${BIN_DIR}/licell"
+  append_path_block_if_needed || true
   show_path_hint
   show_setup_hint
   return 0
@@ -287,6 +379,7 @@ EOF
   fi
 
   log "installed source fallback to ${BIN_DIR}/licell"
+  append_path_block_if_needed || true
   show_path_hint
   show_setup_hint
 }

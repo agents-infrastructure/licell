@@ -1,10 +1,4 @@
 import type { CAC } from 'cac';
-import {
-  detectShellFromEnv,
-  normalizeCompletionShell,
-  renderCompletionScript,
-  resolveCompletionCandidates
-} from '../utils/shell-completion';
 import { emitCliResult, isJsonOutput } from '../utils/output';
 
 interface CompletionOptions {
@@ -14,9 +8,10 @@ interface CompletionOptions {
 export function registerShellCommands(cli: CAC) {
   cli.command('completion [shell]', '输出 shell 补全脚本（bash/zsh）')
     .option('--engine', '内部补全引擎（供 shell completion 调用）')
-    .action((shell: string | undefined, options: CompletionOptions) => {
+    .action(async (shell: string | undefined, options: CompletionOptions) => {
+      const completion = await import('../utils/shell-completion');
       if (options.engine) {
-        const candidates = resolveCompletionCandidates({
+        const candidates = completion.resolveCompletionCandidates({
           compWords: process.env.COMP_WORDS,
           compCword: process.env.COMP_CWORD,
           compCur: process.env.COMP_CUR
@@ -35,9 +30,9 @@ export function registerShellCommands(cli: CAC) {
         return;
       }
 
-      const detected = detectShellFromEnv(process.env.SHELL);
-      const resolvedShell = normalizeCompletionShell(shell || detected || 'bash');
-      const script = renderCompletionScript(resolvedShell);
+      const detected = completion.detectShellFromEnv(process.env.SHELL);
+      const resolvedShell = completion.normalizeCompletionShell(shell || detected || 'bash');
+      const script = completion.renderCompletionScript(resolvedShell);
       if (isJsonOutput()) {
         emitCliResult({
           stage: 'completion.script',

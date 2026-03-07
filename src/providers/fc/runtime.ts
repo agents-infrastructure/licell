@@ -4,6 +4,7 @@ import { getRuntime, getSupportedRuntimeNames, type ResolvedRuntimeConfig } from
 import './runtimes';
 
 export type { ResolvedRuntimeConfig } from './runtime-handler';
+export { getRuntime, getSupportedRuntimeNames } from './runtime-handler';
 
 type ResolveNetworkLike = (options: { vpcId: string; vswId: string }) => Promise<{ sgId?: string }>;
 

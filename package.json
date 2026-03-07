@@ -30,10 +30,13 @@
     "build": "BUN_DISABLE_TRANSPILE_CACHE=1 bun build ./src/cli.ts --target node --packages external --minify --outfile dist/licell.js && node -e \"const f=require('fs'),p='dist/licell.js';f.writeFileSync(p,'#!/usr/bin/env node\\n'+f.readFileSync(p))\"",
     "build:bin": "./scripts/build-bin-wrapper.sh",
     "build:standalone": "./scripts/build-standalone-artifact.sh",
+    "docs:sync": "./scripts/sync-docs.sh",
     "typecheck": "bun x tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "docs:check": "./scripts/check-docs.sh",
+    "e2e:install-upgrade": "node ./scripts/e2e-install-upgrade-matrix.mjs"
   },
   "dependencies": {
     "@alicloud/alidns20150109": "^3.0.1",

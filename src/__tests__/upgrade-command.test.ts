@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import {
+  detectInstallSource,
+  buildPackageManagerUpgradeCommand,
+  formatInstallSourceDisplay,
+  formatUpgradeDryRunText,
+  resolveUpgradePlan,
   resolveUpgradeScriptUrl,
   resolveChecksumUrl,
   parseChecksumForFile,
@@ -85,5 +90,210 @@ describe('verifySha256', () => {
 
   it('returns false for mismatched hash', () => {
     expect(verifySha256('hello world', '0000000000000000000000000000000000000000000000000000000000000000')).toBe(false);
+  });
+});
+
+describe('detectInstallSource', () => {
+  it('detects npm global install from node_modules path', () => {
+    expect(detectInstallSource({
+      argv: ['node', '/usr/local/lib/node_modules/licell/dist/licell.js'],
+      execPath: '/usr/local/bin/node'
+    })).toMatchObject({
+      kind: 'package-manager',
+      packageManager: 'npm'
+    });
+  });
+
+  it('detects pnpm global install from .pnpm path', () => {
+    expect(detectInstallSource({
+      argv: ['node', '/Users/test/Library/pnpm/global/5/.pnpm/licell@0.9.43/node_modules/licell/dist/licell.js'],
+      execPath: '/usr/local/bin/node'
+    })).toMatchObject({
+      kind: 'package-manager',
+      packageManager: 'pnpm'
+    });
+  });
+
+  it('detects yarn global install from yarn global path', () => {
+    expect(detectInstallSource({
+      argv: ['node', '/Users/test/.config/yarn/global/node_modules/licell/dist/licell.js'],
+      execPath: '/usr/local/bin/node'
+    })).toMatchObject({
+      kind: 'package-manager',
+      packageManager: 'yarn'
+    });
+  });
+
+  it('detects release install from install root runtime path', () => {
+    expect(detectInstallSource({
+      argv: ['node', '/Users/test/.local/share/licell/current/dist/licell.js'],
+      execPath: '/usr/local/bin/node'
+    })).toMatchObject({
+      kind: 'release'
+    });
+  });
+
+  it('detects release install from standalone executable path', () => {
+    expect(detectInstallSource({
+      argv: ['/Users/test/.local/bin/licell', 'upgrade'],
+      execPath: '/Users/test/.local/bin/licell'
+    })).toMatchObject({
+      kind: 'release'
+    });
+  });
+
+  it('detects project install from workspace node_modules path', () => {
+    expect(detectInstallSource({
+      argv: ['node', '/Users/test/work/app/node_modules/licell/dist/licell.js'],
+      execPath: '/usr/local/bin/node'
+    })).toMatchObject({
+      kind: 'project',
+      packageManager: 'npm'
+    });
+  });
+
+  it('detects project install from linked local dist path', () => {
+    expect(detectInstallSource({
+      argv: ['node', '/Users/test/work/licell/dist/licell.js'],
+      execPath: '/usr/local/bin/node'
+    })).toMatchObject({
+      kind: 'project'
+    });
+  });
+});
+
+describe('buildPackageManagerUpgradeCommand', () => {
+  it('builds npm upgrade command and strips leading v from version', () => {
+    expect(buildPackageManagerUpgradeCommand({
+      packageManager: 'npm',
+      version: 'v1.2.3'
+    })).toEqual({
+      command: 'npm',
+      args: ['install', '-g', 'licell@1.2.3'],
+      displayCommand: 'npm install -g licell@1.2.3'
+    });
+  });
+
+  it('builds yarn upgrade command for latest version by default', () => {
+    expect(buildPackageManagerUpgradeCommand({
+      packageManager: 'yarn'
+    })).toEqual({
+      command: 'yarn',
+      args: ['global', 'add', 'licell@latest'],
+      displayCommand: 'yarn global add licell@latest'
+    });
+  });
+});
+
+describe('dry-run formatting', () => {
+  it('formats install source label with package manager', () => {
+    expect(formatInstallSourceDisplay({
+      kind: 'package-manager',
+      packageManager: 'pnpm',
+      runtimePath: '/tmp/x',
+      execPath: '/usr/local/bin/node'
+    })).toBe('package-manager (pnpm)');
+  });
+
+  it('formats dry-run text with detected install source and command', () => {
+    expect(formatUpgradeDryRunText({
+      installSource: {
+        kind: 'project',
+        packageManager: 'npm',
+        runtimePath: '/Users/test/work/app/node_modules/licell/dist/licell.js',
+        execPath: '/usr/local/bin/node'
+      },
+      channel: 'npm',
+      plan: {
+        mode: 'package-manager',
+        packageManager: 'npm',
+        command: 'npm',
+        args: ['install', '-g', 'licell@1.2.3'],
+        displayCommand: 'npm install -g licell@1.2.3'
+      }
+    })).toBe([
+      'detected install source: project (npm)',
+      'requested channel: npm',
+      'package manager command: npm install -g licell@1.2.3'
+    ].join('\n'));
+  });
+});
+
+describe('resolveUpgradePlan', () => {
+  it('uses package manager upgrade plan for npm-installed cli', () => {
+    expect(resolveUpgradePlan({
+      version: 'v1.2.3',
+      installSource: {
+        kind: 'package-manager',
+        packageManager: 'npm',
+        runtimePath: '/usr/local/lib/node_modules/licell/dist/licell.js',
+        execPath: '/usr/local/bin/node'
+      }
+    })).toMatchObject({
+      mode: 'package-manager',
+      packageManager: 'npm',
+      command: 'npm',
+      args: ['install', '-g', 'licell@1.2.3']
+    });
+  });
+
+  it('forces release upgrade plan when repo override is provided', () => {
+    expect(resolveUpgradePlan({
+      repo: 'foo/bar',
+      installSource: {
+        kind: 'package-manager',
+        packageManager: 'npm',
+        runtimePath: '/usr/local/lib/node_modules/licell/dist/licell.js',
+        execPath: '/usr/local/bin/node'
+      }
+    })).toEqual({
+      mode: 'release',
+      scriptUrl: 'https://github.com/foo/bar/releases/latest/download/install.sh'
+    });
+  });
+
+  it('rejects auto upgrade for project-local install', () => {
+    expect(() => resolveUpgradePlan({
+      installSource: {
+        kind: 'project',
+        packageManager: 'npm',
+        runtimePath: '/Users/test/work/app/node_modules/licell/dist/licell.js',
+        execPath: '/usr/local/bin/node'
+      }
+    })).toThrow('项目内依赖或开发链接');
+  });
+
+  it('allows explicit channel override for project-local install', () => {
+    expect(resolveUpgradePlan({
+      channel: 'npm',
+      version: 'v1.2.3',
+      installSource: {
+        kind: 'project',
+        packageManager: 'npm',
+        runtimePath: '/Users/test/work/app/node_modules/licell/dist/licell.js',
+        execPath: '/usr/local/bin/node'
+      }
+    })).toMatchObject({
+      mode: 'package-manager',
+      packageManager: 'npm',
+      command: 'npm',
+      args: ['install', '-g', 'licell@1.2.3']
+    });
+  });
+
+  it('allows explicit release channel override for project-local install', () => {
+    expect(resolveUpgradePlan({
+      channel: 'release',
+      version: 'v1.2.3',
+      installSource: {
+        kind: 'project',
+        packageManager: 'npm',
+        runtimePath: '/Users/test/work/app/node_modules/licell/dist/licell.js',
+        execPath: '/usr/local/bin/node'
+      }
+    })).toEqual({
+      mode: 'release',
+      scriptUrl: 'https://github.com/agents-infrastructure/licell/releases/download/v1.2.3/install.sh'
+    });
   });
 });

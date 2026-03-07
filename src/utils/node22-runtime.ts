@@ -1,6 +1,6 @@
-import { chmodSync, cpSync, createReadStream, createWriteStream, existsSync, mkdirSync, rmSync } from 'fs';
+import { chmodSync, copyFileSync, createReadStream, createWriteStream, existsSync, mkdirSync, rmSync } from 'fs';
 import { homedir } from 'os';
-import { join } from 'path';
+import { dirname, join } from 'path';
 import https from 'https';
 import { pipeline } from 'stream/promises';
 import { spawnSync } from 'child_process';
@@ -12,6 +12,7 @@ const RUNTIME_CACHE_ROOT = readLicellEnv(process.env, 'RUNTIME_CACHE_DIR')?.trim
   || join(homedir(), '.licell-cli', 'runtimes');
 const CACHE_DIR = join(RUNTIME_CACHE_ROOT, 'node22');
 const SHASUMS_FILE = 'SHASUMS256.txt';
+const NODE22_RUNTIME_PACKAGE_FILES = ['bin/node'] as const;
 
 interface Node22DownloadSpec {
   tarballName: string;
@@ -28,6 +29,19 @@ export function ensureNode22RuntimeExecutable(targetDir: string) {
   if (!existsSync(nodeBinary)) return;
   // FC 自定义运行时需要直接执行该二进制，显式修复执行位避免打包后丢失。
   chmodSync(nodeBinary, 0o755);
+}
+
+export function copyNode22RuntimeSubset(sourceDir: string, targetDir: string) {
+  for (const relativePath of NODE22_RUNTIME_PACKAGE_FILES) {
+    const sourcePath = join(sourceDir, relativePath);
+    if (!existsSync(sourcePath)) {
+      throw new Error(`Node 22 运行时缺少必要文件: ${relativePath}`);
+    }
+    const targetPath = join(targetDir, relativePath);
+    mkdirSync(dirname(targetPath), { recursive: true });
+    copyFileSync(sourcePath, targetPath);
+  }
+  ensureNode22RuntimeExecutable(targetDir);
 }
 
 function getShasumsSources() {
@@ -167,8 +181,7 @@ export async function prepareNode22RuntimeInCode(outdir: string): Promise<Prepar
   const { folderName, extractedDir } = await ensureNode22RuntimeCacheDir();
   const targetDir = join(runtimeRoot, folderName);
   rmSync(targetDir, { recursive: true, force: true });
-  cpSync(extractedDir, targetDir, { recursive: true });
-  ensureNode22RuntimeExecutable(targetDir);
+  copyNode22RuntimeSubset(extractedDir, targetDir);
   return {
     nodeBinaryInCode: `/code/.licell-runtime/${folderName}/bin/node`
   };

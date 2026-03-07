@@ -5,9 +5,10 @@
 
 function extractErrorText(err: unknown): string {
   if (typeof err !== 'object' || err === null) return '';
+  const name = String((err as { name?: unknown }).name || '');
   const code = String((err as { code?: unknown }).code || '');
   const message = String((err as { message?: unknown }).message || '');
-  return `${code} ${message}`;
+  return `${name} ${code} ${message}`;
 }
 
 function matchesAny(text: string, patterns: string[]): boolean {

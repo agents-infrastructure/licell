@@ -22,27 +22,38 @@ export function resolveSdkCtor<T>(sdkModule: unknown, packageName: string): SdkC
   return ctor as SdkCtor<T>;
 }
 
-const FC_CONNECT_TIMEOUT_MS = 60_000;
-const FC_READ_TIMEOUT_MS = 600_000;
+const DEFAULT_FC_CONNECT_TIMEOUT_MS = 15_000;
+const DEFAULT_FC_READ_TIMEOUT_MS = 180_000;
 const FCClientCtor = resolveSdkCtor<FC>(FC, '@alicloud/fc20230330');
 
-function parsePositiveIntEnv(value: string | undefined, fallback: number) {
+export function parsePositiveIntEnv(value: string | undefined, fallback: number) {
   if (!value) return fallback;
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
   return Math.floor(parsed);
 }
 
+export interface FcTimeoutConfig {
+  connectTimeoutMs: number;
+  readTimeoutMs: number;
+}
+
+export function getFcTimeoutConfig(env: Record<string, string | undefined> = process.env): FcTimeoutConfig {
+  return {
+    connectTimeoutMs: parsePositiveIntEnv(readLicellEnv(env, 'FC_CONNECT_TIMEOUT_MS'), DEFAULT_FC_CONNECT_TIMEOUT_MS),
+    readTimeoutMs: parsePositiveIntEnv(readLicellEnv(env, 'FC_READ_TIMEOUT_MS'), DEFAULT_FC_READ_TIMEOUT_MS)
+  };
+}
+
 export function createSharedFcClient(auth?: AuthConfig) {
   const resolved = auth ?? Config.requireAuth();
-  const connectTimeout = parsePositiveIntEnv(readLicellEnv(process.env, 'FC_CONNECT_TIMEOUT_MS'), FC_CONNECT_TIMEOUT_MS);
-  const readTimeout = parsePositiveIntEnv(readLicellEnv(process.env, 'FC_READ_TIMEOUT_MS'), FC_READ_TIMEOUT_MS);
+  const { connectTimeoutMs, readTimeoutMs } = getFcTimeoutConfig();
   const client = new FCClientCtor(new $OpenApi.Config({
     accessKeyId: resolved.ak,
     accessKeySecret: resolved.sk,
     endpoint: `${resolved.accountId}.${resolved.region}.fc.aliyuncs.com`,
-    connectTimeout,
-    readTimeout
+    connectTimeout: connectTimeoutMs,
+    readTimeout: readTimeoutMs
   }));
   return { auth: resolved, client };
 }
