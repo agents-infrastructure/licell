@@ -108,7 +108,6 @@ function createPackageTemplate() {
   }, null, 2));
 
   writeExecutable(join(templateDir, 'dist', 'licell.js'), `#!/usr/bin/env node
-process.argv[1] = __filename;
 require('tsx/cjs');
 require(${JSON.stringify(workspaceCliPath)});
 `);

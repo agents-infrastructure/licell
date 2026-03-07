@@ -1,3 +1,6 @@
+import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, it, expect } from 'vitest';
 import {
   detectInstallSource,
@@ -122,6 +125,31 @@ describe('detectInstallSource', () => {
       kind: 'package-manager',
       packageManager: 'yarn'
     });
+  });
+
+  it('detects npm global install from symlinked bin path', () => {
+    const tempRoot = mkdtempSync(join(tmpdir(), 'licell-upgrade-detect-'));
+    try {
+      const prefixDir = join(tempRoot, 'prefix');
+      const distFile = join(prefixDir, 'lib', 'node_modules', 'licell', 'dist', 'licell.js');
+      const packageJsonPath = join(prefixDir, 'lib', 'node_modules', 'licell', 'package.json');
+      const binPath = join(prefixDir, 'bin', 'licell');
+      mkdirSync(join(prefixDir, 'lib', 'node_modules', 'licell', 'dist'), { recursive: true });
+      mkdirSync(join(prefixDir, 'bin'), { recursive: true });
+      writeFileSync(distFile, '#!/usr/bin/env node\n');
+      writeFileSync(packageJsonPath, JSON.stringify({ name: 'licell' }));
+      symlinkSync('../lib/node_modules/licell/dist/licell.js', binPath);
+
+      expect(detectInstallSource({
+        argv: ['node', binPath],
+        execPath: '/usr/local/bin/node'
+      })).toMatchObject({
+        kind: 'package-manager',
+        packageManager: 'npm'
+      });
+    } finally {
+      rmSync(tempRoot, { recursive: true, force: true });
+    }
   });
 
   it('detects release install from install root runtime path', () => {

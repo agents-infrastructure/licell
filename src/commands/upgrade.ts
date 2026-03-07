@@ -2,7 +2,7 @@ import type { CAC } from 'cac';
 import pc from 'picocolors';
 import { createHash } from 'crypto';
 import { spawnSync } from 'child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
+import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'fs';
 import { dirname, join, resolve } from 'path';
 import { tmpdir } from 'os';
 import { createSpinner, showIntro, showOutro, toOptionalString } from '../utils/cli-shared';
@@ -80,6 +80,15 @@ function getRuntimePath(argv: string[]) {
   return null;
 }
 
+function resolveRuntimePath(runtimePath: string | null) {
+  if (!runtimePath || !existsSync(runtimePath)) return runtimePath;
+  try {
+    return realpathSync(runtimePath);
+  } catch {
+    return runtimePath;
+  }
+}
+
 function inferPackageManagerFromPath(runtimePathNormalized: string): PackageManagerName {
   if (runtimePathNormalized.includes('/.pnpm/') || runtimePathNormalized.includes('/pnpm/global/')) return 'pnpm';
   if (
@@ -140,12 +149,14 @@ export function detectInstallSource(input?: {
   const argv = input?.argv ?? process.argv;
   const execPath = input?.execPath ?? process.execPath;
   const runtimePath = getRuntimePath(argv);
-  const runtimePathNormalized = normalizePathForMatch(runtimePath);
+  const resolvedRuntimePath = resolveRuntimePath(runtimePath);
+  const runtimePathForDetection = resolvedRuntimePath ?? runtimePath;
+  const runtimePathNormalized = normalizePathForMatch(runtimePathForDetection);
   const execPathNormalized = normalizePathForMatch(execPath);
   const packageManager = inferPackageManagerFromPath(runtimePathNormalized);
 
   if (runtimePathNormalized.includes('/.local/share/licell/')) {
-    return { kind: 'release', runtimePath, execPath };
+    return { kind: 'release', runtimePath: runtimePathForDetection, execPath };
   }
 
   if (runtimePathNormalized.includes('/node_modules/licell/')) {
@@ -153,14 +164,14 @@ export function detectInstallSource(input?: {
       return {
         kind: 'package-manager',
         packageManager,
-        runtimePath,
+        runtimePath: runtimePathForDetection,
         execPath
       };
     }
     return {
       kind: 'project',
       packageManager,
-      runtimePath,
+      runtimePath: runtimePathForDetection,
       execPath
     };
   }
@@ -169,7 +180,7 @@ export function detectInstallSource(input?: {
     return {
       kind: 'project',
       packageManager,
-      runtimePath,
+      runtimePath: runtimePathForDetection,
       execPath
     };
   }
@@ -178,25 +189,25 @@ export function detectInstallSource(input?: {
     return {
       kind: 'project',
       packageManager,
-      runtimePath,
+      runtimePath: runtimePathForDetection,
       execPath
     };
   }
 
-  if (readPackageNameNearRuntime(runtimePath) === DEFAULT_PACKAGE_NAME) {
+  if (readPackageNameNearRuntime(runtimePathForDetection) === DEFAULT_PACKAGE_NAME) {
     return {
       kind: 'project',
       packageManager,
-      runtimePath,
+      runtimePath: runtimePathForDetection,
       execPath
     };
   }
 
   if (/(^|\/)(licell|ali)(\.exe)?$/.test(execPathNormalized)) {
-    return { kind: 'release', runtimePath, execPath };
+    return { kind: 'release', runtimePath: runtimePathForDetection, execPath };
   }
 
-  return { kind: 'unknown', runtimePath, execPath };
+  return { kind: 'unknown', runtimePath: runtimePathForDetection, execPath };
 }
 
 function normalizePackageVersion(version: string | undefined) {
