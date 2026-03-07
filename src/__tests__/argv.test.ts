@@ -82,6 +82,28 @@ describe('normalizeMultiWordCommandArgv', () => {
     ]);
   });
 
+  it('merges oss object get command', () => {
+    const argv = ['node', 'src/cli.ts', 'oss', 'object', 'get', 'my-bucket', 'site/index.html'];
+    expect(normalizeMultiWordCommandArgv(argv)).toEqual([
+      'node',
+      'src/cli.ts',
+      'oss object get',
+      'my-bucket',
+      'site/index.html'
+    ]);
+  });
+
+  it('merges oss sync down command', () => {
+    const argv = ['node', 'src/cli.ts', 'oss', 'sync', 'down', 'my-bucket', 'site'];
+    expect(normalizeMultiWordCommandArgv(argv)).toEqual([
+      'node',
+      'src/cli.ts',
+      'oss sync down',
+      'my-bucket',
+      'site'
+    ]);
+  });
+
   it('merges auth repair command', () => {
     const argv = ['node', 'src/cli.ts', 'auth', 'repair', '--region', 'cn-hangzhou'];
     expect(normalizeMultiWordCommandArgv(argv)).toEqual([

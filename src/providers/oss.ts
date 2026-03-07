@@ -10,8 +10,9 @@ const openapiUtil = (() => {
   throw new Error('Cannot resolve @alicloud/openapi-util');
 })();
 import * as $Util from '@alicloud/tea-util';
-import { createReadStream, existsSync, lstatSync, readdirSync, realpathSync, statSync } from 'fs';
-import { isAbsolute, join, relative } from 'path';
+import { createReadStream, createWriteStream, existsSync, lstatSync, mkdirSync, readdirSync, realpathSync, rmSync, statSync } from 'fs';
+import { basename, dirname, isAbsolute, join, relative } from 'path';
+import { pipeline } from 'stream/promises';
 import mime from 'mime-types';
 import { Config } from '../utils/config';
 import { isConflictError, isAccessDeniedError, isNotFoundError, isTransientError } from '../utils/alicloud-error';
@@ -20,6 +21,8 @@ import { withRetry } from '../utils/retry';
 import { resolveSdkCtor } from '../utils/sdk';
 
 const UPLOAD_CONCURRENCY = 10;
+const DOWNLOAD_CONCURRENCY = 6;
+const DEFAULT_OSS_DOWNLOAD_DIR = 'oss-download';
 const OSS_CONNECT_TIMEOUT_MS = 8_000;
 const OSS_READ_TIMEOUT_MS = 120_000;
 const OssClientCtor = resolveSdkCtor<OSSClient>(OSSClient, '@alicloud/oss20190517');
@@ -64,6 +67,42 @@ export interface OssObjectSummary {
   etag?: string;
   type?: string;
   storageClass?: string;
+}
+
+export interface OssObjectInfo extends OssObjectSummary {
+  bucket: string;
+  key: string;
+  cacheControl?: string;
+  contentDisposition?: string;
+  contentEncoding?: string;
+  contentLanguage?: string;
+  contentLength?: number;
+  contentType?: string;
+  expires?: string;
+  metadata: Record<string, string>;
+}
+
+export interface OssDownloadObjectResult {
+  bucket: string;
+  key: string;
+  filePath: string;
+  contentLength?: number;
+  contentType?: string;
+  etag?: string;
+}
+
+export interface OssDeleteObjectResult {
+  bucket: string;
+  key: string;
+  deleted: boolean;
+}
+
+export interface OssDownloadDirectoryResult {
+  bucket: string;
+  prefix?: string;
+  destinationDir: string;
+  downloadedCount: number;
+  skippedPlaceholderCount: number;
 }
 
 export interface OssUploadDirectoryResult {
@@ -161,6 +200,31 @@ function toOptionalStringValue(value: unknown): string | undefined {
   return normalized.length > 0 ? normalized : undefined;
 }
 
+function getHeaderValue(headers: Record<string, string> | undefined, name: string): string | undefined {
+  if (!headers) return undefined;
+  const direct = headers[name];
+  if (typeof direct === 'string' && direct.length > 0) return direct;
+  const normalizedName = name.toLowerCase();
+  for (const [key, value] of Object.entries(headers)) {
+    if (key.toLowerCase() !== normalizedName) continue;
+    return typeof value === 'string' && value.length > 0 ? value : undefined;
+  }
+  return undefined;
+}
+
+function collectOssUserMetadata(headers: Record<string, string> | undefined) {
+  const metadata: Record<string, string> = {};
+  if (!headers) return metadata;
+  for (const [key, value] of Object.entries(headers)) {
+    const normalizedKey = key.toLowerCase();
+    if (!normalizedKey.startsWith('x-oss-meta-')) continue;
+    const metaValue = toOptionalStringValue(value);
+    if (!metaValue) continue;
+    metadata[normalizedKey.slice('x-oss-meta-'.length)] = metaValue;
+  }
+  return metadata;
+}
+
 type OssRawBody = Record<string, unknown>;
 
 export interface CreateOssBucketOptions {
@@ -218,6 +282,62 @@ function normalizeBucketName(bucketName: string) {
   const normalized = bucketName.trim();
   if (!normalized) throw new Error('bucket 名称不能为空');
   return normalized;
+}
+
+export function normalizeOssObjectKey(objectKey: string) {
+  const normalized = objectKey
+    .trim()
+    .replace(/\\/g, '/')
+    .replace(/^\/+/, '');
+  if (!normalized || normalized === '.' || normalized === '/') {
+    throw new Error('object key 不能为空');
+  }
+  return normalized;
+}
+
+function toSafeLocalPathSegments(relativeObjectKey: string) {
+  const normalized = normalizeOssObjectKey(relativeObjectKey);
+  const segments = normalized.split('/').filter(Boolean);
+  if (segments.length === 0) {
+    throw new Error('对象 key 不能为空');
+  }
+  for (const segment of segments) {
+    if (segment === '.' || segment === '..') {
+      throw new Error(`对象 key 包含不安全路径段: ${relativeObjectKey}`);
+    }
+  }
+  return segments;
+}
+
+export function resolveDefaultOssDownloadFilePath(objectKey: string) {
+  const fileName = basename(normalizeOssObjectKey(objectKey));
+  if (!fileName || fileName === '.' || fileName === '..') {
+    throw new Error('无法推导本地文件名，请通过 --file 指定输出路径');
+  }
+  return fileName;
+}
+
+export function resolveDefaultOssDownloadDir(bucketName: string) {
+  return join(DEFAULT_OSS_DOWNLOAD_DIR, normalizeBucketName(bucketName));
+}
+
+export function buildOssDownloadPath(destinationDir: string, objectKey: string, prefix?: string) {
+  const normalizedDestinationDir = destinationDir.trim();
+  if (!normalizedDestinationDir) throw new Error('本地目标目录不能为空');
+
+  const normalizedObjectKey = normalizeOssObjectKey(objectKey);
+  if (normalizedObjectKey.endsWith('/')) {
+    throw new Error('目录占位对象不能直接下载为文件');
+  }
+
+  const normalizedPrefix = normalizeOssTargetDir(prefix);
+  let relativeObjectKey = normalizedObjectKey;
+  if (normalizedPrefix && normalizedObjectKey.startsWith(`${normalizedPrefix}/`)) {
+    relativeObjectKey = normalizedObjectKey.slice(normalizedPrefix.length + 1);
+  }
+
+  const segments = toSafeLocalPathSegments(relativeObjectKey);
+  return join(normalizedDestinationDir, ...segments);
 }
 
 export function normalizeOssBucketAcl(input: string): OssBucketAcl {
@@ -636,6 +756,97 @@ export function resolveOssContentType(sourceFile: string, objectName?: string) {
   return withCharset ? String(withCharset) : String(detected);
 }
 
+function toOssObjectInfo(bucket: string, key: string, headers: Record<string, string> | undefined): OssObjectInfo {
+  const contentLength = toOptionalNumber(getHeaderValue(headers, 'content-length'));
+  return {
+    bucket,
+    key,
+    name: key,
+    size: contentLength,
+    contentLength,
+    lastModified: getHeaderValue(headers, 'last-modified'),
+    etag: getHeaderValue(headers, 'etag'),
+    type: getHeaderValue(headers, 'x-oss-object-type'),
+    storageClass: getHeaderValue(headers, 'x-oss-storage-class'),
+    cacheControl: getHeaderValue(headers, 'cache-control'),
+    contentDisposition: getHeaderValue(headers, 'content-disposition'),
+    contentEncoding: getHeaderValue(headers, 'content-encoding'),
+    contentLanguage: getHeaderValue(headers, 'content-language'),
+    contentType: getHeaderValue(headers, 'content-type'),
+    expires: getHeaderValue(headers, 'expires'),
+    metadata: collectOssUserMetadata(headers)
+  };
+}
+
+async function putOssObjectWithContentType(
+  client: InstanceType<typeof OssClientCtor>,
+  runtime: $Util.RuntimeOptions,
+  bucket: string,
+  key: string,
+  sourceFile: string,
+  contentType: string
+) {
+  const request = new $OpenApi.OpenApiRequest({
+    hostMap: { bucket },
+    headers: {
+      'content-type': contentType
+    },
+    stream: createReadStream(sourceFile)
+  });
+  const params = new $OpenApi.Params({
+    action: 'PutObject',
+    version: '2019-05-17',
+    protocol: 'HTTPS',
+    pathname: `/${key}`,
+    method: 'PUT',
+    authType: 'AK',
+    style: 'ROA',
+    reqBodyType: 'binary',
+    bodyType: 'binary'
+  });
+  await client.execute(params, request, runtime);
+}
+
+async function downloadOssObjectToFile(
+  client: InstanceType<typeof OssClientCtor>,
+  runtime: $Util.RuntimeOptions,
+  bucket: string,
+  key: string,
+  filePath: string
+): Promise<OssDownloadObjectResult> {
+  const response = await withRetry(
+    () => client.getObjectWithOptions(
+      bucket,
+      key,
+      new $OSS.GetObjectRequest({}),
+      new $OSS.GetObjectHeaders({}),
+      runtime
+    ),
+    {
+      maxAttempts: 4,
+      baseDelayMs: 800,
+      shouldRetry: isTransientError
+    }
+  );
+
+  mkdirSync(dirname(filePath), { recursive: true });
+  try {
+    await pipeline(response.body as NodeJS.ReadableStream, createWriteStream(filePath));
+  } catch (err: unknown) {
+    rmSync(filePath, { force: true });
+    throw err;
+  }
+
+  return {
+    bucket,
+    key,
+    filePath,
+    contentLength: toOptionalNumber(getHeaderValue(response.headers, 'content-length')),
+    contentType: getHeaderValue(response.headers, 'content-type'),
+    etag: getHeaderValue(response.headers, 'etag')
+  };
+}
+
 export async function uploadDirectoryToBucket(
   bucketName: string,
   sourceDir: string,
@@ -655,18 +866,13 @@ export async function uploadDirectoryToBucket(
     collected.files.map((file) => pool(async () => {
       const contentType = resolveOssContentType(file.sourceFile, file.objectName);
       await withRetry(
-        () => client.putObjectWithOptions(
+        () => putOssObjectWithContentType(
+          client,
+          runtime,
           normalizedBucket,
           file.objectName,
-          new $OSS.PutObjectRequest({
-            body: createReadStream(file.sourceFile)
-          }),
-          new $OSS.PutObjectHeaders({
-            commonHeaders: {
-              'content-type': contentType
-            }
-          }),
-          runtime
+          file.sourceFile,
+          contentType
         ),
         {
           maxAttempts: 4,
@@ -1039,6 +1245,123 @@ export async function listOssObjects(bucketName: string, prefix?: string, limit 
   }
   return objects;
 }
+
+export async function getOssObjectInfo(bucketName: string, objectKey: string): Promise<OssObjectInfo> {
+  const { client, runtime } = createOssClient();
+  const bucket = normalizeBucketName(bucketName);
+  const key = normalizeOssObjectKey(objectKey);
+  const response = await withRetry(
+    () => client.headObjectWithOptions(
+      bucket,
+      key,
+      new $OSS.HeadObjectRequest({}),
+      new $OSS.HeadObjectHeaders({}),
+      runtime
+    ),
+    {
+      maxAttempts: 4,
+      baseDelayMs: 800,
+      shouldRetry: isTransientError
+    }
+  );
+  return toOssObjectInfo(bucket, key, response.headers);
+}
+
+export async function downloadOssObject(bucketName: string, objectKey: string, filePath: string): Promise<OssDownloadObjectResult> {
+  const { client, runtime } = createOssClient();
+  const bucket = normalizeBucketName(bucketName);
+  const key = normalizeOssObjectKey(objectKey);
+  const normalizedFilePath = filePath.trim();
+  if (!normalizedFilePath) throw new Error('本地文件路径不能为空');
+  return downloadOssObjectToFile(client, runtime, bucket, key, normalizedFilePath);
+}
+
+export async function deleteOssObject(bucketName: string, objectKey: string): Promise<OssDeleteObjectResult> {
+  const { client, runtime } = createOssClient();
+  const bucket = normalizeBucketName(bucketName);
+  const key = normalizeOssObjectKey(objectKey);
+  try {
+    await withRetry(
+      () => client.deleteObjectWithOptions(
+        bucket,
+        key,
+        new $OSS.DeleteObjectRequest({}),
+        {},
+        runtime
+      ),
+      {
+        maxAttempts: 5,
+        baseDelayMs: 500,
+        shouldRetry: isTransientError
+      }
+    );
+    return { bucket, key, deleted: true };
+  } catch (err: unknown) {
+    if (isNotFoundError(err)) return { bucket, key, deleted: false };
+    throw err;
+  }
+}
+
+export async function downloadOssObjectsToDirectory(
+  bucketName: string,
+  destinationDir: string,
+  options?: { prefix?: string; concurrency?: number }
+): Promise<OssDownloadDirectoryResult> {
+  const { client, runtime } = createOssClient();
+  const bucket = normalizeBucketName(bucketName);
+  const normalizedDestinationDir = destinationDir.trim();
+  if (!normalizedDestinationDir) throw new Error('本地目标目录不能为空');
+  const normalizedPrefix = normalizeOssTargetDir(options?.prefix);
+  const concurrency = Number.isFinite(options?.concurrency)
+    && Number((options?.concurrency || 0)) > 0
+    ? Math.floor(Number(options?.concurrency))
+    : DOWNLOAD_CONCURRENCY;
+  const pool = createPool(concurrency);
+
+  let downloadedCount = 0;
+  let skippedPlaceholderCount = 0;
+  let continuationToken: string | undefined;
+
+  while (true) {
+    const response = await withRetry(
+      () => listObjectsV2Raw(client, runtime, bucket, {
+        ...(normalizedPrefix ? { prefix: normalizedPrefix } : {}),
+        continuationToken,
+        maxKeys: 1000
+      }),
+      {
+        maxAttempts: 5,
+        baseDelayMs: 800,
+        shouldRetry: isTransientError
+      }
+    );
+
+    await Promise.all(response.rows.map((row) => pool(async () => {
+      const key = toOptionalStringValue(row.Key) || toOptionalStringValue(row.key);
+      if (!key) return;
+      const normalizedKey = normalizeOssObjectKey(key);
+      if (normalizedKey.endsWith('/')) {
+        skippedPlaceholderCount += 1;
+        return;
+      }
+      const filePath = buildOssDownloadPath(normalizedDestinationDir, normalizedKey, normalizedPrefix);
+      await downloadOssObjectToFile(client, runtime, bucket, normalizedKey, filePath);
+      downloadedCount += 1;
+    })));
+
+    continuationToken = response.nextContinuationToken;
+    if (!response.isTruncated || !continuationToken || response.rows.length === 0) break;
+  }
+
+  return {
+    bucket,
+    prefix: normalizedPrefix,
+    destinationDir: normalizedDestinationDir,
+    downloadedCount,
+    skippedPlaceholderCount
+  };
+}
+
 
 export async function deleteOssBucketRecursively(bucketName: string): Promise<OssBucketCleanupResult> {
   const { client, runtime } = createOssClient();

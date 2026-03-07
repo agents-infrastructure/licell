@@ -555,6 +555,11 @@ CDN，并回源到 OSS 地址，同时默认启用 HTTPS 证书签发与 CDN 证
 | `licell oss domain list <bucket>` | 查看 Bucket 已绑定的原生 OSS 域名 | — |
 | `licell oss domain rm <bucket> <domain>` | 解绑 Bucket 原生 OSS 自定义域名 | `--yes` |
 | `licell oss domain token <bucket> <domain>` | 为 Bucket 自定义域名生成 TXT 验证 token | — |
+| `licell oss object get <bucket> <key> [file]` | 下载 OSS 对象到本地文件 | `--file` |
+| `licell oss object info <bucket> <key>` | 查看 OSS 对象元数据 | — |
+| `licell oss object rm <bucket> <key>` | 删除 OSS 对象 | `--yes` |
+| `licell oss sync down <bucket> [prefix]` | 批量下载 Bucket 对象到本地目录 | `--dest-dir` |
+| `licell oss sync up [bucket]` | 同步本地目录到 OSS Bucket（等同 oss upload） | `--bucket`, `--source-dir`, `--target-dir` |
 
 #### Data Services
 

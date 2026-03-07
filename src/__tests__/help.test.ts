@@ -64,10 +64,43 @@ describe('help utils', () => {
       'oss create',
       'oss update',
       'oss rm',
+      'oss object',
       'oss domain',
-      'oss upload'
+      'oss upload',
+      'oss sync'
     ]));
-    expect(doc?.text).toContain('OSS Bucket 的创建、属性配置、原生域名绑定与对象上传/查看');
+    expect(doc?.text).toContain('OSS Bucket 的创建、属性配置、原生域名绑定与对象上传/下载/删除/同步');
+  });
+
+  it('builds nested namespace help for oss object', () => {
+    const doc = buildHelpDocument({
+      argv: ['node', 'src/cli.ts', 'oss', 'object', '--help'],
+      version: VERSION
+    });
+
+    expect(doc?.scope).toBe('namespace');
+    expect(doc?.key).toBe('oss object');
+    expect(doc?.subcommands.map((command) => command.key)).toEqual(expect.arrayContaining([
+      'oss object info',
+      'oss object get',
+      'oss object rm'
+    ]));
+    expect(doc?.text).toContain('单个 OSS 对象的查看、下载与删除');
+  });
+
+  it('builds nested namespace help for oss sync', () => {
+    const doc = buildHelpDocument({
+      argv: ['node', 'src/cli.ts', 'oss', 'sync', '--help'],
+      version: VERSION
+    });
+
+    expect(doc?.scope).toBe('namespace');
+    expect(doc?.key).toBe('oss sync');
+    expect(doc?.subcommands.map((command) => command.key)).toEqual(expect.arrayContaining([
+      'oss sync up',
+      'oss sync down'
+    ]));
+    expect(doc?.text).toContain('目录级 OSS 同步');
   });
 
   it('builds nested namespace help for oss domain', () => {

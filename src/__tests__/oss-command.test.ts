@@ -23,7 +23,11 @@ vi.mock('../providers/oss', async () => {
     createOssBucketDomainToken: vi.fn(),
     deleteOssBucket: vi.fn(),
     deleteOssBucketRecursively: vi.fn(),
+    deleteOssObject: vi.fn(),
+    downloadOssObject: vi.fn(),
+    downloadOssObjectsToDirectory: vi.fn(),
     getOssBucketInfo: vi.fn(),
+    getOssObjectInfo: vi.fn(),
     listOssBucketDomains: vi.fn(),
     listOssBuckets: vi.fn(),
     listOssObjects: vi.fn(),
@@ -31,6 +35,8 @@ vi.mock('../providers/oss', async () => {
     normalizeOssBucketDataRedundancyType: vi.fn((value: string) => value.toUpperCase()),
     normalizeOssBucketStorageClass: vi.fn((value: string) => value),
     removeOssBucketDomain: vi.fn(),
+    resolveDefaultOssDownloadDir: vi.fn((bucket: string) => `oss-download/${bucket}`),
+    resolveDefaultOssDownloadFilePath: vi.fn(() => 'index.html'),
     updateOssBucket: vi.fn(),
     uploadDirectoryToBucket: vi.fn()
   };
@@ -70,6 +76,10 @@ import {
   createOssBucket,
   createOssBucketDomainToken,
   deleteOssBucketRecursively,
+  deleteOssObject,
+  downloadOssObject,
+  downloadOssObjectsToDirectory,
+  getOssObjectInfo,
   updateOssBucket,
   uploadDirectoryToBucket
 } from '../providers/oss';
@@ -77,6 +87,10 @@ import {
 const createOssBucketMock = createOssBucket as unknown as ReturnType<typeof vi.fn>;
 const updateOssBucketMock = updateOssBucket as unknown as ReturnType<typeof vi.fn>;
 const deleteOssBucketRecursivelyMock = deleteOssBucketRecursively as unknown as ReturnType<typeof vi.fn>;
+const deleteOssObjectMock = deleteOssObject as unknown as ReturnType<typeof vi.fn>;
+const downloadOssObjectMock = downloadOssObject as unknown as ReturnType<typeof vi.fn>;
+const downloadOssObjectsToDirectoryMock = downloadOssObjectsToDirectory as unknown as ReturnType<typeof vi.fn>;
+const getOssObjectInfoMock = getOssObjectInfo as unknown as ReturnType<typeof vi.fn>;
 const createOssBucketDomainTokenMock = createOssBucketDomainToken as unknown as ReturnType<typeof vi.fn>;
 const bindOssBucketDomainMock = bindOssBucketDomain as unknown as ReturnType<typeof vi.fn>;
 const uploadDirectoryToBucketMock = uploadDirectoryToBucket as unknown as ReturnType<typeof vi.fn>;
@@ -136,6 +150,46 @@ describe('oss commands', () => {
       domain: 'static.example.com',
       status: 'Enabled',
       lastModified: '2026-03-07T10:00:00Z'
+    });
+
+    getOssObjectInfoMock.mockReset();
+    getOssObjectInfoMock.mockResolvedValue({
+      bucket: 'demo-bucket',
+      key: 'site/index.html',
+      name: 'site/index.html',
+      size: 128,
+      contentLength: 128,
+      contentType: 'text/html; charset=utf-8',
+      etag: 'etag-demo',
+      lastModified: '2026-03-07T10:00:00Z',
+      storageClass: 'Standard',
+      metadata: {}
+    });
+
+    downloadOssObjectMock.mockReset();
+    downloadOssObjectMock.mockResolvedValue({
+      bucket: 'demo-bucket',
+      key: 'site/index.html',
+      filePath: './index.html',
+      contentLength: 128,
+      contentType: 'text/html; charset=utf-8',
+      etag: 'etag-demo'
+    });
+
+    deleteOssObjectMock.mockReset();
+    deleteOssObjectMock.mockResolvedValue({
+      bucket: 'demo-bucket',
+      key: 'site/old.js',
+      deleted: true
+    });
+
+    downloadOssObjectsToDirectoryMock.mockReset();
+    downloadOssObjectsToDirectoryMock.mockResolvedValue({
+      bucket: 'demo-bucket',
+      prefix: 'site',
+      destinationDir: './downloads/site',
+      downloadedCount: 2,
+      skippedPlaceholderCount: 0
     });
 
     uploadDirectoryToBucketMock.mockReset();
@@ -259,17 +313,81 @@ describe('oss commands', () => {
     expect(uploadDirectoryToBucketMock).toHaveBeenCalledWith('demo-bucket', 'dist', { targetDir: 'mysite' });
   });
 
-  it('maps `oss bucket` alias args and defaults source-dir to dist', async () => {
+  it('maps `oss object info` args to provider call', async () => {
     const cli = createCli();
     await cli.parse([
       'node',
       'src/cli.ts',
-      'oss bucket',
-      '--bucket',
-      'demo-bucket'
+      'oss object info',
+      'demo-bucket',
+      'site/index.html'
+    ]);
+
+    expect(getOssObjectInfoMock).toHaveBeenCalledTimes(1);
+    expect(getOssObjectInfoMock).toHaveBeenCalledWith('demo-bucket', 'site/index.html');
+  });
+
+  it('maps `oss object get` args to provider call', async () => {
+    const cli = createCli();
+    await cli.parse([
+      'node',
+      'src/cli.ts',
+      'oss object get',
+      'demo-bucket',
+      'site/index.html',
+      './index.html'
+    ]);
+
+    expect(downloadOssObjectMock).toHaveBeenCalledTimes(1);
+    expect(downloadOssObjectMock).toHaveBeenCalledWith('demo-bucket', 'site/index.html', './index.html');
+  });
+
+  it('maps `oss object rm --yes` args to provider call', async () => {
+    const cli = createCli();
+    await cli.parse([
+      'node',
+      'src/cli.ts',
+      'oss object rm',
+      'demo-bucket',
+      'site/old.js',
+      '--yes'
+    ]);
+
+    expect(ensureDestructiveActionConfirmedMock).toHaveBeenCalledTimes(1);
+    expect(deleteOssObjectMock).toHaveBeenCalledTimes(1);
+    expect(deleteOssObjectMock).toHaveBeenCalledWith('demo-bucket', 'site/old.js');
+  });
+
+  it('maps `oss sync down` args to provider call', async () => {
+    const cli = createCli();
+    await cli.parse([
+      'node',
+      'src/cli.ts',
+      'oss sync down',
+      'demo-bucket',
+      'site',
+      '--dest-dir',
+      './downloads/site'
+    ]);
+
+    expect(downloadOssObjectsToDirectoryMock).toHaveBeenCalledTimes(1);
+    expect(downloadOssObjectsToDirectoryMock).toHaveBeenCalledWith('demo-bucket', './downloads/site', { prefix: 'site' });
+  });
+
+  it('maps `oss sync up` args to upload provider call', async () => {
+    const cli = createCli();
+    await cli.parse([
+      'node',
+      'src/cli.ts',
+      'oss sync up',
+      'demo-bucket',
+      '--source-dir',
+      'dist',
+      '--target-dir',
+      'site'
     ]);
 
     expect(uploadDirectoryToBucketMock).toHaveBeenCalledTimes(1);
-    expect(uploadDirectoryToBucketMock).toHaveBeenCalledWith('demo-bucket', 'dist', { targetDir: undefined });
+    expect(uploadDirectoryToBucketMock).toHaveBeenCalledWith('demo-bucket', 'dist', { targetDir: 'site' });
   });
 });

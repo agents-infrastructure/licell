@@ -8,7 +8,11 @@ import {
   createOssBucketDomainToken,
   deleteOssBucket,
   deleteOssBucketRecursively,
+  deleteOssObject,
+  downloadOssObject,
+  downloadOssObjectsToDirectory,
   getOssBucketInfo,
+  getOssObjectInfo,
   listOssBucketDomains,
   listOssBuckets,
   listOssObjects,
@@ -16,6 +20,8 @@ import {
   normalizeOssBucketDataRedundancyType,
   normalizeOssBucketStorageClass,
   removeOssBucketDomain,
+  resolveDefaultOssDownloadDir,
+  resolveDefaultOssDownloadFilePath,
   updateOssBucket,
   uploadDirectoryToBucket
 } from '../providers/oss';
@@ -63,6 +69,25 @@ function printBucketInfo(info: Awaited<ReturnType<typeof getOssBucketInfo>>) {
   console.log(`acl:       ${pc.cyan(info.acl || '-')}`);
   console.log(`public:    ${pc.cyan(info.publicAccessBlock === undefined ? '-' : info.publicAccessBlock ? 'blocked' : 'allowed')}`);
   renderBucketDomains(info.domains || []);
+}
+
+function printObjectInfo(info: Awaited<ReturnType<typeof getOssObjectInfo>>) {
+  console.log(`\nbucket:    ${pc.cyan(info.bucket)}`);
+  console.log(`key:       ${pc.cyan(info.key)}`);
+  console.log(`size:      ${pc.cyan(String(info.contentLength ?? info.size ?? '-'))}`);
+  console.log(`type:      ${pc.cyan(info.contentType || '-')}`);
+  console.log(`etag:      ${pc.cyan(info.etag || '-')}`);
+  console.log(`modified:  ${pc.cyan(info.lastModified || '-')}`);
+  console.log(`class:     ${pc.cyan(info.storageClass || '-')}`);
+  const metadataEntries = Object.entries(info.metadata || {});
+  if (metadataEntries.length === 0) {
+    console.log(`metadata:  ${pc.gray('(none)')}`);
+    return;
+  }
+  console.log(`metadata:  ${pc.cyan(`${metadataEntries[0]![0]}=${metadataEntries[0]![1]}`)}`);
+  for (const [key, value] of metadataEntries.slice(1)) {
+    console.log(`           ${pc.cyan(`${key}=${value}`)}`);
+  }
 }
 
 function buildOssDomainVerificationHint(domain: string, token: string) {
@@ -354,6 +379,146 @@ export function registerOssCommands(cli: CAC) {
       );
     });
 
+
+  cli.command('oss object info <bucket> <key>', '查看 OSS 对象元数据')
+    .action(async (bucket: string, key: string) => {
+      await executeWithAuthRecovery(
+        {
+          commandLabel: 'licell oss object info',
+          interactiveTTY: isInteractiveTTY(),
+          requiredCapabilities: ['oss']
+        },
+        async () => {
+          ensureAuthOrExit();
+          const bucketName = toPromptValue(bucket, 'bucket');
+          const objectKey = toPromptValue(key, 'key');
+          const s = createSpinner();
+          const info = await withSpinner(
+            s,
+            `正在读取 ${bucketName}/${objectKey} 元数据...`,
+            '❌ 获取对象元数据失败',
+            () => getOssObjectInfo(bucketName, objectKey)
+          );
+          if (!info) return;
+          if (!isJsonOutput()) {
+            s.stop(pc.green('✅ 获取成功'));
+          } else {
+            emitCliResult({
+              stage: 'oss.object.info',
+              bucket: bucketName,
+              key: objectKey,
+              info
+            });
+            return;
+          }
+          printObjectInfo(info);
+          console.log('');
+          showOutro('Done.');
+        }
+      );
+    });
+
+  cli.command('oss object get <bucket> <key> [file]', '下载 OSS 对象到本地文件')
+    .option('--file <path>', '本地文件路径（可替代位置参数）')
+    .action(async (bucket: string, key: string, file: string | undefined, options: { file?: unknown }) => {
+      await executeWithAuthRecovery(
+        {
+          commandLabel: 'licell oss object get',
+          interactiveTTY: isInteractiveTTY(),
+          requiredCapabilities: ['oss']
+        },
+        async () => {
+          ensureAuthOrExit();
+          const interactiveTTY = isInteractiveTTY();
+          const bucketName = toPromptValue(bucket, 'bucket');
+          const objectKey = toPromptValue(key, 'key');
+          const outputFile = toOptionalString(options.file)
+            || toOptionalString(file)
+            || (
+              interactiveTTY
+                ? toPromptValue(await text({ message: '本地文件路径:', initialValue: resolveDefaultOssDownloadFilePath(objectKey) }), 'file')
+                : resolveDefaultOssDownloadFilePath(objectKey)
+            );
+
+          const s = createSpinner();
+          const result = await withSpinner(
+            s,
+            `正在下载 ${bucketName}/${objectKey} 到 ${outputFile}...`,
+            '❌ 对象下载失败',
+            () => downloadOssObject(bucketName, objectKey, outputFile)
+          );
+          if (!result) return;
+          if (!isJsonOutput()) {
+            s.stop(pc.green('✅ 下载完成'));
+          } else {
+            emitCliResult({
+              stage: 'oss.object.get',
+              bucket: result.bucket,
+              key: result.key,
+              filePath: result.filePath,
+              contentLength: result.contentLength ?? null,
+              contentType: result.contentType ?? null,
+              etag: result.etag ?? null
+            });
+            return;
+          }
+          console.log(`\nbucket:  ${pc.cyan(result.bucket)}`);
+          console.log(`key:     ${pc.cyan(result.key)}`);
+          console.log(`file:    ${pc.cyan(result.filePath)}`);
+          console.log(`size:    ${pc.cyan(String(result.contentLength ?? '-'))}`);
+          console.log(`type:    ${pc.cyan(result.contentType || '-')}`);
+          console.log('');
+          showOutro('Done.');
+        }
+      );
+    });
+
+  cli.command('oss object rm <bucket> <key>', '删除 OSS 对象')
+    .option('--yes', '跳过二次确认（危险）')
+    .action(async (bucket: string, key: string, options: { yes?: boolean }) => {
+      await executeWithAuthRecovery(
+        {
+          commandLabel: 'licell oss object rm',
+          interactiveTTY: isInteractiveTTY(),
+          requiredCapabilities: ['oss']
+        },
+        async () => {
+          ensureAuthOrExit();
+          const bucketName = toPromptValue(bucket, 'bucket');
+          const objectKey = toPromptValue(key, 'key');
+          await ensureDestructiveActionConfirmed(
+            `删除 OSS 对象 ${bucketName}/${objectKey}`,
+            { yes: Boolean(options.yes) }
+          );
+
+          const s = createSpinner();
+          const result = await withSpinner(
+            s,
+            `正在删除 ${bucketName}/${objectKey}...`,
+            '❌ 删除对象失败',
+            () => deleteOssObject(bucketName, objectKey)
+          );
+          if (!result) return;
+          if (!isJsonOutput()) {
+            s.stop(pc.green(result.deleted ? '✅ 对象已删除' : '✅ 对象不存在，无需删除'));
+          } else {
+            emitCliResult({
+              stage: 'oss.object.rm',
+              bucket: result.bucket,
+              key: result.key,
+              deleted: result.deleted
+            });
+            return;
+          }
+          console.log(`\nbucket:   ${pc.cyan(result.bucket)}`);
+          console.log(`key:      ${pc.cyan(result.key)}`);
+          console.log(`deleted:  ${pc.cyan(result.deleted ? 'yes' : 'no')}`);
+          console.log('');
+          showOutro('Done.');
+        }
+      );
+    });
+
   cli.command('oss domain list <bucket>', '查看 Bucket 已绑定的原生 OSS 域名')
     .action(async (bucket: string) => {
       await executeWithAuthRecovery(
@@ -526,22 +691,26 @@ export function registerOssCommands(cli: CAC) {
       );
     });
 
-  const registerUploadCommand = (name: string, description: string) => {
+  const registerUploadCommand = (
+    name: string,
+    description: string,
+    options?: { commandLabel?: string; stage?: string }
+  ) => {
     cli.command(name, description)
       .option('--bucket <bucket>', 'Bucket 名称（可替代位置参数）')
       .option('--source-dir <dir>', '本地目录（默认 dist）')
       .option('--target-dir <dir>', 'Bucket 内目标目录前缀（如 mysite 或 mysite/v2）')
-      .action(async (bucket: string | undefined, options: { bucket?: unknown; sourceDir?: unknown; targetDir?: unknown }) => {
+      .action(async (bucket: string | undefined, actionOptions: { bucket?: unknown; sourceDir?: unknown; targetDir?: unknown }) => {
         await executeWithAuthRecovery(
           {
-            commandLabel: 'licell oss upload',
+            commandLabel: options?.commandLabel || 'licell oss upload',
             interactiveTTY: isInteractiveTTY(),
             requiredCapabilities: ['oss']
           },
           async () => {
             ensureAuthOrExit();
             const interactiveTTY = isInteractiveTTY();
-            const bucketName = toOptionalString(options.bucket)
+            const bucketName = toOptionalString(actionOptions.bucket)
               || toOptionalString(bucket)
               || (
                 interactiveTTY
@@ -550,13 +719,13 @@ export function registerOssCommands(cli: CAC) {
               );
             if (!bucketName) throw new Error('请通过 <bucket> 或 --bucket 指定 Bucket 名称');
 
-            const sourceDir = toOptionalString(options.sourceDir)
+            const sourceDir = toOptionalString(actionOptions.sourceDir)
               || (
                 interactiveTTY
                   ? toPromptValue(await text({ message: '本地目录:', initialValue: 'dist' }), 'source-dir')
                   : 'dist'
               );
-            const targetDir = toOptionalString(options.targetDir);
+            const targetDir = toOptionalString(actionOptions.targetDir);
 
             const s = createSpinner();
             const result = await withSpinner(
@@ -571,7 +740,7 @@ export function registerOssCommands(cli: CAC) {
               s.stop(pc.green(`✅ 上传完成，共 ${result.uploadedCount} 个文件`));
             } else {
               emitCliResult({
-                stage: 'oss.upload',
+                stage: options?.stage || 'oss.upload',
                 bucket: result.bucket,
                 sourceDir,
                 targetDir: result.targetDir || null,
@@ -596,13 +765,78 @@ export function registerOssCommands(cli: CAC) {
       });
   };
 
-  registerUploadCommand('oss upload [bucket]', '上传本地目录到 OSS Bucket 指定目录');
-  registerUploadCommand('oss bucket [bucket]', '上传本地目录到 OSS Bucket 指定目录（兼容命令，等同 oss upload）');
+  cli.command('oss sync down <bucket> [prefix]', '批量下载 Bucket 对象到本地目录')
+    .option('--dest-dir <dir>', '本地目标目录（默认 oss-download/<bucket>）')
+    .action(async (bucket: string, prefix: string | undefined, options: { destDir?: unknown }) => {
+      await executeWithAuthRecovery(
+        {
+          commandLabel: 'licell oss sync down',
+          interactiveTTY: isInteractiveTTY(),
+          requiredCapabilities: ['oss']
+        },
+        async () => {
+          ensureAuthOrExit();
+          const interactiveTTY = isInteractiveTTY();
+          const bucketName = toPromptValue(bucket, 'bucket');
+          const normalizedPrefix = toOptionalString(prefix);
+          const destDir = toOptionalString(options.destDir)
+            || (
+              interactiveTTY
+                ? toPromptValue(await text({ message: '本地目标目录:', initialValue: resolveDefaultOssDownloadDir(bucketName) }), 'dest-dir')
+                : resolveDefaultOssDownloadDir(bucketName)
+            );
+
+          const s = createSpinner();
+          const result = await withSpinner(
+            s,
+            `正在下载 ${bucketName}${normalizedPrefix ? `/${normalizedPrefix}` : ''} 到 ${destDir}...`,
+            '❌ OSS 批量下载失败',
+            () => downloadOssObjectsToDirectory(bucketName, destDir, { prefix: normalizedPrefix || undefined })
+          );
+          if (!result) return;
+          if (!isJsonOutput()) {
+            s.stop(pc.green(`✅ 下载完成，共 ${result.downloadedCount} 个对象`));
+          } else {
+            emitCliResult({
+              stage: 'oss.sync.down',
+              bucket: result.bucket,
+              prefix: result.prefix || null,
+              destinationDir: result.destinationDir,
+              downloadedCount: result.downloadedCount,
+              skippedPlaceholderCount: result.skippedPlaceholderCount
+            });
+            return;
+          }
+          console.log(`\nbucket:    ${pc.cyan(result.bucket)}`);
+          console.log(`prefix:    ${pc.cyan(result.prefix || '(root)')}`);
+          console.log(`destDir:   ${pc.cyan(result.destinationDir)}`);
+          console.log(`download:  ${pc.cyan(String(result.downloadedCount))}`);
+          if (result.skippedPlaceholderCount > 0) {
+            console.log(pc.yellow(`warning: 已跳过 ${result.skippedPlaceholderCount} 个目录占位对象`));
+          }
+          console.log('');
+          showOutro('Done.');
+        }
+      );
+    });
+
+  registerUploadCommand('oss upload [bucket]', '上传本地目录到 OSS Bucket 指定目录', {
+    commandLabel: 'licell oss upload',
+    stage: 'oss.upload'
+  });
+  registerUploadCommand('oss bucket [bucket]', '上传本地目录到 OSS Bucket 指定目录（兼容命令，等同 oss upload）', {
+    commandLabel: 'licell oss bucket',
+    stage: 'oss.upload'
+  });
+  registerUploadCommand('oss sync up [bucket]', '同步本地目录到 OSS Bucket（等同 oss upload）', {
+    commandLabel: 'licell oss sync up',
+    stage: 'oss.sync.up'
+  });
 }
 
 export const ossCommandMetadata: CommandMetadataMap = {
   oss: {
-    summary: 'OSS Bucket 的创建、属性配置、原生域名绑定与对象上传/查看。',
+    summary: 'OSS Bucket 的创建、属性配置、原生域名绑定与对象上传/下载/删除/同步。',
     notes: [
       '`deploy static` 的生产域名默认走 CDN(sourceType=oss) + DNS；这里补充的是 OSS Bucket 原生管理能力。',
       '首次绑定 OSS 原生域名前，通常先执行 `licell oss domain token`，再添加 TXT 验证记录。'
@@ -611,20 +845,20 @@ export const ossCommandMetadata: CommandMetadataMap = {
       'licell oss list',
       'licell oss create my-bucket --acl private',
       'licell oss info my-bucket',
-      'licell oss update my-bucket --acl public-read --public-access-block off',
-      'licell oss domain token my-bucket static.example.com',
-      'licell oss upload my-bucket --source-dir dist'
+      'licell oss object info my-bucket site/index.html',
+      'licell oss object get my-bucket site/index.html ./index.html',
+      'licell oss sync down my-bucket site --dest-dir ./downloads/site'
     ],
     agentTips: [
-      '自动化场景优先使用 `--output json`，尤其是 `oss info`、`oss domain token`、`oss domain list`。',
-      '要删除 Bucket 时，先确认是否需要 `--recursive` 清理对象。'
+      '自动化场景优先使用 `--output json`，尤其是 `oss info`、`oss object info`、`oss domain token`、`oss domain list`。',
+      '要删除 Bucket 或对象时，先确认是否需要 `--yes` / `--recursive`。'
     ],
     recommendedFlow: [
       { title: '先看现状', command: 'licell oss list --output json', reason: '先拿到当前账号下的 Bucket 清单。' },
       { title: '创建 Bucket', command: 'licell oss create <bucket>', reason: '按需指定 ACL、存储类型、冗余类型。' },
       { title: '检查配置', command: 'licell oss info <bucket> --output json', reason: '确认 ACL、公共访问阻止与已绑定域名。' },
-      { title: '域名验证', command: 'licell oss domain token <bucket> <domain>', reason: '为原生 OSS 域名绑定准备 TXT 验证记录。' },
-      { title: '上传内容', command: 'licell oss upload <bucket> --source-dir dist', reason: '把本地构建产物上传到 Bucket。' }
+      { title: '上传内容', command: 'licell oss sync up <bucket> --source-dir dist', reason: '把本地构建产物上传到 Bucket。' },
+      { title: '下载验证', command: 'licell oss object info <bucket> <key> --output json', reason: '确认对象元数据，必要时再执行下载。' }
     ]
   },
   'oss create': {
@@ -674,13 +908,63 @@ export const ossCommandMetadata: CommandMetadataMap = {
     summary: '列出 Bucket 中的对象，可按 prefix 过滤。',
     examples: ['licell oss ls my-bucket', 'licell oss ls my-bucket assets/ --limit 200']
   },
+  'oss object': {
+    summary: '单个 OSS 对象的查看、下载与删除。',
+    examples: [
+      'licell oss object info my-bucket site/index.html',
+      'licell oss object get my-bucket site/index.html ./tmp/index.html',
+      'licell oss object rm my-bucket site/old.js --yes'
+    ]
+  },
+  'oss object info': {
+    summary: '查看对象元数据（长度 / Content-Type / ETag / 用户自定义 metadata）。',
+    examples: ['licell oss object info my-bucket site/index.html', 'licell oss object info my-bucket site/index.html --output json']
+  },
+  'oss object get': {
+    summary: '下载单个对象到本地文件。',
+    examples: ['licell oss object get my-bucket site/index.html ./index.html', 'licell oss object get my-bucket site/app.js --file ./downloads/app.js'],
+    optionInsights: {
+      '--file': {
+        whenToUse: '需要把对象保存到指定本地路径，而不是默认文件名时使用。',
+        cautions: ['如不指定，默认使用对象 key 的最后一个文件名。']
+      }
+    }
+  },
+  'oss object rm': {
+    safety: {
+      level: 'destructive',
+      reason: '会删除指定 OSS 对象。',
+      confirmFlags: ['--yes']
+    },
+    examples: ['licell oss object rm my-bucket site/old.js --yes']
+  },
   'oss upload': {
     summary: '上传本地目录到指定 Bucket / 目录前缀。',
+    related: ['oss sync up'],
     examples: ['licell oss upload my-bucket --source-dir dist', 'licell oss upload my-bucket --source-dir dist --target-dir web/v2']
   },
   'oss bucket': {
     summary: '兼容命令；等同 `licell oss upload`。',
-    related: ['oss upload']
+    related: ['oss upload', 'oss sync up']
+  },
+  'oss sync': {
+    summary: '目录级 OSS 同步：上传本地目录或批量下载对象前缀。',
+    notes: ['`oss sync up` 等同 `oss upload`；`oss sync down` 会把 prefix 下对象映射到本地目录。'],
+    examples: ['licell oss sync up my-bucket --source-dir dist --target-dir web', 'licell oss sync down my-bucket web --dest-dir ./downloads/web']
+  },
+  'oss sync up': {
+    summary: '同步本地目录到指定 Bucket / 目录前缀（等同 `licell oss upload`）。',
+    related: ['oss upload', 'oss bucket']
+  },
+  'oss sync down': {
+    summary: '把 Bucket 中某个 prefix 的对象批量下载到本地目录。',
+    examples: ['licell oss sync down my-bucket --dest-dir ./downloads', 'licell oss sync down my-bucket web --dest-dir ./downloads/web'],
+    optionInsights: {
+      '--dest-dir': {
+        whenToUse: '需要控制本地落盘目录时使用。',
+        cautions: ['对象 key 中的相对路径会映射到该目录下。']
+      }
+    }
   },
   'oss domain': {
     summary: 'OSS Bucket 原生自定义域名（CNAME）管理。',

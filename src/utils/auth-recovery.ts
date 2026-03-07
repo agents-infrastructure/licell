@@ -36,6 +36,7 @@ const CAPABILITY_ACTIONS: Record<AuthCapability, string[]> = {
     'oss:PutBucketPublicAccessBlock',
     'oss:GetBucketPublicAccessBlock',
     'oss:DeleteBucketPublicAccessBlock',
+    'oss:GetObject',
     'oss:PutObject',
     'oss:DeleteObject',
     'oss:ListCname',

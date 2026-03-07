@@ -88,6 +88,7 @@ export const LICELL_POLICY_ACTIONS = [
   'oss:PutBucketPublicAccessBlock',
   'oss:GetBucketPublicAccessBlock',
   'oss:DeleteBucketPublicAccessBlock',
+  'oss:GetObject',
   'oss:PutObject',
   'oss:DeleteObject',
   'oss:ListBuckets',
