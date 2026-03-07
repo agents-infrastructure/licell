@@ -544,10 +544,17 @@ CDN，并回源到 OSS 地址，同时默认启用 HTTPS 证书签发与 CDN 证
 | `licell dns records list [domain]` | 查看域名解析记录 | `--limit` |
 | `licell dns records rm <recordId>` | 删除域名解析记录 | `--yes` |
 | `licell oss bucket [bucket]` | 上传本地目录到 OSS Bucket 指定目录（兼容命令，等同 oss upload） | `--bucket`, `--source-dir`, `--target-dir` |
-| `licell oss info <bucket>` | 查看 OSS Bucket 详情 | — |
+| `licell oss create <bucket>` | 创建 OSS Bucket | `--acl`, `--storage-class`, `--redundancy` |
+| `licell oss info <bucket>` | 查看 OSS Bucket 详情（含 ACL / 公共访问阻止 / 域名） | — |
 | `licell oss list` | 查看 OSS Bucket 列表 | `--limit` |
 | `licell oss ls <bucket> [prefix]` | 列出 Bucket 对象 | `--limit` |
+| `licell oss rm <bucket>` | 删除 OSS Bucket（默认仅删空 Bucket） | `--recursive`, `--yes` |
+| `licell oss update <bucket>` | 更新 OSS Bucket 属性（ACL / 公共访问阻止） | `--acl`, `--public-access-block` |
 | `licell oss upload [bucket]` | 上传本地目录到 OSS Bucket 指定目录 | `--bucket`, `--source-dir`, `--target-dir` |
+| `licell oss domain bind <bucket> <domain>` | 为 Bucket 绑定原生 OSS 自定义域名 | — |
+| `licell oss domain list <bucket>` | 查看 Bucket 已绑定的原生 OSS 域名 | — |
+| `licell oss domain rm <bucket> <domain>` | 解绑 Bucket 原生 OSS 自定义域名 | `--yes` |
+| `licell oss domain token <bucket> <domain>` | 为 Bucket 自定义域名生成 TXT 验证 token | — |
 
 #### Data Services
 

@@ -58,6 +58,30 @@ describe('normalizeMultiWordCommandArgv', () => {
     ]);
   });
 
+
+  it('merges oss create command', () => {
+    const argv = ['node', 'src/cli.ts', 'oss', 'create', 'my-bucket', '--acl', 'private'];
+    expect(normalizeMultiWordCommandArgv(argv)).toEqual([
+      'node',
+      'src/cli.ts',
+      'oss create',
+      'my-bucket',
+      '--acl',
+      'private'
+    ]);
+  });
+
+  it('merges oss domain bind command', () => {
+    const argv = ['node', 'src/cli.ts', 'oss', 'domain', 'bind', 'my-bucket', 'static.example.com'];
+    expect(normalizeMultiWordCommandArgv(argv)).toEqual([
+      'node',
+      'src/cli.ts',
+      'oss domain bind',
+      'my-bucket',
+      'static.example.com'
+    ]);
+  });
+
   it('merges auth repair command', () => {
     const argv = ['node', 'src/cli.ts', 'auth', 'repair', '--region', 'cn-hangzhou'];
     expect(normalizeMultiWordCommandArgv(argv)).toEqual([
@@ -66,6 +90,17 @@ describe('normalizeMultiWordCommandArgv', () => {
       'auth repair',
       '--region',
       'cn-hangzhou'
+    ]);
+  });
+
+
+  it('merges config domain command', () => {
+    const argv = ['node', 'src/cli.ts', 'config', 'domain', 'example.com'];
+    expect(normalizeMultiWordCommandArgv(argv)).toEqual([
+      'node',
+      'src/cli.ts',
+      'config domain',
+      'example.com'
     ]);
   });
 

@@ -58,6 +58,8 @@ describe('renderSkillCommandReference', () => {
     expect(markdown).toContain('licell setup');
     expect(markdown).toContain('licell upgrade');
     expect(markdown).toContain('licell auth repair');
+    expect(markdown).toContain('licell oss create <bucket>');
+    expect(markdown).toContain('licell oss domain bind <bucket> <domain>');
     expect(markdown).toContain('关键选项建议：');
     expect(markdown).toContain('推荐流程：');
     expect(markdown).toContain('licell deploy spec');

@@ -51,6 +51,42 @@ describe('help utils', () => {
     expect(doc?.text).toContain('DNS 解析记录的查看、添加与删除');
   });
 
+
+  it('builds namespace help for oss with bucket lifecycle commands', () => {
+    const doc = buildHelpDocument({
+      argv: ['node', 'src/cli.ts', 'oss', '--help'],
+      version: VERSION
+    });
+
+    expect(doc?.scope).toBe('namespace');
+    expect(doc?.key).toBe('oss');
+    expect(doc?.subcommands.map((command) => command.key)).toEqual(expect.arrayContaining([
+      'oss create',
+      'oss update',
+      'oss rm',
+      'oss domain',
+      'oss upload'
+    ]));
+    expect(doc?.text).toContain('OSS Bucket 的创建、属性配置、原生域名绑定与对象上传/查看');
+  });
+
+  it('builds nested namespace help for oss domain', () => {
+    const doc = buildHelpDocument({
+      argv: ['node', 'src/cli.ts', 'oss', 'domain', '--help'],
+      version: VERSION
+    });
+
+    expect(doc?.scope).toBe('namespace');
+    expect(doc?.key).toBe('oss domain');
+    expect(doc?.subcommands.map((command) => command.key)).toEqual(expect.arrayContaining([
+      'oss domain list',
+      'oss domain token',
+      'oss domain bind',
+      'oss domain rm'
+    ]));
+    expect(doc?.text).toContain('OSS Bucket 原生自定义域名');
+  });
+
   it('builds command help for mcp with real subcommands', () => {
     const doc = buildHelpDocument({
       argv: ['node', 'src/cli.ts', 'mcp', '--help'],

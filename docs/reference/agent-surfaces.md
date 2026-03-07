@@ -51,10 +51,17 @@
 | `licell dns records list [domain]` | 查看域名解析记录 | `licell_cmd_dns_records_list` | `--limit` |
 | `licell dns records rm <recordId>` | 删除域名解析记录 | `licell_cmd_dns_records_rm` | `--yes` |
 | `licell oss bucket [bucket]` | 上传本地目录到 OSS Bucket 指定目录（兼容命令，等同 oss upload） | `licell_cmd_oss_bucket` | `--bucket`, `--source-dir`, `--target-dir` |
-| `licell oss info <bucket>` | 查看 OSS Bucket 详情 | `licell_cmd_oss_info` | — |
+| `licell oss create <bucket>` | 创建 OSS Bucket | `licell_cmd_oss_create` | `--acl`, `--storage-class`, `--redundancy` |
+| `licell oss info <bucket>` | 查看 OSS Bucket 详情（含 ACL / 公共访问阻止 / 域名） | `licell_cmd_oss_info` | — |
 | `licell oss list` | 查看 OSS Bucket 列表 | `licell_cmd_oss_list` | `--limit` |
 | `licell oss ls <bucket> [prefix]` | 列出 Bucket 对象 | `licell_cmd_oss_ls` | `--limit` |
+| `licell oss rm <bucket>` | 删除 OSS Bucket（默认仅删空 Bucket） | `licell_cmd_oss_rm` | `--recursive`, `--yes` |
+| `licell oss update <bucket>` | 更新 OSS Bucket 属性（ACL / 公共访问阻止） | `licell_cmd_oss_update` | `--acl`, `--public-access-block` |
 | `licell oss upload [bucket]` | 上传本地目录到 OSS Bucket 指定目录 | `licell_cmd_oss_upload` | `--bucket`, `--source-dir`, `--target-dir` |
+| `licell oss domain bind <bucket> <domain>` | 为 Bucket 绑定原生 OSS 自定义域名 | `licell_cmd_oss_domain_bind` | — |
+| `licell oss domain list <bucket>` | 查看 Bucket 已绑定的原生 OSS 域名 | `licell_cmd_oss_domain_list` | — |
+| `licell oss domain rm <bucket> <domain>` | 解绑 Bucket 原生 OSS 自定义域名 | `licell_cmd_oss_domain_rm` | `--yes` |
+| `licell oss domain token <bucket> <domain>` | 为 Bucket 自定义域名生成 TXT 验证 token | `licell_cmd_oss_domain_token` | — |
 
 ### Data Services
 
@@ -189,11 +196,18 @@
 | `licell_cmd_fn_list` | `licell fn list` | 查看函数列表 Auto-generated from the shared licell CLI registry. | `limit`, `prefix` |
 | `licell_cmd_fn_rm` | `licell fn rm` | 删除函数 Auto-generated from the shared licell CLI registry. | `name`, `force`, `yes` |
 | `licell_cmd_logs` | `licell logs` | 查看云端实时或历史日志。 Auto-generated from the shared licell CLI registry. | `once`, `window`, `lines` |
-| `licell_cmd_oss_bucket` | `licell oss bucket` | 上传本地目录到 OSS Bucket 指定目录（兼容命令，等同 oss upload） Auto-generated from the shared licell CLI registry. | `bucket`, `bucket2`, `sourceDir`, `targetDir` |
-| `licell_cmd_oss_info` | `licell oss info` | 查看 OSS Bucket 详情 Auto-generated from the shared licell CLI registry. | `bucket` |
+| `licell_cmd_oss_bucket` | `licell oss bucket` | 兼容命令；等同 `licell oss upload`。 Auto-generated from the shared licell CLI registry. | `bucket`, `bucket2`, `sourceDir`, `targetDir` |
+| `licell_cmd_oss_create` | `licell oss create` | 创建 OSS Bucket Safety: mutating — 会创建新的 OSS Bucket，并可能设置 ACL / 冗余 / 存储类型。 Auto-generated from the shared licell CLI registry. | `bucket`, `acl`, `storageClass`, `redundancy` |
+| `licell_cmd_oss_domain_bind` | `licell oss domain bind` | 为 Bucket 绑定原生 OSS 自定义域名 Safety: mutating — 会把自定义域名绑定到 OSS Bucket。 Auto-generated from the shared licell CLI registry. | `bucket`, `domain` |
+| `licell_cmd_oss_domain_list` | `licell oss domain list` | 查看 Bucket 已绑定的原生 OSS 域名 Auto-generated from the shared licell CLI registry. | `bucket` |
+| `licell_cmd_oss_domain_rm` | `licell oss domain rm` | 解绑 Bucket 原生 OSS 自定义域名 Safety: destructive — 会解除 OSS Bucket 与自定义域名的绑定。 Auto-generated from the shared licell CLI registry. | `bucket`, `domain`, `yes` |
+| `licell_cmd_oss_domain_token` | `licell oss domain token` | 为待绑定的 OSS 自定义域名生成 TXT 验证 token。 Auto-generated from the shared licell CLI registry. | `bucket`, `domain` |
+| `licell_cmd_oss_info` | `licell oss info` | 查看 Bucket 基本信息，并补充 ACL、公共访问阻止、已绑定域名。 Auto-generated from the shared licell CLI registry. | `bucket` |
 | `licell_cmd_oss_list` | `licell oss list` | 查看 OSS Bucket 列表 Auto-generated from the shared licell CLI registry. | `limit` |
-| `licell_cmd_oss_ls` | `licell oss ls` | 列出 Bucket 对象 Auto-generated from the shared licell CLI registry. | `bucket`, `prefix`, `limit` |
-| `licell_cmd_oss_upload` | `licell oss upload` | 上传本地目录到 OSS Bucket 指定目录 Auto-generated from the shared licell CLI registry. | `bucket`, `bucket2`, `sourceDir`, `targetDir` |
+| `licell_cmd_oss_ls` | `licell oss ls` | 列出 Bucket 中的对象，可按 prefix 过滤。 Auto-generated from the shared licell CLI registry. | `bucket`, `prefix`, `limit` |
+| `licell_cmd_oss_rm` | `licell oss rm` | 删除 OSS Bucket（默认仅删空 Bucket） Safety: destructive — 会删除 Bucket；加 `--recursive` 时还会删除其中对象。 Auto-generated from the shared licell CLI registry. | `bucket`, `recursive`, `yes` |
+| `licell_cmd_oss_update` | `licell oss update` | 更新 OSS Bucket 属性（ACL / 公共访问阻止） Safety: mutating — 会更新 Bucket ACL 或公共访问阻止状态。 Auto-generated from the shared licell CLI registry. | `bucket`, `acl`, `publicAccessBlock` |
+| `licell_cmd_oss_upload` | `licell oss upload` | 上传本地目录到指定 Bucket / 目录前缀。 Auto-generated from the shared licell CLI registry. | `bucket`, `bucket2`, `sourceDir`, `targetDir` |
 | `licell_cmd_release_list` | `licell release list` | 查看函数版本列表 Auto-generated from the shared licell CLI registry. | `limit` |
 | `licell_cmd_release_promote` | `licell release promote` | 发布并切流到目标别名 Safety: mutating — 会切换 alias 指向的线上版本。 Auto-generated from the shared licell CLI registry. | `versionId`, `target` |
 | `licell_cmd_release_prune` | `licell release prune` | 清理历史函数版本（默认仅预览） Safety: destructive — 可能删除历史函数版本或预览域名绑定，建议先预览并确认保留策略。 Auto-generated from the shared licell CLI registry. | `keep`, `apply`, `yes`, `preview` |

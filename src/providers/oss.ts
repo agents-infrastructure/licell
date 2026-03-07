@@ -25,12 +25,36 @@ const OSS_READ_TIMEOUT_MS = 120_000;
 const OssClientCtor = resolveSdkCtor<OSSClient>(OSSClient, '@alicloud/oss20190517');
 const DEFAULT_OSS_CONTENT_TYPE = 'application/octet-stream';
 
+export type OssBucketAcl = 'private' | 'public-read' | 'public-read-write';
+export type OssBucketStorageClass = 'Standard' | 'IA' | 'Archive' | 'ColdArchive' | 'DeepColdArchive';
+export type OssBucketDataRedundancyType = 'LRS' | 'ZRS';
+
+export interface OssBucketDomainCertificate {
+  certId?: string;
+  creationDate?: string;
+  fingerprint?: string;
+  status?: string;
+  type?: string;
+  validEndDate?: string;
+  validStartDate?: string;
+}
+
+export interface OssBucketDomainSummary {
+  domain: string;
+  status?: string;
+  lastModified?: string;
+  certificate?: OssBucketDomainCertificate;
+}
+
 export interface OssBucketSummary {
   name: string;
   location?: string;
   creationDate?: string;
   extranetEndpoint?: string;
   intranetEndpoint?: string;
+  acl?: OssBucketAcl;
+  publicAccessBlock?: boolean;
+  domains?: OssBucketDomainSummary[];
 }
 
 export interface OssObjectSummary {
@@ -138,6 +162,326 @@ function toOptionalStringValue(value: unknown): string | undefined {
 }
 
 type OssRawBody = Record<string, unknown>;
+
+export interface CreateOssBucketOptions {
+  acl?: OssBucketAcl;
+  storageClass?: OssBucketStorageClass;
+  dataRedundancyType?: OssBucketDataRedundancyType;
+  allowExisting?: boolean;
+  publicAccessBlock?: boolean;
+  allowPublicAclBlockedFallback?: boolean;
+}
+
+export interface CreateOssBucketResult {
+  bucket: string;
+  created: boolean;
+  info: OssBucketSummary;
+}
+
+export interface UpdateOssBucketOptions {
+  acl?: OssBucketAcl;
+  publicAccessBlock?: boolean;
+}
+
+export interface OssBucketDomainTokenResult {
+  bucket?: string;
+  cname: string;
+  token: string;
+  expireTime?: string;
+}
+
+interface ExecuteOssXmlOptions {
+  action: string;
+  bucket?: string;
+  pathname: string;
+  method: 'GET' | 'PUT' | 'POST' | 'DELETE';
+  query?: Record<string, unknown>;
+  body?: Record<string, unknown>;
+}
+
+function toOptionalBooleanValue(value: unknown): boolean | undefined {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') {
+    if (value === 1) return true;
+    if (value == 0) return false;
+    return undefined;
+  }
+  if (typeof value !== 'string') return undefined;
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return undefined;
+  if (['true', '1', 'on', 'enable', 'enabled', 'yes'].includes(normalized)) return true;
+  if (['false', '0', 'off', 'disable', 'disabled', 'no'].includes(normalized)) return false;
+  return undefined;
+}
+
+function normalizeBucketName(bucketName: string) {
+  const normalized = bucketName.trim();
+  if (!normalized) throw new Error('bucket 名称不能为空');
+  return normalized;
+}
+
+export function normalizeOssBucketAcl(input: string): OssBucketAcl {
+  const normalized = input.trim().toLowerCase();
+  if (normalized === 'private') return 'private';
+  if (normalized === 'public-read' || normalized === 'publicread') return 'public-read';
+  if (normalized === 'public-read-write' || normalized === 'publicreadwrite') return 'public-read-write';
+  throw new Error('--acl 仅支持 private / public-read / public-read-write');
+}
+
+export function normalizeOssBucketStorageClass(input: string): OssBucketStorageClass {
+  const normalized = input.trim().toLowerCase().replace(/[\s_-]+/g, '');
+  if (normalized === 'standard') return 'Standard';
+  if (normalized === 'ia' || normalized === 'infrequentaccess') return 'IA';
+  if (normalized === 'archive') return 'Archive';
+  if (normalized === 'coldarchive') return 'ColdArchive';
+  if (normalized === 'deepcoldarchive') return 'DeepColdArchive';
+  throw new Error('--storage-class 仅支持 standard / ia / archive / cold-archive / deep-cold-archive');
+}
+
+export function normalizeOssBucketDataRedundancyType(input: string): OssBucketDataRedundancyType {
+  const normalized = input.trim().toLowerCase();
+  if (normalized === 'lrs') return 'LRS';
+  if (normalized === 'zrs') return 'ZRS';
+  throw new Error('--redundancy 仅支持 lrs / zrs');
+}
+
+function isPublicAcl(acl: OssBucketAcl | undefined) {
+  return acl === 'public-read' || acl === 'public-read-write';
+}
+
+function isBucketNotEmptyError(err: unknown) {
+  const text = `${String((err as { code?: unknown })?.code || '')} ${String((err as { message?: unknown })?.message || '')}`.toLowerCase();
+  return text.includes('bucketnotempty') || (text.includes('bucket') && text.includes('not empty'));
+}
+
+function isDomainVerificationRequiredError(err: unknown) {
+  const text = `${String((err as { code?: unknown })?.code || '')} ${String((err as { message?: unknown })?.message || '')}`.toLowerCase();
+  return text.includes('verify') || text.includes('ownership') || text.includes('token') || text.includes('cnameowner');
+}
+
+function collectRawBodiesWithStringField(value: unknown, keys: string[], rows: OssRawBody[], depth = 0): void {
+  if (depth > 8) return;
+  if (Array.isArray(value)) {
+    for (const item of value) collectRawBodiesWithStringField(item, keys, rows, depth + 1);
+    return;
+  }
+  if (typeof value !== 'object' || value === null) return;
+  const body = value as OssRawBody;
+  if (keys.some((key) => toOptionalStringValue(body[key]) !== undefined) && !rows.includes(body)) {
+    rows.push(body);
+  }
+  for (const nested of Object.values(body)) {
+    collectRawBodiesWithStringField(nested, keys, rows, depth + 1);
+  }
+}
+
+function findNestedStringField(value: unknown, keys: string[], depth = 0): string | undefined {
+  if (depth > 8) return undefined;
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = findNestedStringField(item, keys, depth + 1);
+      if (found) return found;
+    }
+    return undefined;
+  }
+  if (typeof value !== 'object' || value === null) return undefined;
+  const body = value as OssRawBody;
+  for (const key of keys) {
+    const found = toOptionalStringValue(body[key]);
+    if (found) return found;
+  }
+  for (const nested of Object.values(body)) {
+    const found = findNestedStringField(nested, keys, depth + 1);
+    if (found) return found;
+  }
+  return undefined;
+}
+
+function findNestedBooleanField(value: unknown, keys: string[], depth = 0): boolean | undefined {
+  if (depth > 8) return undefined;
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = findNestedBooleanField(item, keys, depth + 1);
+      if (found !== undefined) return found;
+    }
+    return undefined;
+  }
+  if (typeof value !== 'object' || value === null) return undefined;
+  const body = value as OssRawBody;
+  for (const key of keys) {
+    const found = toOptionalBooleanValue(body[key]);
+    if (found !== undefined) return found;
+  }
+  for (const nested of Object.values(body)) {
+    const found = findNestedBooleanField(nested, keys, depth + 1);
+    if (found !== undefined) return found;
+  }
+  return undefined;
+}
+
+function toDomainCertificate(value: unknown): OssBucketDomainCertificate | undefined {
+  if (typeof value !== 'object' || value === null) return undefined;
+  const body = value as OssRawBody;
+  const fingerprint = toOptionalStringValue(body.Fingerprint) || toOptionalStringValue(body.fingerprint);
+  const certId = toOptionalStringValue(body.CertId) || toOptionalStringValue(body.certId);
+  const creationDate = toOptionalStringValue(body.CreationDate) || toOptionalStringValue(body.creationDate);
+  const status = toOptionalStringValue(body.Status) || toOptionalStringValue(body.status);
+  const type = toOptionalStringValue(body.Type) || toOptionalStringValue(body.type);
+  const validStartDate = toOptionalStringValue(body.ValidStartDate) || toOptionalStringValue(body.validStartDate);
+  const validEndDate = toOptionalStringValue(body.ValidEndDate) || toOptionalStringValue(body.validEndDate);
+  if (!fingerprint && !certId && !creationDate && !status && !type && !validStartDate && !validEndDate) return undefined;
+  return { certId, creationDate, fingerprint, status, type, validStartDate, validEndDate };
+}
+
+function parseOssBucketDomains(body: OssRawBody): OssBucketDomainSummary[] {
+  const rows: OssRawBody[] = [];
+  collectRawBodiesWithStringField(body, ['Domain', 'domain'], rows);
+  const seen = new Set<string>();
+  const domains: OssBucketDomainSummary[] = [];
+  for (const row of rows) {
+    const domain = toOptionalStringValue(row.Domain) || toOptionalStringValue(row.domain);
+    if (!domain || seen.has(domain)) continue;
+    seen.add(domain);
+    domains.push({
+      domain,
+      status: toOptionalStringValue(row.Status) || toOptionalStringValue(row.status),
+      lastModified: toOptionalStringValue(row.LastModified) || toOptionalStringValue(row.lastModified),
+      certificate: toDomainCertificate(row.Certificate || row.certificate)
+    });
+  }
+  return domains.sort((a, b) => a.domain.localeCompare(b.domain));
+}
+
+async function executeOssXml(
+  client: InstanceType<typeof OssClientCtor>,
+  runtime: $Util.RuntimeOptions,
+  options: ExecuteOssXmlOptions
+): Promise<OssRawBody> {
+  const request = new $OpenApi.OpenApiRequest({
+    ...(options.bucket ? { hostMap: { bucket: options.bucket } } : {}),
+    headers: {},
+    ...(options.query && Object.keys(options.query).length > 0 ? { query: openapiUtil.query(options.query) } : {}),
+    ...(options.body ? { body: options.body } : {})
+  });
+  const params = new $OpenApi.Params({
+    action: options.action,
+    version: '2019-05-17',
+    protocol: 'HTTPS',
+    pathname: options.pathname,
+    method: options.method,
+    authType: 'AK',
+    style: 'ROA',
+    reqBodyType: 'xml',
+    bodyType: 'xml'
+  });
+  const response = await client.execute(params, request, runtime) as { body?: OssRawBody };
+  return response.body || {};
+}
+
+async function setOssBucketAclInternal(
+  client: InstanceType<typeof OssClientCtor>,
+  runtime: $Util.RuntimeOptions,
+  bucket: string,
+  acl: OssBucketAcl,
+  options: { allowPublicAclBlockedFallback?: boolean } = {}
+): Promise<OssBucketAcl> {
+  let skippedPublicAcl = false;
+  try {
+    await client.putBucketAclWithOptions(bucket, new $OSS.PutBucketAclHeaders({ acl }), runtime);
+  } catch (err: unknown) {
+    if (isOssEmptyXmlResponseError(err)) {
+      return acl;
+    }
+    if (isPublicAcl(acl) && options.allowPublicAclBlockedFallback && isPublicBucketAclBlockedError(err)) {
+      skippedPublicAcl = true;
+    }
+    if (!skippedPublicAcl && isAccessDeniedError(err)) {
+      throw new Error(`OSS Bucket 无权限修改 ACL: ${bucket}，请确认该 Bucket 属于当前账号并可写`);
+    }
+    if (!skippedPublicAcl) throw err;
+  }
+  return skippedPublicAcl ? 'private' : acl;
+}
+
+async function getOssBucketAclInternal(
+  client: InstanceType<typeof OssClientCtor>,
+  runtime: $Util.RuntimeOptions,
+  bucket: string
+): Promise<OssBucketAcl | undefined> {
+  const response = await client.getBucketAclWithOptions(bucket, {}, runtime);
+  const grant = response.body?.accessControlList?.grant;
+  return grant ? normalizeOssBucketAcl(grant) : undefined;
+}
+
+async function getOssBucketPublicAccessBlockInternal(
+  client: InstanceType<typeof OssClientCtor>,
+  runtime: $Util.RuntimeOptions,
+  bucket: string
+): Promise<boolean> {
+  try {
+    const body = await executeOssXml(client, runtime, {
+      action: 'GetBucketPublicAccessBlock',
+      bucket,
+      pathname: '/?publicAccessBlock',
+      method: 'GET'
+    });
+    return findNestedBooleanField(body, ['BlockPublicAccess', 'blockPublicAccess']) ?? false;
+  } catch (err: unknown) {
+    if (isNotFoundError(err)) return false;
+    throw err;
+  }
+}
+
+async function setOssBucketPublicAccessBlockInternal(
+  client: InstanceType<typeof OssClientCtor>,
+  runtime: $Util.RuntimeOptions,
+  bucket: string,
+  enabled: boolean
+): Promise<boolean> {
+  if (enabled) {
+    try {
+      await executeOssXml(client, runtime, {
+        action: 'PutBucketPublicAccessBlock',
+        bucket,
+        pathname: '/?publicAccessBlock',
+        method: 'PUT',
+        body: {
+          PublicAccessBlockConfiguration: {
+            BlockPublicAccess: true
+          }
+        }
+      });
+    } catch (err: unknown) {
+      if (!isOssEmptyXmlResponseError(err)) throw err;
+    }
+    return true;
+  }
+  try {
+    await executeOssXml(client, runtime, {
+      action: 'DeleteBucketPublicAccessBlock',
+      bucket,
+      pathname: '/?publicAccessBlock',
+      method: 'DELETE'
+    });
+  } catch (err: unknown) {
+    if (!isNotFoundError(err) && !isOssEmptyXmlResponseError(err)) throw err;
+  }
+  return false;
+}
+
+async function listOssBucketDomainsInternal(
+  client: InstanceType<typeof OssClientCtor>,
+  runtime: $Util.RuntimeOptions,
+  bucket: string
+): Promise<OssBucketDomainSummary[]> {
+  const body = await executeOssXml(client, runtime, {
+    action: 'ListCname',
+    bucket,
+    pathname: '/?cname',
+    method: 'GET'
+  });
+  return parseOssBucketDomains(body);
+}
 
 async function listBucketsRaw(
   client: InstanceType<typeof OssClientCtor>,
@@ -343,39 +687,14 @@ export async function uploadDirectoryToBucket(
 }
 
 export async function deployOSS(appName: string, distDir: string, options?: { targetDir?: string }) {
-  const { auth, client, runtime } = createOssClient();
+  const { auth } = createOssClient();
   const bucket = `licell-${appName}-${auth.accountId.substring(0, 4)}`.toLowerCase();
 
-  try {
-    await client.putBucketWithOptions(
-      bucket,
-      new $OSS.PutBucketRequest({}),
-      new $OSS.PutBucketHeaders({}),
-      runtime
-    );
-  } catch (err: unknown) {
-    // OSS OpenAPI currently may throw parse errors for empty XML responses even when bucket creation succeeds.
-    if (!isConflictError(err) && !isOssEmptyXmlResponseError(err)) throw err;
-    await assertBucketAccessible(client, bucket, runtime);
-  }
-  let skippedPublicAcl = false;
-  try {
-    await client.putBucketAclWithOptions(
-      bucket,
-      new $OSS.PutBucketAclHeaders({ acl: 'public-read' }),
-      runtime
-    );
-  } catch (err: unknown) {
-    if (isPublicBucketAclBlockedError(err)) {
-      // Some accounts enforce "block public access". Keep bucket private and rely on CDN-origin access.
-      // Static deploy with custom domain can still work via CDN source type=oss.
-      skippedPublicAcl = true;
-    }
-    if (!skippedPublicAcl && isAccessDeniedError(err)) {
-      throw new Error(`OSS Bucket 无权限修改 ACL: ${bucket}，请确认该 Bucket 属于当前账号并可写`);
-    }
-    if (!skippedPublicAcl) throw err;
-  }
+  await createOssBucket(bucket, {
+    acl: 'public-read',
+    allowExisting: true,
+    allowPublicAclBlockedFallback: true
+  });
 
   const uploadResult = await uploadDirectoryToBucket(bucket, distDir, { targetDir: options?.targetDir });
   return uploadResult.baseUrl;
@@ -384,6 +703,238 @@ export async function deployOSS(appName: string, distDir: string, options?: { ta
 export function resolveOssBucketName(appName: string) {
   const auth = Config.requireAuth();
   return `licell-${appName}-${auth.accountId.substring(0, 4)}`.toLowerCase();
+}
+
+export async function createOssBucket(bucketName: string, options: CreateOssBucketOptions = {}): Promise<CreateOssBucketResult> {
+  const { client, runtime } = createOssClient();
+  const bucket = normalizeBucketName(bucketName);
+  const acl = options.acl || 'private';
+  const publicAccessBlock = options.publicAccessBlock;
+
+  if (publicAccessBlock === true && isPublicAcl(acl)) {
+    throw new Error('开启 public access block 时，ACL 不能设为 public-read / public-read-write');
+  }
+
+  let created = true;
+  const createBucketConfiguration = options.storageClass || options.dataRedundancyType
+    ? new $OSS.CreateBucketConfiguration({
+      ...(options.storageClass ? { storageClass: options.storageClass } : {}),
+      ...(options.dataRedundancyType ? { dataRedundancyType: options.dataRedundancyType } : {})
+    })
+    : undefined;
+
+  try {
+    await client.putBucketWithOptions(
+      bucket,
+      new $OSS.PutBucketRequest({
+        ...(createBucketConfiguration ? { createBucketConfiguration } : {})
+      }),
+      new $OSS.PutBucketHeaders({ acl }),
+      runtime
+    );
+  } catch (err: unknown) {
+    if (isOssEmptyXmlResponseError(err)) {
+      await assertBucketAccessible(client, bucket, runtime);
+    } else if (isConflictError(err)) {
+      await assertBucketAccessible(client, bucket, runtime);
+      if (!options.allowExisting) {
+        throw new Error(`OSS Bucket 已存在: ${bucket}`);
+      }
+      created = false;
+    } else {
+      throw err;
+    }
+  }
+
+  if (options.allowExisting || created) {
+    if (acl !== 'private' || options.allowPublicAclBlockedFallback) {
+      await setOssBucketAclInternal(client, runtime, bucket, acl, {
+        allowPublicAclBlockedFallback: options.allowPublicAclBlockedFallback
+      });
+    }
+    if (publicAccessBlock !== undefined) {
+      await setOssBucketPublicAccessBlockInternal(client, runtime, bucket, publicAccessBlock);
+    }
+  }
+
+  return {
+    bucket,
+    created,
+    info: await getOssBucketInfo(bucket)
+  };
+}
+
+export async function getOssBucketAcl(bucketName: string): Promise<OssBucketAcl | undefined> {
+  const { client, runtime } = createOssClient();
+  return getOssBucketAclInternal(client, runtime, normalizeBucketName(bucketName));
+}
+
+export async function setOssBucketAcl(bucketName: string, acl: OssBucketAcl, options: { allowPublicAclBlockedFallback?: boolean } = {}): Promise<OssBucketAcl> {
+  const { client, runtime } = createOssClient();
+  return setOssBucketAclInternal(client, runtime, normalizeBucketName(bucketName), acl, options);
+}
+
+export async function getOssBucketPublicAccessBlock(bucketName: string): Promise<boolean> {
+  const { client, runtime } = createOssClient();
+  return getOssBucketPublicAccessBlockInternal(client, runtime, normalizeBucketName(bucketName));
+}
+
+export async function setOssBucketPublicAccessBlock(bucketName: string, enabled: boolean): Promise<boolean> {
+  const { client, runtime } = createOssClient();
+  return setOssBucketPublicAccessBlockInternal(client, runtime, normalizeBucketName(bucketName), enabled);
+}
+
+export async function listOssBucketDomains(bucketName: string): Promise<OssBucketDomainSummary[]> {
+  const { client, runtime } = createOssClient();
+  return listOssBucketDomainsInternal(client, runtime, normalizeBucketName(bucketName));
+}
+
+export async function createOssBucketDomainToken(bucketName: string, domain: string): Promise<OssBucketDomainTokenResult> {
+  const { client, runtime } = createOssClient();
+  const bucket = normalizeBucketName(bucketName);
+  const normalizedDomain = domain.trim().toLowerCase();
+  if (!normalizedDomain) throw new Error('域名不能为空');
+  const body = await executeOssXml(client, runtime, {
+    action: 'CreateCnameToken',
+    bucket,
+    pathname: '/?cname&comp=token',
+    method: 'POST',
+    body: {
+      BucketCnameConfiguration: {
+        Cname: {
+          Domain: normalizedDomain
+        }
+      }
+    }
+  });
+  const token = findNestedStringField(body, ['Token', 'token']);
+  if (!token) {
+    throw new Error('OSS 返回了空的域名验证 token');
+  }
+  return {
+    bucket: findNestedStringField(body, ['Bucket', 'bucket']) || bucket,
+    cname: findNestedStringField(body, ['Cname', 'cname']) || normalizedDomain,
+    token,
+    expireTime: findNestedStringField(body, ['ExpireTime', 'expireTime'])
+  };
+}
+
+export async function bindOssBucketDomain(bucketName: string, domain: string): Promise<OssBucketDomainSummary> {
+  const { client, runtime } = createOssClient();
+  const bucket = normalizeBucketName(bucketName);
+  const normalizedDomain = domain.trim().toLowerCase();
+  if (!normalizedDomain) throw new Error('域名不能为空');
+
+  try {
+    await executeOssXml(client, runtime, {
+      action: 'PutCname',
+      bucket,
+      pathname: '/?cname&comp=add',
+      method: 'POST',
+      body: {
+        BucketCnameConfiguration: {
+          Cname: {
+            Domain: normalizedDomain
+          }
+        }
+      }
+    });
+  } catch (err: unknown) {
+    if (isOssEmptyXmlResponseError(err)) {
+      // OSS may return an empty XML body on success and the SDK surfaces it as a parse error.
+    } else if (isDomainVerificationRequiredError(err)) {
+      throw new Error(`Bucket 域名所有权验证未完成：${normalizedDomain}。请先执行 \`licell oss domain token ${bucket} ${normalizedDomain}\` 并补充 TXT 记录后重试`);
+    } else {
+      throw err;
+    }
+  }
+
+  const domains = await listOssBucketDomainsInternal(client, runtime, bucket);
+  return domains.find((item) => item.domain === normalizedDomain) || { domain: normalizedDomain };
+}
+
+export async function removeOssBucketDomain(bucketName: string, domain: string): Promise<boolean> {
+  const { client, runtime } = createOssClient();
+  const bucket = normalizeBucketName(bucketName);
+  const normalizedDomain = domain.trim().toLowerCase();
+  if (!normalizedDomain) throw new Error('域名不能为空');
+
+  try {
+    await executeOssXml(client, runtime, {
+      action: 'DeleteCname',
+      bucket,
+      pathname: '/?cname&comp=delete',
+      method: 'POST',
+      body: {
+        BucketCnameConfiguration: {
+          Cname: {
+            Domain: normalizedDomain
+          }
+        }
+      }
+    });
+    return true;
+  } catch (err: unknown) {
+    if (isOssEmptyXmlResponseError(err)) return true;
+    if (isNotFoundError(err)) return false;
+    throw err;
+  }
+}
+
+export async function updateOssBucket(bucketName: string, options: UpdateOssBucketOptions): Promise<OssBucketSummary> {
+  const { client, runtime } = createOssClient();
+  const bucket = normalizeBucketName(bucketName);
+
+  if (!options.acl && options.publicAccessBlock === undefined) {
+    throw new Error('Bucket 未指定任何可更新属性');
+  }
+  if (options.publicAccessBlock === true && isPublicAcl(options.acl)) {
+    throw new Error('开启 public access block 时，ACL 不能设为 public-read / public-read-write');
+  }
+
+  if (options.publicAccessBlock === false) {
+    await setOssBucketPublicAccessBlockInternal(client, runtime, bucket, false);
+  }
+  if (options.acl) {
+    await setOssBucketAclInternal(client, runtime, bucket, options.acl);
+  }
+  if (options.publicAccessBlock === true) {
+    await setOssBucketPublicAccessBlockInternal(client, runtime, bucket, true);
+  }
+
+  return getOssBucketInfo(bucket);
+}
+
+export async function deleteOssBucket(bucketName: string): Promise<OssBucketCleanupResult> {
+  const { client, runtime } = createOssClient();
+  const bucket = normalizeBucketName(bucketName);
+  try {
+    await withRetry(
+      () => client.deleteBucketWithOptions(bucket, {}, runtime),
+      {
+        maxAttempts: 4,
+        baseDelayMs: 600,
+        shouldRetry: isTransientError
+      }
+    );
+    return {
+      bucket,
+      deletedObjects: 0,
+      deletedBucket: true
+    };
+  } catch (err: unknown) {
+    if (isNotFoundError(err)) {
+      return {
+        bucket,
+        deletedObjects: 0,
+        deletedBucket: false
+      };
+    }
+    if (isBucketNotEmptyError(err)) {
+      throw new Error(`OSS Bucket 非空，无法直接删除：${bucket}。如需连同对象一起删除，请改用 \`licell oss rm ${bucket} --recursive --yes\``);
+    }
+    throw err;
+  }
 }
 
 export async function listOssBuckets(limit = 200): Promise<OssBucketSummary[]> {
@@ -426,21 +977,26 @@ export async function listOssBuckets(limit = 200): Promise<OssBucketSummary[]> {
 
 export async function getOssBucketInfo(bucketName: string): Promise<OssBucketSummary> {
   const { client, runtime } = createOssClient();
-  const normalized = bucketName.trim();
-  if (!normalized) throw new Error('bucket 名称不能为空');
-  const response = await client.getBucketInfoWithOptions(
-    normalized,
-    {},
-    runtime
-  );
+  const normalized = normalizeBucketName(bucketName);
+  const response = await client.getBucketInfoWithOptions(normalized, {}, runtime);
   const bucket = response.body?.bucket;
   const name = bucket?.name || normalized;
+
+  const [aclResult, publicAccessBlockResult, domainsResult] = await Promise.allSettled([
+    getOssBucketAclInternal(client, runtime, normalized),
+    getOssBucketPublicAccessBlockInternal(client, runtime, normalized),
+    listOssBucketDomainsInternal(client, runtime, normalized)
+  ]);
+
   return {
     name,
     location: bucket?.location,
     creationDate: bucket?.creationDate,
     extranetEndpoint: bucket?.extranetEndpoint,
-    intranetEndpoint: bucket?.intranetEndpoint
+    intranetEndpoint: bucket?.intranetEndpoint,
+    acl: aclResult.status === 'fulfilled' ? aclResult.value : undefined,
+    publicAccessBlock: publicAccessBlockResult.status === 'fulfilled' ? publicAccessBlockResult.value : undefined,
+    domains: domainsResult.status === 'fulfilled' ? domainsResult.value : undefined
   };
 }
 
