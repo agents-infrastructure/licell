@@ -2,6 +2,12 @@ import { buildAgentCommandCatalog } from '../utils/command-reference';
 import { getBuiltinMcpTools } from './builtin-tools';
 import { getCuratedMcpCommandTools } from './curated-command-tools';
 import { buildGeneratedMcpCommandTools } from './generated-command-tools';
+import {
+  cloneLicellMcpToolMetadataEnvelope,
+  resolveLicellMcpToolSummary,
+  resolveLicellMcpToolTitle,
+  type LicellMcpToolMetadataEnvelope
+} from './tool-metadata';
 
 export type McpToolKind = 'builtin' | 'curated' | 'generated';
 
@@ -9,13 +15,14 @@ export interface McpToolCatalogEntry {
   kind: McpToolKind;
   name: string;
   title: string;
+  summary?: string;
   description: string;
   inputNames: string[];
   requiredInputNames: string[];
   destructive: boolean;
   openWorld: boolean;
   tags: string[];
-  docsSummary?: string;
+  metadata?: LicellMcpToolMetadataEnvelope;
   commandKey?: string;
   commandSignature?: string;
   rootCommand?: string;
@@ -44,32 +51,38 @@ export function buildMcpToolCatalog(): McpToolCatalogDocument {
   const agentCatalog = buildAgentCommandCatalog();
   const commandByKey = new Map(agentCatalog.commands.map((command) => [command.key, command]));
 
-  const builtinTools = Object.values(getBuiltinMcpTools()).map<McpToolCatalogEntry>((tool) => ({
-    kind: 'builtin',
-    name: tool.name,
-    title: tool.title,
-    description: tool.description,
-    inputNames: Object.keys(tool.inputSchema.properties),
-    requiredInputNames: [...(tool.inputSchema.required || [])],
-    destructive: Boolean(tool.annotations?.destructiveHint),
-    openWorld: Boolean(tool.annotations?.openWorldHint),
-    tags: [],
-    docsSummary: undefined
-  }));
+  const builtinTools = Object.values(getBuiltinMcpTools()).map<McpToolCatalogEntry>((tool) => {
+    const metadata = cloneLicellMcpToolMetadataEnvelope(tool.metadata);
+    return {
+      kind: 'builtin',
+      name: tool.name,
+      title: resolveLicellMcpToolTitle(metadata, tool.title),
+      summary: resolveLicellMcpToolSummary(metadata, tool.description),
+      description: tool.description,
+      inputNames: Object.keys(tool.inputSchema.properties),
+      requiredInputNames: [...(tool.inputSchema.required || [])],
+      destructive: Boolean(tool.annotations?.destructiveHint),
+      openWorld: Boolean(tool.annotations?.openWorldHint),
+      tags: [],
+      metadata
+    };
+  });
 
   const curatedTools = Object.values(getCuratedMcpCommandTools()).map<McpToolCatalogEntry>((tool) => {
     const command = tool.commandSignature ? commandByKey.get(tool.commandSignature) : undefined;
+    const metadata = cloneLicellMcpToolMetadataEnvelope(tool.metadata);
     return {
       kind: 'curated',
       name: tool.name,
-      title: tool.title,
+      title: resolveLicellMcpToolTitle(metadata, tool.title),
+      summary: resolveLicellMcpToolSummary(metadata, tool.description),
       description: tool.description,
       inputNames: Object.keys(tool.inputSchema.properties),
       requiredInputNames: [...(tool.inputSchema.required || [])],
       destructive: Boolean(tool.annotations?.destructiveHint),
       openWorld: false,
       tags: [...(tool.tags || [])],
-      docsSummary: tool.docsSummary,
+      metadata,
       commandKey: command?.key,
       commandSignature: tool.commandSignature,
       rootCommand: tool.rootCommand || command?.rootCommand,
@@ -80,17 +93,19 @@ export function buildMcpToolCatalog(): McpToolCatalogDocument {
 
   const generatedTools = Object.values(buildGeneratedMcpCommandTools()).map<McpToolCatalogEntry>((tool) => {
     const command = commandByKey.get(tool.commandKey);
+    const metadata = cloneLicellMcpToolMetadataEnvelope(tool.metadata);
     return {
       kind: 'generated',
       name: tool.name,
-      title: tool.title,
+      title: resolveLicellMcpToolTitle(metadata, tool.title),
+      summary: resolveLicellMcpToolSummary(metadata, command?.summary || command?.description || tool.description),
       description: tool.description,
       inputNames: Object.keys(tool.inputSchema.properties),
       requiredInputNames: [...(tool.inputSchema.required || [])],
       destructive: Boolean(tool.annotations?.destructiveHint),
       openWorld: false,
       tags: [],
-      docsSummary: command?.summary || command?.description || undefined,
+      metadata,
       commandKey: tool.commandKey,
       commandSignature: tool.commandKey,
       rootCommand: command?.rootCommand,

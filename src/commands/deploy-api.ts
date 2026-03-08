@@ -12,9 +12,9 @@ import {
   publishFunctionVersion,
   promoteFunctionAlias
 } from '../providers/fc';
-import { bindCustomDomain, ensureWildcardCname } from '../providers/domain';
-import { enableCdnForDomain } from '../providers/cdn';
-import { issueAndBindSSLWithArtifacts } from '../providers/ssl';
+import { bindAppDomainWorkflow } from '../workflows/domain';
+import { bindFunctionPreviewDomainWorkflow } from '../workflows/preview';
+import { confirmPreviewWildcardDns } from './deploy-preview';
 import { probeHttpHealth } from '../utils/health-check';
 import { formatErrorMessage } from '../utils/errors';
 import { toPromptValue, withSpinner } from '../utils/cli-shared';
@@ -25,6 +25,7 @@ export interface ApiDeployResult {
   url: string;
   promotedVersion?: string;
   fixedDomain?: string;
+  fixedDomainUrl?: string;
   previewDomain?: string;
   previewVersion?: string;
   healthCheckLogs: string[];
@@ -43,6 +44,16 @@ function formatPrecheckIssueLines(issues: Array<{ id: string; level: 'error' | '
     }
   }
   return lines;
+}
+
+function resolveApiFixedDomain(ctx: DeployContext) {
+  if (ctx.cliDomain) return ctx.cliDomain;
+  if (ctx.domainSuffix) return `${ctx.appName}.${ctx.domainSuffix}`;
+  return undefined;
+}
+
+function describeApiFixedDomain(ctx: DeployContext) {
+  return ctx.cliDomain ? '自定义域名' : '固定规则域名';
 }
 
 export async function executeApiDeploy(
@@ -136,9 +147,9 @@ export async function executeApiDeploy(
         runtime,
         Object.keys(deployOptions).length > 0 ? deployOptions : undefined
       );
-      const fcOriginDomain = `${ctx.auth.accountId}.${ctx.auth.region}.fc.aliyuncs.com`;
       let nextPromotedVersion: string | undefined;
       let nextFixedDomain: string | undefined;
+      let nextFixedDomainUrl: string | undefined;
       let nextPreviewDomain: string | undefined;
       let nextPreviewVersion: string | undefined;
 
@@ -148,43 +159,23 @@ export async function executeApiDeploy(
           ctx.appName,
           `preview at ${new Date().toISOString()}`
         );
-        nextPreviewDomain = `${ctx.appName}-preview-v${nextPreviewVersion}.${ctx.domainSuffix}`;
 
-        s.message(`正在确保通配符 DNS (*.${ctx.domainSuffix}) 存在...`);
-        const wildcardResult = await ensureWildcardCname(
-          ctx.domainSuffix,
-          fcOriginDomain,
-          {
-            interactiveTTY: ctx.interactiveTTY,
-            onConfirm: async () => {
-              const result = await confirm({
-                message: `检测到尚未配置通配符 DNS (*.${ctx.domainSuffix})。\n` +
-                  `创建后，所有 preview 子域名将自动解析到 FC 网关。\n` +
-                  `已有的精确 DNS 记录（如 ${ctx.appName}.${ctx.domainSuffix}）不受影响。\n` +
-                  `是否创建？`
-              });
-              if (isCancel(result)) return false;
-              return result;
-            }
-          }
-        );
-        if (wildcardResult.skipped) {
+        s.message(`正在配置预览域名 (${ctx.domainSuffix})...`);
+        const previewResult = await bindFunctionPreviewDomainWorkflow(ctx.appName, {
+          functionName: ctx.appName,
+          qualifier: nextPreviewVersion,
+          domainSuffix: ctx.domainSuffix,
+          interactiveTTY: ctx.interactiveTTY,
+          onConfirmWildcardDns: () => confirmPreviewWildcardDns(ctx.domainSuffix!, ctx.appName),
+          enableHttps: ctx.enableSSL,
+          forceSslRenew: ctx.forceSslRenew,
+          spinner: s
+        });
+        nextPreviewDomain = previewResult.previewDomain;
+        if (previewResult.wildcardResult.skipped) {
           s.message(pc.yellow('⚠️ 已跳过通配符 DNS 创建，preview 域名可能无法访问'));
-        } else if (wildcardResult.created) {
-          s.message(`✅ 通配符 DNS 已创建: ${wildcardResult.wildcardDomain} → ${wildcardResult.targetValue}`);
-        }
-
-        s.message(`正在绑定预览域名 ${nextPreviewDomain}...`);
-        await bindCustomDomain(
-          nextPreviewDomain,
-          fcOriginDomain,
-          nextPreviewVersion,
-          { skipDnsBind: true }
-        );
-
-        if (ctx.enableSSL) {
-          s.message(`预览域名绑定完成，正在签发 HTTPS 证书 (${nextPreviewDomain})...`);
-          await issueAndBindSSLWithArtifacts(nextPreviewDomain, s, { forceRenew: ctx.forceSslRenew });
+        } else if (previewResult.wildcardResult.created) {
+          s.message(`✅ 通配符 DNS 已创建: ${previewResult.wildcardResult.wildcardDomain} → ${previewResult.wildcardResult.targetValue}`);
         }
       } else if (ctx.releaseTarget) {
         s.message(`函数部署完成，正在发布版本并切流到 ${ctx.releaseTarget}...`);
@@ -200,85 +191,46 @@ export async function executeApiDeploy(
           `deployed by licell at ${new Date().toISOString()}`
         );
       }
-      if (ctx.domainSuffix) {
-        nextFixedDomain = `${ctx.appName}.${ctx.domainSuffix}`;
-        s.message(`函数部署完成，正在按固定规则绑定域名 ${nextFixedDomain}...`);
-        await bindCustomDomain(
-          nextFixedDomain,
-          fcOriginDomain,
-          ctx.releaseTarget,
-          { skipDnsBind: ctx.enableCdn }
-        );
-        let sslArtifacts: { certificate?: string; privateKey?: string } | undefined;
-        if (ctx.enableSSL) {
-          s.message(`固定域名绑定完成，正在签发并挂载 HTTPS 证书 (${nextFixedDomain})...`);
-          const sslResult = await issueAndBindSSLWithArtifacts(nextFixedDomain, s, { forceRenew: ctx.forceSslRenew });
-          sslArtifacts = {
-            certificate: sslResult.certificate,
-            privateKey: sslResult.privateKey
-          };
+      const resolvedFixedDomain = resolveApiFixedDomain(ctx);
+      if (resolvedFixedDomain) {
+        nextFixedDomain = resolvedFixedDomain;
+        s.message(`函数部署完成，正在配置${describeApiFixedDomain(ctx)} ${nextFixedDomain}...`);
+        const domainResult = await bindAppDomainWorkflow(nextFixedDomain, {
+          functionName: ctx.appName,
+          releaseTarget: ctx.releaseTarget,
+          ensureAlias: false,
+          enableCdn: ctx.enableCdn,
+          enableHttps: ctx.enableSSL,
+          forceSslRenew: ctx.forceSslRenew,
+          spinner: s
+        });
+        nextFixedDomain = domainResult.domainName;
+        nextFixedDomainUrl = domainResult.finalUrl;
+        if (ctx.enableCdn && domainResult.cdnCname) {
+          s.message(`✅ CDN 加速已校准，CNAME=${domainResult.cdnCname}`);
         }
-        if (ctx.enableCdn) {
-          s.message(`固定域名绑定完成，正在启用 CDN 加速 (${nextFixedDomain})...`);
-          const cdnResult = await enableCdnForDomain(nextFixedDomain, fcOriginDomain, sslArtifacts);
-          s.message(
-            cdnResult.created
-              ? `✅ CDN 加速已启用，CNAME=${cdnResult.cdnCname}`
-              : `✅ CDN 加速已存在，已校准 DNS 到 CNAME=${cdnResult.cdnCname}`
-          );
-          if (ctx.enableSSL && cdnResult.httpsConfigured) {
-            s.message('✅ CDN 边缘 HTTPS 已自动配置。');
-          }
-          if (ctx.enableSSL && !cdnResult.httpsConfigured) {
-            s.message('⚠️ 未能自动配置 CDN 边缘 HTTPS（未获取到可用证书），请在 CDN 控制台补充证书。');
-          }
+        if (ctx.enableSSL && ctx.enableCdn && domainResult.edgeHttpsConfigured) {
+          s.message('✅ CDN 边缘 HTTPS 已自动配置。');
         }
-      }
-      if (ctx.cliDomain) {
-        nextFixedDomain = ctx.cliDomain;
-        s.message(`函数部署完成，正在绑定自定义域名 ${nextFixedDomain}...`);
-        await bindCustomDomain(
-          nextFixedDomain,
-          fcOriginDomain,
-          ctx.releaseTarget,
-          { skipDnsBind: ctx.enableCdn }
-        );
-        let sslArtifacts: { certificate?: string; privateKey?: string } | undefined;
-        if (ctx.enableSSL) {
-          s.message(`自定义域名绑定完成，正在签发并挂载 HTTPS 证书 (${nextFixedDomain})...`);
-          const sslResult = await issueAndBindSSLWithArtifacts(nextFixedDomain, s, { forceRenew: ctx.forceSslRenew });
-          sslArtifacts = {
-            certificate: sslResult.certificate,
-            privateKey: sslResult.privateKey
-          };
+        if (ctx.enableSSL && ctx.enableCdn && !domainResult.edgeHttpsConfigured) {
+          s.message('⚠️ 未能自动配置 CDN 边缘 HTTPS（未获取到可用证书），请在 CDN 控制台补充证书。');
         }
-        if (ctx.enableCdn) {
-          s.message(`自定义域名绑定完成，正在启用 CDN 加速 (${nextFixedDomain})...`);
-          const cdnResult = await enableCdnForDomain(nextFixedDomain, fcOriginDomain, sslArtifacts);
-          s.message(
-            cdnResult.created
-              ? `✅ CDN 加速已启用，CNAME=${cdnResult.cdnCname}`
-              : `✅ CDN 加速已存在，已校准 DNS 到 CNAME=${cdnResult.cdnCname}`
-          );
-          if (ctx.enableSSL && cdnResult.httpsConfigured) {
-            s.message('✅ CDN 边缘 HTTPS 已自动配置。');
-          }
-          if (ctx.enableSSL && !cdnResult.httpsConfigured) {
-            s.message('⚠️ 未能自动配置 CDN 边缘 HTTPS（未获取到可用证书），请在 CDN 控制台补充证书。');
-          }
+        if (ctx.enableSSL && !ctx.enableCdn && domainResult.domainHttpsConfigured) {
+          s.message('✅ 域名 HTTPS 已自动配置。');
         }
       }
       return {
         url: deployedUrl,
         promotedVersion: nextPromotedVersion,
         fixedDomain: nextFixedDomain,
+        fixedDomainUrl: nextFixedDomainUrl,
         previewDomain: nextPreviewDomain,
         previewVersion: nextPreviewVersion
       };
     }
   );
   if (!apiDeployResult) return undefined;
-  const { url, promotedVersion, fixedDomain, previewDomain, previewVersion } = apiDeployResult;
+  const { url, promotedVersion, fixedDomain, fixedDomainUrl, previewDomain, previewVersion } = apiDeployResult;
 
   s.message('🩺 部署完成，正在做可访问性检测...');
   const healthCheckLogs: string[] = [];
@@ -289,11 +241,11 @@ export async function executeApiDeploy(
     healthCheckLogs.push(`⚠️ 生产地址可访问性检测未通过: ${productionProbe.error}`);
   }
   if (fixedDomain) {
-    const fixedDomainUrl = `${ctx.enableSSL ? 'https' : 'http'}://${fixedDomain}`;
+    const fixedProbeUrl = fixedDomainUrl || `${ctx.enableSSL ? 'https' : 'http'}://${fixedDomain}`;
     const fixedProbeAttempts = ctx.enableCdn ? 10 : 6;
     const fixedProbeIntervalMs = ctx.enableCdn ? 3000 : 2000;
     const fixedProbeTimeoutMs = ctx.enableCdn ? 6000 : 5000;
-    const fixedProbe = await probeHttpHealth(fixedDomainUrl, {
+    const fixedProbe = await probeHttpHealth(fixedProbeUrl, {
       maxAttempts: fixedProbeAttempts,
       intervalMs: fixedProbeIntervalMs,
       timeoutMs: fixedProbeTimeoutMs

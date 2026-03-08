@@ -1,10 +1,11 @@
 import type { CAC } from 'cac';
-import type { CommandMetadataMap } from './module';
+import { defineCommandModule, defineCliCommand, registerCliCommand } from './module';
 import { select, isCancel } from '@clack/prompts';
 import pc from 'picocolors';
 import { createSpinner, isInteractiveTTY, showIntro, showOutro } from '../utils/cli-shared';
 import { formatErrorMessage } from '../utils/errors';
 import { emitCliError, emitCliEvent, emitCliResult, isJsonOutput } from '../utils/output';
+import { AUTOMATION_SECTION } from './sections';
 
 type AgentType = 'claude' | 'codex';
 
@@ -15,10 +16,51 @@ interface SkillsInitOptions {
   force?: boolean;
 }
 
+const skillsInitCommand = defineCliCommand({
+  rawName: 'skills init [agent]',
+  description: '为 AI Agent 生成 licell skills（claude / codex）',
+  options: [
+    { rawName: '--project-root <path>', description: '目标项目目录（默认当前目录）' },
+    { rawName: '--force', description: '覆盖已有文件' }
+  ],
+  descriptor: {
+    notes: ['未传 `[agent]` 且处于交互终端时，会提示选择 `claude` 或 `codex`。'],
+    examples: ['licell skills init codex', 'licell skills init claude', 'licell skills init codex --project-root .'],
+    argumentHints: {
+      agent: '支持 `claude` | `codex`。'
+    },
+    optionInsights: {
+      '--project-root': {
+        whenToUse: '需要把 skills 写入其它项目目录时使用。',
+        cautions: ['会写入目标项目的技能文件与 AGENTS 入口。']
+      },
+      '--force': {
+        whenToUse: '已有目标文件且你明确希望覆盖时使用。',
+        cautions: ['可能覆盖已有定制内容。']
+      }
+    },
+    recommendedFlow: [
+      { title: '选择目标 Agent', command: 'licell skills init codex', reason: '根据实际使用的 Agent 生成对应技能表面。' },
+      { title: '检查写入结果', reason: '确认 skills 文件与 AGENTS 入口写入到了预期目录。' },
+      { title: '必要时接入 MCP', command: 'licell mcp init', reason: '让 Agent 不仅知道命令，还能调用 licell。' }
+    ],
+    result: {
+      summary: '返回 skills 脚手架写入结果。',
+      outcomeKey: 'writtenFiles',
+      fields: [
+        { name: 'stage', description: '固定为 `skills`。', required: true },
+        { name: 'agent', description: '目标 Agent 类型。', required: true },
+        { name: 'projectRoot', description: '目标项目目录。', required: true },
+        { name: 'writtenFiles', description: '实际写入的文件列表。', required: true },
+        { name: 'skippedFiles', description: '内容相同而跳过的文件列表。', required: true },
+        { name: 'agentsMdUpdated', description: '是否更新了 `AGENTS.md`。', required: true }
+      ]
+    }
+  }
+});
+
 export function registerSkillsCommands(cli: CAC) {
-  cli.command('skills init [agent]', '为 AI Agent 生成 licell skills（claude / codex）')
-    .option('--project-root <path>', '目标项目目录（默认当前目录）')
-    .option('--force', '覆盖已有文件')
+  registerCliCommand(cli, skillsInitCommand)
     .action(async (agentInput: string | undefined, options: SkillsInitOptions) => {
       if (!isJsonOutput()) {
         showIntro(pc.bgBlue(pc.white(' 🛠 Licell Skills Init ')));
@@ -103,25 +145,14 @@ export function registerSkillsCommands(cli: CAC) {
     });
 }
 
-export const skillsCommandMetadata: CommandMetadataMap = {
-  skills: {
-    summary: '为 Claude / Codex 生成 licell skills 与 AGENTS 接入文件。',
-    examples: ['licell skills init codex', 'licell skills init claude']
-  },
-  'skills init': {
-    notes: ['未传 `[agent]` 且在交互终端下时，会提示选择 `claude` 或 `codex`。'],
-    optionInsights: {
-      '--project-root': { whenToUse: '要把 skills 写入其它项目目录时使用。', cautions: ['会写入目标项目的技能/AGENTS 文件。'] },
-      '--force': { whenToUse: '已有目标文件，且你明确希望覆盖时使用。', cautions: ['可能覆盖已有定制内容。'] }
-    },
-    recommendedFlow: [
-      { title: '选择目标 Agent', command: 'licell skills init codex', reason: '根据实际使用的 Agent 选择 codex 或 claude。' },
-      { title: '检查生成结果', reason: '确认 skills 文件与 AGENTS 入口已写入预期目录。' },
-      { title: '必要时配合 MCP', command: 'licell mcp init', reason: '让 Agent 既了解命令，也能实际执行 licell。' }
-    ],
-    examples: ['licell skills init codex', 'licell skills init claude', 'licell skills init codex --project-root .'],
-    argumentHints: {
-      agent: '支持 `claude` | `codex`。'
+export const skillsCommandModule = defineCommandModule({
+  section: AUTOMATION_SECTION,
+  register: registerSkillsCommands,
+  namespaces: {
+    skills: {
+      summary: '为 Claude / Codex 生成 licell skills 与 AGENTS 接入文件。',
+      examples: ['licell skills init codex', 'licell skills init claude']
     }
-  }
-};
+  },
+  commands: [skillsInitCommand]
+});

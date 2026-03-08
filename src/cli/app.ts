@@ -1,5 +1,5 @@
 import { cac, type CAC } from 'cac';
-import { LICELL_COMMAND_MODULES } from '../commands/registry';
+import { LICELL_COMMAND_MANIFEST } from '../commands/registry';
 import { resolveCliVersion } from '../utils/version';
 
 export const LICELL_OUTPUT_OPTION = {
@@ -9,7 +9,7 @@ export const LICELL_OUTPUT_OPTION = {
 } as const;
 
 export function registerAllLicellCommands(cli: CAC) {
-  for (const commandModule of LICELL_COMMAND_MODULES) {
+  for (const commandModule of LICELL_COMMAND_MANIFEST.modules) {
     commandModule.register(cli);
   }
 }

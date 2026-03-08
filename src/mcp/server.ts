@@ -319,6 +319,9 @@ export async function runLicellMcpServer(options: { projectRoot: string; serverT
         if ('annotations' in spec && spec.annotations) {
           tool.annotations = spec.annotations;
         }
+        if ('metadata' in spec && spec.metadata) {
+          tool.metadata = spec.metadata;
+        }
         // Back-compat for older MCP clients that used input_schema.
         if (negotiatedProtocolVersion < '2025-03-26') {
           tool.input_schema = spec.inputSchema;

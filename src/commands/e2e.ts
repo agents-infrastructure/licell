@@ -1,5 +1,5 @@
 import type { CAC } from 'cac';
-import type { CommandMetadataMap } from './module';
+import { defineCommandModule, commandInvocation, defineCliCommand, registerCliCommand } from './module';
 import pc from 'picocolors';
 import { mkdirSync, existsSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { basename, join, resolve } from 'path';
@@ -34,6 +34,7 @@ import {
 import { parseRootAndSubdomain } from '../utils/domain';
 import { formatErrorMessage } from '../utils/errors';
 import { emitCliError, emitCliEvent, emitCliResult, isJsonOutput } from '../utils/output';
+import { AUTOMATION_SECTION } from './sections';
 
 interface E2eRunOptions {
   suite?: unknown;
@@ -65,6 +66,43 @@ interface E2eStepContext {
   manifest: E2eManifest;
   state: { hasDeployedApi: boolean; hasDeployedStatic: boolean };
 }
+
+const e2eRunCommand = defineCliCommand({
+  rawName: 'e2e run',
+  description: '执行固定 E2E 套件（默认 smoke）',
+  options: [
+    { rawName: '--suite <suite>', description: '套件：smoke/full（默认 smoke）' },
+    { rawName: '--run-id <id>', description: '指定 runId（默认自动生成）' },
+    { rawName: '--runtime <runtime>', description: '部署 runtime（默认 nodejs22）' },
+    { rawName: '--target <alias>', description: '部署 target alias（默认 preview）' },
+    { rawName: '--enable-vpc', description: 'API 部署启用 VPC（默认关闭，便于无残留清理）' },
+    { rawName: '--domain <domain>', description: '固定完整域名（可选）' },
+    { rawName: '--domain-suffix <suffix>', description: '固定域名后缀（可选）' },
+    { rawName: '--db-instance <instanceId>', description: 'full 套件时附加验证 db info/connect（复用已有实例）' },
+    { rawName: '--cache-instance <instanceId>', description: 'full 套件时附加验证 cache info/connect（复用已有实例）' },
+    { rawName: '--skip-static', description: 'full 套件时跳过 static + oss upload 场景' },
+    { rawName: '--enable-cdn', description: '部署时启用 CDN（需配合 domain/domain-suffix）' },
+    { rawName: '--preview', description: '测试 preview 部署流程（需配合 --domain-suffix）' },
+    { rawName: '--cleanup', description: '执行完后自动清理' },
+    { rawName: '--workspace <dir>', description: '指定 E2E 工作目录（默认 .licell/e2e-work/<runId>）' },
+    { rawName: '--yes', description: '自动清理时跳过二次确认' }
+  ]
+});
+
+const e2eCleanupCommand = defineCliCommand({
+  rawName: 'e2e cleanup [runId]',
+  description: '清理指定 E2E run 产生的资源',
+  options: [
+    { rawName: '--manifest <path>', description: '直接指定 manifest 文件路径' },
+    { rawName: '--keep-workspace', description: '保留本地 workspace 目录' },
+    { rawName: '--yes', description: '跳过二次确认（危险）' }
+  ]
+});
+
+const e2eListCommand = defineCliCommand({
+  rawName: 'e2e list',
+  description: '查看本项目 e2e 运行记录'
+});
 
 function nowIso() {
   return new Date().toISOString();
@@ -440,7 +478,7 @@ async function executeE2eRun(options: E2eRunOptions) {
   try {
     await executeWithAuthRecovery(
       {
-        commandLabel: 'licell e2e run',
+        commandLabel: commandInvocation(e2eRunCommand),
         interactiveTTY,
         requiredCapabilities: resolveRunCapabilities({
           domain,
@@ -699,7 +737,7 @@ async function cleanupByManifest(
 
   await executeWithAuthRecovery(
     {
-      commandLabel: 'licell e2e cleanup',
+      commandLabel: commandInvocation(e2eCleanupCommand),
       interactiveTTY,
       requiredCapabilities: [
         'fc',
@@ -797,22 +835,7 @@ async function cleanupByManifest(
 }
 
 export function registerE2eCommands(cli: CAC) {
-  cli.command('e2e run', '执行固定 E2E 套件（默认 smoke）')
-    .option('--suite <suite>', '套件：smoke/full（默认 smoke）')
-    .option('--run-id <id>', '指定 runId（默认自动生成）')
-    .option('--runtime <runtime>', '部署 runtime（默认 nodejs22）')
-    .option('--target <alias>', '部署 target alias（默认 preview）')
-    .option('--enable-vpc', 'API 部署启用 VPC（默认关闭，便于无残留清理）')
-    .option('--domain <domain>', '固定完整域名（可选）')
-    .option('--domain-suffix <suffix>', '固定域名后缀（可选）')
-    .option('--db-instance <instanceId>', 'full 套件时附加验证 db info/connect（复用已有实例）')
-    .option('--cache-instance <instanceId>', 'full 套件时附加验证 cache info/connect（复用已有实例）')
-    .option('--skip-static', 'full 套件时跳过 static + oss upload 场景')
-    .option('--enable-cdn', '部署时启用 CDN（需配合 domain/domain-suffix）')
-    .option('--preview', '测试 preview 部署流程（需配合 --domain-suffix）')
-    .option('--cleanup', '执行完后自动清理')
-    .option('--workspace <dir>', '指定 E2E 工作目录（默认 .licell/e2e-work/<runId>）')
-    .option('--yes', '自动清理时跳过二次确认')
+  registerCliCommand(cli, e2eRunCommand)
     .action(async (options: E2eRunOptions) => {
       try {
         await executeE2eRun(options);
@@ -826,10 +849,7 @@ export function registerE2eCommands(cli: CAC) {
       }
     });
 
-  cli.command('e2e cleanup [runId]', '清理指定 E2E run 产生的资源')
-    .option('--manifest <path>', '直接指定 manifest 文件路径')
-    .option('--keep-workspace', '保留本地 workspace 目录')
-    .option('--yes', '跳过二次确认（危险）')
+  registerCliCommand(cli, e2eCleanupCommand)
     .action(async (runIdArg: string | undefined, options: E2eCleanupOptions) => {
       try {
         const projectRoot = process.cwd();
@@ -867,7 +887,7 @@ export function registerE2eCommands(cli: CAC) {
       }
     });
 
-  cli.command('e2e list', '查看本项目 e2e 运行记录')
+  registerCliCommand(cli, e2eListCommand)
     .action(() => {
       const runIds = listE2eManifestRunIds(process.cwd());
       if (runIds.length === 0) {
@@ -886,9 +906,14 @@ export function registerE2eCommands(cli: CAC) {
     });
 }
 
-export const e2eCommandMetadata: CommandMetadataMap = {
-  e2e: {
-    summary: '运行、查看与清理 licell E2E 套件。',
-    examples: ['licell e2e run', 'licell e2e list', 'licell e2e cleanup <runId>']
-  }
-};
+export const e2eCommandModule = defineCommandModule({
+  section: AUTOMATION_SECTION,
+  register: registerE2eCommands,
+  namespaces: {
+    e2e: {
+      summary: '运行、查看与清理 licell E2E 套件。',
+      examples: ['licell e2e run', 'licell e2e list', 'licell e2e cleanup <runId>']
+    }
+  },
+  commands: [e2eRunCommand, e2eCleanupCommand, e2eListCommand]
+});

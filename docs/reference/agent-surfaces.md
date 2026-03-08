@@ -41,12 +41,18 @@
 | `licell fn invoke [name]` | 调用函数（同步） | `licell_cmd_fn_invoke` | `--target`, `--payload`, `--file` |
 | `licell fn list` | 查看函数列表 | `licell_cmd_fn_list` | `--limit`, `--prefix` |
 | `licell fn rm [name]` | 删除函数 | `licell_cmd_fn_rm` | `--force`, `--yes` |
+| `licell fn domain bind <domain>` | 绑定或更新 FC 自定义域名（资源级，不默认改 DNS） | `licell_cmd_fn_domain_bind` | `--function`, `--target`, `--path` |
+| `licell fn domain info <domain>` | 查看 FC 自定义域名详情 | `licell_cmd_fn_domain_info` | — |
+| `licell fn domain list` | 查看 FC 自定义域名列表 | `licell_cmd_fn_domain_list` | `--limit`, `--prefix` |
+| `licell fn domain unbind <domain>` | 解绑 FC 自定义域名 | `licell_cmd_fn_domain_unbind` | `--cleanup-dns`, `--yes` |
 | `licell env list` | 查看云端环境变量 | `licell_cmd_env_list` | `--target`, `--show-values` |
 | `licell env pull` | 拉取云端环境变量 | `licell_cmd_env_pull` | `--target` |
 | `licell env rm <key>` | 删除云端环境变量（并同步本地 .licell/project.json） | `licell_cmd_env_rm` | `--yes` |
 | `licell env set <key> <value>` | 设置云端环境变量（并同步本地 .licell/project.json） | `licell_cmd_env_set` | — |
-| `licell domain add <domain>` | 绑定自定义域名 | `licell_cmd_domain_add` | `--ssl`, `--ssl-force-renew`, `--target` |
-| `licell domain rm <domain>` | 解绑自定义域名并清理 DNS CNAME | `licell_cmd_domain_rm` | `--yes` |
+| `licell domain app bind <domain>` | 为当前应用编排 DNS、函数域名与可选 SSL | `licell_cmd_domain_app_bind` | `--ssl`, `--ssl-force-renew`, `--target` |
+| `licell domain app unbind <domain>` | 解绑当前应用域名，并清理 FC custom domain / DNS CNAME | `licell_cmd_domain_app_unbind` | `--yes` |
+| `licell domain static bind <domain>` | 为静态站点编排 CDN、DNS 与可选 HTTPS | `licell_cmd_domain_static_bind` | `--bucket`, `--ssl`, `--ssl-force-renew` |
+| `licell domain static unbind <domain>` | 解绑静态站点域名，并清理 CDN / DNS | `licell_cmd_domain_static_unbind` | `--yes` |
 | `licell dns records add <domain>` | 添加域名解析记录 | `licell_cmd_dns_records_add` | `--rr`, `--type`, `--value` |
 | `licell dns records list [domain]` | 查看域名解析记录 | `licell_cmd_dns_records_list` | `--limit` |
 | `licell dns records rm <recordId>` | 删除域名解析记录 | `licell_cmd_dns_records_rm` | `--yes` |
@@ -60,8 +66,8 @@
 | `licell oss upload [bucket]` | 上传本地目录到 OSS Bucket 指定目录 | `licell_cmd_oss_upload` | `--bucket`, `--source-dir`, `--target-dir` |
 | `licell oss domain bind <bucket> <domain>` | 为 Bucket 绑定原生 OSS 自定义域名 | `licell_cmd_oss_domain_bind` | — |
 | `licell oss domain list <bucket>` | 查看 Bucket 已绑定的原生 OSS 域名 | `licell_cmd_oss_domain_list` | — |
-| `licell oss domain rm <bucket> <domain>` | 解绑 Bucket 原生 OSS 自定义域名 | `licell_cmd_oss_domain_rm` | `--yes` |
 | `licell oss domain token <bucket> <domain>` | 为 Bucket 自定义域名生成 TXT 验证 token | `licell_cmd_oss_domain_token` | — |
+| `licell oss domain unbind <bucket> <domain>` | 解绑 Bucket 原生 OSS 自定义域名 | `licell_cmd_oss_domain_unbind` | `--yes` |
 | `licell oss object get <bucket> <key> [file]` | 下载 OSS 对象到本地文件 | `licell_cmd_oss_object_get` | `--file` |
 | `licell oss object info <bucket> <key>` | 查看 OSS 对象元数据 | `licell_cmd_oss_object_info` | — |
 | `licell oss object rm <bucket> <key>` | 删除 OSS 对象 | `licell_cmd_oss_object_rm` | `--yes` |
@@ -125,8 +131,8 @@
 
 | Tool | 说明 | 关键输入 |
 |------|------|----------|
-| `licell_cli` | Use licell CLI to deploy API/static services to Alibaba Cloud and manage related resources (FC, custom domains, SSL, DNS, CDN, logs, etc.). Returns stdout/stderr. For self-upgrade, prefer `licell upgrade --dry-run` first; project-local installs require explicit `--channel`. | `argv` |
-| `licell_command_catalog` | Return the shared licell command catalog used by Skills, shell completion, and MCP discovery. Useful when the agent wants up-to-date command/option metadata without hardcoded docs. | `rootCommand`, `commandKey` |
+| `licell_cli` | Use licell CLI to deploy API/static services to Alibaba Cloud and manage related resources (FC, custom domains, SSL, DNS, CDN, logs, etc.). Returns stdout/stderr. Decision guide: Inspect → licell_command_catalog \| Mutate → licell_cli \| Verify → 优先读取结构化 records. For self-upgrade, prefer `licell upgrade --dry-run` first; project-local installs require explicit `--channel`. | `argv` |
+| `licell_command_catalog` | Return the shared licell command catalog used by Skills, shell completion, and MCP discovery. Useful when the agent wants up-to-date command/option metadata without hardcoded docs. Decision guide: Inspect → licell_command_catalog. | `rootCommand`, `commandKey` |
 
 ## MCP 精选工作流工具
 
@@ -134,35 +140,39 @@
 
 | Tool | 对应 CLI | 说明 | 关键输入 |
 |------|----------|------|----------|
-| `licell_deploy` | `licell deploy` | Deploy current project. API deploys to Function Compute (FC 3.0); Static deploys to OSS hosting. For API, Agent should call licell_fc_deploy_spec + licell_fc_deploy_check before deploy. | `type`, `runtime`, `entry`, `dist` |
-| `licell_dns_records_add` | `licell dns records add` | Add a DNS record (Alidns). | `domain`, `rr`, `type`, `value` |
+| `licell_deploy` | `licell deploy` | Deploy current project. API deploys to Function Compute (FC 3.0); Static deploys to OSS hosting. For API, Agent should call licell_fc_deploy_spec + licell_fc_deploy_check before deploy. Safety: mutating — 会创建或更新函数、域名、SSL、CDN 等云端资源。 Decision guide: Inspect → licell deploy spec · licell deploy check \| Mutate → licell deploy --output json. | `type`, `runtime`, `entry`, `dist` |
+| `licell_dns_records_add` | `licell dns records add` | Add a DNS record (Alidns). Safety: mutating — 该命令会创建或修改云端资源、本地配置，建议先查看当前状态。 Structured JSON result: 结构化结果会返回新建 recordId 和完整记录参数，便于后续自动化追踪。 Key fields: stage, created, domain, recordId, rr, type, value, ttl, line. | `domain`, `rr`, `type`, `value` |
 | `licell_dns_records_list` | `licell dns records list` | List DNS records for a domain (Alidns). | `domain`, `limit` |
-| `licell_dns_records_rm` | `licell dns records rm` | Remove a DNS record by recordId. Destructive (requires yes=true). | `recordId`, `yes` |
-| `licell_domain_add` | `licell domain add` | Bind a custom domain to current FC app and optionally enable HTTPS. | `domain`, `ssl`, `sslForceRenew`, `target` |
-| `licell_domain_rm` | `licell domain rm` | Unbind custom domain and cleanup DNS record. Destructive (requires yes=true). | `domain`, `yes` |
+| `licell_dns_records_rm` | `licell dns records rm` | Remove a DNS record by recordId. Destructive (requires yes=true). Safety: destructive — 该命令会删除、回滚、暴露公网访问或轮换关键凭证，执行前请确认影响面。 Structured JSON result: 结构化结果会返回被删除的 recordId。 Key fields: stage, removed, recordId. | `recordId`, `yes` |
+| `licell_domain_app_bind` | `licell domain app bind` | Bind an app domain by orchestrating DNS, FC custom domain routing, and optional HTTPS in one workflow. Safety: mutating — 该命令会创建或修改云端资源、本地配置，建议先查看当前状态。 Structured JSON result: 结构化结果会返回域名绑定后的 alias / HTTPS 状态与最终访问地址。 Key fields: stage, bound, workflow, domain, releaseTarget, ssl, aliasEnsured, aliasVersionId, httpsConfigured, finalUrl. | `domain`, `ssl`, `sslForceRenew`, `target` |
+| `licell_domain_app_unbind` | `licell domain app unbind` | Unbind an app domain by removing FC custom domain routing and cleaning up DNS in one workflow. Safety: destructive — 会解绑应用域名并清理对应 DNS CNAME。 Structured JSON result: 结构化结果会返回已解绑域名，以及实际清理到的 FC / DNS 资源。 Key fields: stage, unbound, workflow, domain, removedCustomDomain, removedDnsRecordIds. | `domain`, `yes` |
+| `licell_domain_static_bind` | `licell domain static bind` | Bind a static-site domain by orchestrating CDN, DNS, and optional HTTPS in one workflow. Safety: mutating — 该命令会创建或修改云端资源、本地配置，建议先查看当前状态。 Structured JSON result: 结构化结果会返回静态域名接入 CDN 后的源站、CNAME 与最终访问 URL。 Key fields: stage, bound, workflow, domain, bucket, originDomain, cdnCname, ssl, httpsConfigured, finalUrl. | `domain`, `bucket`, `ssl`, `sslForceRenew` |
+| `licell_domain_static_unbind` | `licell domain static unbind` | Unbind a static-site domain by removing CDN routing and cleaning up DNS in one workflow. Safety: destructive — 会解绑静态域名并清理 CDN / DNS。 Structured JSON result: 结构化结果会返回已解绑域名，以及实际清理到的 DNS 记录。 Key fields: stage, unbound, workflow, domain, removedDnsRecordIds. | `domain`, `yes` |
 | `licell_fc_deploy_check` | `licell deploy check` | Read-only validation before FC API deployment. Returns actionable issues (missing handler, wrong entry, Docker prerequisites, etc.) and does not modify project files. | `runtime`, `entry`, `dockerDaemon` |
 | `licell_fc_deploy_spec` | `licell deploy spec` | Return machine-readable FC API runtime specs (handlerContract/eventSchema/responseSchema/examples/validationRules and resource constraints) for agent planning. | `runtime`, `all` |
 | `licell_fn_info` | `licell fn info` | Get FC function details. | `name`, `target` |
 | `licell_fn_invoke` | `licell fn invoke` | Invoke FC function synchronously with an optional payload. | `name`, `target`, `payload`, `payloadJson` |
 | `licell_fn_list` | `licell fn list` | List FC functions in current region. | `limit`, `prefix` |
-| `licell_fn_rm` | `licell fn rm` | Delete FC function. Destructive (requires yes=true). | `name`, `force`, `yes` |
-| `licell_init` | `licell init` | Initialize current directory: write .licell/project.json, and optionally generate scaffold files for supported runtimes. | `runtime`, `app`, `force`, `yes` |
-| `licell_release_promote` | `licell release promote` | Publish (if needed) and switch an FC alias (e.g. prod/preview) to a version. | `versionId`, `target` |
-| `licell_release_prune` | `licell release prune` | Preview or delete old FC published versions. Destructive when apply=true (requires yes=true). | `keep`, `apply`, `yes` |
-| `licell_release_rollback` | `licell release rollback` | Switch an FC alias to a specific versionId. | `versionId`, `target` |
-| `licell_supa_add` | `licell supa add` | Provision a new RDS Supabase instance (creates PG, waits until Running, saves env vars). Long-running (~5-10 min). | `name`, `vsw`, `class`, `dbInstance` |
+| `licell_fn_rm` | `licell fn rm` | Delete FC function. Destructive (requires yes=true). Safety: destructive — 该命令会删除、回滚、暴露公网访问或轮换关键凭证，执行前请确认影响面。 | `name`, `force`, `yes` |
+| `licell_init` | `licell init` | Initialize current directory: write .licell/project.json, and optionally generate scaffold files for supported runtimes. Safety: mutating — 该命令会创建或修改云端资源、本地配置，建议先查看当前状态。 Structured JSON result: 返回初始化后的 runtime、应用名与文件写入结果。 Key fields: stage, runtime, appName, mode, writtenFiles, skippedFiles. | `runtime`, `app`, `force`, `yes` |
+| `licell_release_promote` | `licell release promote` | Publish (if needed) and switch an FC alias (e.g. prod/preview) to a version. Safety: mutating — 会切换 alias 指向的线上版本。 | `versionId`, `target` |
+| `licell_release_prune` | `licell release prune` | Preview or delete old FC published versions. Destructive when apply=true (requires yes=true). Safety: destructive — 可能删除历史函数版本或预览域名绑定，建议先预览并确认保留策略。 | `keep`, `apply`, `yes` |
+| `licell_release_rollback` | `licell release rollback` | Switch an FC alias to a specific versionId. Safety: destructive — 会将线上流量回滚到旧版本，执行前请确认目标版本。 | `versionId`, `target` |
+| `licell_supa_add` | `licell supa add` | Provision a new RDS Supabase instance (creates PG, waits until Running, saves env vars). Long-running (~5-10 min). Safety: mutating — 该命令会创建或修改云端资源、本地配置，建议先查看当前状态。 | `name`, `vsw`, `class`, `dbInstance` |
 | `licell_supa_config` | `licell supa config` | View or modify Supabase instance configuration (auth/storage/RAG). Without modification flags, shows current config. | `instanceName`, `setAuth`, `setStorage`, `rag` |
 | `licell_supa_connect` | `licell supa connect` | Get Supabase endpoints, DB endpoints, and API keys (anon key, service key, JWT secret). | `instanceName` |
 | `licell_supa_info` | `licell supa info` | Get detailed attributes of a Supabase instance. | `instanceName` |
-| `licell_supa_lifecycle` | `licell supa <action>` | Manage Supabase instance lifecycle: restart, stop, or start. | `instanceName`, `action` |
+| `licell_supa_lifecycle` | `licell supa <action>` | Manage Supabase instance lifecycle: restart, stop, or start. Decision guide: Mutate → supa <action>. | `instanceName`, `action` |
 | `licell_supa_list` | `licell supa list` | List RDS Supabase instances in current region. | `limit` |
-| `licell_supa_reset_password` | `licell supa reset-password` | Reset Supabase dashboard or database password. | `instanceName`, `dashboardPassword`, `dbPassword` |
-| `licell_supa_rm` | `licell supa rm` | Delete a Supabase instance. Destructive and irreversible (requires yes=true). Associated PG instance and NAT gateway need manual cleanup. | `instanceName`, `yes` |
-| `licell_supa_whitelist` | `licell supa whitelist` | View or modify Supabase instance IP whitelist. Without modification flags, shows current whitelist. | `instanceName`, `set`, `add`, `remove` |
+| `licell_supa_reset_password` | `licell supa reset-password` | Reset Supabase dashboard or database password. Safety: destructive — 该命令会删除、回滚、暴露公网访问或轮换关键凭证，执行前请确认影响面。 | `instanceName`, `dashboardPassword`, `dbPassword` |
+| `licell_supa_rm` | `licell supa rm` | Delete a Supabase instance. Destructive and irreversible (requires yes=true). Associated PG instance and NAT gateway need manual cleanup. Safety: destructive — 会删除 Supabase 实例及其相关配置。 | `instanceName`, `yes` |
+| `licell_supa_whitelist` | `licell supa whitelist` | View or modify Supabase instance IP whitelist. Without modification flags, shows current whitelist. Safety: mutating — 该命令会创建或修改云端资源、本地配置，建议先查看当前状态。 | `instanceName`, `set`, `add`, `remove` |
 
 ## 自动生成的 MCP 命令工具
 
 除 `licell mcp ...` 外，其他 CLI 命令默认都会派生出 `licell_cmd_*` Tool。下面按命令分组展示。
+
+- 所有 builtin / curated / generated MCP tools 都会暴露 `metadata.licell`；generated tools 会自动继承 CLI 侧 `decisionGuide` / `tasks` / `safety` / `result`；curated workflow tools 会额外挂上 `workflows` 元数据。
 
 ### Setup & Identity
 
@@ -170,9 +180,9 @@
 
 | Tool | 对应 CLI | 说明 | 关键输入 |
 |------|----------|------|----------|
-| `licell_cmd_auth_repair` | `licell auth repair` | 修复凭证权限（推荐：用超级 AK/SK 自动补齐 licell 最小权限并继续使用） Auto-generated from the shared licell CLI registry. | `accountId`, `ak`, `sk`, `region` |
-| `licell_cmd_config_domain` | `licell config domain` | 查看或设置全局默认域名后缀 Auto-generated from the shared licell CLI registry. | `suffix`, `unset` |
-| `licell_cmd_init` | `licell init` | 初始化 FC 项目（空目录生成脚手架，已有项目写入 licell 配置） Auto-generated from the shared licell CLI registry. | `runtime`, `app`, `force`, `yes` |
+| `licell_cmd_auth_repair` | `licell auth repair` | 修复凭证权限（推荐：用超级 AK/SK 自动补齐 licell 最小权限并继续使用） Safety: mutating — 该命令会创建或修改云端资源、本地配置，建议先查看当前状态。 Auto-generated from the shared licell CLI registry. | `accountId`, `ak`, `sk`, `region` |
+| `licell_cmd_config_domain` | `licell config domain` | 查看或设置全局默认域名后缀 Safety: mutating — 该命令会创建或修改云端资源、本地配置，建议先查看当前状态。 Structured JSON result: 返回当前或更新后的全局域名后缀。 Key fields: stage, domainSuffix, action. Auto-generated from the shared licell CLI registry. | `suffix`, `unset` |
+| `licell_cmd_init` | `licell init` | 初始化 FC 项目（空目录生成脚手架，已有项目写入 licell 配置） Safety: mutating — 该命令会创建或修改云端资源、本地配置，建议先查看当前状态。 Structured JSON result: 返回初始化后的 runtime、应用名与文件写入结果。 Key fields: stage, runtime, appName, mode, writtenFiles, skippedFiles. Auto-generated from the shared licell CLI registry. | `runtime`, `app`, `force`, `yes` |
 | `licell_cmd_login` | `licell login` | 配置阿里云凭证 Auto-generated from the shared licell CLI registry. | `accountId`, `ak`, `sk`, `region` |
 | `licell_cmd_logout` | `licell logout` | 清除本地凭证 Auto-generated from the shared licell CLI registry. | `cwd`, `timeoutMs` |
 | `licell_cmd_switch` | `licell switch` | 切换默认 region Auto-generated from the shared licell CLI registry. | `region` |
@@ -184,29 +194,35 @@
 
 | Tool | 对应 CLI | 说明 | 关键输入 |
 |------|----------|------|----------|
-| `licell_cmd_deploy` | `licell deploy` | 一键部署 API / Static，并提供 spec / check 辅助子命令。 Safety: mutating — 会创建或更新函数、域名、SSL、CDN 等云端资源。 Auto-generated from the shared licell CLI registry. | `type`, `entry`, `dist`, `runtime` |
+| `licell_cmd_deploy` | `licell deploy` | 一键部署 API / Static，并提供 spec / check 辅助子命令。 Safety: mutating — 会创建或更新函数、域名、SSL、CDN 等云端资源。 Decision guide: Inspect → licell deploy spec · licell deploy check \| Mutate → licell deploy --output json. Auto-generated from the shared licell CLI registry. | `type`, `entry`, `dist`, `runtime` |
 | `licell_cmd_deploy_check` | `licell deploy check` | 本地预检 FC API 入口与 runtime 约束（建议 deploy 前执行） Auto-generated from the shared licell CLI registry. | `runtime`, `entry`, `dockerDaemon` |
 | `licell_cmd_deploy_spec` | `licell deploy spec` | 查看 FC API 部署规格（给 Agent/开发者在 deploy 前对照） Auto-generated from the shared licell CLI registry. | `runtime`, `all` |
-| `licell_cmd_dns_records_add` | `licell dns records add` | 添加域名解析记录 Auto-generated from the shared licell CLI registry. | `domain`, `rr`, `type`, `value` |
+| `licell_cmd_dns_records_add` | `licell dns records add` | 添加一条 DNS 解析记录。 Safety: mutating — 该命令会创建或修改云端资源、本地配置，建议先查看当前状态。 Structured JSON result: 结构化结果会返回新建 recordId 和完整记录参数，便于后续自动化追踪。 Key fields: stage, created, domain, recordId, rr, type, value, ttl, line. Auto-generated from the shared licell CLI registry. | `domain`, `rr`, `type`, `value` |
 | `licell_cmd_dns_records_list` | `licell dns records list` | 查看域名解析记录 Auto-generated from the shared licell CLI registry. | `domain`, `limit` |
-| `licell_cmd_dns_records_rm` | `licell dns records rm` | 删除域名解析记录 Auto-generated from the shared licell CLI registry. | `recordId`, `yes` |
-| `licell_cmd_domain_add` | `licell domain add` | 绑定自定义域名 Auto-generated from the shared licell CLI registry. | `domain`, `ssl`, `sslForceRenew`, `target` |
-| `licell_cmd_domain_rm` | `licell domain rm` | 解绑自定义域名并清理 DNS CNAME Safety: destructive — 会解绑域名并清理对应 DNS CNAME。 Auto-generated from the shared licell CLI registry. | `domain`, `yes` |
+| `licell_cmd_dns_records_rm` | `licell dns records rm` | 删除一条 DNS 解析记录。 Safety: destructive — 该命令会删除、回滚、暴露公网访问或轮换关键凭证，执行前请确认影响面。 Structured JSON result: 结构化结果会返回被删除的 recordId。 Key fields: stage, removed, recordId. Auto-generated from the shared licell CLI registry. | `recordId`, `yes` |
+| `licell_cmd_domain_app_bind` | `licell domain app bind` | 为当前应用编排 DNS CNAME、FC custom domain，并可选自动开启 HTTPS。 Safety: mutating — 该命令会创建或修改云端资源、本地配置，建议先查看当前状态。 Structured JSON result: 结构化结果会返回域名绑定后的 alias / HTTPS 状态与最终访问地址。 Key fields: stage, bound, workflow, domain, releaseTarget, ssl, aliasEnsured, aliasVersionId, httpsConfigured, finalUrl. Auto-generated from the shared licell CLI registry. | `domain`, `ssl`, `sslForceRenew`, `target` |
+| `licell_cmd_domain_app_unbind` | `licell domain app unbind` | 解绑应用域名，并清理对应 FC custom domain / DNS CNAME。 Safety: destructive — 会解绑应用域名并清理对应 DNS CNAME。 Structured JSON result: 结构化结果会返回已解绑域名，以及实际清理到的 FC / DNS 资源。 Key fields: stage, unbound, workflow, domain, removedCustomDomain, removedDnsRecordIds. Auto-generated from the shared licell CLI registry. | `domain`, `yes` |
+| `licell_cmd_domain_static_bind` | `licell domain static bind` | 将静态站点域名接到 CDN，并把 DNS CNAME 切到 CDN；可选自动启用 HTTPS。 Safety: mutating — 该命令会创建或修改云端资源、本地配置，建议先查看当前状态。 Structured JSON result: 结构化结果会返回静态域名接入 CDN 后的源站、CNAME 与最终访问 URL。 Key fields: stage, bound, workflow, domain, bucket, originDomain, cdnCname, ssl, httpsConfigured, finalUrl. Auto-generated from the shared licell CLI registry. | `domain`, `bucket`, `ssl`, `sslForceRenew` |
+| `licell_cmd_domain_static_unbind` | `licell domain static unbind` | 解绑静态站点域名，并清理对应 CDN domain / DNS CNAME。 Safety: destructive — 会解绑静态域名并清理 CDN / DNS。 Structured JSON result: 结构化结果会返回已解绑域名，以及实际清理到的 DNS 记录。 Key fields: stage, unbound, workflow, domain, removedDnsRecordIds. Auto-generated from the shared licell CLI registry. | `domain`, `yes` |
 | `licell_cmd_env_list` | `licell env list` | 查看云端环境变量 Auto-generated from the shared licell CLI registry. | `target`, `showValues` |
 | `licell_cmd_env_pull` | `licell env pull` | 拉取云端环境变量 Auto-generated from the shared licell CLI registry. | `target` |
 | `licell_cmd_env_rm` | `licell env rm` | 删除云端环境变量（并同步本地 .licell/project.json） Safety: destructive — 会删除已有环境变量，执行前建议先 `licell env list` 确认。 Auto-generated from the shared licell CLI registry. | `key`, `yes` |
 | `licell_cmd_env_set` | `licell env set` | 设置云端环境变量（并同步本地 .licell/project.json） Safety: mutating — 会更新云端环境变量，并同步本地 `.licell/project.json`。 Auto-generated from the shared licell CLI registry. | `key`, `value` |
+| `licell_cmd_fn_domain_bind` | `licell fn domain bind` | 绑定或更新 FC 自定义域名路由。 Safety: mutating — 该命令会创建或修改云端资源、本地配置，建议先查看当前状态。 Structured JSON result: 结构化结果会返回 FC 自定义域名的目标函数、路由与最终状态快照。 Key fields: stage, bound, domain, functionName, qualifier, path, protocol, ensureDns, info. Auto-generated from the shared licell CLI registry. | `domain`, `function`, `target`, `path` |
+| `licell_cmd_fn_domain_info` | `licell fn domain info` | 查看 FC 自定义域名详情 Auto-generated from the shared licell CLI registry. | `domain` |
+| `licell_cmd_fn_domain_list` | `licell fn domain list` | 查看 FC 自定义域名列表 Auto-generated from the shared licell CLI registry. | `limit`, `prefix` |
+| `licell_cmd_fn_domain_unbind` | `licell fn domain unbind` | 解绑 FC 自定义域名，可选同步清理 DNS。 Safety: destructive — 会删除 FC custom domain；启用 --cleanup-dns 时还会删除匹配的 DNS CNAME。 Structured JSON result: 结构化结果会返回解绑状态与 DNS 清理结果。 Key fields: stage, unbound, domain, cleanupDns, removedDnsRecordIds. Auto-generated from the shared licell CLI registry. | `domain`, `cleanupDns`, `yes` |
 | `licell_cmd_fn_info` | `licell fn info` | 查看函数详情 Auto-generated from the shared licell CLI registry. | `name`, `target` |
 | `licell_cmd_fn_invoke` | `licell fn invoke` | 调用函数（同步） Auto-generated from the shared licell CLI registry. | `name`, `target`, `payload`, `file` |
 | `licell_cmd_fn_list` | `licell fn list` | 查看函数列表 Auto-generated from the shared licell CLI registry. | `limit`, `prefix` |
-| `licell_cmd_fn_rm` | `licell fn rm` | 删除函数 Auto-generated from the shared licell CLI registry. | `name`, `force`, `yes` |
-| `licell_cmd_logs` | `licell logs` | 查看云端实时或历史日志。 Auto-generated from the shared licell CLI registry. | `once`, `window`, `lines` |
+| `licell_cmd_fn_rm` | `licell fn rm` | 删除函数 Safety: destructive — 该命令会删除、回滚、暴露公网访问或轮换关键凭证，执行前请确认影响面。 Auto-generated from the shared licell CLI registry. | `name`, `force`, `yes` |
+| `licell_cmd_logs` | `licell logs` | 查看云端日志（默认实时流式） Structured JSON result: 返回当前应用的一次性日志抓取结果。 Key fields: stage, lines, appName, once, count. Auto-generated from the shared licell CLI registry. | `once`, `window`, `lines` |
 | `licell_cmd_oss_bucket` | `licell oss bucket` | 兼容命令；等同 `licell oss upload`。 Auto-generated from the shared licell CLI registry. | `bucket`, `bucket2`, `sourceDir`, `targetDir` |
 | `licell_cmd_oss_create` | `licell oss create` | 创建 OSS Bucket Safety: mutating — 会创建新的 OSS Bucket，并可能设置 ACL / 冗余 / 存储类型。 Auto-generated from the shared licell CLI registry. | `bucket`, `acl`, `storageClass`, `redundancy` |
-| `licell_cmd_oss_domain_bind` | `licell oss domain bind` | 为 Bucket 绑定原生 OSS 自定义域名 Safety: mutating — 会把自定义域名绑定到 OSS Bucket。 Auto-generated from the shared licell CLI registry. | `bucket`, `domain` |
+| `licell_cmd_oss_domain_bind` | `licell oss domain bind` | 为 Bucket 绑定原生 OSS 自定义域名 Safety: mutating — 会把自定义域名绑定到 OSS Bucket。 Structured JSON result: 结构化结果会返回绑定的 Bucket / 域名，以及 OSS 返回的绑定状态。 Key fields: stage, bound, bucket, domain, binding. Auto-generated from the shared licell CLI registry. | `bucket`, `domain` |
 | `licell_cmd_oss_domain_list` | `licell oss domain list` | 查看 Bucket 已绑定的原生 OSS 域名 Auto-generated from the shared licell CLI registry. | `bucket` |
-| `licell_cmd_oss_domain_rm` | `licell oss domain rm` | 解绑 Bucket 原生 OSS 自定义域名 Safety: destructive — 会解除 OSS Bucket 与自定义域名的绑定。 Auto-generated from the shared licell CLI registry. | `bucket`, `domain`, `yes` |
-| `licell_cmd_oss_domain_token` | `licell oss domain token` | 为待绑定的 OSS 自定义域名生成 TXT 验证 token。 Auto-generated from the shared licell CLI registry. | `bucket`, `domain` |
+| `licell_cmd_oss_domain_token` | `licell oss domain token` | 为待绑定的 OSS 自定义域名生成 TXT 验证 token。 Structured JSON result: 结构化结果会返回 OSS 域名验证 token，以及建议写入的 DNS TXT 记录。 Key fields: stage, bucket, domain, token, dnsVerification. Auto-generated from the shared licell CLI registry. | `bucket`, `domain` |
+| `licell_cmd_oss_domain_unbind` | `licell oss domain unbind` | 解绑 Bucket 原生 OSS 自定义域名。 Safety: destructive — 会解除 OSS Bucket 与自定义域名的绑定。 Structured JSON result: 结构化结果会返回解绑目标与最终解绑状态。 Key fields: stage, unbound, bucket, domain. Auto-generated from the shared licell CLI registry. | `bucket`, `domain`, `yes` |
 | `licell_cmd_oss_info` | `licell oss info` | 查看 Bucket 基本信息，并补充 ACL、公共访问阻止、已绑定域名。 Auto-generated from the shared licell CLI registry. | `bucket` |
 | `licell_cmd_oss_list` | `licell oss list` | 查看 OSS Bucket 列表 Auto-generated from the shared licell CLI registry. | `limit` |
 | `licell_cmd_oss_ls` | `licell oss ls` | 列出 Bucket 中的对象，可按 prefix 过滤。 Auto-generated from the shared licell CLI registry. | `bucket`, `prefix`, `limit` |
@@ -229,30 +245,30 @@
 
 | Tool | 对应 CLI | 说明 | 关键输入 |
 |------|----------|------|----------|
-| `licell_cmd_cache_add` | `licell cache add` | 分配 Redis 缓存 Auto-generated from the shared licell CLI registry. | `type`, `instance`, `password`, `username` |
+| `licell_cmd_cache_add` | `licell cache add` | 分配 Redis 缓存 Safety: mutating — 该命令会创建或修改云端资源、本地配置，建议先查看当前状态。 Auto-generated from the shared licell CLI registry. | `type`, `instance`, `password`, `username` |
 | `licell_cmd_cache_connect` | `licell cache connect` | 输出缓存连接信息 Auto-generated from the shared licell CLI registry. | `instanceId` |
 | `licell_cmd_cache_info` | `licell cache info` | 查看缓存实例详情 Auto-generated from the shared licell CLI registry. | `instanceId` |
 | `licell_cmd_cache_list` | `licell cache list` | 查看缓存实例列表 Auto-generated from the shared licell CLI registry. | `limit` |
 | `licell_cmd_cache_public_access` | `licell cache public-access` | 开通 Redis 公网访问并添加当前 IP 到白名单 Safety: destructive — 会开启缓存公网访问并修改白名单。 Auto-generated from the shared licell CLI registry. | `instanceId`, `ip` |
 | `licell_cmd_cache_rm` | `licell cache rm` | 删除缓存实例 Safety: destructive — 会删除缓存实例，请确认实例 ID。 Auto-generated from the shared licell CLI registry. | `instanceId`, `yes` |
 | `licell_cmd_cache_rotate_password` | `licell cache rotate-password` | 轮换 Redis 密码 Safety: destructive — 会轮换 Redis 密码，现有连接配置可能立即失效。 Auto-generated from the shared licell CLI registry. | `instance` |
-| `licell_cmd_db_add` | `licell db add` | 分配数据库实例 Auto-generated from the shared licell CLI registry. | `type`, `engineVersion`, `category`, `class` |
+| `licell_cmd_db_add` | `licell db add` | 分配数据库实例 Safety: mutating — 该命令会创建或修改云端资源、本地配置，建议先查看当前状态。 Auto-generated from the shared licell CLI registry. | `type`, `engineVersion`, `category`, `class` |
 | `licell_cmd_db_connect` | `licell db connect` | 输出数据库连接信息 Auto-generated from the shared licell CLI registry. | `instanceId` |
 | `licell_cmd_db_info` | `licell db info` | 查看数据库实例详情 Auto-generated from the shared licell CLI registry. | `instanceId` |
 | `licell_cmd_db_list` | `licell db list` | 查看数据库实例列表 Auto-generated from the shared licell CLI registry. | `limit` |
 | `licell_cmd_db_public_access` | `licell db public-access` | 开通数据库公网访问并添加当前 IP 到白名单 Safety: destructive — 会开启数据库公网访问并修改白名单。 Auto-generated from the shared licell CLI registry. | `instanceId`, `ip` |
 | `licell_cmd_db_rm` | `licell db rm` | 删除数据库实例 Safety: destructive — 会删除数据库实例，请确认实例 ID 与备份策略。 Auto-generated from the shared licell CLI registry. | `instanceId`, `yes` |
-| `licell_cmd_supa_add` | `licell supa add` | 创建 RDS Supabase 实例 Auto-generated from the shared licell CLI registry. | `name`, `vsw`, `class`, `dbInstance` |
+| `licell_cmd_supa_add` | `licell supa add` | 创建 RDS Supabase 实例 Safety: mutating — 该命令会创建或修改云端资源、本地配置，建议先查看当前状态。 Auto-generated from the shared licell CLI registry. | `name`, `vsw`, `class`, `dbInstance` |
 | `licell_cmd_supa_config` | `licell supa config` | 查看 Supabase 实例配置（auth/storage/rag） Auto-generated from the shared licell CLI registry. | `instanceName`, `setAuth`, `setStorage`, `rag` |
 | `licell_cmd_supa_connect` | `licell supa connect` | 查看 Supabase 连接信息和 API Keys Auto-generated from the shared licell CLI registry. | `instanceName` |
 | `licell_cmd_supa_info` | `licell supa info` | 查看 Supabase 实例详情 Auto-generated from the shared licell CLI registry. | `instanceName` |
 | `licell_cmd_supa_list` | `licell supa list` | 查看 Supabase 实例列表 Auto-generated from the shared licell CLI registry. | `limit` |
-| `licell_cmd_supa_reset_password` | `licell supa reset-password` | 重置 Supabase Dashboard 或数据库密码 Auto-generated from the shared licell CLI registry. | `instanceName`, `dashboardPassword`, `dbPassword` |
-| `licell_cmd_supa_restart` | `licell supa restart` | 重启 Supabase 实例 Auto-generated from the shared licell CLI registry. | `instanceName` |
+| `licell_cmd_supa_reset_password` | `licell supa reset-password` | 重置 Supabase Dashboard 或数据库密码 Safety: destructive — 该命令会删除、回滚、暴露公网访问或轮换关键凭证，执行前请确认影响面。 Auto-generated from the shared licell CLI registry. | `instanceName`, `dashboardPassword`, `dbPassword` |
+| `licell_cmd_supa_restart` | `licell supa restart` | 重启 Supabase 实例 Safety: mutating — 该命令会创建或修改云端资源、本地配置，建议先查看当前状态。 Auto-generated from the shared licell CLI registry. | `instanceName` |
 | `licell_cmd_supa_rm` | `licell supa rm` | 删除 Supabase 实例 Safety: destructive — 会删除 Supabase 实例及其相关配置。 Auto-generated from the shared licell CLI registry. | `instanceName`, `yes` |
-| `licell_cmd_supa_start` | `licell supa start` | 启动 Supabase 实例 Auto-generated from the shared licell CLI registry. | `instanceName` |
-| `licell_cmd_supa_stop` | `licell supa stop` | 暂停 Supabase 实例 Auto-generated from the shared licell CLI registry. | `instanceName` |
-| `licell_cmd_supa_whitelist` | `licell supa whitelist` | 查看/修改 Supabase IP 白名单 Auto-generated from the shared licell CLI registry. | `instanceName`, `set`, `add`, `remove` |
+| `licell_cmd_supa_start` | `licell supa start` | 启动 Supabase 实例 Safety: mutating — 该命令会创建或修改云端资源、本地配置，建议先查看当前状态。 Auto-generated from the shared licell CLI registry. | `instanceName` |
+| `licell_cmd_supa_stop` | `licell supa stop` | 暂停 Supabase 实例 Safety: destructive — 该命令会删除、回滚、暴露公网访问或轮换关键凭证，执行前请确认影响面。 Auto-generated from the shared licell CLI registry. | `instanceName` |
+| `licell_cmd_supa_whitelist` | `licell supa whitelist` | 查看/修改 Supabase IP 白名单 Safety: mutating — 该命令会创建或修改云端资源、本地配置，建议先查看当前状态。 Auto-generated from the shared licell CLI registry. | `instanceName`, `set`, `add`, `remove` |
 
 ### Automation & Tooling
 
@@ -260,12 +276,12 @@
 
 | Tool | 对应 CLI | 说明 | 关键输入 |
 |------|----------|------|----------|
-| `licell_cmd_completion` | `licell completion` | 生成 shell 补全脚本，或调用内部补全引擎。 Auto-generated from the shared licell CLI registry. | `shell`, `engine` |
+| `licell_cmd_completion` | `licell completion` | 输出 shell 补全脚本（bash/zsh） Structured JSON result: 返回 shell 补全脚本，或内部候选项列表。 Key fields: stage, shell, script, candidates, count. Auto-generated from the shared licell CLI registry. | `shell`, `engine` |
 | `licell_cmd_e2e_cleanup` | `licell e2e cleanup` | 清理指定 E2E run 产生的资源 Auto-generated from the shared licell CLI registry. | `runId`, `manifest`, `keepWorkspace`, `yes` |
 | `licell_cmd_e2e_list` | `licell e2e list` | 查看本项目 e2e 运行记录 Auto-generated from the shared licell CLI registry. | `cwd`, `timeoutMs` |
 | `licell_cmd_e2e_run` | `licell e2e run` | 执行固定 E2E 套件（默认 smoke） Auto-generated from the shared licell CLI registry. | `suite`, `runId`, `runtime`, `target` |
-| `licell_cmd_setup` | `licell setup` | 安装后的一站式引导：配置 Skills 与 MCP。 Auto-generated from the shared licell CLI registry. | `agent`, `global`, `projectRoot`, `force` |
-| `licell_cmd_skills_init` | `licell skills init` | 为 AI Agent 生成 licell skills（claude / codex） Auto-generated from the shared licell CLI registry. | `agent`, `projectRoot`, `force` |
+| `licell_cmd_setup` | `licell setup` | 安装后的一站式引导：配置 Skills 与 MCP。 Structured JSON result: 返回 setup 引导的写入结果与 MCP 配置状态。 Key fields: stage, agent, scope, projectRoot, writtenFiles, skippedFiles, mcpConfigured, mcpConfigPath, mcpConfigUpdated. Decision guide: Mutate → licell setup · licell setup --agent codex --global --output json. Auto-generated from the shared licell CLI registry. | `agent`, `global`, `projectRoot`, `force` |
+| `licell_cmd_skills_init` | `licell skills init` | 为 AI Agent 生成 licell skills（claude / codex） Safety: mutating — 该命令会创建或修改云端资源、本地配置，建议先查看当前状态。 Structured JSON result: 返回 skills 脚手架写入结果。 Key fields: stage, writtenFiles, agent, projectRoot, skippedFiles, agentsMdUpdated. Auto-generated from the shared licell CLI registry. | `agent`, `projectRoot`, `force` |
 | `licell_cmd_upgrade` | `licell upgrade` | 按当前安装来源执行自升级，支持 dry-run 查看计划。 Safety: mutating — 会修改本机 licell 安装，建议先 dry-run 再执行。 Auto-generated from the shared licell CLI registry. | `channel`, `targetVersion`, `repo`, `scriptUrl` |
 
 ## 同步机制

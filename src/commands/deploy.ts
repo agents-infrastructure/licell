@@ -1,5 +1,5 @@
 import type { CAC } from 'cac';
-import type { CommandMetadataMap } from './module';
+import { defineCommandModule, commandInvocation, defineCliCommand, registerCliCommand } from './module';
 import pc from 'picocolors';
 import { Config } from '../utils/config';
 import {
@@ -25,8 +25,109 @@ import { emitCliError, emitCliEvent, emitCliResult, isJsonOutput } from '../util
 import { resolveDeployContext, type DeployCliOptions } from './deploy-context';
 import { executeApiDeploy } from './deploy-api';
 import { executeStaticDeploy } from './deploy-static';
+import { DELIVERY_SECTION } from './sections';
 
 export { resolveDeploySslEnabled } from './deploy-context';
+
+
+const deploySpecCommand = defineCliCommand({
+  rawName: 'deploy spec [runtime]',
+  description: '查看 FC API 部署规格（给 Agent/开发者在 deploy 前对照）',
+  options: [
+    { rawName: '--all', description: '输出全部 runtime 规格' }
+  ],
+  descriptor: {
+    title: 'Get FC API deploy spec',
+    examples: ['licell deploy spec', 'licell deploy spec nodejs22', 'licell deploy spec python3.13 --output json']
+  }
+});
+
+const deployCheckCommand = defineCliCommand({
+  rawName: 'deploy check',
+  description: '本地预检 FC API 入口与 runtime 约束（建议 deploy 前执行）',
+  options: [
+    { rawName: '--runtime <runtime>', description: 'FC runtime：nodejs20/nodejs22/python3.12/python3.13/docker' },
+    { rawName: '--entry <entry>', description: '入口文件路径（默认按 runtime 推断）' },
+    { rawName: '--docker-daemon', description: 'runtime=docker 时额外检测本机 Docker daemon 可用性' }
+  ],
+  descriptor: {
+    title: 'Precheck FC API deploy readiness',
+    examples: ['licell deploy check', 'licell deploy check --output json']
+  }
+});
+
+const deployCommand = defineCliCommand({
+  rawName: 'deploy',
+  description: '一键极速打包部署',
+  options: [
+    { rawName: '--type <type>', description: '部署类型：api 或 static（适配 CI 非交互场景）' },
+    { rawName: '--entry <entry>', description: 'API 入口文件（Node 默认 src/index.ts；Python 默认 src/main.py）' },
+    { rawName: '--dist <dist>', description: '静态站点目录（默认 dist）' },
+    { rawName: '--runtime <runtime>', description: '运行时（API: nodejs20/nodejs22/python3.12/python3.13/docker；静态站: static/statis）' },
+    { rawName: '--target <target>', description: 'API 部署后自动发布并切流到该 alias（如 prod/preview）' },
+    { rawName: '--preview', description: '生成预览部署（自动发版 + 绑定预览域名，不影响生产）' },
+    { rawName: '--domain <domain>', description: '绑定完整自定义域名（如 api.your-domain.xyz）' },
+    { rawName: '--domain-suffix <suffix>', description: '自动绑定固定子域名后缀（如 your-domain.xyz）' },
+    { rawName: '--enable-cdn', description: '域名绑定后自动接入 CDN 并将 DNS CNAME 切到 CDN（API 显式开启；Static 提供域名时默认开启）' },
+    { rawName: '--ssl', description: '启用 HTTPS（API: --domain/--enable-cdn 默认开启；Static: 提供域名时默认开启）' },
+    { rawName: '--ssl-force-renew', description: '启用 HTTPS 时强制续签证书（忽略到期阈值）' },
+    { rawName: '--acr-namespace <ns>', description: 'Docker 部署时使用的 ACR 命名空间（默认 licell）' },
+    { rawName: '--enable-vpc', description: 'API 部署时启用 VPC 接入（默认启用）' },
+    { rawName: '--disable-vpc', description: 'API 部署时禁用 VPC 接入（使用公网模式）' },
+    { rawName: '--memory <mb>', description: '函数内存大小（MB，默认 512）' },
+    { rawName: '--vcpu <n>', description: '函数 vCPU 核数（如 0.5 / 1 / 2，默认 0.5）' },
+    { rawName: '--instance-concurrency <n>', description: '单实例并发数（默认自动，通常起始 10）' },
+    { rawName: '--timeout <seconds>', description: '函数超时时间（秒，默认 30）' }
+  ],
+  descriptor: {
+    title: 'Deploy current project',
+    summary: '一键部署 API / Static，并提供 spec / check 辅助子命令。',
+    notes: ['FC API 部署前，建议先执行 `licell deploy spec` 与 `licell deploy check`。'],
+    safety: {
+      level: 'mutating',
+      reason: '会创建或更新函数、域名、SSL、CDN 等云端资源。'
+    },
+    optionInsights: {
+      '--type': { whenToUse: '在 CI / Agent 非交互场景下显式指定 `api` 或 `static`。', cautions: ['不指定时可能依赖当前项目上下文或交互提示。'] },
+      '--entry': { whenToUse: 'API 入口不是默认的 `src/index.ts` / `src/main.py` 时使用。', cautions: ['建议先运行 `licell deploy check` 验证入口与 runtime 约束。'] },
+      '--runtime': { whenToUse: '需要强制指定运行时，例如 `nodejs22`、`python3.13`、`docker`。', cautions: ['部分 runtime 有地域限制；先查看 `licell deploy spec`。'] },
+      '--preview': { whenToUse: '需要生成预览版本且不影响生产流量时使用。', cautions: ['预览版本通常还需要后续 `licell release promote` 才会进入生产。'] },
+      '--domain': { whenToUse: '希望直接绑定完整自定义域名时使用。', cautions: ['可能联动 SSL / CDN / DNS 变更。'] },
+      '--domain-suffix': { whenToUse: '希望按固定后缀自动生成子域名时使用。', cautions: ['适合标准化环境，不适合完全自定义主机名。'] },
+      '--enable-cdn': { whenToUse: '希望流量走 CDN、获得缓存/加速能力时使用。', cautions: ['会改写 DNS CNAME 指向 CDN。'] },
+      '--ssl': { whenToUse: '需要 HTTPS 证书自动签发与绑定时使用。', cautions: ['依赖域名解析正确；必要时结合 `--ssl-force-renew`。'] },
+      '--target': { whenToUse: 'API 部署后需要自动发布到指定 alias（如 `prod` / `preview`）时使用。', cautions: ['会影响 alias 指向的流量入口。'] }
+    },
+    recommendedFlow: [
+      { title: '确认部署规格', command: 'licell deploy spec', reason: '先看可用 runtime、资源约束和推荐姿势。' },
+      { title: '本地预检入口', command: 'licell deploy check', reason: '避免入口文件、runtime、打包形态不匹配。' },
+      { title: '执行部署', command: 'licell deploy --output json', reason: '让 Agent 拿到结构化部署结果。' },
+      { title: '必要时发布预览版本', command: 'licell release promote <versionId>', reason: '预览验证通过后再切到稳定 alias。' }
+    ],
+    taskHints: [
+      {
+        phase: 'inspect',
+        title: '部署前先做预检',
+        description: '先跑 spec 与 check，确认 runtime、入口和项目形态都匹配。',
+        commands: ['licell deploy spec', 'licell deploy check']
+      },
+      {
+        phase: 'mutate',
+        title: '让 Agent 稳定拿到部署结果',
+        description: '正式执行时优先输出 JSON，方便自动化继续读取版本、域名和资源状态。',
+        commands: ['licell deploy --output json']
+      }
+    ],
+    examples: [
+      'licell deploy spec nodejs22',
+      'licell deploy check',
+      'licell deploy --type api --entry src/index.ts',
+      'licell deploy --output json'
+    ],
+    agentTips: ['生成或修改部署前配置时，优先调用 `deploy spec` 与 `deploy check`。'],
+    related: ['release promote', 'logs']
+  }
+});
 
 interface DeploySpecOptions {
   all?: boolean;
@@ -185,8 +286,7 @@ function runDeployCheck(options: DeployCheckOptions) {
 }
 
 export function registerDeployCommand(cli: CAC) {
-  cli.command('deploy spec [runtime]', '查看 FC API 部署规格（给 Agent/开发者在 deploy 前对照）')
-    .option('--all', '输出全部 runtime 规格')
+  registerCliCommand(cli, deploySpecCommand)
     .action((runtime: string | undefined, options: DeploySpecOptions) => {
       try {
         printDeploySpec(runtime, options.all);
@@ -200,10 +300,7 @@ export function registerDeployCommand(cli: CAC) {
       }
     });
 
-  cli.command('deploy check', '本地预检 FC API 入口与 runtime 约束（建议 deploy 前执行）')
-    .option('--runtime <runtime>', 'FC runtime：nodejs20/nodejs22/python3.12/python3.13/docker')
-    .option('--entry <entry>', '入口文件路径（默认按 runtime 推断）')
-    .option('--docker-daemon', 'runtime=docker 时额外检测本机 Docker daemon 可用性')
+  registerCliCommand(cli, deployCheckCommand)
     .action((options: DeployCheckOptions) => {
       try {
         runDeployCheck(options);
@@ -217,25 +314,7 @@ export function registerDeployCommand(cli: CAC) {
       }
     });
 
-  cli.command('deploy', '一键极速打包部署')
-    .option('--type <type>', '部署类型：api 或 static（适配 CI 非交互场景）')
-    .option('--entry <entry>', 'API 入口文件（Node 默认 src/index.ts；Python 默认 src/main.py）')
-    .option('--dist <dist>', '静态站点目录（默认 dist）')
-    .option('--runtime <runtime>', '运行时（API: nodejs20/nodejs22/python3.12/python3.13/docker；静态站: static/statis）')
-    .option('--target <target>', 'API 部署后自动发布并切流到该 alias（如 prod/preview）')
-    .option('--preview', '生成预览部署（自动发版 + 绑定预览域名，不影响生产）')
-    .option('--domain <domain>', '绑定完整自定义域名（如 api.your-domain.xyz）')
-    .option('--domain-suffix <suffix>', '自动绑定固定子域名后缀（如 your-domain.xyz）')
-    .option('--enable-cdn', '域名绑定后自动接入 CDN 并将 DNS CNAME 切到 CDN（API 显式开启；Static 提供域名时默认开启）')
-    .option('--ssl', '启用 HTTPS（API: --domain/--enable-cdn 默认开启；Static: 提供域名时默认开启）')
-    .option('--ssl-force-renew', '启用 HTTPS 时强制续签证书（忽略到期阈值）')
-    .option('--acr-namespace <ns>', 'Docker 部署时使用的 ACR 命名空间（默认 licell）')
-    .option('--enable-vpc', 'API 部署时启用 VPC 接入（默认启用）')
-    .option('--disable-vpc', 'API 部署时禁用 VPC 接入（使用公网模式）')
-    .option('--memory <mb>', '函数内存大小（MB，默认 512）')
-    .option('--vcpu <n>', '函数 vCPU 核数（如 0.5 / 1 / 2，默认 0.5）')
-    .option('--instance-concurrency <n>', '单实例并发数（默认自动，通常起始 10）')
-    .option('--timeout <seconds>', '函数超时时间（秒，默认 30）')
+  registerCliCommand(cli, deployCommand)
     .action(async (options: DeployCliOptions) => {
       if (!isJsonOutput()) {
         showIntro(pc.bgBlue(pc.white(' ▲ Deploying to Aliyun ')));
@@ -245,7 +324,7 @@ export function registerDeployCommand(cli: CAC) {
       const s = createSpinner();
       const interactiveTTY = isInteractiveTTY();
       try {
-        await ensureAuthReadyForCommand({ commandLabel: 'licell deploy', interactiveTTY });
+        await ensureAuthReadyForCommand({ commandLabel: commandInvocation(deployCommand), interactiveTTY });
 
         let recoveredAuth = false;
         while (true) {
@@ -255,7 +334,7 @@ export function registerDeployCommand(cli: CAC) {
             ? `${resolvedAuth.accountId}|${resolvedAuth.region}|${resolvedAuth.ak}`
             : '';
           await ensureAuthCapabilityPreflight({
-            commandLabel: 'licell deploy',
+            commandLabel: commandInvocation(deployCommand),
             interactiveTTY,
             requiredCapabilities: resolveDeployRequiredCapabilities(ctx)
           });
@@ -365,7 +444,7 @@ export function registerDeployCommand(cli: CAC) {
             if (!recoveredAuth && detectAuthIssue(err) !== 'unknown') {
               s.stop(pc.yellow('⚠️ 检测到鉴权/权限问题，正在尝试自动修复并重试...'));
               const repaired = await tryRecoverAuthForError(err, {
-                commandLabel: 'licell deploy',
+                commandLabel: commandInvocation(deployCommand),
                 interactiveTTY
               });
               if (repaired) {
@@ -388,44 +467,8 @@ export function registerDeployCommand(cli: CAC) {
     });
 }
 
-export const deployCommandMetadata: CommandMetadataMap = {
-  deploy: {
-    summary: '一键部署 API / Static，并提供 spec / check 辅助子命令。',
-    notes: ['FC API 部署前，建议先执行 `licell deploy spec` 与 `licell deploy check`。'],
-    safety: {
-      level: 'mutating',
-      reason: '会创建或更新函数、域名、SSL、CDN 等云端资源。'
-    },
-    optionInsights: {
-      '--type': { whenToUse: '在 CI / Agent 非交互场景下显式指定 `api` 或 `static`。', cautions: ['不指定时可能依赖当前项目上下文或交互提示。'] },
-      '--entry': { whenToUse: 'API 入口不是默认的 `src/index.ts` / `src/main.py` 时使用。', cautions: ['建议先运行 `licell deploy check` 验证入口与 runtime 约束。'] },
-      '--runtime': { whenToUse: '需要强制指定运行时，例如 `nodejs22`、`python3.13`、`docker`。', cautions: ['部分 runtime 有地域限制；先查看 `licell deploy spec`。'] },
-      '--preview': { whenToUse: '需要生成预览版本且不影响生产流量时使用。', cautions: ['预览版本通常还需要后续 `licell release promote` 才会进入生产。'] },
-      '--domain': { whenToUse: '希望直接绑定完整自定义域名时使用。', cautions: ['可能联动 SSL / CDN / DNS 变更。'] },
-      '--domain-suffix': { whenToUse: '希望按固定后缀自动生成子域名时使用。', cautions: ['适合标准化环境，不适合完全自定义主机名。'] },
-      '--enable-cdn': { whenToUse: '希望流量走 CDN、获得缓存/加速能力时使用。', cautions: ['会改写 DNS CNAME 指向 CDN。'] },
-      '--ssl': { whenToUse: '需要 HTTPS 证书自动签发与绑定时使用。', cautions: ['依赖域名解析正确；必要时结合 `--ssl-force-renew`。'] },
-      '--target': { whenToUse: 'API 部署后需要自动发布到指定 alias（如 `prod` / `preview`）时使用。', cautions: ['会影响 alias 指向的流量入口。'] }
-    },
-    recommendedFlow: [
-      { title: '确认部署规格', command: 'licell deploy spec', reason: '先看可用 runtime、资源约束和推荐姿势。' },
-      { title: '本地预检入口', command: 'licell deploy check', reason: '避免入口文件、runtime、打包形态不匹配。' },
-      { title: '执行部署', command: 'licell deploy --output json', reason: '让 Agent 拿到结构化部署结果。' },
-      { title: '必要时发布预览版本', command: 'licell release promote <versionId>', reason: '预览验证通过后再切到稳定 alias。' }
-    ],
-    examples: [
-      'licell deploy spec nodejs22',
-      'licell deploy check',
-      'licell deploy --type api --entry src/index.ts',
-      'licell deploy --output json'
-    ],
-    agentTips: ['生成或修改部署前配置时，优先调用 `deploy spec` 与 `deploy check`。'],
-    related: ['release promote', 'logs']
-  },
-  'deploy spec': {
-    examples: ['licell deploy spec', 'licell deploy spec nodejs22', 'licell deploy spec python3.13 --output json']
-  },
-  'deploy check': {
-    examples: ['licell deploy check', 'licell deploy check --output json']
-  }
-};
+export const deployCommandModule = defineCommandModule({
+  section: DELIVERY_SECTION,
+  register: registerDeployCommand,
+  commands: [deployCommand, deploySpecCommand, deployCheckCommand]
+});

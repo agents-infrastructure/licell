@@ -1,5 +1,5 @@
 import type { CAC } from 'cac';
-import type { CommandMetadataMap } from './module';
+import { defineCommandModule, commandInvocation, defineCliCommand, registerCliCommand } from './module';
 import pc from 'picocolors';
 import { writeFileSync } from 'fs';
 import { escapeEnvValue, normalizeReleaseTarget } from '../utils/cli-helpers';
@@ -19,15 +19,71 @@ import {
 } from '../utils/cli-shared';
 import { Config } from '../utils/config';
 import { emitCliResult, isJsonOutput } from '../utils/output';
+import { DELIVERY_SECTION } from './sections';
+
+const envListCommand = defineCliCommand({
+  rawName: 'env list',
+  description: '查看云端环境变量',
+  options: [
+    { rawName: '--target <target>', description: '查看指定 FC alias 的环境变量（如 prod/preview）' },
+    { rawName: '--show-values', description: '显示完整变量值（默认隐藏）' }
+  ]
+});
+
+const envSetCommand = defineCliCommand({
+  rawName: 'env set <key> <value>',
+  description: '设置云端环境变量（并同步本地 .licell/project.json）',
+  descriptor: {
+    examples: ['licell env set API_BASE_URL https://api.example.com', 'licell env set NODE_ENV production --output json'],
+    argumentHints: {
+      key: '环境变量名，例如 `API_KEY`、`NODE_ENV`。',
+      value: '变量值；如包含空格，请使用引号。'
+    },
+    recommendedFlow: [
+      { title: '先查看现状', command: 'licell env list --output json', reason: '避免覆盖已有变量或拼错 key。' },
+      { title: '设置变量', command: 'licell env set <key> <value> --output json', reason: '同时更新云端与本地项目配置。' },
+      { title: '必要时回拉确认', command: 'licell env pull --output json', reason: '确保云端状态与本地项目配置一致。' }
+    ],
+    safety: {
+      level: 'mutating',
+      reason: '会更新云端环境变量，并同步本地 `.licell/project.json`。'
+    }
+  }
+});
+
+const envRmCommand = defineCliCommand({
+  rawName: 'env rm <key>',
+  description: '删除云端环境变量（并同步本地 .licell/project.json）',
+  options: [
+    { rawName: '--yes', description: '跳过二次确认（危险）' }
+  ],
+  descriptor: {
+    notes: ['会同时删除云端环境变量与本地 `.licell/project.json` 中对应项。'],
+    examples: ['licell env rm API_KEY', 'licell env rm API_KEY --output json'],
+    argumentHints: {
+      key: '待删除的环境变量名。'
+    },
+    safety: {
+      level: 'destructive',
+      reason: '会删除已有环境变量，执行前建议先 `licell env list` 确认。'
+    }
+  }
+});
+
+const envPullCommand = defineCliCommand({
+  rawName: 'env pull',
+  description: '拉取云端环境变量',
+  options: [
+    { rawName: '--target <target>', description: '从指定 FC alias 拉取环境变量（如 prod/preview）' }
+  ]
+});
 
 export function registerEnvCommands(cli: CAC) {
-  cli.command('env list', '查看云端环境变量')
-    .option('--target <target>', '查看指定 FC alias 的环境变量（如 prod/preview）')
-    .option('--show-values', '显示完整变量值（默认隐藏）')
+  registerCliCommand(cli, envListCommand)
     .action(async (options: { target?: string; showValues?: boolean }) => {
       await executeWithAuthRecovery(
         {
-          commandLabel: 'licell env list',
+          commandLabel: commandInvocation(envListCommand),
           interactiveTTY: isInteractiveTTY(),
           requiredCapabilities: ['fc']
         },
@@ -77,11 +133,11 @@ export function registerEnvCommands(cli: CAC) {
       );
     });
 
-  cli.command('env set <key> <value>', '设置云端环境变量（并同步本地 .licell/project.json）')
+  registerCliCommand(cli, envSetCommand)
     .action(async (key: string, value: string) => {
       await executeWithAuthRecovery(
         {
-          commandLabel: 'licell env set',
+          commandLabel: commandInvocation(envSetCommand),
           interactiveTTY: isInteractiveTTY(),
           requiredCapabilities: ['fc']
         },
@@ -115,12 +171,11 @@ export function registerEnvCommands(cli: CAC) {
       );
     });
 
-  cli.command('env rm <key>', '删除云端环境变量（并同步本地 .licell/project.json）')
-    .option('--yes', '跳过二次确认（危险）')
+  registerCliCommand(cli, envRmCommand)
     .action(async (key: string, options: { yes?: boolean }) => {
       await executeWithAuthRecovery(
         {
-          commandLabel: 'licell env rm',
+          commandLabel: commandInvocation(envRmCommand),
           interactiveTTY: isInteractiveTTY(),
           requiredCapabilities: ['fc']
         },
@@ -154,12 +209,11 @@ export function registerEnvCommands(cli: CAC) {
       );
     });
 
-  cli.command('env pull', '拉取云端环境变量')
-    .option('--target <target>', '从指定 FC alias 拉取环境变量（如 prod/preview）')
+  registerCliCommand(cli, envPullCommand)
     .action(async (options: { target?: string }) => {
       await executeWithAuthRecovery(
         {
-          commandLabel: 'licell env pull',
+          commandLabel: commandInvocation(envPullCommand),
           interactiveTTY: isInteractiveTTY(),
           requiredCapabilities: ['fc']
         },
@@ -180,7 +234,9 @@ export function registerEnvCommands(cli: CAC) {
           Config.setProject({ envs }, { replaceEnvs: true });
           const entries = Object.entries(envs);
           if (entries.length === 0) {
-            try { writeFileSync('.env', '', { mode: 0o600 }); } catch (e) {
+            try {
+              writeFileSync('.env', '', { mode: 0o600 });
+            } catch (e) {
               throw new Error(`写入 .env 文件失败: ${e instanceof Error ? e.message : String(e)}`);
             }
             if (!isJsonOutput()) {
@@ -195,8 +251,10 @@ export function registerEnvCommands(cli: CAC) {
             });
             return;
           }
-          const envContent = entries.map(([k, v]) => `${k}="${escapeEnvValue(String(v))}"`).join('\n');
-          try { writeFileSync('.env', envContent, { mode: 0o600 }); } catch (e) {
+          const envContent = entries.map(([key, value]) => `${key}="${escapeEnvValue(String(value))}"`).join('\n');
+          try {
+            writeFileSync('.env', envContent, { mode: 0o600 });
+          } catch (e) {
             throw new Error(`写入 .env 文件失败: ${e instanceof Error ? e.message : String(e)}`);
           }
           ensureEnvIgnored();
@@ -215,36 +273,14 @@ export function registerEnvCommands(cli: CAC) {
     });
 }
 
-export const envCommandMetadata: CommandMetadataMap = {
-  env: {
-    summary: '云端环境变量的查看、设置、删除与回拉。',
-    examples: ['licell env list', 'licell env set API_KEY secret', 'licell env pull --output json']
-  },
-  'env set': {
-    examples: ['licell env set API_BASE_URL https://api.example.com', 'licell env set NODE_ENV production --output json'],
-    argumentHints: {
-      key: '环境变量名，例如 `API_KEY`、`NODE_ENV`。',
-      value: '变量值；如包含空格，请使用引号。'
-    },
-    recommendedFlow: [
-      { title: '先查看现状', command: 'licell env list --output json', reason: '避免覆盖已有变量或拼错 key。' },
-      { title: '设置变量', command: 'licell env set <key> <value> --output json', reason: '同时更新云端与本地项目配置。' },
-      { title: '必要时回拉确认', command: 'licell env pull --output json', reason: '确保云端状态与本地项目配置一致。' }
-    ],
-    safety: {
-      level: 'mutating',
-      reason: '会更新云端环境变量，并同步本地 `.licell/project.json`。'
-    }
-  },
-  'env rm': {
-    notes: ['会同时删除云端环境变量与本地 `.licell/project.json` 中对应项。'],
-    examples: ['licell env rm API_KEY', 'licell env rm API_KEY --output json'],
-    argumentHints: {
-      key: '待删除的环境变量名。'
-    },
-    safety: {
-      level: 'destructive',
-      reason: '会删除已有环境变量，执行前建议先 `licell env list` 确认。'
+export const envCommandModule = defineCommandModule({
+  section: DELIVERY_SECTION,
+  register: registerEnvCommands,
+  commands: [envListCommand, envSetCommand, envRmCommand, envPullCommand],
+  namespaces: {
+    env: {
+      summary: '云端环境变量的查看、设置、删除与回拉。',
+      examples: ['licell env list', 'licell env set API_KEY secret', 'licell env pull --output json']
     }
   }
-};
+});

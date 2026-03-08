@@ -1,10 +1,15 @@
 import type { CatalogOption } from './command-catalog';
-import { LICELL_COMMAND_MODULES, LICELL_ROOT_HELP_METADATA } from '../commands/registry';
+import { LICELL_COMMAND_MANIFEST } from '../commands/registry';
 import type {
   CommandActionHint,
+  CommandTaskPhase,
+  CommandTaskHint,
+  CommandDescriptor,
+  CommandDescriptorMap,
   CommandFlowStep,
-  CommandMetadata,
   CommandOptionInsight,
+  CommandResultDescriptor,
+  CommandResultFieldDescriptor,
   CommandSafetyLevel,
   CommandSafetyMetadata,
   CommandSectionConfig
@@ -12,13 +17,30 @@ import type {
 
 export type {
   CommandActionHint,
+  CommandTaskPhase,
+  CommandTaskHint,
+  CommandDescriptor,
+  CommandDescriptorMap,
   CommandFlowStep,
-  CommandMetadata,
   CommandOptionInsight,
+  CommandResultDescriptor,
+  CommandResultFieldDescriptor,
   CommandSafetyLevel,
   CommandSafetyMetadata,
   CommandSectionConfig
 } from '../commands/module';
+
+export interface ResolvedCommandResultFieldDescriptor {
+  name: string;
+  description: string;
+  required: boolean;
+}
+
+export interface ResolvedCommandResultDescriptor {
+  summary?: string;
+  outcomeKey?: string;
+  fields: ResolvedCommandResultFieldDescriptor[];
+}
 
 function unique<T>(values: T[]) {
   return [...new Set(values)];
@@ -28,7 +50,7 @@ function buildCommandSectionConfig(): CommandSectionConfig[] {
   const sections: CommandSectionConfig[] = [];
   const indexById = new Map<string, number>();
 
-  for (const module of LICELL_COMMAND_MODULES) {
+  for (const module of LICELL_COMMAND_MANIFEST.modules) {
     const existingIndex = indexById.get(module.section.id);
     if (existingIndex === undefined) {
       indexById.set(module.section.id, sections.length);
@@ -37,7 +59,8 @@ function buildCommandSectionConfig(): CommandSectionConfig[] {
         title: module.section.title,
         roots: [...module.roots],
         summary: module.section.summary,
-        notes: [...(module.section.notes || [])]
+        notes: [...(module.section.notes || [])],
+        taskHints: (module.section.taskHints || []).map((task) => ({ ...task, commands: [...(task.commands || [])] }))
       });
       continue;
     }
@@ -51,25 +74,38 @@ function buildCommandSectionConfig(): CommandSectionConfig[] {
 
 export const COMMAND_SECTION_CONFIG: CommandSectionConfig[] = buildCommandSectionConfig();
 
-const REGISTRY_COMMAND_METADATA: Record<string, CommandMetadata> = Object.assign(
+const REGISTRY_COMMAND_DESCRIPTORS: Record<string, CommandDescriptor> = Object.assign(
   {},
-  ...LICELL_COMMAND_MODULES
-    .map((module) => module.metadata || {})
+  ...LICELL_COMMAND_MANIFEST.modules
+    .map((module) => module.descriptors)
 );
 
-const RESOLVED_COMMAND_METADATA: Record<string, CommandMetadata> = {
-  help: LICELL_ROOT_HELP_METADATA,
-  ...REGISTRY_COMMAND_METADATA
+const RESOLVED_COMMAND_DESCRIPTORS: Record<string, CommandDescriptor> = {
+  ...LICELL_COMMAND_MANIFEST.root.descriptors,
+  ...REGISTRY_COMMAND_DESCRIPTORS
 };
 
-const EMPTY_COMMAND_METADATA: CommandMetadata = {};
+const EMPTY_COMMAND_DESCRIPTOR: CommandDescriptor = {};
 
-export function getCommandMetadata(key: string): CommandMetadata {
-  return RESOLVED_COMMAND_METADATA[key] || EMPTY_COMMAND_METADATA;
+export function getCommandDescriptor(key: string): CommandDescriptor {
+  return RESOLVED_COMMAND_DESCRIPTORS[key] || EMPTY_COMMAND_DESCRIPTOR;
 }
 
-export function buildCommandOptionInsights(options: Pick<CatalogOption, 'rawName' | 'flags'>[], metadata: CommandMetadata) {
-  const configured = metadata.optionInsights || {};
+export function buildCommandResultDescriptor(descriptor: CommandDescriptor): ResolvedCommandResultDescriptor | undefined {
+  if (!descriptor.result) return undefined;
+  return {
+    summary: descriptor.result.summary,
+    outcomeKey: descriptor.result.outcomeKey,
+    fields: (descriptor.result.fields || []).map((field) => ({
+      name: field.name,
+      description: field.description,
+      required: field.required !== false
+    }))
+  };
+}
+
+export function buildCommandOptionInsights(options: Pick<CatalogOption, 'rawName' | 'flags'>[], descriptor: CommandDescriptor) {
+  const configured = descriptor.optionInsights || {};
   const configuredFlags = Object.keys(configured);
   if (configuredFlags.length === 0) return [] as CommandOptionInsight[];
 
@@ -101,19 +137,19 @@ export function buildCommandOptionInsights(options: Pick<CatalogOption, 'rawName
   return insights;
 }
 
-export function buildExplicitRecommendedFlow(metadata: CommandMetadata) {
-  return (metadata.recommendedFlow || []).map((step) => ({
+export function buildExplicitRecommendedFlow(descriptor: CommandDescriptor) {
+  return (descriptor.recommendedFlow || []).map((step) => ({
     title: step.title,
     command: step.command,
     reason: step.reason
   }));
 }
 
-export function buildCommandSafetyMetadata(metadata: CommandMetadata) {
-  if (!metadata.safety?.level || !metadata.safety.reason) return undefined;
+export function buildCommandSafetyMetadata(descriptor: CommandDescriptor) {
+  if (!descriptor.safety?.level || !descriptor.safety.reason) return undefined;
   return {
-    level: metadata.safety.level,
-    reason: metadata.safety.reason,
-    confirmFlags: [...(metadata.safety.confirmFlags || [])]
+    level: descriptor.safety.level,
+    reason: descriptor.safety.reason,
+    confirmFlags: [...(descriptor.safety.confirmFlags || [])]
   } satisfies CommandSafetyMetadata;
 }

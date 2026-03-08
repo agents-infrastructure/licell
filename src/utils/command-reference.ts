@@ -6,16 +6,22 @@ import {
 } from './command-catalog';
 import {
   COMMAND_SECTION_CONFIG,
-  buildCommandOptionInsights,
-  buildCommandSafetyMetadata,
-  buildExplicitRecommendedFlow,
-  getCommandMetadata,
+  getCommandDescriptor,
   type CommandActionHint,
   type CommandFlowStep,
+  type CommandTaskPhase,
   type CommandOptionInsight,
-  type CommandSafetyMetadata
+  type CommandSafetyMetadata,
+  type ResolvedCommandResultDescriptor
 } from './command-metadata';
+import {
+  buildCommandTasks,
+  groupCommandTasks,
+  type CommandTaskEntry,
+  type CommandTaskGroup
+} from './command-tasks';
 import { canExposeCommandAsGeneratedMcpTool, toGeneratedMcpToolName } from './command-surface-ids';
+import { buildCommandSurfaceMetadata, toLicellInvocation } from './command-surface-metadata';
 
 export interface CommandReferenceSection {
   id: string;
@@ -23,6 +29,7 @@ export interface CommandReferenceSection {
   roots: string[];
   summary?: string;
   notes: string[];
+  taskHints: Array<{ title: string; description: string; commands?: string[]; phase?: CommandTaskPhase }>;
   commands: CatalogCommand[];
 }
 
@@ -34,10 +41,13 @@ export interface AgentCommandCatalogSection {
   commandKeys: string[];
 }
 
+export type AgentCommandResult = ResolvedCommandResultDescriptor;
+
 export interface AgentCommandCatalogEntry {
   key: string;
   rawName: string;
   invocation: string;
+  title?: string;
   description: string;
   summary?: string;
   rootCommand: string;
@@ -50,10 +60,13 @@ export interface AgentCommandCatalogEntry {
   agentTips: string[];
   actionHints: CommandActionHint[];
   argumentHints: Record<string, string>;
+  tasks: CommandTaskEntry[];
+  decisionGuide: CommandTaskGroup[];
   relatedCommands: string[];
   safety?: CommandSafetyMetadata;
   optionInsights: CommandOptionInsight[];
   recommendedFlow: CommandFlowStep[];
+  result?: AgentCommandResult;
   sectionId: string;
   sectionTitle: string;
   generatedMcpToolName?: string;
@@ -78,12 +91,8 @@ function escapeMarkdownCell(value: string) {
   return normalized.replace(/\|/g, '\\|') || '—';
 }
 
-function toInvocation(command: CatalogCommand) {
-  return `licell ${command.rawName}`;
-}
-
 function getCommandDisplayDescription(command: CatalogCommand) {
-  return getCommandMetadata(command.key).summary || command.description;
+  return getCommandDescriptor(command.key).summary || command.description;
 }
 
 function summarizeKeyOptions(command: CatalogCommand) {
@@ -110,7 +119,7 @@ function renderCommandTable(commands: CatalogCommand[]) {
   const rows = commands.map((command) => {
     const display = getCommandDisplayDescription(command);
     const description = display ? escapeMarkdownCell(display) : '—';
-    return `| \`${toInvocation(command)}\` | ${description} | ${summarizeKeyOptions(command)} |`;
+    return `| \`${toLicellInvocation(command.rawName)}\` | ${description} | ${summarizeKeyOptions(command)} |`;
   });
 
   return [
@@ -134,6 +143,31 @@ function renderOptionTable(command: CatalogCommand) {
   ].join('\n');
 }
 
+function renderDecisionGuideMarkdown(command: AgentCommandCatalogEntry) {
+  if (command.tasks.length === 0) return [] as string[];
+
+  const actionableGroups = command.decisionGuide.filter((group) => group.phase !== 'general');
+  if (actionableGroups.length === 0) {
+    return [
+      '',
+      '常用任务：',
+      ...command.tasks.map((task) => {
+        const commands = task.commands.length > 0 ? ` 起手式：${task.commands.map((item) => `\`${item}\``).join(' · ')}` : '';
+        return `- ${task.title}：${task.description}${commands}`;
+      })
+    ];
+  }
+
+  const lines = ['', '决策指南：'];
+  for (const group of actionableGroups) {
+    const descriptions = group.tasks.map((task) => `${task.title}：${task.description}`).join('；');
+    const commands = unique(group.tasks.flatMap((task) => task.commands));
+    const commandText = commands.length > 0 ? ` 起手式：${commands.map((item) => `\`${item}\``).join(' · ')}` : '';
+    lines.push(`- ${group.title}：${descriptions}${commandText}`);
+  }
+  return lines;
+}
+
 export function buildCommandReferenceSections(catalog: CommandCatalog = getCommandCatalog()): CommandReferenceSection[] {
   const assignedRoots = new Set<string>();
   const sections: CommandReferenceSection[] = [];
@@ -150,6 +184,7 @@ export function buildCommandReferenceSections(catalog: CommandCatalog = getComma
       roots,
       summary: config.summary,
       notes: [...(config.notes || [])],
+      taskHints: (config.taskHints || []).map((task) => ({ ...task, commands: [...(task.commands || [])] })),
       commands: sortCommands(
         catalog.commands.filter((command) => roots.includes(command.rootCommand)),
         roots
@@ -165,6 +200,7 @@ export function buildCommandReferenceSections(catalog: CommandCatalog = getComma
       roots: remainingRoots,
       summary: '当前尚未归类的命令。',
       notes: [],
+      taskHints: [],
       commands: sortCommands(
         catalog.commands.filter((command) => remainingRoots.includes(command.rootCommand)),
         remainingRoots
@@ -178,6 +214,7 @@ export function buildCommandReferenceSections(catalog: CommandCatalog = getComma
 export function buildAgentCommandCatalog(catalog: CommandCatalog = getCommandCatalog()): AgentCommandCatalogDocument {
   const sections = buildCommandReferenceSections(catalog);
   const sectionByRoot = new Map<string, CommandReferenceSection>();
+  const commandByKey = new Map(catalog.commands.map((command) => [command.key, command]));
   for (const section of sections) {
     for (const root of section.roots) {
       sectionByRoot.set(root, section);
@@ -202,27 +239,50 @@ export function buildAgentCommandCatalog(catalog: CommandCatalog = getCommandCat
       commandKeys: section.commands.map((command) => command.key)
     })),
     commands: sections.flatMap((section) => section.commands.map((command) => {
-      const metadata = getCommandMetadata(command.key);
+      const descriptor = getCommandDescriptor(command.key);
+      const subcommands = (catalog.childCommands[command.key] || [])
+        .map((child) => commandByKey.get(`${command.key} ${child}`))
+        .filter((child): child is CatalogCommand => Boolean(child))
+        .map((child) => ({
+          key: child.key,
+          rawName: child.rawName,
+          invocation: toLicellInvocation(child.rawName),
+          description: child.description
+        }));
+      const tasks = buildCommandTasks({ scope: 'command', enhancement: descriptor, subcommands });
+      const decisionGuide = groupCommandTasks(tasks);
+      const surface = buildCommandSurfaceMetadata({
+        scope: 'command',
+        key: command.key,
+        command,
+        subcommands,
+        descriptor,
+        extraTokens: []
+      });
       return {
         key: command.key,
         rawName: command.rawName,
-        invocation: toInvocation(command),
-        description: metadata.summary || command.description,
-        summary: metadata.summary,
+        invocation: toLicellInvocation(command.rawName),
+        title: descriptor.title,
+        description: descriptor.summary || command.description,
+        summary: descriptor.summary,
         rootCommand: command.rootCommand,
         args: command.args.map((arg) => ({ ...arg })),
         aliases: [...command.aliases],
         options: command.options.map((option) => ({ ...option, flags: [...option.flags] })),
         subcommands: [...(catalog.childCommands[command.key] || [])],
-        notes: [...(metadata.notes || [])],
-        examples: [...(metadata.examples || [])],
-        agentTips: [...(metadata.agentTips || [])],
-        actionHints: [...(metadata.actionHints || [])],
-        argumentHints: { ...(metadata.argumentHints || {}) },
-        relatedCommands: [...(metadata.related || [])],
-        safety: buildCommandSafetyMetadata(metadata),
-        optionInsights: buildCommandOptionInsights(command.options, metadata),
-        recommendedFlow: buildExplicitRecommendedFlow(metadata),
+        notes: [...(descriptor.notes || [])],
+        examples: surface.examples,
+        agentTips: surface.agentTips,
+        actionHints: [...(descriptor.actionHints || [])],
+        argumentHints: { ...(descriptor.argumentHints || {}) },
+        tasks,
+        decisionGuide,
+        relatedCommands: [...(descriptor.related || [])],
+        safety: surface.safety,
+        optionInsights: surface.optionInsights,
+        recommendedFlow: surface.recommendedFlow,
+        result: surface.result,
         sectionId: sectionByRoot.get(command.rootCommand)?.id || section.id,
         sectionTitle: sectionByRoot.get(command.rootCommand)?.title || section.title,
         generatedMcpToolName: canExposeCommandAsGeneratedMcpTool(command.rootCommand)
@@ -255,12 +315,23 @@ export function filterAgentCommandCatalog(
     agentTips: [...command.agentTips],
     actionHints: command.actionHints.map((hint) => ({ ...hint })),
     argumentHints: { ...command.argumentHints },
+    tasks: command.tasks.map((task) => ({ ...task, commands: [...task.commands] })),
+    decisionGuide: command.decisionGuide.map((group) => ({
+      ...group,
+      tasks: group.tasks.map((task) => ({ ...task, commands: [...task.commands] }))
+    })),
     relatedCommands: [...command.relatedCommands],
     safety: command.safety
       ? { ...command.safety, confirmFlags: [...command.safety.confirmFlags] }
       : undefined,
     optionInsights: command.optionInsights.map((insight) => ({ ...insight, cautions: [...insight.cautions] })),
-    recommendedFlow: command.recommendedFlow.map((step) => ({ ...step }))
+    recommendedFlow: command.recommendedFlow.map((step) => ({ ...step })),
+    result: command.result
+      ? {
+          ...command.result,
+          fields: command.result.fields.map((field) => ({ ...field }))
+        }
+      : undefined
   }));
 
   const allowedKeys = new Set(commands.map((command) => command.key));
@@ -320,7 +391,17 @@ export function renderSkillCommandReference(catalog: CommandCatalog = getCommand
 
     parts.push(renderCommandTable(section.commands));
 
-    const detailedCommands = section.commands.filter((command) => command.options.length > 0 || command.aliases.length > 0);
+    const detailedCommands = section.commands.filter((command) => {
+      const agentCommand = agentCommandByKey.get(command.key);
+      return command.options.length > 0
+        || command.aliases.length > 0
+        || Boolean(agentCommand?.result)
+        || Boolean(agentCommand?.notes.length)
+        || Boolean(agentCommand?.tasks.length)
+        || Boolean(agentCommand?.optionInsights.length)
+        || Boolean(agentCommand?.recommendedFlow.length)
+        || Boolean(agentCommand?.agentTips.length);
+    });
     for (const command of detailedCommands) {
       const metadata: string[] = [];
       if (command.args.length > 0) {
@@ -338,7 +419,7 @@ export function renderSkillCommandReference(catalog: CommandCatalog = getCommand
         metadata.push(`生成 MCP Tool：\`${generatedMcpToolName}\``);
       }
 
-      parts.push('', `#### \`${toInvocation(command)}\``);
+      parts.push('', `#### \`${toLicellInvocation(command.rawName)}\``);
       if (agentCommand?.description || command.description) {
         parts.push('', agentCommand?.description || command.description);
       }
@@ -349,11 +430,32 @@ export function renderSkillCommandReference(catalog: CommandCatalog = getCommand
         parts.push('', '说明：');
         for (const note of agentCommand.notes) parts.push(`- ${note}`);
       }
+      if (agentCommand?.examples.length) {
+        parts.push('', '示例命令：');
+        for (const example of agentCommand.examples) parts.push(`- \`${example}\``);
+      }
+      if (agentCommand) {
+        parts.push(...renderDecisionGuideMarkdown(agentCommand));
+      }
       if (agentCommand?.optionInsights.length) {
         parts.push('', '关键选项建议：');
         for (const insight of agentCommand.optionInsights) {
           const caution = insight.cautions.length > 0 ? ` 注意：${insight.cautions.join(' ')}` : '';
           parts.push(`- \`${insight.flag}\`：${insight.whenToUse}${caution}`);
+        }
+      }
+      if (agentCommand?.result) {
+        parts.push('', '结构化结果：');
+        if (agentCommand.result.summary) {
+          parts.push(`- ${agentCommand.result.summary}`);
+        }
+        parts.push('- `stage`：命令阶段标识。');
+        if (agentCommand.result.outcomeKey) {
+          parts.push(`- \`${agentCommand.result.outcomeKey}\`：结果布尔态字段。`);
+        }
+        for (const field of agentCommand.result.fields) {
+          const optional = field.required ? '' : '（可选）';
+          parts.push(`- \`${field.name}\`${optional}：${field.description}`);
         }
       }
       if (agentCommand?.recommendedFlow.length) {

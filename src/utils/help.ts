@@ -6,8 +6,6 @@ import {
   type CommandCatalog
 } from './command-catalog';
 import {
-  buildCommandOptionInsights,
-  buildCommandResultDescriptor,
   getCommandDescriptor,
   type CommandActionHint,
   type CommandDescriptor,
@@ -25,10 +23,11 @@ import {
 } from './command-tasks';
 import { buildCommandReferenceSections, type CommandReferenceSection } from './command-reference';
 import {
-  buildDerivedRecommendedFlow,
-  deriveCommandSafety,
-  deriveNamespaceSafety
-} from './command-semantics';
+  buildCommandSurfaceMetadata,
+  formatInvocationWithSelection,
+  stripArgsFromUsage,
+  toLicellInvocation
+} from './command-surface-metadata';
 
 export type HelpScope = 'root' | 'namespace' | 'command';
 
@@ -186,16 +185,6 @@ function compact(values: Array<string | undefined>) {
   return values.filter((value): value is string => Boolean(value && value.trim()));
 }
 
-function toInvocation(rawName: string) {
-  return `licell ${rawName}`.trim();
-}
-
-function formatInvocationWithSelection(command: CatalogCommand, extraTokens: string[]) {
-  const selected = extraTokens.slice(0, command.args.length);
-  const prefix = command.commandTokens.join(' ');
-  return selected.length > 0 ? `licell ${prefix} ${selected.join(' ')}` : toInvocation(command.rawName);
-}
-
 function sortEntries(entries: HelpCommandEntry[]) {
   return [...entries].sort((left, right) => left.key.localeCompare(right.key));
 }
@@ -204,7 +193,7 @@ function toHelpEntry(command: CatalogCommand, namespace = false): HelpCommandEnt
   return {
     key: command.key,
     rawName: command.rawName,
-    invocation: toInvocation(command.rawName),
+    invocation: toLicellInvocation(command.rawName),
     description: command.description,
     aliases: [...command.aliases],
     namespace
@@ -334,65 +323,6 @@ function buildDecisionGuideBlock(groups: HelpTaskGroup[], fallbackTasks: HelpTas
   return [{ kind: 'decision-guide', title: 'Decision Guide', groups, fallbackTasks }];
 }
 
-function buildNamespaceSafety(subcommands: HelpCommandEntry[]) {
-  const safety = deriveNamespaceSafety(subcommands);
-  if (!safety) return undefined;
-  return {
-    ...safety,
-    confirmFlags: []
-  } satisfies HelpSafetyDoc;
-}
-
-function buildCommandSafety(command: CatalogCommand, enhancement: CommandDescriptor): HelpSafetyDoc | undefined {
-  if (enhancement.safety?.level && enhancement.safety.reason) {
-    return {
-      level: enhancement.safety.level,
-      reason: enhancement.safety.reason,
-      confirmFlags: [...(enhancement.safety.confirmFlags || [])]
-    };
-  }
-
-  const confirmFlags = command.options
-    .map((option) => option.primaryFlag)
-    .filter((flag) => flag === '--yes' || flag === '--apply' || flag === '--force');
-  const safety = deriveCommandSafety(command.key);
-
-  if (!safety) return undefined;
-  return {
-    ...safety,
-    confirmFlags
-  };
-}
-
-function buildSafetyDoc(input: {
-  scope: HelpScope;
-  command?: CatalogCommand;
-  enhancement: CommandDescriptor;
-  subcommands: HelpCommandEntry[];
-}) {
-  if (input.scope === 'root') return undefined;
-  if (input.scope === 'namespace') return buildNamespaceSafety(input.subcommands);
-  if (!input.command) return undefined;
-  return buildCommandSafety(input.command, input.enhancement);
-}
-
-function buildRecommendedFlow(
-  scope: HelpScope,
-  enhancement: CommandDescriptor,
-  subcommands: HelpCommandEntry[]
-) {
-  if (enhancement.recommendedFlow && enhancement.recommendedFlow.length > 0) {
-    return enhancement.recommendedFlow.map((step) => ({
-      title: step.title,
-      command: step.command,
-      reason: step.reason
-    }));
-  }
-
-  if (scope !== 'namespace' || subcommands.length === 0) return [] as HelpFlowStep[];
-  return buildDerivedRecommendedFlow(subcommands);
-}
-
 function buildOptionGuidanceRows(insights: HelpOptionInsight[]) {
   return insights.map((insight) => ({
     label: insight.flag,
@@ -512,14 +442,6 @@ export function shouldRenderCustomHelp(argv: string[]) {
   return resolution.bareNamespaceRequested && resolution.scope === 'namespace';
 }
 
-export function stripArgsFromUsage(commandUsage: string) {
-  return commandUsage
-    .trim()
-    .split(/\s+/)
-    .filter((token) => !(token.startsWith('<') && token.endsWith('>')) && !(token.startsWith('[') && token.endsWith(']')))
-    .join(' ');
-}
-
 function buildRootSectionDocs(catalog: CommandCatalog, sections: CommandReferenceSection[]): HelpSectionDoc[] {
   return sections.map((section) => ({
     id: section.id,
@@ -575,54 +497,6 @@ function buildRelatedCommands(
       .slice(0, 5)
       .map((command) => toHelpEntry(command))
   );
-}
-
-function buildDefaultExamples(
-  scope: HelpScope,
-  key: string,
-  command: CatalogCommand | undefined,
-  subcommands: HelpCommandEntry[],
-  enhancement: CommandDescriptor,
-  extraTokens: string[]
-) {
-  if (enhancement.examples && enhancement.examples.length > 0) return [...enhancement.examples];
-  if (scope === 'root') return ['licell login', 'licell init', 'licell deploy', 'licell deploy --output json'];
-  if (scope === 'namespace') {
-    const examples = subcommands.slice(0, 3).map((entry) => entry.invocation);
-    if (subcommands.some((entry) => entry.key.endsWith(' list'))) {
-      const listEntry = subcommands.find((entry) => entry.key.endsWith(' list'));
-      if (listEntry) examples.unshift(`${listEntry.invocation} --output json`);
-    }
-    return unique(examples);
-  }
-  if (!command) return [];
-  const examples = [formatInvocationWithSelection(command, extraTokens)];
-  if (command.options.length > 0 && key !== 'mcp') {
-    examples.push(`${formatInvocationWithSelection(command, extraTokens)} --output json`);
-  }
-  if (subcommands.length > 0) {
-    examples.push(...subcommands.slice(0, 2).map((entry) => entry.invocation));
-  }
-  return unique(examples);
-}
-
-function buildDefaultAgentTips(
-  scope: HelpScope,
-  key: string,
-  enhancement: CommandDescriptor,
-  subcommands: HelpCommandEntry[]
-) {
-  const defaults: string[] = [];
-  if (scope !== 'root') {
-    defaults.push('自动化调用时优先追加 `--output json`，获取稳定的结构化结果。');
-  }
-  if (scope === 'namespace' && subcommands.length > 0) {
-    defaults.push('先执行只读子命令（如 list/info/check/spec）获取现状，再执行变更命令。');
-  }
-  if (key === 'mcp') {
-    defaults.push('真正启动 `mcp serve` 时不要传 `--output json`，否则会破坏 stdio JSON-RPC 输出。');
-  }
-  return unique([...(enhancement.agentTips || []), ...defaults]);
 }
 
 function buildRootHelpBlocks(doc: Omit<HelpDocument, 'blocks' | 'text'>): HelpBlock[] {
@@ -854,6 +728,13 @@ export function buildHelpDocument(input: {
       subcommands: [],
       sectionTasks: sections.flatMap((section) => section.taskHints || [])
     });
+    const surface = buildCommandSurfaceMetadata({
+      scope: 'root',
+      key: 'help',
+      descriptor: enhancement,
+      subcommands: [],
+      extraTokens: []
+    });
     return finalizeHelpDocument({
       version: input.version,
       scope: 'root',
@@ -874,14 +755,14 @@ export function buildHelpDocument(input: {
       tasks,
       decisionGuide: groupCommandTasks(tasks),
       notes: [...(enhancement.notes || [])],
-      examples: buildDefaultExamples('root', 'help', undefined, [], enhancement, []),
-      agentTips: buildDefaultAgentTips('root', 'help', enhancement, []),
+      examples: surface.examples,
+      agentTips: surface.agentTips,
       relatedCommands: [],
       sections: buildRootSectionDocs(catalog, sections),
-      safety: undefined,
-      result: undefined,
-      optionInsights: buildCommandOptionInsights([], enhancement),
-      recommendedFlow: buildRecommendedFlow('root', enhancement, [])
+      safety: surface.safety,
+      result: surface.result,
+      optionInsights: surface.optionInsights,
+      recommendedFlow: surface.recommendedFlow
     });
   }
 
@@ -891,6 +772,13 @@ export function buildHelpDocument(input: {
     const section = getSectionForRoot(rootCommand, sections);
     const subcommands = buildImmediateChildren(resolution.key, catalog);
     const tasks = buildCommandTasks({ scope: 'namespace', enhancement, subcommands });
+    const surface = buildCommandSurfaceMetadata({
+      scope: 'namespace',
+      key: resolution.key,
+      descriptor: enhancement,
+      subcommands,
+      extraTokens: resolution.extraTokens
+    });
     return finalizeHelpDocument({
       version: input.version,
       scope: 'namespace',
@@ -910,14 +798,14 @@ export function buildHelpDocument(input: {
       tasks,
       decisionGuide: groupCommandTasks(tasks),
       notes: [...(enhancement.notes || [])],
-      examples: buildDefaultExamples('namespace', resolution.key, undefined, subcommands, enhancement, resolution.extraTokens),
-      agentTips: buildDefaultAgentTips('namespace', resolution.key, enhancement, subcommands),
+      examples: surface.examples,
+      agentTips: surface.agentTips,
       relatedCommands: buildRelatedCommands(resolution.key, rootCommand, catalog, enhancement, subcommands),
       sections: [],
-      safety: buildSafetyDoc({ scope: 'namespace', enhancement, subcommands }),
-      result: undefined,
-      optionInsights: buildCommandOptionInsights([], enhancement),
-      recommendedFlow: buildRecommendedFlow('namespace', enhancement, subcommands)
+      safety: surface.safety,
+      result: surface.result,
+      optionInsights: surface.optionInsights,
+      recommendedFlow: surface.recommendedFlow
     });
   }
 
@@ -927,15 +815,23 @@ export function buildHelpDocument(input: {
   const argumentHints = enhancement.argumentHints || {};
   const args = command.args.map((arg) => ({ ...arg, hint: argumentHints[arg.name] }));
   const tasks = buildCommandTasks({ scope: 'command', enhancement, subcommands });
+  const surface = buildCommandSurfaceMetadata({
+    scope: 'command',
+    key: command.key,
+    command,
+    descriptor: enhancement,
+    subcommands,
+    extraTokens: resolution.extraTokens
+  });
 
   return finalizeHelpDocument({
     version: input.version,
     scope: 'command',
     key: command.key,
-    title: toInvocation(command.rawName),
+    title: toLicellInvocation(command.rawName),
     summary: enhancement.summary || command.description,
     usage: unique([
-      toInvocation(command.rawName),
+      toLicellInvocation(command.rawName),
       formatInvocationWithSelection(command, resolution.extraTokens),
       ...subcommands.slice(0, 4).map((entry) => entry.invocation)
     ]),
@@ -948,16 +844,18 @@ export function buildHelpDocument(input: {
     tasks,
     decisionGuide: groupCommandTasks(tasks),
     notes: [...(enhancement.notes || [])],
-    examples: buildDefaultExamples('command', command.key, command, subcommands, enhancement, resolution.extraTokens),
-    agentTips: buildDefaultAgentTips('command', command.key, enhancement, subcommands),
+    examples: surface.examples,
+    agentTips: surface.agentTips,
     relatedCommands: buildRelatedCommands(command.key, command.rootCommand, catalog, enhancement, subcommands),
     sections: [],
-    safety: buildSafetyDoc({ scope: 'command', command, enhancement, subcommands }),
-    result: buildCommandResultDescriptor(enhancement),
-    optionInsights: buildCommandOptionInsights(command.options, enhancement),
-    recommendedFlow: buildRecommendedFlow('command', enhancement, subcommands)
+    safety: surface.safety,
+    result: surface.result,
+    optionInsights: surface.optionInsights,
+    recommendedFlow: surface.recommendedFlow
   });
 }
+
+export { stripArgsFromUsage };
 
 export function renderHelpDocument(input: { argv: string[]; version: string; catalog?: CommandCatalog }) {
   return buildHelpDocument(input)?.text || '';

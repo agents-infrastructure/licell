@@ -7,7 +7,8 @@ describe('getGeneratedDocTargets', () => {
     expect(targets.map((target) => target.id)).toEqual([
       'readme',
       'agent-surfaces',
-      'scenario-ai-driven-deployment'
+      'scenario-ai-driven-deployment',
+      'scenario-domain-and-https'
     ]);
   });
 });

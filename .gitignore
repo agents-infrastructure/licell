@@ -34,3 +34,7 @@ core
 
 # Lock files (bun.lock is committed intentionally)
 # bun.lock
+
+# Local MCP / temp artifacts
+.mcp.json
+.tmp/

@@ -6,6 +6,15 @@ describe('getBuiltinMcpTools', () => {
     const tools = getBuiltinMcpTools();
     expect(tools).toHaveProperty('licell_cli');
     expect(tools).toHaveProperty('licell_command_catalog');
+    expect(tools.licell_cli.title).toBe('Deploy & manage Aliyun services (licell)');
+    expect(tools.licell_cli.metadata?.licell.toolKind).toBe('builtin');
+    expect(tools.licell_cli.metadata?.licell.openWorld).toBe(true);
+    expect(tools.licell_cli.metadata?.licell.summary).toContain('deploy API/static services');
+    expect(tools.licell_cli.metadata?.licell.description).toContain('Returns stdout/stderr');
+    expect(tools.licell_cli.description).toContain('Decision guide:');
+    expect(tools.licell_cli.description).toContain('licell_command_catalog');
+    expect(tools.licell_command_catalog.metadata?.licell.decisionGuide.some((group) => group.phase === 'inspect')).toBe(true);
+    expect(tools.licell_command_catalog.description).toContain('Decision guide:');
   });
 
   it('validates licell_cli argv input', () => {

@@ -136,6 +136,8 @@ licell deploy check --runtime nodejs22 --entry src/index.ts
 | `licell_fc_deploy_check` | `licell deploy check` | 只读预检当前项目，提前发现 handler、入口文件或 Docker 环境问题，并给出可执行修复建议。 |
 | `licell_deploy` | `licell deploy` | 在前两步通过后执行正式部署，将当前项目发布到阿里云。 |
 
+- Workflow：标准 FC API 部署链路：先读取部署规格，再做本地预检，最后执行正式部署。
+
 - 建议顺序：`licell_fc_deploy_spec` → `licell_fc_deploy_check` → `licell_deploy`
 <!-- END GENERATED:README_MCP_FC_API_WORKFLOW -->
 
@@ -534,12 +536,18 @@ CDN，并回源到 OSS 地址，同时默认启用 HTTPS 证书签发与 CDN 证
 | `licell fn invoke [name]` | 调用函数（同步） | `--target`, `--payload`, `--file` |
 | `licell fn list` | 查看函数列表 | `--limit`, `--prefix` |
 | `licell fn rm [name]` | 删除函数 | `--force`, `--yes` |
+| `licell fn domain bind <domain>` | 绑定或更新 FC 自定义域名（资源级，不默认改 DNS） | `--function`, `--target`, `--path` |
+| `licell fn domain info <domain>` | 查看 FC 自定义域名详情 | — |
+| `licell fn domain list` | 查看 FC 自定义域名列表 | `--limit`, `--prefix` |
+| `licell fn domain unbind <domain>` | 解绑 FC 自定义域名 | `--cleanup-dns`, `--yes` |
 | `licell env list` | 查看云端环境变量 | `--target`, `--show-values` |
 | `licell env pull` | 拉取云端环境变量 | `--target` |
 | `licell env rm <key>` | 删除云端环境变量（并同步本地 .licell/project.json） | `--yes` |
 | `licell env set <key> <value>` | 设置云端环境变量（并同步本地 .licell/project.json） | — |
-| `licell domain add <domain>` | 绑定自定义域名 | `--ssl`, `--ssl-force-renew`, `--target` |
-| `licell domain rm <domain>` | 解绑自定义域名并清理 DNS CNAME | `--yes` |
+| `licell domain app bind <domain>` | 为当前应用编排 DNS、函数域名与可选 SSL | `--ssl`, `--ssl-force-renew`, `--target` |
+| `licell domain app unbind <domain>` | 解绑当前应用域名，并清理 FC custom domain / DNS CNAME | `--yes` |
+| `licell domain static bind <domain>` | 为静态站点编排 CDN、DNS 与可选 HTTPS | `--bucket`, `--ssl`, `--ssl-force-renew` |
+| `licell domain static unbind <domain>` | 解绑静态站点域名，并清理 CDN / DNS | `--yes` |
 | `licell dns records add <domain>` | 添加域名解析记录 | `--rr`, `--type`, `--value` |
 | `licell dns records list [domain]` | 查看域名解析记录 | `--limit` |
 | `licell dns records rm <recordId>` | 删除域名解析记录 | `--yes` |
@@ -553,8 +561,8 @@ CDN，并回源到 OSS 地址，同时默认启用 HTTPS 证书签发与 CDN 证
 | `licell oss upload [bucket]` | 上传本地目录到 OSS Bucket 指定目录 | `--bucket`, `--source-dir`, `--target-dir` |
 | `licell oss domain bind <bucket> <domain>` | 为 Bucket 绑定原生 OSS 自定义域名 | — |
 | `licell oss domain list <bucket>` | 查看 Bucket 已绑定的原生 OSS 域名 | — |
-| `licell oss domain rm <bucket> <domain>` | 解绑 Bucket 原生 OSS 自定义域名 | `--yes` |
 | `licell oss domain token <bucket> <domain>` | 为 Bucket 自定义域名生成 TXT 验证 token | — |
+| `licell oss domain unbind <bucket> <domain>` | 解绑 Bucket 原生 OSS 自定义域名 | `--yes` |
 | `licell oss object get <bucket> <key> [file]` | 下载 OSS 对象到本地文件 | `--file` |
 | `licell oss object info <bucket> <key>` | 查看 OSS 对象元数据 | — |
 | `licell oss object rm <bucket> <key>` | 删除 OSS 对象 | `--yes` |
@@ -722,6 +730,58 @@ licell deploy --type api --target preview --domain api.your-domain.xyz
 - `--enable-cdn` 在 API 场景下表示显式开启；Static 提供域名时默认开启
 - 默认续签阈值 30 天
 - 域名需托管在阿里云 DNS
+
+<!-- BEGIN GENERATED:README_MCP_DOMAIN_WORKFLOWS -->
+`licell mcp` 也提供共享的域名编排 workflow 工具：
+
+#### 应用域名绑定
+
+通过一个入口同时编排 DNS、FC custom domain 与可选 HTTPS。
+
+| Tool | 对应 CLI | 用途 |
+|------|----------|------|
+| `licell_domain_app_bind` | `licell domain app bind` | 为当前应用绑定自定义域名，编排 DNS、FC custom domain 与可选 HTTPS。 |
+
+- Workflow：应用域名接入链路：绑定 FC custom domain、对齐 DNS，并可选自动签发 HTTPS。
+
+- 建议顺序：`licell_domain_app_bind`
+
+#### 静态站点域名绑定
+
+通过一个入口同时编排 CDN、DNS 与可选 HTTPS。
+
+| Tool | 对应 CLI | 用途 |
+|------|----------|------|
+| `licell_domain_static_bind` | `licell domain static bind` | 为静态站点绑定自定义域名，编排 CDN、DNS 与可选 HTTPS。 |
+
+- Workflow：静态站点域名接入链路：把域名接到 CDN、对齐 DNS，并可选自动启用 HTTPS。
+
+- 建议顺序：`licell_domain_static_bind`
+
+#### 应用域名解绑
+
+通过一个入口下线应用域名，并清理 FC custom domain / DNS。
+
+| Tool | 对应 CLI | 用途 |
+|------|----------|------|
+| `licell_domain_app_unbind` | `licell domain app unbind` | 解绑当前应用域名，并清理 FC custom domain / DNS CNAME。 |
+
+- Workflow：应用域名下线链路：解绑 FC custom domain，并清理对应 DNS CNAME。
+
+- 建议顺序：`licell_domain_app_unbind`
+
+#### 静态站点域名解绑
+
+通过一个入口下线静态站点域名，并清理 CDN / DNS。
+
+| Tool | 对应 CLI | 用途 |
+|------|----------|------|
+| `licell_domain_static_unbind` | `licell domain static unbind` | 解绑静态站点域名，并清理 CDN domain / DNS CNAME。 |
+
+- Workflow：静态站点域名下线链路：移除 CDN domain，并清理对应 DNS CNAME。
+
+- 建议顺序：`licell_domain_static_unbind`
+<!-- END GENERATED:README_MCP_DOMAIN_WORKFLOWS -->
 
 ## 9. 进阶：数据库与缓存
 

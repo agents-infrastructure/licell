@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   LICELL_JSON_PREFIX,
   buildCliErrorRecord,
+  emitCommandResult,
   extractJsonRecordsFromOutput,
   initOutputContext,
   parseGlobalOutputModeArgv
@@ -87,5 +88,36 @@ describe('output utils', () => {
     expect(records).toHaveLength(2);
     expect(records[0].type).toBe('event');
     expect(records[1].type).toBe('result');
+  });
+
+  it('auto-infers stage and bound outcome from command context', () => {
+    initOutputContext('json', ['node', 'src/cli.ts', 'domain', 'app', 'bind']);
+    const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+
+    emitCommandResult({ domain: 'api.example.com' });
+
+    const raw = writeSpy.mock.calls.map((args) => String(args[0])).join('');
+    const records = extractJsonRecordsFromOutput(raw) as any[];
+    expect(records).toHaveLength(1);
+    expect(records[0].stage).toBe('domain.app.bind');
+    expect(records[0].bound).toBe(true);
+    expect(records[0].domain).toBe('api.example.com');
+
+    writeSpy.mockRestore();
+  });
+
+  it('preserves explicit outcome fields when emitting command result', () => {
+    initOutputContext('json', ['node', 'src/cli.ts', 'oss', 'domain', 'unbind']);
+    const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+
+    emitCommandResult({ bucket: 'demo-bucket', domain: 'static.example.com', unbound: false });
+
+    const raw = writeSpy.mock.calls.map((args) => String(args[0])).join('');
+    const records = extractJsonRecordsFromOutput(raw) as any[];
+    expect(records).toHaveLength(1);
+    expect(records[0].stage).toBe('oss.domain.unbind');
+    expect(records[0].unbound).toBe(false);
+
+    writeSpy.mockRestore();
   });
 });

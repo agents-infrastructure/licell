@@ -1,19 +1,19 @@
-import { confirm, text, isCancel, type spinner } from '@clack/prompts';
+import { text, isCancel, type spinner } from '@clack/prompts';
 import pc from 'picocolors';
-import { Config } from '../utils/config';
 import { deployOSS, resolveOssBucketName } from '../providers/oss';
-import { enableCdnForDomain } from '../providers/cdn';
 import { issueAndBindSSLWithArtifacts } from '../providers/ssl';
+import { bindStaticDomainWorkflow } from '../workflows/domain';
+import { bindFunctionPreviewDomainWorkflow } from '../workflows/preview';
 import { probeHttpHealth } from '../utils/health-check';
 import { detectStaticDistDir } from '../utils/static-dist';
 import { toPromptValue, withSpinner } from '../utils/cli-shared';
-import { ensureWildcardCname } from '../providers/domain.js';
 import {
   deployStaticProxyFunction,
   publishStaticProxyVersion,
   resolveStaticProxyFunctionName
 } from '../providers/fc/static-proxy.js';
 import type { DeployContext } from './deploy-context.js';
+import { confirmPreviewWildcardDns } from './deploy-preview';
 
 export interface StaticDeployResult {
   url: string;
@@ -29,13 +29,6 @@ function resolveStaticFixedDomain(ctx: DeployContext) {
   return undefined;
 }
 
-function resolveOriginDomain(url: string) {
-  try {
-    return new URL(url).host;
-  } catch {
-    throw new Error(`无法解析 OSS 源站域名: ${url}`);
-  }
-}
 
 export async function executeStaticDeploy(
   ctx: DeployContext,
@@ -58,42 +51,39 @@ export async function executeStaticDeploy(
     '☁️ 正在递归上传静态资源到 OSS 边缘节点...',
     '❌ 部署失败',
     async () => {
+      const bucketName = resolveOssBucketName(ctx.appName);
       const url = await deployOSS(ctx.appName, dist);
       if (!fixedDomain) {
         return { url, fixedDomain: undefined };
       }
 
-      const originDomain = resolveOriginDomain(url);
-      let sslArtifacts: { certificate?: string; privateKey?: string } | undefined;
+      let tlsArtifacts: { certificate?: string; privateKey?: string } | undefined;
       if (ctx.enableSSL) {
         s.message(`静态资源上传完成，正在签发 HTTPS 证书 (${fixedDomain})...`);
         const sslResult = await issueAndBindSSLWithArtifacts(fixedDomain, s, {
           forceRenew: ctx.forceSslRenew,
           bindToFcDomain: false
         });
-        sslArtifacts = {
+        tlsArtifacts = {
           certificate: sslResult.certificate,
           privateKey: sslResult.privateKey
         };
       }
 
-      s.message(`静态资源上传完成，正在接入 CDN 并回源 OSS (${fixedDomain})...`);
-      const cdnResult = await enableCdnForDomain(fixedDomain, originDomain, {
-        ...sslArtifacts,
-        sourceType: 'oss'
+      s.message(`静态资源上传完成，正在执行静态域名 workflow (${fixedDomain})...`);
+      const domainResult = await bindStaticDomainWorkflow(fixedDomain, {
+        bucketName,
+        tlsArtifacts,
+        preferHttps: ctx.enableSSL
       });
-      s.message(
-        cdnResult.created
-          ? `✅ CDN 加速已启用，CNAME=${cdnResult.cdnCname}`
-          : `✅ CDN 加速已存在，已校准 DNS 到 CNAME=${cdnResult.cdnCname}`
-      );
-      if (ctx.enableSSL && cdnResult.httpsConfigured) {
+      s.message(`✅ CDN 加速已校准，CNAME=${domainResult.cdnCname}`);
+      if (ctx.enableSSL && domainResult.httpsConfigured) {
         s.message('✅ CDN 边缘 HTTPS 已自动配置。');
       }
-      if (ctx.enableSSL && !cdnResult.httpsConfigured) {
+      if (ctx.enableSSL && !domainResult.httpsConfigured) {
         s.message('⚠️ 未能自动配置 CDN 边缘 HTTPS（未获取到可用证书），请在 CDN 控制台补充证书。');
       }
-      return { url, fixedDomain };
+      return { url, fixedDomain: domainResult.domainName };
     }
   );
   if (!staticDeployResult) return undefined;
@@ -140,9 +130,7 @@ async function executeStaticPreviewDeploy(
   s: ReturnType<typeof spinner>,
   dist: string
 ): Promise<StaticDeployResult | undefined> {
-  const auth = Config.requireAuth();
   const bucketName = resolveOssBucketName(ctx.appName);
-  const fcOriginDomain = `${auth.accountId}.${auth.region}.fc.aliyuncs.com`;
 
   const staticPreviewResult = await withSpinner(
     s,
@@ -175,52 +163,27 @@ async function executeStaticPreviewDeploy(
       );
       const versionId = await publishStaticProxyVersion(ctx.appName);
 
-      // Step 5: Generate preview domain
-      const previewDomain = `${ctx.appName}-preview-v${versionId}.${ctx.domainSuffix}`;
-
-      // Step 6: Ensure wildcard DNS
-      s.message(`正在确保通配符 DNS (*.${ctx.domainSuffix}) 存在...`);
-      const wildcardResult = await ensureWildcardCname(
-        ctx.domainSuffix!,
-        fcOriginDomain,
-        {
-          interactiveTTY: ctx.interactiveTTY,
-          onConfirm: async () => {
-            const result = await confirm({
-              message: `检测到尚未配置通配符 DNS (*.${ctx.domainSuffix})。\n` +
-                `创建后，所有 preview 子域名将自动解析到 FC 网关。\n` +
-                `已有的精确 DNS 记录（如 ${ctx.appName}.${ctx.domainSuffix}）不受影响。\n` +
-                `是否创建？`
-            });
-            if (isCancel(result)) return false;
-            return result;
-          }
-        }
-      );
-      if (wildcardResult.skipped) {
+      // Step 5: Bind preview domain through shared workflow
+      s.message(`正在配置预览域名 (${ctx.domainSuffix})...`);
+      const previewResult = await bindFunctionPreviewDomainWorkflow(ctx.appName, {
+        functionName: proxyFunctionName,
+        qualifier: versionId,
+        domainSuffix: ctx.domainSuffix!,
+        interactiveTTY: ctx.interactiveTTY,
+        onConfirmWildcardDns: () => confirmPreviewWildcardDns(ctx.domainSuffix!, ctx.appName),
+        enableHttps: ctx.enableSSL,
+        forceSslRenew: ctx.forceSslRenew,
+        spinner: s
+      });
+      if (previewResult.wildcardResult.skipped) {
         s.message(pc.yellow('⚠️ 已跳过通配符 DNS 创建，preview 域名可能无法访问'));
-      } else if (wildcardResult.created) {
-        s.message(`✅ 通配符 DNS 已创建: ${wildcardResult.wildcardDomain} → ${wildcardResult.targetValue}`);
-      }
-
-      // Step 7: Bind custom domain for static proxy
-      s.message(`正在绑定预览域名 ${previewDomain}...`);
-      await bindCustomDomainForStaticProxy(
-        previewDomain,
-        fcOriginDomain,
-        proxyFunctionName,
-        versionId
-      );
-
-      // Step 8: Issue SSL if enabled
-      if (ctx.enableSSL) {
-        s.message(`预览域名绑定完成，正在签发 HTTPS 证书 (${previewDomain})...`);
-        await issueAndBindSSLWithArtifacts(previewDomain, s, { forceRenew: ctx.forceSslRenew });
+      } else if (previewResult.wildcardResult.created) {
+        s.message(`✅ 通配符 DNS 已创建: ${previewResult.wildcardResult.wildcardDomain} → ${previewResult.wildcardResult.targetValue}`);
       }
 
       return {
         url,
-        previewDomain,
+        previewDomain: previewResult.previewDomain,
         previewVersion: versionId
       };
     }
@@ -265,42 +228,4 @@ async function executeStaticPreviewDeploy(
     previewVersion,
     healthCheckLogs
   };
-}
-
-async function bindCustomDomainForStaticProxy(
-  domainName: string,
-  targetFcDomain: string,
-  functionName: string,
-  versionId: string
-) {
-  const { createSharedFcClient } = await import('../utils/sdk');
-  const $FC = await import('@alicloud/fc20230330');
-  const { isConflictError } = await import('../utils/alicloud-error');
-
-  const { client: fcClient } = createSharedFcClient();
-
-  const routeConfig = {
-    routes: [{
-      path: '/*',
-      functionName,
-      qualifier: versionId
-    }]
-  };
-
-  const domainInput = new $FC.CreateCustomDomainInput({
-    domainName,
-    protocol: 'HTTP',
-    routeConfig
-  });
-
-  try {
-    await fcClient.createCustomDomain(new $FC.CreateCustomDomainRequest({
-      body: domainInput
-    }));
-  } catch (err: unknown) {
-    if (!isConflictError(err)) throw err;
-    await fcClient.updateCustomDomain(domainName, new $FC.UpdateCustomDomainRequest({
-      body: new $FC.UpdateCustomDomainInput({ routeConfig })
-    }));
-  }
 }

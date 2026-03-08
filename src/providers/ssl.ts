@@ -1,6 +1,5 @@
 import * as acme from 'acme-client';
 import Alidns, * as $Alidns from '@alicloud/alidns20150109';
-import * as $FC from '@alicloud/fc20230330';
 import * as $OpenApi from '@alicloud/openapi-client';
 import { createPrivateKey, X509Certificate } from 'crypto';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
@@ -11,8 +10,9 @@ import { parseRootAndSubdomain } from '../utils/domain';
 import type { Spinner } from '../utils/errors';
 import { sleep } from '../utils/runtime';
 import { withRetry } from '../utils/retry';
-import { createSharedFcClient, resolveSdkCtor } from '../utils/sdk';
+import { resolveSdkCtor } from '../utils/sdk';
 import { readLicellEnv } from '../utils/env';
+import { getFnCustomDomain, updateFnCustomDomain } from './fc/custom-domain';
 
 const ACME_KEY_PATH = join(homedir(), '.licell-cli', 'acme-account.pem');
 const AlidnsClientCtor = resolveSdkCtor<Alidns>(Alidns, '@alicloud/alidns20150109');
@@ -234,7 +234,6 @@ export async function issueAndBindSSLWithArtifacts(
     connectTimeout: 10000,
     readTimeout: 600000
   }));
-  const fcClient = bindToFcDomain ? createSharedFcClient(auth).client : undefined;
   const resolvedOptions: ResolvedIssueSslOptions = {
     forceRenew: Boolean(options?.forceRenew),
     renewBeforeDays: resolveRenewBeforeDays(options?.renewBeforeDays ?? readLicellEnv(process.env, 'SSL_RENEW_BEFORE_DAYS'))
@@ -245,14 +244,13 @@ export async function issueAndBindSSLWithArtifacts(
 
   let existingDomain: ExistingDomainLike | null = null;
 
-  if (fcClient) {
+  if (bindToFcDomain) {
     try {
-      const existingDomainResponse = await withRetry(() => fcClient.getCustomDomain(domain));
-      existingDomain = existingDomainResponse.body as ExistingDomainLike;
+      existingDomain = await getFnCustomDomain(domain) as ExistingDomainLike | null;
     } catch { /* best-effort: existing domain query may fail if domain not yet bound */ }
   }
 
-  const decision = fcClient
+  const decision = bindToFcDomain
     ? shouldIssueNewCertificate(existingDomain, resolvedOptions)
     : {
       issue: true,
@@ -335,14 +333,12 @@ export async function issueAndBindSSLWithArtifacts(
   });
 
   const privateKeyPem = toFcPemPrivateKey(certKey);
-  if (fcClient) {
+  if (bindToFcDomain) {
     spinner.message('📦 证书下发成功，正在自动挂载至云端网关开启 HTTPS...');
-    await withRetry(() => fcClient.updateCustomDomain(domain, new $FC.UpdateCustomDomainRequest({
-      body: new $FC.UpdateCustomDomainInput({
-        protocol: 'HTTP,HTTPS',
-        certConfig: { certName: `licell-cert-${Date.now()}`, certificate: cert.toString(), privateKey: privateKeyPem }
-      })
-    })));
+    await updateFnCustomDomain(domain, {
+      protocol: 'HTTP,HTTPS',
+      certConfig: { certName: `licell-cert-${Date.now()}`, certificate: cert.toString(), privateKey: privateKeyPem }
+    });
   } else {
     spinner.message('📦 证书下发成功，正在用于 CDN 边缘 HTTPS 配置...');
   }

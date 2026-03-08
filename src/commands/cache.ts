@@ -1,5 +1,5 @@
 import type { CAC } from 'cac';
-import type { CommandMetadataMap } from './module';
+import { defineCommandModule, commandInvocation, defineCliCommand, registerCliCommand } from './module';
 import { select, confirm, isCancel } from '@clack/prompts';
 import pc from 'picocolors';
 import { maskConnectionString } from '../utils/cli-helpers';
@@ -27,23 +27,93 @@ import {
   withSpinner
 } from '../utils/cli-shared';
 import { emitCliResult, isJsonOutput } from '../utils/output';
+import { DATA_SECTION } from './sections';
+
+const cacheAddOptions = [
+  { rawName: '--type <type>', description: '缓存类型：redis（CI 场景建议显式传入）' },
+  { rawName: '--instance <instanceId>', description: '绑定已有实例 ID（tt-/tk-/r-），传入后跳过创建' },
+  { rawName: '--password <password>', description: '绑定已有实例时的访问密码（不传则尝试自动轮换）' },
+  { rawName: '--username <accountName>', description: '绑定已有实例时指定账号名（可选）' },
+  { rawName: '--engine-version <version>', description: '旧版 Redis 参数（Tair Serverless KV 模式下不支持）' },
+  { rawName: '--class <instanceClass>', description: 'Tair Serverless KV 规格（如 kvcache.cu.g4b.2）' },
+  { rawName: '--node-type <type>', description: '旧版 Redis 参数（Tair Serverless KV 模式下不支持）' },
+  { rawName: '--capacity <mb>', description: '旧版 Redis 参数（Tair Serverless KV 模式下不支持）' },
+  { rawName: '--vk-name <vkName>', description: 'Tair KV 回退模式使用的 vkName（tk- 开头，不传则自动探测）' },
+  { rawName: '--compute-unit <n>', description: 'Tair Serverless KV 计算单元（当前仅支持 1）' },
+  { rawName: '--zone <zoneId>', description: '可用区（如 cn-hangzhou-b）' },
+  { rawName: '--vpc <vpcId>', description: '指定 VPC ID' },
+  { rawName: '--vsw <vSwitchId>', description: '指定 VSwitch ID' },
+  { rawName: '--security-ip-list <cidrs>', description: '白名单 CIDR（逗号分隔）' }
+] as const;
+
+const cacheAddCommand = defineCliCommand({
+  rawName: 'cache add',
+  description: '分配 Redis 缓存',
+  options: cacheAddOptions
+});
+
+const cacheListCommand = defineCliCommand({
+  rawName: 'cache list',
+  description: '查看缓存实例列表',
+  options: [
+    { rawName: '--limit <n>', description: '返回数量，默认 20' }
+  ]
+});
+
+const cacheInfoCommand = defineCliCommand({
+  rawName: 'cache info <instanceId>',
+  description: '查看缓存实例详情'
+});
+
+const cacheConnectCommand = defineCliCommand({
+  rawName: 'cache connect [instanceId]',
+  description: '输出缓存连接信息'
+});
+
+const cacheRotatePasswordCommand = defineCliCommand({
+  rawName: 'cache rotate-password',
+  description: '轮换 Redis 密码',
+  options: [
+    { rawName: '--instance <instanceId>', description: '指定 Redis 实例 ID，不传则使用当前项目绑定实例' }
+  ],
+  descriptor: {
+    safety: {
+      level: 'destructive',
+      reason: '会轮换 Redis 密码，现有连接配置可能立即失效。'
+    }
+  }
+});
+
+const cachePublicAccessCommand = defineCliCommand({
+  rawName: 'cache public-access [instanceId]',
+  description: '开通 Redis 公网访问并添加当前 IP 到白名单',
+  options: [
+    { rawName: '--ip <ip>', description: '手动指定公网 IP（不传则自动获取）' }
+  ],
+  descriptor: {
+    safety: {
+      level: 'destructive',
+      reason: '会开启缓存公网访问并修改白名单。'
+    }
+  }
+});
+
+const cacheRmCommand = defineCliCommand({
+  rawName: 'cache rm <instanceId>',
+  description: '删除缓存实例',
+  options: [
+    { rawName: '--yes', description: '跳过确认' }
+  ],
+  descriptor: {
+    safety: {
+      level: 'destructive',
+      reason: '会删除缓存实例，请确认实例 ID。'
+    }
+  }
+});
 
 export function registerCacheCommands(cli: CAC) {
-  cli.command('cache add', '分配 Redis 缓存')
-    .option('--type <type>', '缓存类型：redis（CI 场景建议显式传入）')
-    .option('--instance <instanceId>', '绑定已有实例 ID（tt-/tk-/r-），传入后跳过创建')
-    .option('--password <password>', '绑定已有实例时的访问密码（不传则尝试自动轮换）')
-    .option('--username <accountName>', '绑定已有实例时指定账号名（可选）')
-    .option('--engine-version <version>', '旧版 Redis 参数（Tair Serverless KV 模式下不支持）')
-    .option('--class <instanceClass>', 'Tair Serverless KV 规格（如 kvcache.cu.g4b.2）')
-    .option('--node-type <type>', '旧版 Redis 参数（Tair Serverless KV 模式下不支持）')
-    .option('--capacity <mb>', '旧版 Redis 参数（Tair Serverless KV 模式下不支持）')
-    .option('--vk-name <vkName>', 'Tair KV 回退模式使用的 vkName（tk- 开头，不传则自动探测）')
-    .option('--compute-unit <n>', 'Tair Serverless KV 计算单元（当前仅支持 1）')
-    .option('--zone <zoneId>', '可用区（如 cn-hangzhou-b）')
-    .option('--vpc <vpcId>', '指定 VPC ID')
-    .option('--vsw <vSwitchId>', '指定 VSwitch ID')
-    .option('--security-ip-list <cidrs>', '白名单 CIDR（逗号分隔）')
+  registerCliCommand(cli, cacheAddCommand)
     .action(async (options: {
       type?: unknown;
       instance?: unknown;
@@ -62,7 +132,7 @@ export function registerCacheCommands(cli: CAC) {
     }) => {
       await executeWithAuthRecovery(
         {
-          commandLabel: 'licell cache add',
+          commandLabel: commandInvocation(cacheAddCommand),
           interactiveTTY: isInteractiveTTY(),
           requiredCapabilities: ['redis', 'vpc']
         },
@@ -122,14 +192,13 @@ export function registerCacheCommands(cli: CAC) {
           showOutro('下次执行 licell deploy 时，将自动作为 process.env.REDIS_URL 注入！');
         }
       );
-  });
+    });
 
-  cli.command('cache list', '查看缓存实例列表')
-    .option('--limit <n>', '返回数量，默认 20')
+  registerCliCommand(cli, cacheListCommand)
     .action(async (options: { limit?: unknown }) => {
       await executeWithAuthRecovery(
         {
-          commandLabel: 'licell cache list',
+          commandLabel: commandInvocation(cacheListCommand),
           interactiveTTY: isInteractiveTTY(),
           requiredCapabilities: ['redis']
         },
@@ -170,11 +239,11 @@ export function registerCacheCommands(cli: CAC) {
       );
     });
 
-  cli.command('cache info <instanceId>', '查看缓存实例详情')
+  registerCliCommand(cli, cacheInfoCommand)
     .action(async (instanceId: string) => {
       await executeWithAuthRecovery(
         {
-          commandLabel: 'licell cache info',
+          commandLabel: commandInvocation(cacheInfoCommand),
           interactiveTTY: isInteractiveTTY(),
           requiredCapabilities: ['redis']
         },
@@ -214,11 +283,11 @@ export function registerCacheCommands(cli: CAC) {
       );
     });
 
-  cli.command('cache connect [instanceId]', '输出缓存连接信息')
+  registerCliCommand(cli, cacheConnectCommand)
     .action(async (instanceId: string | undefined) => {
       await executeWithAuthRecovery(
         {
-          commandLabel: 'licell cache connect',
+          commandLabel: commandInvocation(cacheConnectCommand),
           interactiveTTY: isInteractiveTTY(),
           requiredCapabilities: ['redis']
         },
@@ -263,12 +332,11 @@ export function registerCacheCommands(cli: CAC) {
       );
     });
 
-  cli.command('cache rotate-password', '轮换 Redis 密码')
-    .option('--instance <instanceId>', '指定 Redis 实例 ID，不传则使用当前项目绑定实例')
+  registerCliCommand(cli, cacheRotatePasswordCommand)
     .action(async (options: { instance?: string }) => {
       await executeWithAuthRecovery(
         {
-          commandLabel: 'licell cache rotate-password',
+          commandLabel: commandInvocation(cacheRotatePasswordCommand),
           interactiveTTY: isInteractiveTTY(),
           requiredCapabilities: ['redis']
         },
@@ -302,12 +370,11 @@ export function registerCacheCommands(cli: CAC) {
       );
     });
 
-  cli.command('cache public-access [instanceId]', '开通 Redis 公网访问并添加当前 IP 到白名单')
-    .option('--ip <ip>', '手动指定公网 IP（不传则自动获取）')
+  registerCliCommand(cli, cachePublicAccessCommand)
     .action(async (instanceId: string | undefined, options: { ip?: string }) => {
       await executeWithAuthRecovery(
         {
-          commandLabel: 'licell cache public-access',
+          commandLabel: commandInvocation(cachePublicAccessCommand),
           interactiveTTY: isInteractiveTTY(),
           requiredCapabilities: ['redis']
         },
@@ -379,12 +446,11 @@ export function registerCacheCommands(cli: CAC) {
       );
     });
 
-  cli.command('cache rm <instanceId>', '删除缓存实例')
-    .option('--yes', '跳过确认')
+  registerCliCommand(cli, cacheRmCommand)
     .action(async (instanceId: string, options: { yes?: boolean }) => {
       await executeWithAuthRecovery(
         {
-          commandLabel: 'licell cache rm',
+          commandLabel: commandInvocation(cacheRmCommand),
           interactiveTTY: isInteractiveTTY(),
           requiredCapabilities: ['redis']
         },
@@ -419,28 +485,24 @@ export function registerCacheCommands(cli: CAC) {
       );
     });
 }
-export const cacheCommandMetadata: CommandMetadataMap = {
-  cache: {
-    summary: 'Redis 缓存实例的创建、查看、连接、密码轮换、公网访问与删除。',
-    examples: ['licell cache list', 'licell cache connect <instanceId>', 'licell cache rotate-password --output json'],
-    agentTips: ['执行公网访问、密码轮换、删除前，先向用户确认影响面。']
-  },
-  'cache rm': {
-    safety: {
-      level: 'destructive',
-      reason: '会删除缓存实例，请确认实例 ID。'
+
+export const cacheCommandModule = defineCommandModule({
+  section: DATA_SECTION,
+  register: registerCacheCommands,
+  namespaces: {
+    cache: {
+      summary: 'Redis 缓存实例的创建、查看、连接、密码轮换、公网访问与删除。',
+      examples: ['licell cache list', 'licell cache connect <instanceId>', 'licell cache rotate-password --output json'],
+      agentTips: ['执行公网访问、密码轮换、删除前，先向用户确认影响面。']
     }
   },
-  'cache public-access': {
-    safety: {
-      level: 'destructive',
-      reason: '会开启缓存公网访问并修改白名单。'
-    }
-  },
-  'cache rotate-password': {
-    safety: {
-      level: 'destructive',
-      reason: '会轮换 Redis 密码，现有连接配置可能立即失效。'
-    }
-  }
-};
+  commands: [
+    cacheAddCommand,
+    cacheListCommand,
+    cacheInfoCommand,
+    cacheConnectCommand,
+    cacheRotatePasswordCommand,
+    cachePublicAccessCommand,
+    cacheRmCommand
+  ]
+});

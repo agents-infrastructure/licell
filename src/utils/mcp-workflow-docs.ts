@@ -1,9 +1,23 @@
 import { buildMcpToolCatalog, type McpToolCatalogEntry } from '../mcp/tool-catalog';
+import {
+  DOMAIN_APP_BIND_WORKFLOW_TAG,
+  DOMAIN_APP_UNBIND_WORKFLOW_TAG,
+  DOMAIN_STATIC_BIND_WORKFLOW_TAG,
+  DOMAIN_STATIC_UNBIND_WORKFLOW_TAG,
+  FC_API_DEPLOY_WORKFLOW_TAG,
+  FC_API_PRECHECK_WORKFLOW_TAG,
+  getLicellWorkflowDescriptor,
+  resolveLicellWorkflowSuggestedCommandOrder
+} from '../mcp/workflow-descriptors';
 
-export const FC_API_DEPLOY_WORKFLOW_TAG = 'fc-api-deploy-workflow';
-export const FC_API_PRECHECK_WORKFLOW_TAG = 'fc-api-precheck-workflow';
-
-const DEFAULT_WORKFLOW_ORDER = ['deploy spec', 'deploy check', 'deploy'];
+export {
+  DOMAIN_APP_BIND_WORKFLOW_TAG,
+  DOMAIN_APP_UNBIND_WORKFLOW_TAG,
+  DOMAIN_STATIC_BIND_WORKFLOW_TAG,
+  DOMAIN_STATIC_UNBIND_WORKFLOW_TAG,
+  FC_API_DEPLOY_WORKFLOW_TAG,
+  FC_API_PRECHECK_WORKFLOW_TAG
+} from '../mcp/workflow-descriptors';
 
 function escapeMarkdownCell(value: string) {
   const normalized = value.trim().replace(/\s+/g, ' ');
@@ -15,7 +29,7 @@ function getOrderIndex(order: string[]) {
 }
 
 export function listTaggedCuratedWorkflowTools(tag: string, options?: { order?: string[] }) {
-  const order = options?.order || DEFAULT_WORKFLOW_ORDER;
+  const order = options?.order || resolveLicellWorkflowSuggestedCommandOrder(tag);
   const orderIndex = getOrderIndex(order);
 
   return buildMcpToolCatalog().tools
@@ -29,7 +43,7 @@ export function listTaggedCuratedWorkflowTools(tag: string, options?: { order?: 
 }
 
 function getSummary(tool: McpToolCatalogEntry) {
-  return tool.docsSummary || tool.description;
+  return tool.summary || tool.description;
 }
 
 export function renderTaggedCuratedWorkflowTable(tag: string, options: {
@@ -48,7 +62,9 @@ export function renderTaggedCuratedWorkflowTable(tag: string, options: {
   ];
 
   if (options.includeSuggestedOrder !== false) {
+    const descriptor = getLicellWorkflowDescriptor(tag);
     const suggestedOrder = tools.length > 0 ? tools.map((tool) => `\`${tool.name}\``).join(' → ') : '—';
+    if (descriptor?.summary) parts.push('', `- Workflow：${descriptor.summary}`);
     parts.push('', `- 建议顺序：${suggestedOrder}`);
   }
 

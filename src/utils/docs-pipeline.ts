@@ -3,7 +3,7 @@ import { resolve } from 'path';
 import { renderAgentSurfaceReferenceDoc } from './agent-surface-docs';
 import { normalizeTextFileContent, syncTextFile } from './generated-docs';
 import { syncReadmeGeneratedSections } from './readme-docs';
-import { syncAiDrivenDeploymentScenario } from './scenario-docs';
+import { syncAiDrivenDeploymentScenario, syncDomainAndHttpsScenario } from './scenario-docs';
 
 export interface GeneratedDocTarget {
   id: string;
@@ -42,6 +42,13 @@ export function getGeneratedDocTargets(rootDir = process.cwd()): GeneratedDocTar
       filePath: resolve(rootDir, 'docs/scenarios/02-ai-driven-deployment.md'),
       computeNext(currentContent: string) {
         return syncAiDrivenDeploymentScenario(currentContent);
+      }
+    },
+    {
+      id: 'scenario-domain-and-https',
+      filePath: resolve(rootDir, 'docs/scenarios/03-domain-and-https.md'),
+      computeNext(currentContent: string) {
+        return syncDomainAndHttpsScenario(currentContent);
       }
     }
   ];

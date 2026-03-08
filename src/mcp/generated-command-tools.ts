@@ -1,4 +1,10 @@
 import { buildAgentCommandCatalog, type AgentCommandCatalogEntry } from '../utils/command-reference';
+import {
+  buildLicellMcpToolMetadataFromAgentCommand,
+  renderLicellMcpToolDescription,
+  resolveLicellMcpToolTitle,
+  type LicellMcpToolMetadataEnvelope
+} from './tool-metadata';
 import { canExposeCommandAsGeneratedMcpTool, toGeneratedMcpToolName } from '../utils/command-surface-ids';
 
 interface JsonSchemaProperty {
@@ -21,6 +27,7 @@ export interface GeneratedMcpCommandTool {
   annotations?: {
     destructiveHint?: boolean;
   };
+  metadata?: LicellMcpToolMetadataEnvelope;
   positionalBindings: Array<{
     inputName: string;
     rawName: string;
@@ -130,17 +137,15 @@ export function buildGeneratedMcpCommandTools() {
     properties.cwd = { type: 'string', description: 'Working directory relative to projectRoot (default: projectRoot).' };
     properties.timeoutMs = { type: 'number', description: 'Command timeout in milliseconds.' };
 
-    const descriptionSuffix = 'Auto-generated from the shared licell CLI registry.';
-    const safetyHint = command.safety
-      ? ` Safety: ${command.safety.level} — ${command.safety.reason}`
-      : '';
-    const description = command.description
-      ? `${command.description}${safetyHint} ${descriptionSuffix}`
-      : `${safetyHint.trim()} ${descriptionSuffix}`.trim();
+    const metadata = buildLicellMcpToolMetadataFromAgentCommand(command, { toolKind: 'generated' });
+    const description = renderLicellMcpToolDescription(metadata, {
+      fallbackDescription: command.description,
+      suffix: 'Auto-generated from the shared licell CLI registry.'
+    });
 
     const tool: GeneratedMcpCommandTool = {
       name: toGeneratedMcpToolName(command.key),
-      title: `Run ${command.invocation}`,
+      title: resolveLicellMcpToolTitle(metadata),
       description,
       inputSchema: {
         type: 'object',
@@ -149,6 +154,7 @@ export function buildGeneratedMcpCommandTools() {
         ...(required.length > 0 ? { required: unique(required) } : {})
       },
       commandKey: command.key,
+      metadata,
       ...(inferDestructive(command) ? { annotations: { destructiveHint: true } } : {}),
       positionalBindings,
       optionBindings

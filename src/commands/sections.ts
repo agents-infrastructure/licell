@@ -1,0 +1,61 @@
+import type { CommandSectionMembership } from './module';
+
+export const SETUP_SECTION: CommandSectionMembership = {
+  id: 'setup',
+  title: 'Setup & Identity',
+  summary: '认证、项目初始化与默认配置相关命令。',
+  taskHints: [
+    {
+      title: '配置凭证并初始化项目',
+      description: '先完成 AK/SK 登录，再在项目目录生成 licell 配置或脚手架。',
+      commands: ['licell login', 'licell init']
+    }
+  ]
+};
+
+export const DELIVERY_SECTION: CommandSectionMembership = {
+  id: 'delivery',
+  title: 'Delivery Workflow',
+  summary: '围绕应用部署、发布、函数管理、环境变量、域名、DNS、日志和对象存储的交付链路。',
+  notes: [
+    'Agent 在 FC API 部署前，优先执行 `licell deploy spec` 与 `licell deploy check`。',
+    '涉及删除或清理的命令通常需要显式传入 `--yes`。'
+  ],
+  taskHints: [
+    {
+      title: '部署服务并拿到可访问地址',
+      description: '用 deploy 完成 API 或静态站点发布，必要时继续绑定域名和 HTTPS。',
+      commands: ['licell deploy --type api --target preview', 'licell domain app bind api.example.com --ssl']
+    }
+  ]
+};
+
+export const DATA_SECTION: CommandSectionMembership = {
+  id: 'data',
+  title: 'Data Services',
+  summary: '数据库、缓存与 Supabase 实例的创建、连接、白名单和生命周期管理。',
+  taskHints: [
+    {
+      title: '开通数据库或缓存实例',
+      description: '先查看现有资源，再创建新实例并获取连接信息。',
+      commands: ['licell db list --output json', 'licell cache add']
+    }
+  ]
+};
+
+export const AUTOMATION_SECTION: CommandSectionMembership = {
+  id: 'automation',
+  title: 'Automation & Tooling',
+  summary: '面向 Agent、开发体验与 CLI 生命周期的自动化命令。',
+  notes: [
+    '`licell skills init` 与 `licell mcp` 都基于同一套 CLI 命令目录生成外部表面。',
+    '`licell completion` 的候选命令同样来自共享命令目录。'
+  ],
+  taskHints: [
+    {
+      title: '把 licell 接入 AI Agent',
+      description: '先生成 skills，再写入 MCP 配置，让 Agent 既懂命令也能实际调用。',
+      commands: ['licell setup', 'licell mcp init']
+    }
+  ]
+};

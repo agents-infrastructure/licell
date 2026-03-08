@@ -1,11 +1,10 @@
 import Alidns, * as $Alidns from '@alicloud/alidns20150109';
-import * as $FC from '@alicloud/fc20230330';
 import * as $OpenApi from '@alicloud/openapi-client';
 import { Config } from '../utils/config';
 import { parseRootAndSubdomain } from '../utils/domain';
-import { isConflictError, isNotFoundError, isInvalidDomainNameError } from '../utils/alicloud-error';
+import { isConflictError, isInvalidDomainNameError, isNotFoundError } from '../utils/alicloud-error';
 import { withRetry } from '../utils/retry';
-import { createSharedFcClient, resolveSdkCtor } from '../utils/sdk';
+import { resolveSdkCtor } from '../utils/sdk';
 
 const AlidnsClientCtor = resolveSdkCtor<Alidns>(Alidns, '@alicloud/alidns20150109');
 
@@ -21,6 +20,28 @@ export interface DnsRecordSummary {
   ttl?: number;
   line?: string;
   status?: string;
+}
+
+export interface AddDnsRecordOptions {
+  rr: string;
+  type: string;
+  value: string;
+  ttl?: number;
+  line?: string;
+}
+
+export interface WildcardCnameResult {
+  created: boolean;
+  skipped: boolean;
+  wildcardDomain: string;
+  targetValue: string;
+}
+
+interface DomainRecordLike {
+  recordId?: string;
+  RR?: string;
+  type?: string;
+  value?: string;
 }
 
 export function buildSubDomainQueryCandidates(rootDomain: string, subDomain: string) {
@@ -41,17 +62,6 @@ function createDnsClient() {
     accessKeySecret: auth.sk,
     endpoint: 'alidns.aliyuncs.com'
   }));
-}
-
-function createFcClient() {
-  return createSharedFcClient().client;
-}
-
-interface DomainRecordLike {
-  recordId?: string;
-  RR?: string;
-  type?: string;
-  value?: string;
 }
 
 async function findCnameRecord(
@@ -80,6 +90,45 @@ async function findCnameRecord(
     const item = record as DomainRecordLike;
     return (item.RR || '@') === subDomain && (item.type || '').toUpperCase() === 'CNAME';
   }) as DomainRecordLike | undefined;
+}
+
+async function listExactCnameRecords(
+  dnsClient: Alidns,
+  rootDomain: string,
+  subDomain: string
+) {
+  const deleted = new Set<string>();
+  const results: DomainRecordLike[] = [];
+  const candidates = buildSubDomainQueryCandidates(rootDomain, subDomain);
+
+  for (const candidate of candidates) {
+    let records: DomainRecordLike[] = [];
+    try {
+      const response = await withRetry(() => dnsClient.describeSubDomainRecords(new $Alidns.DescribeSubDomainRecordsRequest({
+        domainName: rootDomain,
+        subDomain: candidate,
+        type: 'CNAME',
+        pageNumber: 1,
+        pageSize: 200
+      })));
+      records = (response.body?.domainRecords?.record || []) as DomainRecordLike[];
+    } catch (err: unknown) {
+      if (isInvalidDomainNameError(err)) continue;
+      throw err;
+    }
+
+    for (const record of records) {
+      const item = record as DomainRecordLike;
+      const recordId = item.recordId;
+      if ((item.RR || '@') !== subDomain || (item.type || '').toUpperCase() !== 'CNAME' || !recordId || deleted.has(recordId)) {
+        continue;
+      }
+      deleted.add(recordId);
+      results.push(item);
+    }
+  }
+
+  return results;
 }
 
 async function ensureCnameRecord(
@@ -130,87 +179,26 @@ export async function ensureDomainCname(domainName: string, targetValue: string)
   await ensureCnameRecord(dnsClient, normalizedDomain, rootDomain, subDomain, targetValue);
 }
 
-export async function bindCustomDomain(
-  domainName: string,
-  targetFcDomain: string,
-  aliasName?: string,
-  options: { skipDnsBind?: boolean } = {}
-) {
-  const project = Config.getProject();
-  if (!project.appName) throw new Error('未找到应用名，请先执行 licell deploy');
-  if (!options.skipDnsBind) {
-    await ensureDomainCname(domainName, targetFcDomain);
-  }
-
-  const fcClient = createFcClient();
-  const routeConfig = {
-    routes: [{
-      path: '/*',
-      functionName: project.appName,
-      qualifier: aliasName
-    }]
-  };
-  const domainInput = new $FC.CreateCustomDomainInput({
-    domainName,
-    protocol: 'HTTP',
-    routeConfig
-  });
-  try {
-    await withRetry(() => fcClient.createCustomDomain(new $FC.CreateCustomDomainRequest({
-      body: domainInput
-    })));
-  } catch (err: unknown) {
-    if (!isConflictError(err)) throw err;
-    await withRetry(() => fcClient.updateCustomDomain(domainName, new $FC.UpdateCustomDomainRequest({
-      body: new $FC.UpdateCustomDomainInput({ routeConfig })
-    })));
-  }
-  return `http://${domainName}`;
-}
-
-export async function unbindCustomDomain(domainName: string) {
+export async function removeDomainCname(domainName: string) {
   const normalizedDomain = domainName.trim().toLowerCase();
   if (!normalizedDomain) throw new Error('域名不能为空');
   const { rootDomain, subDomain } = parseRootAndSubdomain(normalizedDomain);
   const dnsClient = createDnsClient();
-  const fcClient = createFcClient();
+  const records = await listExactCnameRecords(dnsClient, rootDomain, subDomain);
+  const deletedRecordIds: string[] = [];
 
-  try {
-    await withRetry(() => fcClient.deleteCustomDomain(normalizedDomain));
-  } catch (err: unknown) {
-    if (!isNotFoundError(err)) throw err;
-  }
-
-  const deleted = new Set<string>();
-  const candidates = buildSubDomainQueryCandidates(rootDomain, subDomain);
-  for (const candidate of candidates) {
-    let records: DomainRecordLike[] = [];
+  for (const record of records) {
+    const recordId = record.recordId;
+    if (!recordId) continue;
     try {
-      const recordsRes = await withRetry(() => dnsClient.describeSubDomainRecords(new $Alidns.DescribeSubDomainRecordsRequest({
-        domainName: rootDomain,
-        subDomain: candidate,
-        type: 'CNAME',
-        pageNumber: 1,
-        pageSize: 200
-      })));
-      records = (recordsRes.body?.domainRecords?.record || []) as DomainRecordLike[];
+      await withRetry(() => dnsClient.deleteDomainRecord(new $Alidns.DeleteDomainRecordRequest({ recordId })));
+      deletedRecordIds.push(recordId);
     } catch (err: unknown) {
-      if (isInvalidDomainNameError(err)) continue;
-      throw err;
-    }
-    for (const record of records) {
-      const item = record as DomainRecordLike;
-      if ((item.RR || '@') !== subDomain || (item.type || '').toUpperCase() !== 'CNAME') continue;
-      const recordId = item.recordId;
-      if (!recordId || deleted.has(recordId)) continue;
-      deleted.add(recordId);
-      try {
-        await withRetry(() => dnsClient.deleteDomainRecord(new $Alidns.DeleteDomainRecordRequest({ recordId })));
-      } catch (err: unknown) {
-        if (!isNotFoundError(err)) throw err;
-      }
+      if (!isNotFoundError(err)) throw err;
     }
   }
+
+  return deletedRecordIds;
 }
 
 export async function listDnsRecords(domainName: string, limit = 200): Promise<DnsRecordSummary[]> {
@@ -249,14 +237,6 @@ export async function listDnsRecords(domainName: string, limit = 200): Promise<D
   return results;
 }
 
-export interface AddDnsRecordOptions {
-  rr: string;
-  type: string;
-  value: string;
-  ttl?: number;
-  line?: string;
-}
-
 export async function addDnsRecord(domainName: string, options: AddDnsRecordOptions) {
   const normalizedDomain = domainName.trim().toLowerCase();
   if (!normalizedDomain) throw new Error('域名不能为空');
@@ -286,13 +266,6 @@ export async function removeDnsRecord(recordId: string) {
   if (!normalized) throw new Error('recordId 不能为空');
   const dnsClient = createDnsClient();
   await withRetry(() => dnsClient.deleteDomainRecord(new $Alidns.DeleteDomainRecordRequest({ recordId: normalized })));
-}
-
-export interface WildcardCnameResult {
-  created: boolean;
-  skipped: boolean;
-  wildcardDomain: string;
-  targetValue: string;
 }
 
 export async function ensureWildcardCname(
@@ -327,8 +300,6 @@ export async function ensureWildcardCname(
 
   if (!options.skipConfirm) {
     if (!options.interactiveTTY) {
-      // In non-interactive mode, skip creation and return skipped status
-      // This allows CI/CD and e2e tests to proceed without manual intervention
       return { created: false, skipped: true, wildcardDomain, targetValue: normalizedTarget };
     }
     if (options.onConfirm) {
@@ -348,3 +319,5 @@ export async function ensureWildcardCname(
 
   return { created: true, skipped: false, wildcardDomain, targetValue: normalizedTarget };
 }
+
+export { removeDomainCname as removeMatchingCnameRecords };

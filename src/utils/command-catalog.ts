@@ -31,6 +31,7 @@ export interface CatalogCommand {
 export interface CommandCatalog {
   commands: CatalogCommand[];
   commandsByKey: Record<string, CatalogCommand>;
+  aliasToKey: Record<string, string>;
   rootCommands: string[];
   childCommands: Record<string, string[]>;
   commandOptions: Record<string, string[]>;
@@ -104,6 +105,9 @@ function buildCommandCatalog(): CommandCatalog {
   }).filter((command) => command.commandTokens.length > 0);
 
   const commandsByKey = Object.fromEntries(commands.map((command) => [command.key, command]));
+  const aliasToKey = Object.fromEntries(
+    commands.flatMap((command) => command.aliases.map((alias) => [alias, command.key] as const))
+  );
   const rootCommands = unique(commands.map((command) => command.rootCommand).filter(Boolean));
 
   const childCommands: Record<string, string[]> = {};
@@ -136,6 +140,7 @@ function buildCommandCatalog(): CommandCatalog {
   return {
     commands,
     commandsByKey,
+    aliasToKey,
     rootCommands,
     childCommands,
     commandOptions,

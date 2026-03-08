@@ -82,6 +82,18 @@ describe('normalizeMultiWordCommandArgv', () => {
     ]);
   });
 
+
+  it('merges oss domain unbind command', () => {
+    const argv = ['node', 'src/cli.ts', 'oss', 'domain', 'unbind', 'my-bucket', 'static.example.com'];
+    expect(normalizeMultiWordCommandArgv(argv)).toEqual([
+      'node',
+      'src/cli.ts',
+      'oss domain unbind',
+      'my-bucket',
+      'static.example.com'
+    ]);
+  });
+
   it('merges oss object get command', () => {
     const argv = ['node', 'src/cli.ts', 'oss', 'object', 'get', 'my-bucket', 'site/index.html'];
     expect(normalizeMultiWordCommandArgv(argv)).toEqual([
@@ -241,6 +253,75 @@ describe('normalizeCliArgv', () => {
       'upgrade',
       '--target-version',
       'v1.2.3'
+    ]);
+  });
+});
+
+describe('domain workflow argv normalization', () => {
+  it('merges domain app bind command', () => {
+    expect(normalizeMultiWordCommandArgv([
+      'node',
+      'src/cli.ts',
+      'domain',
+      'app',
+      'bind',
+      'api.example.com'
+    ])).toEqual([
+      'node',
+      'src/cli.ts',
+      'domain app bind',
+      'api.example.com'
+    ]);
+  });
+
+  it('merges domain static bind command', () => {
+    expect(normalizeMultiWordCommandArgv([
+      'node',
+      'src/cli.ts',
+      'domain',
+      'static',
+      'bind',
+      'static.example.com',
+      '--ssl'
+    ])).toEqual([
+      'node',
+      'src/cli.ts',
+      'domain static bind',
+      'static.example.com',
+      '--ssl'
+    ]);
+  });
+
+  it('merges fn domain bind command', () => {
+    expect(normalizeMultiWordCommandArgv([
+      'node',
+      'src/cli.ts',
+      'fn',
+      'domain',
+      'bind',
+      'api.example.com'
+    ])).toEqual([
+      'node',
+      'src/cli.ts',
+      'fn domain bind',
+      'api.example.com'
+    ]);
+  });
+
+
+  it('merges fn domain unbind command', () => {
+    expect(normalizeMultiWordCommandArgv([
+      'node',
+      'src/cli.ts',
+      'fn',
+      'domain',
+      'unbind',
+      'api.example.com'
+    ])).toEqual([
+      'node',
+      'src/cli.ts',
+      'fn domain unbind',
+      'api.example.com'
     ]);
   });
 });

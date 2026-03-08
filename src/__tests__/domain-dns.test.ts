@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildSubDomainQueryCandidates, normalizeDnsValue } from '../providers/domain';
+import { buildSubDomainQueryCandidates, normalizeDnsValue } from '../providers/dns';
 
 describe('normalizeDnsValue', () => {
   it('strips https:// prefix', () => {

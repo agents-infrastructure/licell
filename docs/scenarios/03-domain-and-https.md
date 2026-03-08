@@ -44,6 +44,12 @@ licell deploy \
 `LICELL_DOMAIN_SUFFIX=my-startup.com`，这样甚至以后连 `--domain-suffix`
 这个参数都可以不用手敲！
 
+<!-- BEGIN GENERATED:SCENARIO_DOMAIN_APP_BIND_WORKFLOW -->
+> 如果你是通过 Agent / MCP 执行这一步，推荐直接调用下面这条共享 workflow 入口：
+
+1. `licell_domain_app_bind`：为当前应用绑定自定义域名，编排 DNS、FC custom domain 与可选 HTTPS。
+<!-- END GENERATED:SCENARIO_DOMAIN_APP_BIND_WORKFLOW -->
+
 ## 3. 直接绑定完整独立域名
 
 针对面向核心终端用户的重点应用系统（例如你的主站和博客），你通常不想使用前缀：
@@ -59,17 +65,37 @@ Licell 监测到你是 static (静态站部署) 并且传递了 `--domain` 参�
 **自动开启 CDN 部署，并将你的 OSS 挂载为 CDN 源站，同时全自动生成 HTTPS Let's
 Encrypt 证书** 并下发到 CDN 节点中。
 
+<!-- BEGIN GENERATED:SCENARIO_DOMAIN_STATIC_BIND_WORKFLOW -->
+> 如果你是通过 Agent / MCP 执行这一步，推荐直接调用下面这条共享 workflow 入口：
+
+1. `licell_domain_static_bind`：为静态站点绑定自定义域名，编排 CDN、DNS 与可选 HTTPS。
+<!-- END GENERATED:SCENARIO_DOMAIN_STATIC_BIND_WORKFLOW -->
+
 ## 4. 强大的域名解绑与纯净模式
 
 想撤下域名不再占用？只需要：
 
 ```bash
-licell domain rm api.my-startup.com
+licell domain app unbind api.my-startup.com
+# 或者
+licell domain static unbind www.your-website.com
 ```
 
 只要是 Licell 管辖的域名映射资源，它不仅会解除对 Serverless
-实例的绑定，**还会智能检查并自动在阿里云“云解析 DNS”中清理无用的这条 CNAME
+实例或静态站点入口的绑定，**还会智能检查并自动在阿里云“云解析 DNS”中清理无用的这条 CNAME
 脏数据**。真正把洁癖工程师关心的东西做到闭环。
+
+<!-- BEGIN GENERATED:SCENARIO_DOMAIN_APP_UNBIND_WORKFLOW -->
+> 需要下线 API 域名时，推荐走这条 cleanup workflow：
+
+1. `licell_domain_app_unbind`：解绑当前应用域名，并清理 FC custom domain / DNS CNAME。
+<!-- END GENERATED:SCENARIO_DOMAIN_APP_UNBIND_WORKFLOW -->
+
+<!-- BEGIN GENERATED:SCENARIO_DOMAIN_STATIC_UNBIND_WORKFLOW -->
+> 需要下线静态站点域名时，推荐走这条 cleanup workflow：
+
+1. `licell_domain_static_unbind`：解绑静态站点域名，并清理 CDN domain / DNS CNAME。
+<!-- END GENERATED:SCENARIO_DOMAIN_STATIC_UNBIND_WORKFLOW -->
 
 ---
 

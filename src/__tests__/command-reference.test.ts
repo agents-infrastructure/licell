@@ -32,9 +32,25 @@ describe('buildAgentCommandCatalog', () => {
     expect(deploy?.subcommands).toContain('spec');
     expect(deploy?.subcommands).toContain('check');
     expect(deploy?.options.some((option) => option.primaryFlag === '--type')).toBe(true);
+    expect(deploy?.title).toBe('Deploy current project');
     expect(deploy?.summary).toContain('一键部署 API / Static');
     expect(deploy?.optionInsights.some((insight) => insight.flag.includes('--runtime'))).toBe(true);
+    expect(deploy?.tasks.some((task) => task.phase === 'inspect')).toBe(true);
+    expect(deploy?.decisionGuide.some((group) => group.phase === 'mutate')).toBe(true);
+    expect(deploy?.examples).toContain('licell deploy --output json');
     expect(deploy?.recommendedFlow[0]?.command).toBe('licell deploy spec');
+
+    const releasePrune = catalog.commands.find((command) => command.key === 'release prune');
+    expect(releasePrune?.safety?.level).toBe('destructive');
+
+    const mcp = catalog.commands.find((command) => command.key === 'mcp');
+    expect(mcp?.recommendedFlow[0]?.command).toBe('licell mcp init');
+    expect(mcp?.examples).toContain('licell mcp init');
+    expect(mcp?.agentTips.some((tip) => tip.includes('mcp serve'))).toBe(true);
+
+    const domainAppBind = catalog.commands.find((command) => command.key === 'domain app bind');
+    expect(domainAppBind?.result?.outcomeKey).toBe('bound');
+    expect(domainAppBind?.result?.fields.some((field) => field.name === 'finalUrl')).toBe(true);
   });
 
   it('filters by root command without hardcoded command lists', () => {
@@ -62,8 +78,24 @@ describe('renderSkillCommandReference', () => {
     expect(markdown).toContain('licell oss domain bind <bucket> <domain>');
     expect(markdown).toContain('licell oss object get <bucket> <key> [file]');
     expect(markdown).toContain('licell oss sync down <bucket> [prefix]');
+    expect(markdown).toContain('示例命令：');
+    expect(markdown).toContain('`licell deploy --output json`');
+    expect(markdown).toContain('决策指南：');
+    expect(markdown).toContain('Inspect：');
     expect(markdown).toContain('关键选项建议：');
+    expect(markdown).toContain('结构化结果：');
+    expect(markdown).toContain('`stage`：命令阶段标识。');
+    expect(markdown).toContain('`finalUrl`：最终访问 URL。');
     expect(markdown).toContain('推荐流程：');
     expect(markdown).toContain('licell deploy spec');
+  });
+});
+
+describe('domain command reference coverage', () => {
+  it('renders domain workflow and fn domain commands from shared registry', () => {
+    const markdown = renderSkillCommandReference();
+    expect(markdown).toContain('licell domain app bind <domain>');
+    expect(markdown).toContain('licell fn domain bind <domain>');
+    expect(markdown).toContain('licell domain static bind <domain>');
   });
 });

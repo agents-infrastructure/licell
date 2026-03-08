@@ -94,7 +94,8 @@ export function renderSkillMcpToolReference() {
     '### Generated Command Tools',
     '',
     '- 常规 CLI 命令的生成 MCP Tool 名称已在上方 Command Reference 的命令明细中标注。',
-    '- 命名规则为 `licell_cmd_<command_key>`；实际名称与可用输入字段由共享 CLI 注册表实时推导。'
+    '- 命名规则为 `licell_cmd_<command_key>`；实际名称与可用输入字段由共享 CLI 注册表实时推导。',
+    '- 所有 MCP tools 都会暴露 `metadata.licell`；generated tools 还会从 CLI 注册表自动继承 `decisionGuide` / `tasks` / `safety` / `result`；curated workflow tools 还会额外挂上 `workflows` 元数据。'
   ].join('\n').trim() + '\n';
 }
 
@@ -125,7 +126,9 @@ export function renderAgentSurfaceReferenceDoc() {
     '',
     '## 自动生成的 MCP 命令工具',
     '',
-    '除 `licell mcp ...` 外，其他 CLI 命令默认都会派生出 `licell_cmd_*` Tool。下面按命令分组展示。'
+    '除 `licell mcp ...` 外，其他 CLI 命令默认都会派生出 `licell_cmd_*` Tool。下面按命令分组展示。',
+    '',
+    '- 所有 builtin / curated / generated MCP tools 都会暴露 `metadata.licell`；generated tools 会自动继承 CLI 侧 `decisionGuide` / `tasks` / `safety` / `result`；curated workflow tools 会额外挂上 `workflows` 元数据。'
   ];
 
   for (const section of generatedSections) {

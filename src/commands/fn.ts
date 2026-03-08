@@ -1,5 +1,5 @@
 import type { CAC } from 'cac';
-import type { CommandMetadataMap } from './module';
+import { defineCommandModule, commandInvocation, defineCliCommand, registerCliCommand } from './module';
 import pc from 'picocolors';
 import { readFileSync, realpathSync } from 'fs';
 import { resolve, relative, isAbsolute } from 'path';
@@ -22,15 +22,53 @@ import {
 } from '../utils/cli-shared';
 import { executeWithAuthRecovery } from '../utils/auth-recovery';
 import { emitCliResult, isJsonOutput } from '../utils/output';
+import { fnDomainCommandBundle } from './fn-domain';
+import { DELIVERY_SECTION } from './sections';
+
+const fnListCommand = defineCliCommand({
+  rawName: 'fn list',
+  description: '查看函数列表',
+  options: [
+    { rawName: '--limit <n>', description: '返回数量，默认 20' },
+    { rawName: '--prefix <prefix>', description: '按函数名前缀过滤' }
+  ]
+});
+
+const fnInfoCommand = defineCliCommand({
+  rawName: 'fn info [name]',
+  description: '查看函数详情',
+  options: [
+    { rawName: '--target <target>', description: '指定 alias/version（如 prod/preview/1）' }
+  ]
+});
+
+const fnInvokeCommand = defineCliCommand({
+  rawName: 'fn invoke [name]',
+  description: '调用函数（同步）',
+  options: [
+    { rawName: '--target <target>', description: '指定 alias/version（如 prod/preview/1）' },
+    { rawName: '--payload <text>', description: '传入原始 payload 文本' },
+    { rawName: '--file <path>', description: '从文件读取 payload' }
+  ]
+});
+
+const fnRmCommand = defineCliCommand({
+  rawName: 'fn rm [name]',
+  description: '删除函数',
+  options: [
+    { rawName: '--force', description: '级联删除触发器、alias、已发布版本后再删除函数' },
+    { rawName: '--yes', description: '跳过二次确认（危险）' }
+  ]
+});
 
 export function registerFnCommands(cli: CAC) {
-  cli.command('fn list', '查看函数列表')
-    .option('--limit <n>', '返回数量，默认 20')
-    .option('--prefix <prefix>', '按函数名前缀过滤')
+  fnDomainCommandBundle.register(cli);
+
+  registerCliCommand(cli, fnListCommand)
     .action(async (options: { limit?: unknown; prefix?: unknown }) => {
       await executeWithAuthRecovery(
         {
-          commandLabel: 'licell fn list',
+          commandLabel: commandInvocation(fnListCommand),
           interactiveTTY: isInteractiveTTY(),
           requiredCapabilities: ['fc']
         },
@@ -73,12 +111,11 @@ export function registerFnCommands(cli: CAC) {
       );
     });
 
-  cli.command('fn info [name]', '查看函数详情')
-    .option('--target <target>', '指定 alias/version（如 prod/preview/1）')
+  registerCliCommand(cli, fnInfoCommand)
     .action(async (name: string | undefined, options: { target?: unknown }) => {
       await executeWithAuthRecovery(
         {
-          commandLabel: 'licell fn info',
+          commandLabel: commandInvocation(fnInfoCommand),
           interactiveTTY: isInteractiveTTY(),
           requiredCapabilities: ['fc']
         },
@@ -142,14 +179,11 @@ export function registerFnCommands(cli: CAC) {
       );
     });
 
-  cli.command('fn invoke [name]', '调用函数（同步）')
-    .option('--target <target>', '指定 alias/version（如 prod/preview/1）')
-    .option('--payload <text>', '传入原始 payload 文本')
-    .option('--file <path>', '从文件读取 payload')
+  registerCliCommand(cli, fnInvokeCommand)
     .action(async (name: string | undefined, options: { target?: unknown; payload?: unknown; file?: unknown }) => {
       await executeWithAuthRecovery(
         {
-          commandLabel: 'licell fn invoke',
+          commandLabel: commandInvocation(fnInvokeCommand),
           interactiveTTY: isInteractiveTTY(),
           requiredCapabilities: ['fc']
         },
@@ -215,13 +249,11 @@ export function registerFnCommands(cli: CAC) {
       );
     });
 
-  cli.command('fn rm [name]', '删除函数')
-    .option('--force', '级联删除触发器、alias、已发布版本后再删除函数')
-    .option('--yes', '跳过二次确认（危险）')
+  registerCliCommand(cli, fnRmCommand)
     .action(async (name: string | undefined, options: { force?: boolean; yes?: boolean }) => {
       await executeWithAuthRecovery(
         {
-          commandLabel: 'licell fn rm',
+          commandLabel: commandInvocation(fnRmCommand),
           interactiveTTY: isInteractiveTTY(),
           requiredCapabilities: ['fc']
         },
@@ -271,9 +303,15 @@ export function registerFnCommands(cli: CAC) {
     });
 }
 
-export const fnCommandMetadata: CommandMetadataMap = {
-  fn: {
-    summary: '函数的查看、详情、调用与删除。',
-    examples: ['licell fn list', 'licell fn info hello-world', 'licell fn invoke hello-world --output json']
-  }
-};
+export const fnCommandModule = defineCommandModule({
+  section: DELIVERY_SECTION,
+  register: registerFnCommands,
+  commands: [fnListCommand, fnInfoCommand, fnInvokeCommand, fnRmCommand],
+  namespaces: {
+    fn: {
+      summary: '函数与 FC 自定义域名的查看、详情、调用与删除。',
+      examples: ['licell fn list', 'licell fn info hello-world', 'licell fn domain list', 'licell fn invoke hello-world --output json']
+    }
+  },
+  mergeBundles: [fnDomainCommandBundle]
+});

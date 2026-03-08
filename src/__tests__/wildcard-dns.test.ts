@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeDnsValue } from '../providers/domain';
+import { normalizeDnsValue } from '../providers/dns';
 
 describe('wildcard DNS', () => {
   describe('normalizeDnsValue', () => {

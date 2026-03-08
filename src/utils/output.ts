@@ -412,6 +412,64 @@ export function emitCliResult(result: Record<string, unknown>) {
   });
 }
 
+export function commandStage(command = outputContext.command) {
+  const normalized = command.trim().split(/\s+/).filter(Boolean).join('.');
+  return normalized || 'runtime';
+}
+
+const AUTO_COMMAND_OUTCOME_KEYS = new Set([
+  'created',
+  'updated',
+  'removed',
+  'deleted',
+  'bound',
+  'unbound',
+  'promoted',
+  'rolledBack',
+  'connected',
+  'cleared'
+]);
+
+const COMMAND_OUTCOME_BY_VERB: Record<string, string> = {
+  add: 'created',
+  create: 'created',
+  set: 'updated',
+  update: 'updated',
+  bind: 'bound',
+  unbind: 'unbound',
+  rm: 'removed',
+  remove: 'removed',
+  delete: 'deleted',
+  promote: 'promoted',
+  rollback: 'rolledBack',
+  connect: 'connected',
+  clear: 'cleared',
+  logout: 'cleared'
+};
+
+function hasExplicitOutcome(payload: Record<string, unknown>) {
+  return Object.keys(payload).some((key) => AUTO_COMMAND_OUTCOME_KEYS.has(key));
+}
+
+function inferCommandOutcomeKey(command = outputContext.command) {
+  const tokens = command.trim().split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return undefined;
+  return COMMAND_OUTCOME_BY_VERB[tokens[tokens.length - 1]!] || undefined;
+}
+
+export function emitCommandResult(result: Record<string, unknown>, command = outputContext.command) {
+  const { stage, ...payload } = result;
+  const inferredOutcomeKey = inferCommandOutcomeKey(command);
+  const finalPayload = inferredOutcomeKey && !hasExplicitOutcome(payload)
+    ? { ...payload, [inferredOutcomeKey]: true }
+    : payload;
+
+  emitCliResult({
+    stage: typeof stage === 'string' && stage.trim().length > 0 ? stage : commandStage(command),
+    ...finalPayload
+  });
+}
+
 export function buildCliErrorRecord(
   err: unknown,
   context?: { stage?: string; command?: string; details?: Record<string, unknown> }

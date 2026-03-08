@@ -1,5 +1,5 @@
 import type { CAC } from 'cac';
-import type { CommandMetadataMap } from './module';
+import { defineCommandModule, commandInvocation, defineCliCommand, registerCliCommand } from './module';
 import { select, confirm, isCancel } from '@clack/prompts';
 import pc from 'picocolors';
 import { maskConnectionString } from '../utils/cli-helpers';
@@ -30,25 +30,81 @@ import {
   type DbTypeInput
 } from '../utils/cli-shared';
 import { emitCliResult, isJsonOutput } from '../utils/output';
+import { DATA_SECTION } from './sections';
+
+const dbAddOptions = [
+  { rawName: '--type <type>', description: '数据库类型：postgresql 或 mysql（默认 serverless-postgresql，即将上线）' },
+  { rawName: '--engine-version <version>', description: '数据库引擎版本（postgres 默认 18.0，mysql 默认 8.0）' },
+  { rawName: '--category <category>', description: 'RDS Category（默认 serverless_basic）' },
+  { rawName: '--class <instanceClass>', description: '实例规格（如 pg.n2.serverless.1c）' },
+  { rawName: '--storage <gb>', description: '存储空间 GB（默认 20）' },
+  { rawName: '--storage-type <storageType>', description: '存储类型（默认 cloud_essd）' },
+  { rawName: '--min-rcu <n>', description: 'Serverless 最小 RCU（如 0.5）' },
+  { rawName: '--max-rcu <n>', description: 'Serverless 最大 RCU（如 8）' },
+  { rawName: '--auto-pause <mode>', description: '自动启停：on/off' },
+  { rawName: '--zone <zoneId>', description: '主可用区（如 cn-hangzhou-b）' },
+  { rawName: '--zone-slave1 <zoneId>', description: '备可用区 1（多可用区部署）' },
+  { rawName: '--zone-slave2 <zoneId>', description: '备可用区 2（多可用区部署）' },
+  { rawName: '--vpc <vpcId>', description: '指定 VPC ID' },
+  { rawName: '--vsw <vSwitchId>', description: '指定 VSwitch ID' },
+  { rawName: '--security-ip-list <cidrs>', description: '白名单 CIDR（逗号分隔）' },
+  { rawName: '--description <text>', description: '实例描述' }
+] as const;
+
+const dbAddCommand = defineCliCommand({
+  rawName: 'db add',
+  description: '分配数据库实例',
+  options: dbAddOptions
+});
+
+const dbListCommand = defineCliCommand({
+  rawName: 'db list',
+  description: '查看数据库实例列表',
+  options: [
+    { rawName: '--limit <n>', description: '返回数量，默认 20' }
+  ]
+});
+
+const dbInfoCommand = defineCliCommand({
+  rawName: 'db info <instanceId>',
+  description: '查看数据库实例详情'
+});
+
+const dbConnectCommand = defineCliCommand({
+  rawName: 'db connect [instanceId]',
+  description: '输出数据库连接信息'
+});
+
+const dbPublicAccessCommand = defineCliCommand({
+  rawName: 'db public-access [instanceId]',
+  description: '开通数据库公网访问并添加当前 IP 到白名单',
+  options: [
+    { rawName: '--ip <ip>', description: '手动指定公网 IP（不传则自动获取）' }
+  ],
+  descriptor: {
+    safety: {
+      level: 'destructive',
+      reason: '会开启数据库公网访问并修改白名单。'
+    }
+  }
+});
+
+const dbRmCommand = defineCliCommand({
+  rawName: 'db rm <instanceId>',
+  description: '删除数据库实例',
+  options: [
+    { rawName: '--yes', description: '跳过确认' }
+  ],
+  descriptor: {
+    safety: {
+      level: 'destructive',
+      reason: '会删除数据库实例，请确认实例 ID 与备份策略。'
+    }
+  }
+});
 
 export function registerDbCommands(cli: CAC) {
-  cli.command('db add', '分配数据库实例')
-    .option('--type <type>', '数据库类型：postgresql 或 mysql（默认 serverless-postgresql，即将上线）')
-    .option('--engine-version <version>', '数据库引擎版本（postgres 默认 18.0，mysql 默认 8.0）')
-    .option('--category <category>', 'RDS Category（默认 serverless_basic）')
-    .option('--class <instanceClass>', '实例规格（如 pg.n2.serverless.1c）')
-    .option('--storage <gb>', '存储空间 GB（默认 20）')
-    .option('--storage-type <storageType>', '存储类型（默认 cloud_essd）')
-    .option('--min-rcu <n>', 'Serverless 最小 RCU（如 0.5）')
-    .option('--max-rcu <n>', 'Serverless 最大 RCU（如 8）')
-    .option('--auto-pause <mode>', '自动启停：on/off')
-    .option('--zone <zoneId>', '主可用区（如 cn-hangzhou-b）')
-    .option('--zone-slave1 <zoneId>', '备可用区 1（多可用区部署）')
-    .option('--zone-slave2 <zoneId>', '备可用区 2（多可用区部署）')
-    .option('--vpc <vpcId>', '指定 VPC ID')
-    .option('--vsw <vSwitchId>', '指定 VSwitch ID')
-    .option('--security-ip-list <cidrs>', '白名单 CIDR（逗号分隔）')
-    .option('--description <text>', '实例描述')
+  registerCliCommand(cli, dbAddCommand)
     .action(async (options: {
       type?: unknown;
       engineVersion?: unknown;
@@ -69,7 +125,7 @@ export function registerDbCommands(cli: CAC) {
     }) => {
       await executeWithAuthRecovery(
         {
-          commandLabel: 'licell db add',
+          commandLabel: commandInvocation(dbAddCommand),
           interactiveTTY: isInteractiveTTY(),
           requiredCapabilities: ['rds']
         },
@@ -153,12 +209,11 @@ export function registerDbCommands(cli: CAC) {
       );
     });
 
-  cli.command('db list', '查看数据库实例列表')
-    .option('--limit <n>', '返回数量，默认 20')
+  registerCliCommand(cli, dbListCommand)
     .action(async (options: { limit?: unknown }) => {
       await executeWithAuthRecovery(
         {
-          commandLabel: 'licell db list',
+          commandLabel: commandInvocation(dbListCommand),
           interactiveTTY: isInteractiveTTY(),
           requiredCapabilities: ['rds']
         },
@@ -200,11 +255,11 @@ export function registerDbCommands(cli: CAC) {
       );
     });
 
-  cli.command('db info <instanceId>', '查看数据库实例详情')
+  registerCliCommand(cli, dbInfoCommand)
     .action(async (instanceId: string) => {
       await executeWithAuthRecovery(
         {
-          commandLabel: 'licell db info',
+          commandLabel: commandInvocation(dbInfoCommand),
           interactiveTTY: isInteractiveTTY(),
           requiredCapabilities: ['rds']
         },
@@ -248,11 +303,11 @@ export function registerDbCommands(cli: CAC) {
       );
     });
 
-  cli.command('db connect [instanceId]', '输出数据库连接信息')
+  registerCliCommand(cli, dbConnectCommand)
     .action(async (instanceId: string | undefined) => {
       await executeWithAuthRecovery(
         {
-          commandLabel: 'licell db connect',
+          commandLabel: commandInvocation(dbConnectCommand),
           interactiveTTY: isInteractiveTTY(),
           requiredCapabilities: ['rds']
         },
@@ -298,12 +353,11 @@ export function registerDbCommands(cli: CAC) {
       );
     });
 
-  cli.command('db public-access [instanceId]', '开通数据库公网访问并添加当前 IP 到白名单')
-    .option('--ip <ip>', '手动指定公网 IP（不传则自动获取）')
+  registerCliCommand(cli, dbPublicAccessCommand)
     .action(async (instanceId: string | undefined, options: { ip?: string }) => {
       await executeWithAuthRecovery(
         {
-          commandLabel: 'licell db public-access',
+          commandLabel: commandInvocation(dbPublicAccessCommand),
           interactiveTTY: isInteractiveTTY(),
           requiredCapabilities: ['rds']
         },
@@ -376,12 +430,11 @@ export function registerDbCommands(cli: CAC) {
       );
     });
 
-  cli.command('db rm <instanceId>', '删除数据库实例')
-    .option('--yes', '跳过确认')
+  registerCliCommand(cli, dbRmCommand)
     .action(async (instanceId: string, options: { yes?: boolean }) => {
       await executeWithAuthRecovery(
         {
-          commandLabel: 'licell db rm',
+          commandLabel: commandInvocation(dbRmCommand),
           interactiveTTY: isInteractiveTTY(),
           requiredCapabilities: ['rds']
         },
@@ -417,23 +470,16 @@ export function registerDbCommands(cli: CAC) {
     });
 }
 
-export const dbCommandMetadata: CommandMetadataMap = {
-  db: {
-    summary: 'RDS 数据库实例的创建、查看、连接、公网访问与删除。',
-    notes: ['公网访问与删除属于高影响操作，自动化执行前应先确认。'],
-    examples: ['licell db list', 'licell db info <instanceId>', 'licell db connect <instanceId> --output json'],
-    agentTips: ['优先从 `licell db list --output json` 获取实例，再执行 connect / public-access / rm。']
-  },
-  'db rm': {
-    safety: {
-      level: 'destructive',
-      reason: '会删除数据库实例，请确认实例 ID 与备份策略。'
+export const dbCommandModule = defineCommandModule({
+  section: DATA_SECTION,
+  register: registerDbCommands,
+  namespaces: {
+    db: {
+      summary: 'RDS 数据库实例的创建、查看、连接、公网访问与删除。',
+      notes: ['公网访问与删除属于高影响操作，自动化执行前应先确认。'],
+      examples: ['licell db list', 'licell db info <instanceId>', 'licell db connect <instanceId> --output json'],
+      agentTips: ['优先从 `licell db list --output json` 获取实例，再执行 connect / public-access / rm。']
     }
   },
-  'db public-access': {
-    safety: {
-      level: 'destructive',
-      reason: '会开启数据库公网访问并修改白名单。'
-    }
-  }
-};
+  commands: [dbAddCommand, dbListCommand, dbInfoCommand, dbConnectCommand, dbPublicAccessCommand, dbRmCommand]
+});

@@ -1,8 +1,8 @@
 import type { CAC } from 'cac';
-import type { CommandMetadataMap } from './module';
+import { defineCommandModule, commandInvocation, defineCliCommand, registerCliCommand } from './module';
 import { text, isCancel } from '@clack/prompts';
 import pc from 'picocolors';
-import { addDnsRecord, listDnsRecords, removeDnsRecord } from '../providers/domain';
+import { addDnsRecord, listDnsRecords, removeDnsRecord } from '../providers/dns';
 import { executeWithAuthRecovery } from '../utils/auth-recovery';
 import {
   ensureAuthOrExit,
@@ -16,15 +16,58 @@ import {
   parseOptionalPositiveInt,
   withSpinner
 } from '../utils/cli-shared';
-import { emitCliResult, isJsonOutput } from '../utils/output';
+import { emitCommandResult, isJsonOutput } from '../utils/output';
+import { DELIVERY_SECTION } from './sections';
+
+
+const dnsRecordsListCommand = defineCliCommand({
+  rawName: 'dns records list [domain]',
+  description: '查看域名解析记录'
+});
+
+const dnsRecordsAddCommand = defineCliCommand({
+  rawName: 'dns records add <domain>',
+  description: '添加域名解析记录',
+  descriptor: {
+    summary: '添加一条 DNS 解析记录。',
+    result: {
+      summary: '结构化结果会返回新建 recordId 和完整记录参数，便于后续自动化追踪。',
+      outcomeKey: 'created',
+      fields: [
+        { name: 'domain', description: '记录所属根域名。' },
+        { name: 'recordId', description: '新建后的 DNS recordId。' },
+        { name: 'rr', description: '主机记录，例如 @ / www / api。' },
+        { name: 'type', description: '记录类型，例如 A / CNAME / TXT。' },
+        { name: 'value', description: '记录值。' },
+        { name: 'ttl', description: 'TTL 秒数。' },
+        { name: 'line', description: '解析线路。' }
+      ]
+    }
+  }
+});
+
+const dnsRecordsRmCommand = defineCliCommand({
+  rawName: 'dns records rm <recordId>',
+  description: '删除域名解析记录',
+  descriptor: {
+    summary: '删除一条 DNS 解析记录。',
+    result: {
+      summary: '结构化结果会返回被删除的 recordId。',
+      outcomeKey: 'removed',
+      fields: [
+        { name: 'recordId', description: '被删除的 DNS recordId。' }
+      ]
+    }
+  }
+});
 
 export function registerDnsCommands(cli: CAC) {
-  cli.command('dns records list [domain]', '查看域名解析记录')
+  registerCliCommand(cli, dnsRecordsListCommand)
     .option('--limit <n>', '返回数量，默认 100')
     .action(async (domain: string | undefined, options: { limit?: unknown }) => {
       await executeWithAuthRecovery(
         {
-          commandLabel: 'licell dns records list',
+          commandLabel: commandInvocation(dnsRecordsListCommand),
           interactiveTTY: isInteractiveTTY(),
           requiredCapabilities: ['dns']
         },
@@ -57,8 +100,7 @@ export function registerDnsCommands(cli: CAC) {
             s.stop(pc.green(`✅ 共获取 ${records.length} 条记录`));
           }
           if (isJsonOutput()) {
-            emitCliResult({
-              stage: 'dns.records.list',
+            emitCommandResult({
               domain: normalizedDomain,
               count: records.length,
               records
@@ -80,7 +122,7 @@ export function registerDnsCommands(cli: CAC) {
       );
     });
 
-  cli.command('dns records add <domain>', '添加域名解析记录')
+  registerCliCommand(cli, dnsRecordsAddCommand)
     .option('--rr <rr>', '主机记录，如 @/www/api')
     .option('--type <type>', '记录类型，如 A/CNAME/TXT')
     .option('--value <value>', '记录值')
@@ -89,7 +131,7 @@ export function registerDnsCommands(cli: CAC) {
     .action(async (domain: string, options: { rr?: unknown; type?: unknown; value?: unknown; ttl?: unknown; line?: unknown }) => {
       await executeWithAuthRecovery(
         {
-          commandLabel: 'licell dns records add',
+          commandLabel: commandInvocation(dnsRecordsAddCommand),
           interactiveTTY: isInteractiveTTY(),
           requiredCapabilities: ['dns']
         },
@@ -117,8 +159,7 @@ export function registerDnsCommands(cli: CAC) {
             s.stop(pc.green('✅ DNS 记录已创建'));
           }
           if (isJsonOutput()) {
-            emitCliResult({
-              stage: 'dns.records.add',
+            emitCommandResult({
               domain: normalizedDomain,
               recordId,
               rr,
@@ -135,12 +176,12 @@ export function registerDnsCommands(cli: CAC) {
       );
     });
 
-  cli.command('dns records rm <recordId>', '删除域名解析记录')
+  registerCliCommand(cli, dnsRecordsRmCommand)
     .option('--yes', '跳过二次确认（危险）')
     .action(async (recordId: string, options: { yes?: boolean }) => {
       await executeWithAuthRecovery(
         {
-          commandLabel: 'licell dns records rm',
+          commandLabel: commandInvocation(dnsRecordsRmCommand),
           interactiveTTY: isInteractiveTTY(),
           requiredCapabilities: ['dns']
         },
@@ -163,8 +204,7 @@ export function registerDnsCommands(cli: CAC) {
             s.stop(pc.green('✅ DNS 记录已删除'));
             showOutro('Done.');
           } else {
-            emitCliResult({
-              stage: 'dns.records.rm',
+            emitCommandResult({
               recordId: normalizedRecordId,
               removed: true
             });
@@ -174,14 +214,33 @@ export function registerDnsCommands(cli: CAC) {
     });
 }
 
-export const dnsCommandMetadata: CommandMetadataMap = {
-  dns: {
-    summary: 'DNS 解析工作流入口。',
-    examples: ['licell dns records --help', 'licell dns records list example.com']
+export const dnsCommandModule = defineCommandModule({
+  section: DELIVERY_SECTION,
+  register: registerDnsCommands,
+  namespaces: {
+    dns: {
+      summary: 'DNS 解析工作流入口。',
+      examples: ['licell dns records --help', 'licell dns records list example.com'],
+      taskHints: [
+        {
+          phase: 'inspect',
+          title: '先查看某个域名当前解析',
+          description: '在添加、删除记录前，先把现状拉出来，避免误删或重复写入。',
+          commands: ['licell dns records list example.com --output json']
+        },
+        {
+          phase: 'mutate',
+          title: '新增或删除单条解析记录',
+          description: '确认现状后，再执行 add / rm 这类原子操作。',
+          commands: ['licell dns records add example.com', 'licell dns records rm <recordId> --yes']
+        }
+      ]
+    },
+    'dns records': {
+      summary: 'DNS 解析记录的查看、添加与删除。',
+      examples: ['licell dns records list example.com', 'licell dns records add example.com', 'licell dns records rm <recordId>'],
+      agentTips: ['修改解析前，先 `list --output json` 获取现状，避免误删记录。']
+    }
   },
-  'dns records': {
-    summary: 'DNS 解析记录的查看、添加与删除。',
-    examples: ['licell dns records list example.com', 'licell dns records add example.com', 'licell dns records rm <recordId>'],
-    agentTips: ['修改解析前，先 `list --output json` 获取现状，避免误删记录。']
-  }
-};
+  commands: [dnsRecordsListCommand, dnsRecordsAddCommand, dnsRecordsRmCommand]
+});

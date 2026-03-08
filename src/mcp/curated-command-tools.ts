@@ -1,4 +1,12 @@
 import {
+  DOMAIN_APP_BIND_WORKFLOW_TAG,
+  DOMAIN_APP_UNBIND_WORKFLOW_TAG,
+  DOMAIN_STATIC_BIND_WORKFLOW_TAG,
+  DOMAIN_STATIC_UNBIND_WORKFLOW_TAG,
+  FC_API_DEPLOY_WORKFLOW_TAG,
+  FC_API_PRECHECK_WORKFLOW_TAG
+} from './workflow-descriptors';
+import {
   atLeastOnePresentValidator,
   booleanProp,
   buildCuratedToolMap,
@@ -29,12 +37,9 @@ import {
 const CURATED_MCP_COMMAND_TOOLS = buildCuratedToolMap([
   defineCuratedTool({
     name: 'licell_deploy',
-    title: 'Deploy service (API/Static) to Aliyun',
     commandSignature: 'deploy',
-    tags: ['fc-api-deploy-workflow'],
-    docsSummary: '在前两步通过后执行正式部署，将当前项目发布到阿里云。',
-    description:
-      'Deploy current project. API deploys to Function Compute (FC 3.0); Static deploys to OSS hosting. For API, Agent should call licell_fc_deploy_spec + licell_fc_deploy_check before deploy.',
+    tags: [FC_API_DEPLOY_WORKFLOW_TAG],
+    workflowRoleByTag: { [FC_API_DEPLOY_WORKFLOW_TAG]: 'entry' },
     inputSchema: inputSchema(
       withExecutionProps({
         type: stringEnumProp('Deployment type.', ['api', 'static']),
@@ -80,9 +85,8 @@ const CURATED_MCP_COMMAND_TOOLS = buildCuratedToolMap([
 
   defineCuratedTool({
     name: 'licell_fc_deploy_spec',
-    title: 'Get FC API deploy spec',
-    tags: ['fc-api-deploy-workflow', 'fc-api-precheck-workflow'],
-    docsSummary: '读取 FC API runtime 的 entry / handler / 资源约束，帮助 Agent 先理解限制与签名模板。',
+    tags: [FC_API_DEPLOY_WORKFLOW_TAG, FC_API_PRECHECK_WORKFLOW_TAG],
+    summary: '读取 FC API runtime 的 entry / handler / 资源约束，帮助 Agent 先理解限制与签名模板。',
     description:
       'Return machine-readable FC API runtime specs (handlerContract/eventSchema/responseSchema/examples/validationRules and resource constraints) for agent planning.',
     inputSchema: inputSchema(withExecutionProps({
@@ -98,9 +102,8 @@ const CURATED_MCP_COMMAND_TOOLS = buildCuratedToolMap([
 
   defineCuratedTool({
     name: 'licell_fc_deploy_check',
-    title: 'Precheck FC API deploy readiness',
-    tags: ['fc-api-deploy-workflow', 'fc-api-precheck-workflow'],
-    docsSummary: '只读预检当前项目，提前发现 handler、入口文件或 Docker 环境问题，并给出可执行修复建议。',
+    tags: [FC_API_DEPLOY_WORKFLOW_TAG, FC_API_PRECHECK_WORKFLOW_TAG],
+    summary: '只读预检当前项目，提前发现 handler、入口文件或 Docker 环境问题，并给出可执行修复建议。',
     description:
       'Read-only validation before FC API deployment. Returns actionable issues (missing handler, wrong entry, Docker prerequisites, etc.) and does not modify project files.',
     inputSchema: inputSchema(withExecutionProps({
@@ -118,7 +121,6 @@ const CURATED_MCP_COMMAND_TOOLS = buildCuratedToolMap([
 
   defineCuratedTool({
     name: 'licell_init',
-    title: 'Initialize licell project',
     description:
       'Initialize current directory: write .licell/project.json, and optionally generate scaffold files for supported runtimes.',
     inputSchema: inputSchema(withExecutionProps({
@@ -138,7 +140,6 @@ const CURATED_MCP_COMMAND_TOOLS = buildCuratedToolMap([
 
   defineCuratedTool({
     name: 'licell_release_promote',
-    title: 'Promote FC release (alias switch)',
     description: 'Publish (if needed) and switch an FC alias (e.g. prod/preview) to a version.',
     inputSchema: inputSchema(withExecutionProps({
       versionId: stringProp('Optional versionId. If omitted, licell will publish current code or reuse latest published.'),
@@ -153,7 +154,6 @@ const CURATED_MCP_COMMAND_TOOLS = buildCuratedToolMap([
 
   defineCuratedTool({
     name: 'licell_release_rollback',
-    title: 'Rollback FC release (alias switch)',
     description: 'Switch an FC alias to a specific versionId.',
     inputSchema: inputSchema(withExecutionProps({
       versionId: stringProp('VersionId to rollback to.'),
@@ -168,7 +168,6 @@ const CURATED_MCP_COMMAND_TOOLS = buildCuratedToolMap([
 
   defineCuratedTool({
     name: 'licell_release_prune',
-    title: 'Prune FC historical versions (dangerous)',
     description: 'Preview or delete old FC published versions. Destructive when apply=true (requires yes=true).',
     inputSchema: inputSchema(withExecutionProps({
       keep: numberProp('Keep latest N versions (default 10).'),
@@ -186,7 +185,6 @@ const CURATED_MCP_COMMAND_TOOLS = buildCuratedToolMap([
 
   defineCuratedTool({
     name: 'licell_fn_list',
-    title: 'List functions',
     description: 'List FC functions in current region.',
     inputSchema: inputSchema(withExecutionProps({
       limit: numberProp('Max items (default 20).'),
@@ -201,7 +199,6 @@ const CURATED_MCP_COMMAND_TOOLS = buildCuratedToolMap([
 
   defineCuratedTool({
     name: 'licell_fn_info',
-    title: 'Get function info',
     description: 'Get FC function details.',
     inputSchema: inputSchema(withExecutionProps({
       name: stringProp('Function name. If omitted, uses project appName.'),
@@ -216,7 +213,6 @@ const CURATED_MCP_COMMAND_TOOLS = buildCuratedToolMap([
 
   defineCuratedTool({
     name: 'licell_fn_invoke',
-    title: 'Invoke function',
     description: 'Invoke FC function synchronously with an optional payload.',
     inputSchema: inputSchema(withExecutionProps({
       name: stringProp('Function name. If omitted, uses project appName.'),
@@ -236,7 +232,6 @@ const CURATED_MCP_COMMAND_TOOLS = buildCuratedToolMap([
 
   defineCuratedTool({
     name: 'licell_fn_rm',
-    title: 'Remove function (dangerous)',
     description: 'Delete FC function. Destructive (requires yes=true).',
     inputSchema: inputSchema(withExecutionProps({
       name: stringProp('Function name. If omitted, uses project appName.'),
@@ -254,16 +249,16 @@ const CURATED_MCP_COMMAND_TOOLS = buildCuratedToolMap([
   }),
 
   defineCuratedTool({
-    name: 'licell_domain_add',
-    title: 'Bind custom domain (and optional SSL)',
-    description: 'Bind a custom domain to current FC app and optionally enable HTTPS.',
+    name: 'licell_domain_app_bind',
+    tags: [DOMAIN_APP_BIND_WORKFLOW_TAG],
+    workflowRoleByTag: { [DOMAIN_APP_BIND_WORKFLOW_TAG]: 'entry' },
     inputSchema: inputSchema(withExecutionProps({
       domain: stringProp('Full domain, e.g. api.example.com.'),
       ssl: booleanProp("Enable HTTPS (Let's Encrypt)."),
       sslForceRenew: booleanProp('Force renew certificate.'),
       target: stringProp('Route to FC alias (prod/preview).')
     }), ['domain']),
-    baseArgv: ['domain', 'add'],
+    baseArgv: ['domain', 'app', 'bind'],
     bindings: [
       requiredPositionalString('domain', 'domain is required'),
       optionalBooleanFlag('ssl', '--ssl'),
@@ -273,16 +268,52 @@ const CURATED_MCP_COMMAND_TOOLS = buildCuratedToolMap([
   }),
 
   defineCuratedTool({
-    name: 'licell_domain_rm',
-    title: 'Unbind custom domain (dangerous)',
-    description: 'Unbind custom domain and cleanup DNS record. Destructive (requires yes=true).',
+    name: 'licell_domain_app_unbind',
+    tags: [DOMAIN_APP_UNBIND_WORKFLOW_TAG],
+    workflowRoleByTag: { [DOMAIN_APP_UNBIND_WORKFLOW_TAG]: 'entry' },
     inputSchema: inputSchema(withExecutionProps({
       domain: stringProp('Full domain, e.g. api.example.com.'),
       yes: booleanProp('Required in non-interactive mode.')
     }), ['domain']),
     annotations: { destructiveHint: true },
-    baseArgv: ['domain', 'rm'],
-    validators: [requireTrueValidator('yes', 'domain rm is destructive; set yes=true to confirm')],
+    baseArgv: ['domain', 'app', 'unbind'],
+    validators: [requireTrueValidator('yes', 'domain app unbind is destructive; set yes=true to confirm')],
+    bindings: [
+      requiredPositionalString('domain', 'domain is required'),
+      literalTokens('--yes')
+    ]
+  }),
+
+  defineCuratedTool({
+    name: 'licell_domain_static_bind',
+    tags: [DOMAIN_STATIC_BIND_WORKFLOW_TAG],
+    workflowRoleByTag: { [DOMAIN_STATIC_BIND_WORKFLOW_TAG]: 'entry' },
+    inputSchema: inputSchema(withExecutionProps({
+      domain: stringProp('Full domain, e.g. www.example.com.'),
+      bucket: stringProp('Optional OSS bucket override.'),
+      ssl: booleanProp("Enable HTTPS (Let's Encrypt)."),
+      sslForceRenew: booleanProp('Force renew certificate.')
+    }), ['domain']),
+    baseArgv: ['domain', 'static', 'bind'],
+    bindings: [
+      requiredPositionalString('domain', 'domain is required'),
+      optionalStringFlag('bucket', '--bucket'),
+      optionalBooleanFlag('ssl', '--ssl'),
+      optionalBooleanFlag('sslForceRenew', '--ssl-force-renew')
+    ]
+  }),
+
+  defineCuratedTool({
+    name: 'licell_domain_static_unbind',
+    tags: [DOMAIN_STATIC_UNBIND_WORKFLOW_TAG],
+    workflowRoleByTag: { [DOMAIN_STATIC_UNBIND_WORKFLOW_TAG]: 'entry' },
+    inputSchema: inputSchema(withExecutionProps({
+      domain: stringProp('Full domain, e.g. www.example.com.'),
+      yes: booleanProp('Required in non-interactive mode.')
+    }), ['domain']),
+    annotations: { destructiveHint: true },
+    baseArgv: ['domain', 'static', 'unbind'],
+    validators: [requireTrueValidator('yes', 'domain static unbind is destructive; set yes=true to confirm')],
     bindings: [
       requiredPositionalString('domain', 'domain is required'),
       literalTokens('--yes')
@@ -291,7 +322,6 @@ const CURATED_MCP_COMMAND_TOOLS = buildCuratedToolMap([
 
   defineCuratedTool({
     name: 'licell_dns_records_list',
-    title: 'List DNS records',
     description: 'List DNS records for a domain (Alidns).',
     inputSchema: inputSchema(withExecutionProps({
       domain: stringProp('Root domain, e.g. example.com.'),
@@ -306,7 +336,6 @@ const CURATED_MCP_COMMAND_TOOLS = buildCuratedToolMap([
 
   defineCuratedTool({
     name: 'licell_dns_records_add',
-    title: 'Add DNS record',
     description: 'Add a DNS record (Alidns).',
     inputSchema: inputSchema(withExecutionProps({
       domain: stringProp('Root domain, e.g. example.com.'),
@@ -329,7 +358,6 @@ const CURATED_MCP_COMMAND_TOOLS = buildCuratedToolMap([
 
   defineCuratedTool({
     name: 'licell_dns_records_rm',
-    title: 'Remove DNS record (dangerous)',
     description: 'Remove a DNS record by recordId. Destructive (requires yes=true).',
     inputSchema: inputSchema(withExecutionProps({
       recordId: stringProp('RecordId from list.'),
@@ -346,7 +374,6 @@ const CURATED_MCP_COMMAND_TOOLS = buildCuratedToolMap([
 
   defineCuratedTool({
     name: 'licell_supa_list',
-    title: 'List Supabase instances',
     description: 'List RDS Supabase instances in current region.',
     inputSchema: inputSchema(withExecutionProps({
       limit: numberProp('Max items (default 20).')
@@ -357,7 +384,6 @@ const CURATED_MCP_COMMAND_TOOLS = buildCuratedToolMap([
 
   defineCuratedTool({
     name: 'licell_supa_add',
-    title: 'Create Supabase instance',
     description: 'Provision a new RDS Supabase instance (creates PG, waits until Running, saves env vars). Long-running (~5-10 min).',
     inputSchema: inputSchema(withExecutionProps({
       name: stringProp('App name for the instance.'),
@@ -384,7 +410,6 @@ const CURATED_MCP_COMMAND_TOOLS = buildCuratedToolMap([
 
   defineCuratedTool({
     name: 'licell_supa_info',
-    title: 'Get Supabase instance details',
     description: 'Get detailed attributes of a Supabase instance.',
     inputSchema: inputSchema(withExecutionProps({
       instanceName: stringProp('Supabase instance name.')
@@ -395,7 +420,6 @@ const CURATED_MCP_COMMAND_TOOLS = buildCuratedToolMap([
 
   defineCuratedTool({
     name: 'licell_supa_connect',
-    title: 'Get Supabase connection info',
     description: 'Get Supabase endpoints, DB endpoints, and API keys (anon key, service key, JWT secret).',
     inputSchema: inputSchema(withExecutionProps({
       instanceName: stringProp('Supabase instance name.')
@@ -406,7 +430,6 @@ const CURATED_MCP_COMMAND_TOOLS = buildCuratedToolMap([
 
   defineCuratedTool({
     name: 'licell_supa_config',
-    title: 'View/modify Supabase config',
     description: 'View or modify Supabase instance configuration (auth/storage/RAG). Without modification flags, shows current config.',
     inputSchema: inputSchema(withExecutionProps({
       instanceName: stringProp('Supabase instance name.'),
@@ -427,7 +450,6 @@ const CURATED_MCP_COMMAND_TOOLS = buildCuratedToolMap([
 
   defineCuratedTool({
     name: 'licell_supa_whitelist',
-    title: 'Manage Supabase IP whitelist',
     description: 'View or modify Supabase instance IP whitelist. Without modification flags, shows current whitelist.',
     inputSchema: inputSchema(withExecutionProps({
       instanceName: stringProp('Supabase instance name.'),
@@ -448,7 +470,6 @@ const CURATED_MCP_COMMAND_TOOLS = buildCuratedToolMap([
 
   defineCuratedTool({
     name: 'licell_supa_reset_password',
-    title: 'Reset Supabase password',
     description: 'Reset Supabase dashboard or database password.',
     inputSchema: inputSchema(withExecutionProps({
       instanceName: stringProp('Supabase instance name.'),
@@ -466,7 +487,7 @@ const CURATED_MCP_COMMAND_TOOLS = buildCuratedToolMap([
 
   defineCuratedTool({
     name: 'licell_supa_lifecycle',
-    title: 'Restart/stop/start Supabase instance',
+    title: 'Manage Supabase instance lifecycle',
     commandSignature: 'supa <action>',
     description: 'Manage Supabase instance lifecycle: restart, stop, or start.',
     inputSchema: inputSchema(withExecutionProps({
@@ -482,7 +503,6 @@ const CURATED_MCP_COMMAND_TOOLS = buildCuratedToolMap([
 
   defineCuratedTool({
     name: 'licell_supa_rm',
-    title: 'Delete Supabase instance (dangerous)',
     description: 'Delete a Supabase instance. Destructive and irreversible (requires yes=true). Associated PG instance and NAT gateway need manual cleanup.',
     inputSchema: inputSchema(withExecutionProps({
       instanceName: stringProp('Supabase instance name.'),

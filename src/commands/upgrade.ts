@@ -1,5 +1,5 @@
 import type { CAC } from 'cac';
-import type { CommandMetadataMap } from './module';
+import { defineCommandModule, defineCliCommand, registerCliCommand } from './module';
 import pc from 'picocolors';
 import { createHash } from 'crypto';
 import { spawnSync } from 'child_process';
@@ -8,11 +8,48 @@ import { dirname, join, resolve } from 'path';
 import { tmpdir } from 'os';
 import { createSpinner, showIntro, showOutro, toOptionalString } from '../utils/cli-shared';
 import { emitCliEvent, emitCliResult, isJsonOutput } from '../utils/output';
+import { AUTOMATION_SECTION } from './sections';
 
 const DEFAULT_UPGRADE_REPO = 'agents-infrastructure/licell';
 const DEFAULT_PACKAGE_NAME = 'licell';
 const REPO_SLUG_RE = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 const UPGRADE_CHANNELS = ['auto', 'release', 'npm', 'pnpm', 'yarn', 'bun'] as const;
+
+const upgradeCommand = defineCliCommand({
+  rawName: 'upgrade',
+  description: '按当前安装来源升级 licell',
+  options: [
+    { rawName: '--channel <channel>', description: `升级渠道：${UPGRADE_CHANNELS.join('/')}（默认 auto）` },
+    { rawName: '--target-version <tag>', description: '指定升级目标版本（release tag 如 v0.9.6；兼容旧写法：`upgrade --version <tag>`）' },
+    { rawName: '--repo <owner/repo>', description: `GitHub 仓库（仅 release 渠道生效，默认 ${DEFAULT_UPGRADE_REPO}）` },
+    { rawName: '--script-url <url>', description: '覆盖 install.sh 地址（仅 release 渠道，需配合 --skip-checksum）' },
+    { rawName: '--skip-checksum', description: '跳过 SHA256 完整性校验（仅 release 渠道，不推荐）' },
+    { rawName: '--dry-run', description: '只输出将执行的升级计划（脚本地址或包管理器命令）' }
+  ],
+  descriptor: {
+    summary: '按当前安装来源执行自升级，支持 dry-run 查看计划。',
+    notes: ['推荐先执行 `licell upgrade --dry-run` 确认升级渠道与动作。'],
+    safety: {
+      level: 'mutating',
+      reason: '会修改本机 licell 安装，建议先 dry-run 再执行。'
+    },
+    optionInsights: {
+      '--dry-run': { whenToUse: '任何自动升级前都建议先使用。', cautions: ['用于确认 installSource、package manager 或 release installer。'] },
+      '--channel': { whenToUse: '需要强制走 `release` / `npm` / `pnpm` / `yarn` / `bun` 时使用。', cautions: ['覆盖 auto 检测可能与当前安装来源不一致。'] },
+      '--target-version': { whenToUse: '需要锁定升级到指定 tag 时使用。', cautions: ['建议先 dry-run 验证该版本与渠道是否匹配。'] },
+      '--repo': { whenToUse: 'release 渠道需要切到其它 GitHub 仓库时使用。', cautions: ['仅对 release 渠道生效。'] },
+      '--script-url': { whenToUse: '需要使用自定义 install.sh 地址时使用。', cautions: ['必须配合 `--skip-checksum`，安全性由调用方承担。'] },
+      '--skip-checksum': { whenToUse: '仅在自定义脚本地址且你明确接受风险时使用。', cautions: ['会跳过 release 脚本 SHA256 校验。'] }
+    },
+    recommendedFlow: [
+      { title: '检查升级计划', command: 'licell upgrade --dry-run --output json', reason: '先确认检测到的安装来源与执行命令。' },
+      { title: '确认渠道', command: 'licell upgrade --channel <channel> --dry-run', reason: '当 auto 检测不符合预期时再显式覆盖。' },
+      { title: '执行升级', command: 'licell upgrade', reason: '在 dry-run 结果符合预期后再真正修改安装。' }
+    ],
+    examples: ['licell upgrade --dry-run', 'licell upgrade', 'licell upgrade --channel release --target-version v0.10.1'],
+    agentTips: ['Agent 优先使用 `--dry-run --output json` 判断升级来源与命令。']
+  }
+});
 
 export type PackageManagerName = 'npm' | 'pnpm' | 'yarn' | 'bun';
 export type UpgradeChannel = typeof UPGRADE_CHANNELS[number];
@@ -353,13 +390,7 @@ function downloadText(url: string, label: string) {
 }
 
 export function registerUpgradeCommand(cli: CAC) {
-  cli.command('upgrade', '按当前安装来源升级 licell')
-    .option('--channel <channel>', `升级渠道：${UPGRADE_CHANNELS.join('/')}（默认 auto）`)
-    .option('--target-version <tag>', '指定升级目标版本（release tag 如 v0.9.6；兼容旧写法：`upgrade --version <tag>`）')
-    .option('--repo <owner/repo>', `GitHub 仓库（仅 release 渠道生效，默认 ${DEFAULT_UPGRADE_REPO}）`)
-    .option('--script-url <url>', '覆盖 install.sh 地址（仅 release 渠道，需配合 --skip-checksum）')
-    .option('--skip-checksum', '跳过 SHA256 完整性校验（仅 release 渠道，不推荐）')
-    .option('--dry-run', '只输出将执行的升级计划（脚本地址或包管理器命令）')
+  registerCliCommand(cli, upgradeCommand)
     .action(async (options: { channel?: unknown; targetVersion?: unknown; repo?: unknown; scriptUrl?: unknown; skipChecksum?: unknown; dryRun?: unknown }) => {
       showIntro(pc.bgBlue(pc.white(' ⬆ Licell Upgrade ')));
 
@@ -572,28 +603,8 @@ export function registerUpgradeCommand(cli: CAC) {
     });
 }
 
-export const upgradeCommandMetadata: CommandMetadataMap = {
-  upgrade: {
-    summary: '按当前安装来源执行自升级，支持 dry-run 查看计划。',
-    notes: ['推荐先执行 `licell upgrade --dry-run` 确认升级渠道与动作。'],
-    safety: {
-      level: 'mutating',
-      reason: '会修改本机 licell 安装，建议先 dry-run 再执行。'
-    },
-    optionInsights: {
-      '--dry-run': { whenToUse: '任何自动升级前都建议先使用。', cautions: ['用于确认 installSource、package manager 或 release installer。'] },
-      '--channel': { whenToUse: '需要强制走 `release` / `npm` / `pnpm` / `yarn` / `bun` 时使用。', cautions: ['覆盖 auto 检测可能与当前安装来源不一致。'] },
-      '--target-version': { whenToUse: '需要锁定升级到指定 tag 时使用。', cautions: ['建议先 dry-run 验证该版本与渠道是否匹配。'] },
-      '--repo': { whenToUse: 'release 渠道需要切到其它 GitHub 仓库时使用。', cautions: ['仅对 release 渠道生效。'] },
-      '--script-url': { whenToUse: '需要使用自定义 install.sh 地址时使用。', cautions: ['必须配合 `--skip-checksum`，安全性由调用方承担。'] },
-      '--skip-checksum': { whenToUse: '仅在自定义脚本地址且你明确接受风险时使用。', cautions: ['会跳过 release 脚本 SHA256 校验。'] }
-    },
-    recommendedFlow: [
-      { title: '检查升级计划', command: 'licell upgrade --dry-run --output json', reason: '先确认检测到的安装来源与执行命令。' },
-      { title: '确认渠道', command: 'licell upgrade --channel <channel> --dry-run', reason: '当 auto 检测不符合预期时再显式覆盖。' },
-      { title: '执行升级', command: 'licell upgrade', reason: '在 dry-run 结果符合预期后再真正修改安装。' }
-    ],
-    examples: ['licell upgrade --dry-run', 'licell upgrade', 'licell upgrade --channel release --target-version v0.10.1'],
-    agentTips: ['Agent 优先使用 `--dry-run --output json` 判断升级来源与命令。']
-  }
-};
+export const upgradeCommandModule = defineCommandModule({
+  section: AUTOMATION_SECTION,
+  register: registerUpgradeCommand,
+  commands: [upgradeCommand]
+});

@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cac } from 'cac';
-import { registerOssCommands } from '../commands/oss';
 
-const { ensureDestructiveActionConfirmedMock } = vi.hoisted(() => ({
-  ensureDestructiveActionConfirmedMock: vi.fn(async () => {})
+const { ensureDestructiveActionConfirmedMock, showOutroMock, spinnerStopMock } = vi.hoisted(() => ({
+  ensureDestructiveActionConfirmedMock: vi.fn(async () => {}),
+  showOutroMock: vi.fn(),
+  spinnerStopMock: vi.fn()
 }));
 
 vi.mock('@clack/prompts', () => ({
@@ -59,11 +60,11 @@ vi.mock('../utils/cli-shared', () => {
     normalizeCustomDomain: (value: string) => value.trim().toLowerCase(),
     createSpinner: () => ({
       start: vi.fn(),
-      stop: vi.fn(),
+      stop: spinnerStopMock,
       message: vi.fn()
     }),
     isInteractiveTTY: vi.fn(() => false),
-    showOutro: vi.fn(),
+    showOutro: showOutroMock,
     toPromptValue: (value: unknown) => String(value),
     toOptionalString,
     parseListLimit: (_input: unknown, fallback: number) => fallback,
@@ -80,6 +81,7 @@ import {
   downloadOssObject,
   downloadOssObjectsToDirectory,
   getOssObjectInfo,
+  removeOssBucketDomain,
   updateOssBucket,
   uploadDirectoryToBucket
 } from '../providers/oss';
@@ -93,10 +95,12 @@ const downloadOssObjectsToDirectoryMock = downloadOssObjectsToDirectory as unkno
 const getOssObjectInfoMock = getOssObjectInfo as unknown as ReturnType<typeof vi.fn>;
 const createOssBucketDomainTokenMock = createOssBucketDomainToken as unknown as ReturnType<typeof vi.fn>;
 const bindOssBucketDomainMock = bindOssBucketDomain as unknown as ReturnType<typeof vi.fn>;
+const removeOssBucketDomainMock = removeOssBucketDomain as unknown as ReturnType<typeof vi.fn>;
 const uploadDirectoryToBucketMock = uploadDirectoryToBucket as unknown as ReturnType<typeof vi.fn>;
 
-function createCli() {
+async function createCli() {
   const cli = cac('licell');
+  const { registerOssCommands } = await import('../commands/oss');
   registerOssCommands(cli);
   return cli;
 }
@@ -107,6 +111,8 @@ describe('oss commands', () => {
   beforeEach(() => {
     consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     ensureDestructiveActionConfirmedMock.mockClear();
+    showOutroMock.mockClear();
+    spinnerStopMock.mockClear();
 
     createOssBucketMock.mockReset();
     createOssBucketMock.mockResolvedValue({
@@ -151,6 +157,9 @@ describe('oss commands', () => {
       status: 'Enabled',
       lastModified: '2026-03-07T10:00:00Z'
     });
+
+    removeOssBucketDomainMock.mockReset();
+    removeOssBucketDomainMock.mockResolvedValue(true);
 
     getOssObjectInfoMock.mockReset();
     getOssObjectInfoMock.mockResolvedValue({
@@ -207,7 +216,7 @@ describe('oss commands', () => {
   });
 
   it('maps `oss create` args to provider call', async () => {
-    const cli = createCli();
+    const cli = await createCli();
     await cli.parse([
       'node',
       'src/cli.ts',
@@ -233,7 +242,7 @@ describe('oss commands', () => {
   });
 
   it('maps `oss update` args to provider call', async () => {
-    const cli = createCli();
+    const cli = await createCli();
     await cli.parse([
       'node',
       'src/cli.ts',
@@ -253,7 +262,7 @@ describe('oss commands', () => {
   });
 
   it('maps `oss rm --recursive --yes` to recursive delete flow', async () => {
-    const cli = createCli();
+    const cli = await createCli();
     await cli.parse([
       'node',
       'src/cli.ts',
@@ -269,7 +278,7 @@ describe('oss commands', () => {
   });
 
   it('maps `oss domain token` args to provider call', async () => {
-    const cli = createCli();
+    const cli = await createCli();
     await cli.parse([
       'node',
       'src/cli.ts',
@@ -283,7 +292,7 @@ describe('oss commands', () => {
   });
 
   it('maps `oss domain bind` args to provider call', async () => {
-    const cli = createCli();
+    const cli = await createCli();
     await cli.parse([
       'node',
       'src/cli.ts',
@@ -296,8 +305,26 @@ describe('oss commands', () => {
     expect(bindOssBucketDomainMock).toHaveBeenCalledWith('demo-bucket', 'static.example.com');
   });
 
+
+  it('accepts `oss domain unbind` when domain binding is already absent', async () => {
+    removeOssBucketDomainMock.mockResolvedValue(false);
+    const cli = await createCli();
+    await cli.parse([
+      'node',
+      'src/cli.ts',
+      'oss domain unbind',
+      'demo-bucket',
+      'static.example.com',
+      '--yes'
+    ]);
+
+    expect(ensureDestructiveActionConfirmedMock).toHaveBeenCalledTimes(1);
+    expect(removeOssBucketDomainMock).toHaveBeenCalledTimes(1);
+    expect(removeOssBucketDomainMock).toHaveBeenCalledWith('demo-bucket', 'static.example.com');
+  });
+
   it('maps `oss upload` args to provider call', async () => {
-    const cli = createCli();
+    const cli = await createCli();
     await cli.parse([
       'node',
       'src/cli.ts',
@@ -314,7 +341,7 @@ describe('oss commands', () => {
   });
 
   it('maps `oss object info` args to provider call', async () => {
-    const cli = createCli();
+    const cli = await createCli();
     await cli.parse([
       'node',
       'src/cli.ts',
@@ -328,7 +355,7 @@ describe('oss commands', () => {
   });
 
   it('maps `oss object get` args to provider call', async () => {
-    const cli = createCli();
+    const cli = await createCli();
     await cli.parse([
       'node',
       'src/cli.ts',
@@ -343,7 +370,7 @@ describe('oss commands', () => {
   });
 
   it('maps `oss object rm --yes` args to provider call', async () => {
-    const cli = createCli();
+    const cli = await createCli();
     await cli.parse([
       'node',
       'src/cli.ts',
@@ -359,7 +386,7 @@ describe('oss commands', () => {
   });
 
   it('maps `oss sync down` args to provider call', async () => {
-    const cli = createCli();
+    const cli = await createCli();
     await cli.parse([
       'node',
       'src/cli.ts',
@@ -375,7 +402,7 @@ describe('oss commands', () => {
   });
 
   it('maps `oss sync up` args to upload provider call', async () => {
-    const cli = createCli();
+    const cli = await createCli();
     await cli.parse([
       'node',
       'src/cli.ts',

@@ -1,4 +1,18 @@
+import type { CommandTaskHint } from '../utils/command-metadata';
+import {
+  buildLicellMcpToolMetadata,
+  buildLicellMcpToolMetadataFromAgentCommand,
+  findAgentCommandForTool,
+  renderLicellMcpToolDescription,
+  resolveLicellMcpToolTitle,
+  type LicellMcpToolMetadataEnvelope,
+  type LicellMcpToolPreferredOutput
+} from './tool-metadata';
 import { assertTrue, toOptionalBoolean, toOptionalNumber, toOptionalString } from './tool-arg-utils';
+import {
+  resolveLicellWorkflowEntryCopy,
+  type LicellWorkflowRole
+} from './workflow-descriptors';
 
 export type ToolArgs = Record<string, unknown>;
 export type CuratedSchemaProperty = Record<string, unknown>;
@@ -18,22 +32,26 @@ export interface CuratedMcpCommandTool {
   annotations?: {
     destructiveHint?: boolean;
   };
+  metadata?: LicellMcpToolMetadataEnvelope;
   commandSignature?: string;
   rootCommand?: string;
   tags?: string[];
-  docsSummary?: string;
   buildArgv(toolArgs: ToolArgs): string[];
 }
 
 interface CuratedMcpCommandToolDefinition {
   name: string;
-  title: string;
-  description: string;
+  title?: string;
+  summary?: string;
+  description?: string;
   inputSchema: CuratedMcpCommandTool['inputSchema'];
   annotations?: CuratedMcpCommandTool['annotations'];
   commandSignature?: string;
   tags?: string[];
-  docsSummary?: string;
+  workflowRoleByTag?: Record<string, LicellWorkflowRole>;
+  preferredOutput?: LicellMcpToolPreferredOutput;
+  supportsStructuredOutput?: boolean;
+  taskHints?: CommandTaskHint[];
   baseArgv: string[] | ((toolArgs: ToolArgs) => string[]);
   validators?: CuratedToolValidator[];
   bindings?: CuratedToolBinding[];
@@ -95,18 +113,102 @@ function inferCommandSignature(baseArgv: CuratedMcpCommandToolDefinition['baseAr
   return tokens.length > 0 ? tokens.join(' ') : undefined;
 }
 
+function resolveDefinitionDescription(
+  definition: CuratedMcpCommandToolDefinition,
+  matchedCommand?: ReturnType<typeof findAgentCommandForTool>
+) {
+  const workflowEntryCopy = resolveLicellWorkflowEntryCopy(definition.tags, definition.workflowRoleByTag);
+  return definition.description
+    || workflowEntryCopy?.description
+    || matchedCommand?.description
+    || matchedCommand?.summary
+    || definition.summary;
+}
+
+function resolveDefinitionSummary(
+  definition: CuratedMcpCommandToolDefinition,
+  matchedCommand?: ReturnType<typeof findAgentCommandForTool>
+) {
+  const workflowEntryCopy = resolveLicellWorkflowEntryCopy(definition.tags, definition.workflowRoleByTag);
+  return definition.summary
+    || workflowEntryCopy?.summary
+    || matchedCommand?.summary
+    || definition.description
+    || workflowEntryCopy?.description;
+}
+
+function buildFallbackCuratedTaskHints(
+  definition: CuratedMcpCommandToolDefinition,
+  commandSignature?: string,
+  fallbackDescription?: string
+): CommandTaskHint[] {
+  return [{
+    phase: definition.annotations?.destructiveHint ? 'cleanup' : 'mutate',
+    title: definition.title || definition.name,
+    description: fallbackDescription || definition.summary || definition.title || definition.name,
+    commands: [commandSignature || definition.name]
+  }];
+}
+
+function buildCuratedToolMetadata(definition: CuratedMcpCommandToolDefinition, commandSignature?: string) {
+  const rootCommand = commandSignature?.split(/\s+/)[0];
+  const matchedCommand = findAgentCommandForTool(commandSignature, rootCommand);
+  const summary = resolveDefinitionSummary(definition, matchedCommand);
+  const description = resolveDefinitionDescription(definition, matchedCommand) || summary || definition.name;
+
+  if (matchedCommand && !(definition.taskHints && definition.taskHints.length > 0)) {
+    return buildLicellMcpToolMetadataFromAgentCommand(matchedCommand, {
+      toolKind: 'curated',
+      preferredOutput: definition.preferredOutput || 'json',
+      supportsStructuredOutput: definition.supportsStructuredOutput !== false,
+      tags: definition.tags,
+      commandSignature,
+      title: definition.title,
+      summary,
+      description,
+      workflowRoleByTag: definition.workflowRoleByTag
+    });
+  }
+
+  return buildLicellMcpToolMetadata({
+    toolKind: 'curated',
+    preferredOutput: definition.preferredOutput || 'json',
+    supportsStructuredOutput: definition.supportsStructuredOutput !== false,
+    title: definition.title,
+    summary,
+    description,
+    command: {
+      key: matchedCommand?.key,
+      signature: commandSignature,
+      rootCommand: matchedCommand?.rootCommand || rootCommand
+    },
+    section: matchedCommand?.sectionId && matchedCommand.sectionTitle
+      ? { id: matchedCommand.sectionId, title: matchedCommand.sectionTitle }
+      : undefined,
+    tags: [...(definition.tags || []), ...(rootCommand ? [rootCommand] : [])],
+    workflowRoleByTag: definition.workflowRoleByTag,
+    taskHints: definition.taskHints || buildFallbackCuratedTaskHints(definition, commandSignature, description),
+    safety: matchedCommand?.safety,
+    result: matchedCommand?.result
+  });
+}
+
 export function defineCuratedTool(definition: CuratedMcpCommandToolDefinition): CuratedMcpCommandTool {
   const commandSignature = definition.commandSignature || inferCommandSignature(definition.baseArgv);
+  const metadata = buildCuratedToolMetadata(definition, commandSignature);
   return {
     name: definition.name,
-    title: definition.title,
-    description: definition.description,
+    title: resolveLicellMcpToolTitle(metadata, definition.title),
+    description: renderLicellMcpToolDescription(metadata, {
+      fallbackSummary: definition.summary,
+      fallbackDescription: definition.description
+    }),
     inputSchema: definition.inputSchema,
     annotations: definition.annotations,
+    metadata,
     commandSignature,
     rootCommand: commandSignature?.split(/\s+/)[0],
     tags: definition.tags ? [...definition.tags] : [],
-    docsSummary: definition.docsSummary,
     buildArgv(toolArgs: ToolArgs) {
       for (const validator of definition.validators || []) validator(toolArgs);
       const argv = typeof definition.baseArgv === 'function'
@@ -159,7 +261,6 @@ export function optionalBooleanFlag(inputName: string, flag: string): CuratedToo
   };
 }
 
-
 export function requiredPositionalString(inputName: string, message?: string): CuratedToolBinding {
   return (toolArgs, argv) => {
     argv.push(requireString(toolArgs, inputName, message));
@@ -184,7 +285,6 @@ export function defaultTrueFlag(inputName: string, flag: string): CuratedToolBin
     if (toOptionalBoolean(toolArgs[inputName]) !== false) argv.push(flag);
   };
 }
-
 
 export function literalTokens(...tokens: string[]): CuratedToolBinding {
   return (_toolArgs, argv) => {
@@ -218,7 +318,6 @@ export function requireTrueValidator(inputName: string, message: string): Curate
     assertTrue(toOptionalBoolean(toolArgs[inputName]), message);
   };
 }
-
 
 export function requireTrueWhenBoolean(conditionInputName: string, confirmInputName: string, message: string): CuratedToolValidator {
   return (toolArgs) => {

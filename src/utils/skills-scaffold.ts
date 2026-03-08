@@ -91,7 +91,8 @@ licell deploy --type api --target preview --enable-vpc
 
 - 认证失败：运行 \`licell login\` 重新配置凭证
 - 部署失败：检查 \`licell logs --once\` 查看错误日志
-- 域名冲突：使用 \`licell domain rm <domain>\` 清理后重试
+- 应用域名冲突：使用 \`licell domain app unbind <domain>\` 清理后重试
+- 静态域名冲突：使用 \`licell domain static unbind <domain>\` 清理后重试
 - 版本清理：\`licell release prune --keep 5 --apply\` 清理旧版本
 - 破坏性操作（rm/prune）需要 \`--yes\` 跳过确认，或在交互模式下手动确认
 `;

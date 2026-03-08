@@ -8,14 +8,25 @@ import {
   renderReadmeUpgradeGuidance
 } from './install-upgrade-docs';
 import {
-  FC_API_DEPLOY_WORKFLOW_TAG,
-  renderTaggedCuratedWorkflowTable
-} from './mcp-workflow-docs';
+  README_MCP_DOMAIN_WORKFLOWS_END,
+  README_MCP_DOMAIN_WORKFLOWS_SECTION,
+  README_MCP_DOMAIN_WORKFLOWS_START,
+  README_MCP_FC_API_WORKFLOW_END,
+  README_MCP_FC_API_WORKFLOW_SECTION,
+  README_MCP_FC_API_WORKFLOW_START,
+  renderWorkflowDocGeneratedSection,
+  syncWorkflowDocGeneratedSection
+} from './workflow-doc-sections';
+
+export {
+  README_MCP_DOMAIN_WORKFLOWS_END,
+  README_MCP_DOMAIN_WORKFLOWS_START,
+  README_MCP_FC_API_WORKFLOW_END,
+  README_MCP_FC_API_WORKFLOW_START
+} from './workflow-doc-sections';
 
 export const README_QUICK_REFERENCE_START = '<!-- BEGIN GENERATED:README_QUICK_REFERENCE -->';
 export const README_QUICK_REFERENCE_END = '<!-- END GENERATED:README_QUICK_REFERENCE -->';
-export const README_MCP_FC_API_WORKFLOW_START = '<!-- BEGIN GENERATED:README_MCP_FC_API_WORKFLOW -->';
-export const README_MCP_FC_API_WORKFLOW_END = '<!-- END GENERATED:README_MCP_FC_API_WORKFLOW -->';
 
 function unique<T>(values: T[]) {
   return [...new Set(values)];
@@ -41,9 +52,11 @@ function renderCommandTable(commands: ReturnType<typeof buildCommandReferenceSec
 }
 
 export function renderReadmeMcpFcApiWorkflow() {
-  return renderTaggedCuratedWorkflowTable(FC_API_DEPLOY_WORKFLOW_TAG, {
-    intro: '`licell mcp` 已提供这组 FC API 部署工作流工具（由共享 MCP 注册表自动生成）：'
-  });
+  return renderWorkflowDocGeneratedSection(README_MCP_FC_API_WORKFLOW_SECTION);
+}
+
+export function renderReadmeMcpDomainWorkflows() {
+  return renderWorkflowDocGeneratedSection(README_MCP_DOMAIN_WORKFLOWS_SECTION);
 }
 
 export function renderReadmeQuickReference() {
@@ -122,18 +135,19 @@ export function syncReadmeQuickReferenceSection(readmeContent: string) {
 }
 
 export function syncReadmeMcpFcApiWorkflowSection(readmeContent: string) {
-  return syncGeneratedSection(readmeContent, {
-    startMarker: README_MCP_FC_API_WORKFLOW_START,
-    endMarker: README_MCP_FC_API_WORKFLOW_END,
-    generatedContent: renderReadmeMcpFcApiWorkflow(),
-    missingMarkersMessage: 'README MCP FC API workflow markers not found'
-  });
+  return syncWorkflowDocGeneratedSection(readmeContent, README_MCP_FC_API_WORKFLOW_SECTION);
+}
+
+export function syncReadmeMcpDomainWorkflowsSection(readmeContent: string) {
+  return syncWorkflowDocGeneratedSection(readmeContent, README_MCP_DOMAIN_WORKFLOWS_SECTION);
 }
 
 export function syncReadmeGeneratedSections(readmeContent: string) {
   return syncReadmeQuickReferenceSection(
-    syncReadmeMcpFcApiWorkflowSection(
-      syncReadmeUpgradeGuidanceSection(readmeContent)
+    syncReadmeMcpDomainWorkflowsSection(
+      syncReadmeMcpFcApiWorkflowSection(
+        syncReadmeUpgradeGuidanceSection(readmeContent)
+      )
     )
   );
 }

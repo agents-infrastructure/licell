@@ -4,7 +4,7 @@ import { Config } from '../utils/config';
 import { isConflictError, isNotFoundError, isTransientError } from '../utils/alicloud-error';
 import { formatErrorMessage } from '../utils/errors';
 import { withRetry } from '../utils/retry';
-import { ensureDomainCname, normalizeDnsValue } from './domain';
+import { ensureDomainCname, normalizeDnsValue } from './dns';
 import { resolveSdkCtor } from '../utils/sdk';
 
 const RpcClientCtor = resolveSdkCtor<$OpenApi.default>($OpenApi.default, '@alicloud/openapi-client');

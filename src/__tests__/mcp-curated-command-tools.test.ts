@@ -7,6 +7,28 @@ describe('getCuratedMcpCommandTools', () => {
     expect(tools).toHaveProperty('licell_deploy');
     expect(tools).toHaveProperty('licell_release_prune');
     expect(tools).toHaveProperty('licell_supa_rm');
+    expect(tools).toHaveProperty('licell_domain_static_bind');
+    expect(tools).toHaveProperty('licell_domain_static_unbind');
+    expect(tools.licell_deploy.title).toBe('Deploy current project');
+    expect(tools.licell_fc_deploy_spec.title).toBe('Get FC API deploy spec');
+    expect(tools.licell_supa_lifecycle.title).toBe('Manage Supabase instance lifecycle');
+    expect(tools.licell_deploy.metadata?.licell.title).toBe('Deploy current project');
+    expect(tools.licell_deploy.metadata?.licell.toolKind).toBe('curated');
+    expect(tools.licell_deploy.metadata?.licell.command?.key).toBe('deploy');
+    expect(tools.licell_deploy.metadata?.licell.summary).toContain('正式部署');
+    expect(tools.licell_deploy.metadata?.licell.workflows.map((workflow) => workflow.tag)).toContain('fc-api-deploy-workflow');
+    expect(tools.licell_deploy.metadata?.licell.workflows.find((workflow) => workflow.tag === 'fc-api-deploy-workflow')?.role).toBe('entry');
+    expect(tools.licell_domain_app_bind.metadata?.licell.workflows.find((workflow) => workflow.tag === 'domain-app-bind-workflow')?.role).toBe('entry');
+    expect(tools.licell_domain_app_unbind.metadata?.licell.workflows.find((workflow) => workflow.tag === 'domain-app-unbind-workflow')?.role).toBe('entry');
+    expect(tools.licell_domain_static_bind.metadata?.licell.workflows.find((workflow) => workflow.tag === 'domain-static-bind-workflow')?.role).toBe('entry');
+    expect(tools.licell_domain_static_unbind.metadata?.licell.workflows.find((workflow) => workflow.tag === 'domain-static-unbind-workflow')?.role).toBe('entry');
+    expect(tools.licell_deploy.metadata?.licell.description).toContain('Deploy current project');
+    expect(tools.licell_domain_app_bind.metadata?.licell.summary).toContain('绑定自定义域名');
+    expect(tools.licell_domain_app_unbind.metadata?.licell.summary).toContain('解绑当前应用域名');
+    expect(tools.licell_domain_static_bind.metadata?.licell.summary).toContain('静态站点');
+    expect(tools.licell_domain_static_unbind.metadata?.licell.summary).toContain('解绑静态站点域名');
+    expect(tools.licell_release_prune.description).toContain('Safety: destructive');
+    expect(tools.licell_supa_lifecycle.metadata?.licell.command?.rootCommand).toBe('supa');
   });
 
   it('builds deploy argv from structured input', () => {

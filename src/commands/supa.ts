@@ -1,5 +1,5 @@
 import type { CAC } from 'cac';
-import type { CommandMetadataMap } from './module';
+import { defineCommandModule, commandInvocation, defineCliCommand, registerCliCommand, type DeclaredCliCommand } from './module';
 import { confirm, isCancel } from '@clack/prompts';
 import pc from 'picocolors';
 import { executeWithAuthRecovery } from '../utils/auth-recovery';
@@ -33,19 +33,110 @@ import {
   withSpinner
 } from '../utils/cli-shared';
 import { emitCliResult, isJsonOutput } from '../utils/output';
+import { DATA_SECTION } from './sections';
+
+const supaAddCommand = defineCliCommand({
+  rawName: 'supa add',
+  description: '创建 RDS Supabase 实例',
+  descriptor: { title: 'Create Supabase instance' },
+  options: [
+    { rawName: '--name <name>', description: '应用名称' },
+    { rawName: '--vsw <vSwitchId>', description: '指定 VSwitch ID' },
+    { rawName: '--class <instanceClass>', description: '实例规格（默认 rdsai.supabase.basic）' },
+    { rawName: '--db-instance <dbInstanceName>', description: '关联已有 RDS PostgreSQL 实例 ID' },
+    { rawName: '--dashboard-user <user>', description: 'Dashboard 用户名（默认 supabase）' },
+    { rawName: '--dashboard-password <password>', description: 'Dashboard 密码（自动生成）' },
+    { rawName: '--db-password <password>', description: '数据库密码（自动生成）' },
+    { rawName: '--public-network', description: '开启公网 NAT 网关' }
+  ]
+});
+
+const supaListCommand = defineCliCommand({
+  rawName: 'supa list',
+  description: '查看 Supabase 实例列表',
+  options: [
+    { rawName: '--limit <n>', description: '返回数量，默认 20' }
+  ]
+});
+
+const supaInfoCommand = defineCliCommand({
+  rawName: 'supa info <instanceName>',
+  description: '查看 Supabase 实例详情',
+  descriptor: { title: 'Get Supabase instance details' }
+});
+
+const supaConnectCommand = defineCliCommand({
+  rawName: 'supa connect <instanceName>',
+  description: '查看 Supabase 连接信息和 API Keys',
+  descriptor: { title: 'Get Supabase connection info' }
+});
+
+const supaConfigCommand = defineCliCommand({
+  rawName: 'supa config <instanceName>',
+  description: '查看 Supabase 实例配置（auth/storage/rag）',
+  descriptor: { title: 'View/modify Supabase config' },
+  options: [
+    { rawName: '--set-auth <key=value>', description: '修改 Auth 配置（如 GOTRUE_SITE_URL=http://example.com）' },
+    { rawName: '--set-storage <key=value>', description: '修改 Storage 配置（如 TENANT_ID=my-prefix）' },
+    { rawName: '--rag <on|off>', description: '开启/关闭 RAG Agent' },
+    { rawName: '--set-rag <key=value>', description: '修改 RAG 配置（如 LLM_MODEL=qwen-flash）' }
+  ]
+});
+
+const supaWhitelistCommand = defineCliCommand({
+  rawName: 'supa whitelist <instanceName>',
+  description: '查看/修改 Supabase IP 白名单',
+  descriptor: { title: 'Manage Supabase IP whitelist' },
+  options: [
+    { rawName: '--set <ips>', description: '设置白名单 IP（覆盖模式，逗号分隔）' },
+    { rawName: '--add <ips>', description: '追加白名单 IP（逗号分隔）' },
+    { rawName: '--remove <ips>', description: '删除白名单 IP（逗号分隔）' },
+    { rawName: '--group <name>', description: '白名单分组名称（默认 default）' }
+  ]
+});
+
+const supaResetPasswordCommand = defineCliCommand({
+  rawName: 'supa reset-password <instanceName>',
+  description: '重置 Supabase Dashboard 或数据库密码',
+  descriptor: { title: 'Reset Supabase password' },
+  options: [
+    { rawName: '--dashboard-password <password>', description: '新的 Dashboard 密码' },
+    { rawName: '--db-password <password>', description: '新的数据库密码' }
+  ]
+});
+
+const supaRestartCommand = defineCliCommand({
+  rawName: 'supa restart <instanceName>',
+  description: '重启 Supabase 实例'
+});
+
+const supaStopCommand = defineCliCommand({
+  rawName: 'supa stop <instanceName>',
+  description: '暂停 Supabase 实例'
+});
+
+const supaStartCommand = defineCliCommand({
+  rawName: 'supa start <instanceName>',
+  description: '启动 Supabase 实例'
+});
+
+const supaRmCommand = defineCliCommand({
+  rawName: 'supa rm <instanceName>',
+  description: '删除 Supabase 实例',
+  options: [
+    { rawName: '--yes', description: '跳过确认' }
+  ],
+  descriptor: {
+    title: 'Delete Supabase instance',
+    safety: {
+      level: 'destructive',
+      reason: '会删除 Supabase 实例及其相关配置。'
+    }
+  }
+});
 
 export function registerSupaCommands(cli: CAC) {
-
-  // ── supa add ──
-  cli.command('supa add', '创建 RDS Supabase 实例')
-    .option('--name <name>', '应用名称')
-    .option('--vsw <vSwitchId>', '指定 VSwitch ID')
-    .option('--class <instanceClass>', '实例规格（默认 rdsai.supabase.basic）')
-    .option('--db-instance <dbInstanceName>', '关联已有 RDS PostgreSQL 实例 ID')
-    .option('--dashboard-user <user>', 'Dashboard 用户名（默认 supabase）')
-    .option('--dashboard-password <password>', 'Dashboard 密码（自动生成）')
-    .option('--db-password <password>', '数据库密码（自动生成）')
-    .option('--public-network', '开启公网 NAT 网关')
+  registerCliCommand(cli, supaAddCommand)
     .action(async (options: {
       name?: unknown;
       vsw?: unknown;
@@ -57,7 +148,7 @@ export function registerSupaCommands(cli: CAC) {
       publicNetwork?: boolean;
     }) => {
       await executeWithAuthRecovery(
-        { commandLabel: 'licell supa add', interactiveTTY: isInteractiveTTY(), requiredCapabilities: ['rdsai', 'vpc'] },
+        { commandLabel: commandInvocation(supaAddCommand), interactiveTTY: isInteractiveTTY(), requiredCapabilities: ['rdsai', 'vpc'] },
         async () => {
           showIntro(pc.bgGreen(pc.black(' 🟢 Supabase Provisioning ')));
           ensureAuthOrExit();
@@ -96,12 +187,10 @@ export function registerSupaCommands(cli: CAC) {
       );
     });
 
-  // ── supa list ──
-  cli.command('supa list', '查看 Supabase 实例列表')
-    .option('--limit <n>', '返回数量，默认 20')
+  registerCliCommand(cli, supaListCommand)
     .action(async (options: { limit?: unknown }) => {
       await executeWithAuthRecovery(
-        { commandLabel: 'licell supa list', interactiveTTY: isInteractiveTTY(), requiredCapabilities: ['rdsai'] },
+        { commandLabel: commandInvocation(supaListCommand), interactiveTTY: isInteractiveTTY(), requiredCapabilities: ['rdsai'] },
         async () => {
           ensureAuthOrExit();
           const limit = parseListLimit(options.limit, 20, 200);
@@ -125,11 +214,10 @@ export function registerSupaCommands(cli: CAC) {
       );
     });
 
-  // ── supa info ──
-  cli.command('supa info <instanceName>', '查看 Supabase 实例详情')
+  registerCliCommand(cli, supaInfoCommand)
     .action(async (instanceName: string) => {
       await executeWithAuthRecovery(
-        { commandLabel: 'licell supa info', interactiveTTY: isInteractiveTTY(), requiredCapabilities: ['rdsai'] },
+        { commandLabel: commandInvocation(supaInfoCommand), interactiveTTY: isInteractiveTTY(), requiredCapabilities: ['rdsai'] },
         async () => {
           ensureAuthOrExit();
           const name = instanceName.trim();
@@ -153,11 +241,10 @@ export function registerSupaCommands(cli: CAC) {
       );
     });
 
-  // ── supa connect ──
-  cli.command('supa connect <instanceName>', '查看 Supabase 连接信息和 API Keys')
+  registerCliCommand(cli, supaConnectCommand)
     .action(async (instanceName: string) => {
       await executeWithAuthRecovery(
-        { commandLabel: 'licell supa connect', interactiveTTY: isInteractiveTTY(), requiredCapabilities: ['rdsai'] },
+        { commandLabel: commandInvocation(supaConnectCommand), interactiveTTY: isInteractiveTTY(), requiredCapabilities: ['rdsai'] },
         async () => {
           ensureAuthOrExit();
           const name = instanceName.trim();
@@ -195,12 +282,7 @@ export function registerSupaCommands(cli: CAC) {
       );
     });
 
-  // ── supa config ──
-  cli.command('supa config <instanceName>', '查看 Supabase 实例配置（auth/storage/rag）')
-    .option('--set-auth <key=value>', '修改 Auth 配置（如 GOTRUE_SITE_URL=http://example.com）')
-    .option('--set-storage <key=value>', '修改 Storage 配置（如 TENANT_ID=my-prefix）')
-    .option('--rag <on|off>', '开启/关闭 RAG Agent')
-    .option('--set-rag <key=value>', '修改 RAG 配置（如 LLM_MODEL=qwen-flash）')
+  registerCliCommand(cli, supaConfigCommand)
     .action(async (instanceName: string, options: {
       setAuth?: string;
       setStorage?: string;
@@ -208,13 +290,12 @@ export function registerSupaCommands(cli: CAC) {
       setRag?: string;
     }) => {
       await executeWithAuthRecovery(
-        { commandLabel: 'licell supa config', interactiveTTY: isInteractiveTTY(), requiredCapabilities: ['rdsai'] },
+        { commandLabel: commandInvocation(supaConfigCommand), interactiveTTY: isInteractiveTTY(), requiredCapabilities: ['rdsai'] },
         async () => {
           ensureAuthOrExit();
           const name = instanceName.trim();
           const s = createSpinner();
 
-          // Handle modifications
           if (options.setAuth) {
             const [key, ...rest] = options.setAuth.split('=');
             const value = rest.join('=');
@@ -248,7 +329,6 @@ export function registerSupaCommands(cli: CAC) {
             else { emitCliResult({ stage: 'supa.config', action: 'set-rag', ragStatus, ragConfig }); return; }
           }
 
-          // If no modification flags, show current config
           if (!options.setAuth && !options.setStorage && !options.rag && !options.setRag) {
             const [authInfo, storageConfig, ragConfig] = await withSpinner(
               s, '正在获取配置...', '❌ 获取失败',
@@ -284,12 +364,7 @@ export function registerSupaCommands(cli: CAC) {
       );
     });
 
-  // ── supa whitelist ──
-  cli.command('supa whitelist <instanceName>', '查看/修改 Supabase IP 白名单')
-    .option('--set <ips>', '设置白名单 IP（覆盖模式，逗号分隔）')
-    .option('--add <ips>', '追加白名单 IP（逗号分隔）')
-    .option('--remove <ips>', '删除白名单 IP（逗号分隔）')
-    .option('--group <name>', '白名单分组名称（默认 default）')
+  registerCliCommand(cli, supaWhitelistCommand)
     .action(async (instanceName: string, options: {
       set?: string;
       add?: string;
@@ -297,7 +372,7 @@ export function registerSupaCommands(cli: CAC) {
       group?: string;
     }) => {
       await executeWithAuthRecovery(
-        { commandLabel: 'licell supa whitelist', interactiveTTY: isInteractiveTTY(), requiredCapabilities: ['rdsai'] },
+        { commandLabel: commandInvocation(supaWhitelistCommand), interactiveTTY: isInteractiveTTY(), requiredCapabilities: ['rdsai'] },
         async () => {
           ensureAuthOrExit();
           const name = instanceName.trim();
@@ -335,13 +410,10 @@ export function registerSupaCommands(cli: CAC) {
       );
     });
 
-  // ── supa reset-password ──
-  cli.command('supa reset-password <instanceName>', '重置 Supabase Dashboard 或数据库密码')
-    .option('--dashboard-password <password>', '新的 Dashboard 密码')
-    .option('--db-password <password>', '新的数据库密码')
+  registerCliCommand(cli, supaResetPasswordCommand)
     .action(async (instanceName: string, options: { dashboardPassword?: string; dbPassword?: string }) => {
       await executeWithAuthRecovery(
-        { commandLabel: 'licell supa reset-password', interactiveTTY: isInteractiveTTY(), requiredCapabilities: ['rdsai'] },
+        { commandLabel: commandInvocation(supaResetPasswordCommand), interactiveTTY: isInteractiveTTY(), requiredCapabilities: ['rdsai'] },
         async () => {
           ensureAuthOrExit();
           const name = instanceName.trim();
@@ -358,35 +430,37 @@ export function registerSupaCommands(cli: CAC) {
       );
     });
 
-  // ── supa restart / stop / start ──
-  for (const [cmd, label, fn] of [
-    ['supa restart', '重启', restartSupabaseInstance],
-    ['supa stop', '暂停', stopSupabaseInstance],
-    ['supa start', '启动', startSupabaseInstance]
-  ] as const) {
-    cli.command(`${cmd} <instanceName>`, `${label} Supabase 实例`)
+  const registerLifecycleCommand = (
+    command: DeclaredCliCommand,
+    label: string,
+    fn: (instanceName: string) => Promise<unknown>,
+    stage: string
+  ) => {
+    registerCliCommand(cli, command)
       .action(async (instanceName: string) => {
         await executeWithAuthRecovery(
-          { commandLabel: `licell ${cmd}`, interactiveTTY: isInteractiveTTY(), requiredCapabilities: ['rdsai'] },
+          { commandLabel: commandInvocation(command), interactiveTTY: isInteractiveTTY(), requiredCapabilities: ['rdsai'] },
           async () => {
             ensureAuthOrExit();
             const name = instanceName.trim();
             const s = createSpinner();
             await withSpinner(s, `正在${label}实例 ${name}...`, `❌ ${label}失败`, () => fn(name));
-            if (isJsonOutput()) { emitCliResult({ stage: `supa.${cmd.split(' ')[1]}`, instanceName: name }); return; }
+            if (isJsonOutput()) { emitCliResult({ stage, instanceName: name }); return; }
             s.stop(pc.green(`✅ 实例 ${name} 已${label}`));
             showOutro('Done.');
           }
         );
       });
-  }
+  };
 
-  // ── supa rm ──
-  cli.command('supa rm <instanceName>', '删除 Supabase 实例')
-    .option('--yes', '跳过确认')
+  registerLifecycleCommand(supaRestartCommand, '重启', restartSupabaseInstance, 'supa.restart');
+  registerLifecycleCommand(supaStopCommand, '暂停', stopSupabaseInstance, 'supa.stop');
+  registerLifecycleCommand(supaStartCommand, '启动', startSupabaseInstance, 'supa.start');
+
+  registerCliCommand(cli, supaRmCommand)
     .action(async (instanceName: string, options: { yes?: boolean }) => {
       await executeWithAuthRecovery(
-        { commandLabel: 'licell supa rm', interactiveTTY: isInteractiveTTY(), requiredCapabilities: ['rdsai'] },
+        { commandLabel: commandInvocation(supaRmCommand), interactiveTTY: isInteractiveTTY(), requiredCapabilities: ['rdsai'] },
         async () => {
           showIntro(pc.bgRed(pc.white(' 🗑️ Delete Supabase Instance ')));
           ensureAuthOrExit();
@@ -407,15 +481,26 @@ export function registerSupaCommands(cli: CAC) {
     });
 }
 
-export const supaCommandMetadata: CommandMetadataMap = {
-  supa: {
-    summary: 'Supabase 实例的创建、配置、连接、生命周期与白名单管理。',
-    examples: ['licell supa list', 'licell supa info <instanceName>', 'licell supa config <instanceName> --output json']
-  },
-  'supa rm': {
-    safety: {
-      level: 'destructive',
-      reason: '会删除 Supabase 实例及其相关配置。'
+export const supaCommandModule = defineCommandModule({
+  section: DATA_SECTION,
+  register: registerSupaCommands,
+  namespaces: {
+    supa: {
+      summary: 'Supabase 实例的创建、配置、连接、生命周期与白名单管理。',
+      examples: ['licell supa list', 'licell supa info <instanceName>', 'licell supa config <instanceName> --output json']
     }
-  }
-};
+  },
+  commands: [
+    supaAddCommand,
+    supaListCommand,
+    supaInfoCommand,
+    supaConnectCommand,
+    supaConfigCommand,
+    supaWhitelistCommand,
+    supaResetPasswordCommand,
+    supaRestartCommand,
+    supaStopCommand,
+    supaStartCommand,
+    supaRmCommand
+  ]
+});

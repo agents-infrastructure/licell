@@ -37,3 +37,24 @@ export { pullFunctionEnvs, listFunctions, getFunctionInfo, removeFunction, invok
 export { ensureFunctionHttpUrl } from './fc/http';
 
 export { listFunctionVersions, publishFunctionVersion, promoteFunctionAlias, pruneFunctionVersions } from './fc/release';
+
+export {
+  createFnCustomDomain,
+  getFnCustomDomain,
+  listFnCustomDomains,
+  normalizeFnCustomDomainProtocol,
+  removeFnCustomDomain,
+  updateFnCustomDomain,
+  upsertFnCustomDomain,
+  bindFnCustomDomain,
+  resolveDefaultFcGatewayDomain,
+  type FnCustomDomainCertConfig,
+  type FnCustomDomainMutationOptions,
+  type BindFnCustomDomainOptions,
+  type FnCustomDomainProtocol,
+  type FnCustomDomainRoute,
+  type FnCustomDomainRouteSummary,
+  type FnCustomDomainState,
+  type FnCustomDomainSummary,
+  type FnCustomDomainInfo
+} from './fc/custom-domain';

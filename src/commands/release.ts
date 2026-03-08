@@ -1,5 +1,5 @@
 import type { CAC } from 'cac';
-import type { CommandMetadataMap } from './module';
+import { defineCommandModule, commandInvocation, defineCliCommand, registerCliCommand } from './module';
 import pc from 'picocolors';
 import { normalizeReleaseTarget } from '../utils/cli-helpers';
 import { executeWithAuthRecovery } from '../utils/auth-recovery';
@@ -26,15 +26,86 @@ import {
 } from '../utils/cli-shared';
 import { Config } from '../utils/config';
 import { emitCliResult, isJsonOutput } from '../utils/output.js';
-import { prunePreviewDomains } from '../providers/fc/preview-cleanup.js';
+import { prunePreviewDomainsWorkflow } from '../workflows/preview';
+import { DELIVERY_SECTION } from './sections';
+
+const releaseListCommand = defineCliCommand({
+  rawName: 'release list',
+  description: '查看函数版本列表',
+  options: [
+    { rawName: '--limit <n>', description: '返回版本数量，默认 20' }
+  ]
+});
+
+const releasePromoteCommand = defineCliCommand({
+  rawName: 'release promote [versionId]',
+  description: '发布并切流到目标别名',
+  options: [
+    { rawName: '--target <target>', description: '目标别名，默认 prod' }
+  ],
+  descriptor: {
+    title: 'Promote FC release',
+    safety: {
+      level: 'mutating',
+      reason: '会切换 alias 指向的线上版本。'
+    }
+  }
+});
+
+const releaseRollbackCommand = defineCliCommand({
+  rawName: 'release rollback <versionId>',
+  description: '回滚到指定函数版本',
+  options: [
+    { rawName: '--target <target>', description: '目标别名，默认 prod' }
+  ],
+  descriptor: {
+    title: 'Rollback FC release',
+    safety: {
+      level: 'destructive',
+      reason: '会将线上流量回滚到旧版本，执行前请确认目标版本。'
+    }
+  }
+});
+
+const releasePruneCommand = defineCliCommand({
+  rawName: 'release prune',
+  description: '清理历史函数版本（默认仅预览）',
+  options: [
+    { rawName: '--keep <n>', description: '保留最近 N 个版本，默认 10' },
+    { rawName: '--apply', description: '执行删除，未传则仅预览' },
+    { rawName: '--yes', description: '跳过二次确认（危险）' },
+    { rawName: '--preview', description: '清理预览域名绑定（而非函数版本）' }
+  ],
+  descriptor: {
+    title: 'Prune FC historical versions',
+    notes: ['默认仅预览；传 `--apply` 才会真正删除。'],
+    optionInsights: {
+      '--keep': { whenToUse: '需要显式控制保留最近多少个版本时使用。', cautions: ['数值过小可能导致缺少可回滚版本。'] },
+      '--apply': { whenToUse: '确认预览结果后，再加上它执行真实删除。', cautions: ['不加时仅预览；加上后会真正删除。'] },
+      '--yes': { whenToUse: '非交互自动化场景下跳过二次确认时使用。', cautions: ['建议仅在前一步已经做过预览时使用。'] },
+      '--preview': { whenToUse: '你想清理预览域名绑定，而不是函数版本时使用。', cautions: ['不要和函数版本清理目标混淆。'] }
+    },
+    recommendedFlow: [
+      { title: '先预览', command: 'licell release prune --output json', reason: '先看待删除项，避免误删历史版本。' },
+      { title: '调整保留数', command: 'licell release prune --keep <n>', reason: '根据回滚需求决定最小保留版本数量。' },
+      { title: '确认后执行', command: 'licell release prune --apply --yes', reason: '在非交互场景下执行真实清理。' }
+    ],
+    examples: ['licell release prune', 'licell release prune --keep 5', 'licell release prune --apply --yes'],
+    agentTips: ['Agent 先执行默认预览，再决定是否加 `--apply`。'],
+    safety: {
+      level: 'destructive',
+      reason: '可能删除历史函数版本或预览域名绑定，建议先预览并确认保留策略。',
+      confirmFlags: ['--apply', '--yes']
+    }
+  }
+});
 
 export function registerReleaseCommands(cli: CAC) {
-  cli.command('release list', '查看函数版本列表')
-    .option('--limit <n>', '返回版本数量，默认 20')
+  registerCliCommand(cli, releaseListCommand)
     .action(async (options: { limit?: string }) => {
       await executeWithAuthRecovery(
         {
-          commandLabel: 'licell release list',
+          commandLabel: commandInvocation(releaseListCommand),
           interactiveTTY: isInteractiveTTY(),
           requiredCapabilities: ['fc']
         },
@@ -81,12 +152,11 @@ export function registerReleaseCommands(cli: CAC) {
       );
     });
 
-  cli.command('release promote [versionId]', '发布并切流到目标别名')
-    .option('--target <target>', '目标别名，默认 prod')
+  registerCliCommand(cli, releasePromoteCommand)
     .action(async (versionIdArg: string | undefined, options: { target?: string }) => {
       await executeWithAuthRecovery(
         {
-          commandLabel: 'licell release promote',
+          commandLabel: commandInvocation(releasePromoteCommand),
           interactiveTTY: isInteractiveTTY(),
           requiredCapabilities: ['fc']
         },
@@ -145,12 +215,11 @@ export function registerReleaseCommands(cli: CAC) {
       );
     });
 
-  cli.command('release rollback <versionId>', '回滚到指定函数版本')
-    .option('--target <target>', '目标别名，默认 prod')
+  registerCliCommand(cli, releaseRollbackCommand)
     .action(async (versionId: string, options: { target?: string }) => {
       await executeWithAuthRecovery(
         {
-          commandLabel: 'licell release rollback',
+          commandLabel: commandInvocation(releaseRollbackCommand),
           interactiveTTY: isInteractiveTTY(),
           requiredCapabilities: ['fc']
         },
@@ -196,15 +265,11 @@ export function registerReleaseCommands(cli: CAC) {
       );
     });
 
-  cli.command('release prune', '清理历史函数版本（默认仅预览）')
-    .option('--keep <n>', '保留最近 N 个版本，默认 10')
-    .option('--apply', '执行删除，未传则仅预览')
-    .option('--yes', '跳过二次确认（危险）')
-    .option('--preview', '清理预览域名绑定（而非函数版本）')
+  registerCliCommand(cli, releasePruneCommand)
     .action(async (options: { keep?: string; apply?: boolean; yes?: boolean; preview?: boolean }) => {
       await executeWithAuthRecovery(
         {
-          commandLabel: 'licell release prune',
+          commandLabel: commandInvocation(releasePruneCommand),
           interactiveTTY: isInteractiveTTY(),
           requiredCapabilities: options.preview ? ['fc', 'dns'] : ['fc']
         },
@@ -226,7 +291,7 @@ export function registerReleaseCommands(cli: CAC) {
               s,
               apply ? '正在清理预览域名...' : '正在预览可清理的预览域名...',
               '❌ 清理失败',
-              () => prunePreviewDomains(project.appName, keep, apply)
+              () => prunePreviewDomainsWorkflow(project.appName, keep, apply)
             );
             if (!result) return;
             if (!isJsonOutput()) {
@@ -314,42 +379,14 @@ export function registerReleaseCommands(cli: CAC) {
     });
 }
 
-export const releaseCommandMetadata: CommandMetadataMap = {
-  release: {
-    summary: '函数版本管理、切流、回滚与清理。',
-    examples: ['licell release list', 'licell release promote <versionId>', 'licell release rollback <versionId>']
-  },
-  'release prune': {
-    notes: ['默认仅预览；传 `--apply` 才会真正删除。'],
-    optionInsights: {
-      '--keep': { whenToUse: '需要显式控制保留最近多少个版本时使用。', cautions: ['数值过小可能导致缺少可回滚版本。'] },
-      '--apply': { whenToUse: '确认预览结果后，再加上它执行真实删除。', cautions: ['不加时仅预览；加上后会真正删除。'] },
-      '--yes': { whenToUse: '非交互自动化场景下跳过二次确认时使用。', cautions: ['建议仅在前一步已经做过预览时使用。'] },
-      '--preview': { whenToUse: '你想清理预览域名绑定，而不是函数版本时使用。', cautions: ['不要和函数版本清理目标混淆。'] }
-    },
-    recommendedFlow: [
-      { title: '先预览', command: 'licell release prune --output json', reason: '先看待删除项，避免误删历史版本。' },
-      { title: '调整保留数', command: 'licell release prune --keep <n>', reason: '根据回滚需求决定最小保留版本数量。' },
-      { title: '确认后执行', command: 'licell release prune --apply --yes', reason: '在非交互场景下执行真实清理。' }
-    ],
-    examples: ['licell release prune', 'licell release prune --keep 5', 'licell release prune --apply --yes'],
-    agentTips: ['Agent 先执行默认预览，再决定是否加 `--apply`。'],
-    safety: {
-      level: 'destructive',
-      reason: '可能删除历史函数版本或预览域名绑定，建议先预览并确认保留策略。',
-      confirmFlags: ['--apply', '--yes']
+export const releaseCommandModule = defineCommandModule({
+  section: DELIVERY_SECTION,
+  register: registerReleaseCommands,
+  namespaces: {
+    release: {
+      summary: '函数版本管理、切流、回滚与清理。',
+      examples: ['licell release list', 'licell release promote <versionId>', 'licell release rollback <versionId>']
     }
   },
-  'release rollback': {
-    safety: {
-      level: 'destructive',
-      reason: '会将线上流量回滚到旧版本，执行前请确认目标版本。'
-    }
-  },
-  'release promote': {
-    safety: {
-      level: 'mutating',
-      reason: '会切换 alias 指向的线上版本。'
-    }
-  }
-};
+  commands: [releaseListCommand, releasePromoteCommand, releaseRollbackCommand, releasePruneCommand]
+});

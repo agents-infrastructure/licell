@@ -1,4 +1,5 @@
 import type { CAC } from 'cac';
+import { defineCommandModule, defineCliCommand, registerCliCommand } from './module';
 import { select, text, isCancel } from '@clack/prompts';
 import pc from 'picocolors';
 import { Config } from '../utils/config';
@@ -14,6 +15,7 @@ import {
   validateAppName,
   writeScaffoldFiles
 } from '../utils/init-scaffold';
+import { SETUP_SECTION } from './sections';
 
 interface InitOptions {
   runtime?: string;
@@ -22,12 +24,47 @@ interface InitOptions {
   yes?: boolean;
 }
 
+const initCommand = defineCliCommand({
+  rawName: 'init',
+  description: '初始化 FC 项目（空目录生成脚手架，已有项目写入 licell 配置）',
+  options: [
+    { rawName: '--runtime <runtime>', description: '默认 runtime：nodejs20/nodejs22/python3.12/python3.13/docker' },
+    { rawName: '--app <name>', description: '应用名（用于 FC functionName）' },
+    { rawName: '--force', description: '在已有项目目录生成/覆盖脚手架文件' },
+    { rawName: '--yes', description: '使用默认值，不进入交互' }
+  ],
+  descriptor: {
+    title: 'Initialize licell project',
+    notes: ['空目录下会生成脚手架；已有项目目录默认仅写入 licell 配置。', '若要在已有目录补齐脚手架，需要显式传 `--runtime` 与 `--force`。'],
+    examples: ['licell init', 'licell init --runtime docker --app my-app', 'licell init --yes --output json'],
+    optionInsights: {
+      '--runtime': { whenToUse: '需要显式指定项目模板与默认 runtime 时使用。' },
+      '--app': { whenToUse: '希望指定或覆盖 FC functionName 对应的应用名时使用。' },
+      '--force': { whenToUse: '已有项目目录中仍需要生成或覆盖脚手架文件时使用。', cautions: ['可能覆盖已有文件内容。'] },
+      '--yes': { whenToUse: '非交互或自动化场景，直接使用默认值时使用。' }
+    },
+    recommendedFlow: [
+      { title: '初始化项目', command: 'licell init --output json', reason: '先拿到解析出的 runtime、appName 与写入结果。' },
+      { title: '检查生成文件', reason: '确认脚手架或 licell 项目配置是否符合预期。' },
+      { title: '继续部署', command: 'licell deploy --type api --target preview', reason: '初始化完成后直接进入部署链路。' }
+    ],
+    result: {
+      summary: '返回初始化后的 runtime、应用名与文件写入结果。',
+      fields: [
+        { name: 'stage', description: '固定为 `init`。', required: true },
+        { name: 'runtime', description: '解析后的默认 runtime。', required: true },
+        { name: 'appName', description: '最终写入配置的应用名。', required: true },
+        { name: 'mode', description: '`scaffold+config` 或 `config-only`。', required: true },
+        { name: 'writtenFiles', description: '实际写入的文件列表。', required: true },
+        { name: 'skippedFiles', description: '跳过写入的文件列表。', required: true }
+      ]
+    },
+    agentTips: ['Agent 在自动化初始化时优先使用 `--yes --output json`，并读取 `mode` / `writtenFiles` 决定后续动作。']
+  }
+});
+
 export function registerInitCommand(cli: CAC) {
-  cli.command('init', '初始化 FC 项目（空目录生成脚手架，已有项目写入 licell 配置）')
-    .option('--runtime <runtime>', '默认 runtime：nodejs20/nodejs22/python3.12/python3.13/docker')
-    .option('--app <name>', '应用名（用于 FC functionName）')
-    .option('--force', '在已有项目目录生成/覆盖脚手架文件')
-    .option('--yes', '使用默认值，不进入交互')
+  registerCliCommand(cli, initCommand)
     .action(async (options: InitOptions) => {
       if (!isJsonOutput()) {
         showIntro(pc.bgBlue(pc.white(' ⚡ Licell Project Init ')));
@@ -128,3 +165,9 @@ export function registerInitCommand(cli: CAC) {
       }
     });
 }
+
+export const initCommandModule = defineCommandModule({
+  section: SETUP_SECTION,
+  register: registerInitCommand,
+  commands: [initCommand]
+});

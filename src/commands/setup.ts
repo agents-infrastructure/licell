@@ -1,5 +1,5 @@
 import type { CAC } from 'cac';
-import type { CommandMetadataMap } from './module';
+import { defineCommandModule, defineCliCommand, registerCliCommand } from './module';
 import { select, confirm, isCancel } from '@clack/prompts';
 import pc from 'picocolors';
 import { createSpinner, isInteractiveTTY, showIntro, showOutro } from '../utils/cli-shared';
@@ -11,8 +11,65 @@ type Scope = 'global' | 'project';
 type AgentType = 'claude' | 'codex';
 
 import { type SetupOptions } from './setup.options';
+import { AUTOMATION_SECTION } from './sections';
 
 const SUPPORTED_AGENTS = new Set<AgentType>(['claude', 'codex']);
+
+const setupCommand = defineCliCommand({
+  rawName: 'setup',
+  description: '安装后引导：配置 AI Agent Skills 和 MCP',
+  options: [
+    { rawName: '--agent <agent>', description: '目标 Agent（claude / codex）' },
+    { rawName: '--global', description: '全局配置（所有项目生效）' },
+    { rawName: '--project-root <path>', description: '项目目录（默认当前目录）' },
+    { rawName: '--force', description: '覆盖已有文件' }
+  ],
+  descriptor: {
+    summary: '安装后的一站式引导：配置 Skills 与 MCP。',
+    notes: ['交互模式下会引导选择 Agent、范围，并可选写入 MCP 配置。'],
+    examples: ['licell setup', 'licell setup --agent codex --global', 'licell setup --output json'],
+    optionInsights: {
+      '--agent': { whenToUse: '非交互模式下必须显式指定目标 Agent。', cautions: ['当前仅支持 `claude` / `codex`。'] },
+      '--global': { whenToUse: '希望技能与 MCP 配置对所有项目生效时使用。', cautions: ['会写入用户级全局配置目录。'] },
+      '--project-root': { whenToUse: '要为指定项目而不是当前目录生成配置时使用。' },
+      '--force': { whenToUse: '目标文件已存在但需要覆盖时使用。', cautions: ['可能覆盖已有定制内容。'] }
+    },
+    recommendedFlow: [
+      { title: '运行引导', command: 'licell setup', reason: '以交互方式一次性完成 Skills 与 MCP 初始化。' },
+      { title: '必要时切到非交互', command: 'licell setup --agent codex --global --output json', reason: '在自动化或 CI 场景中稳定复用。' },
+      { title: '验证 MCP', command: 'licell mcp init --output json', reason: '确认 MCP 配置文件已写入预期位置。' }
+    ],
+    taskHints: [
+      {
+        phase: 'mutate',
+        title: '给当前环境快速接入 Agent',
+        description: '一条 setup 引导完成 skills 与 MCP 的主流程配置。',
+        commands: ['licell setup']
+      },
+      {
+        phase: 'mutate',
+        title: '在自动化里做非交互初始化',
+        description: '显式指定 agent / scope，并用 JSON 结果跟踪写入状态。',
+        commands: ['licell setup --agent codex --global --output json']
+      }
+    ],
+    result: {
+      summary: '返回 setup 引导的写入结果与 MCP 配置状态。',
+      fields: [
+        { name: 'stage', description: '固定为 `setup`。', required: true },
+        { name: 'agent', description: '目标 Agent。', required: true },
+        { name: 'scope', description: '`global` 或 `project`。', required: true },
+        { name: 'projectRoot', description: '项目根目录。', required: true },
+        { name: 'writtenFiles', description: '实际写入的文件列表。', required: true },
+        { name: 'skippedFiles', description: '跳过写入的文件列表。', required: true },
+        { name: 'mcpConfigured', description: '是否执行了 MCP 配置。', required: true },
+        { name: 'mcpConfigPath', description: 'MCP 配置文件路径。' },
+        { name: 'mcpConfigUpdated', description: 'MCP 配置文件是否发生更新。' }
+      ]
+    },
+    agentTips: ['自动化场景优先传 `--agent`，并搭配 `--output json` 获取可追踪的写入结果。']
+  }
+});
 
 export async function runInteractiveSetup(options: SetupOptions = {}) {
   const interactiveTTY = isInteractiveTTY();
@@ -37,7 +94,6 @@ export async function runInteractiveSetup(options: SetupOptions = {}) {
       }
     };
 
-    // ① Agent 选择
     let agent: AgentType;
     if (options.agent && SUPPORTED_AGENTS.has(options.agent as AgentType)) {
       agent = options.agent as AgentType;
@@ -60,7 +116,6 @@ export async function runInteractiveSetup(options: SetupOptions = {}) {
       throw new Error('非交互模式下必须指定 --agent 参数（claude / codex）');
     }
 
-    // ② Scope 选择
     let scope: Scope;
     if (options.global) {
       scope = 'global';
@@ -81,7 +136,6 @@ export async function runInteractiveSetup(options: SetupOptions = {}) {
       scope = 'global';
     }
 
-    // ③ 生成 Skills
     const s = createSpinner();
     if (!jsonMode) {
       s.start('正在生成 Skills...');
@@ -106,7 +160,6 @@ export async function runInteractiveSetup(options: SetupOptions = {}) {
       for (const f of skipped) console.log(`  ${pc.gray('=')} ${f}（已存在）`);
     }
 
-    // ④ MCP 配置
     let configureMcp = false;
     let mcpConfigPath: string | null = null;
     let mcpConfigUpdated: boolean | null = null;
@@ -170,11 +223,7 @@ export async function runInteractiveSetup(options: SetupOptions = {}) {
 }
 
 export function registerSetupCommand(cli: CAC) {
-  cli.command('setup', '安装后引导：配置 AI Agent Skills 和 MCP')
-    .option('--agent <agent>', '目标 Agent（claude / codex）')
-    .option('--global', '全局配置（所有项目生效）')
-    .option('--project-root <path>', '项目目录（默认当前目录）')
-    .option('--force', '覆盖已有文件')
+  registerCliCommand(cli, setupCommand)
     .action(async (options: SetupOptions) => {
       const jsonMode = isJsonOutput();
       if (!jsonMode) {
@@ -187,9 +236,8 @@ export function registerSetupCommand(cli: CAC) {
     });
 }
 
-export const setupCommandMetadata: CommandMetadataMap = {
-  setup: {
-    summary: '安装后的一站式引导：配置 Skills 与 MCP。',
-    examples: ['licell setup', 'licell setup --output json']
-  }
-};
+export const setupCommandModule = defineCommandModule({
+  section: AUTOMATION_SECTION,
+  register: registerSetupCommand,
+  commands: [setupCommand]
+});

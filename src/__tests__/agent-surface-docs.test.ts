@@ -25,6 +25,8 @@ describe('renderAgentSurfaceReferenceDoc', () => {
     expect(output).toContain('`licell_cli`');
     expect(output).toContain('`licell_fc_deploy_spec`');
     expect(output).toContain('`licell_cmd_deploy_check`');
+    expect(output).toContain('metadata.licell');
+    expect(output).toContain('builtin / curated / generated MCP tools');
   });
 
   it('keeps generated docs file in sync with renderer', () => {

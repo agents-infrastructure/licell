@@ -1,5 +1,5 @@
 import type { CAC } from 'cac';
-import type { CommandMetadataMap } from './module';
+import { defineCommandModule, commandInvocation, defineCliCommand, registerCliCommand } from './module';
 import { text, password, confirm, isCancel } from '@clack/prompts';
 import pc from 'picocolors';
 import { Config, DEFAULT_ALI_REGION } from '../utils/config';
@@ -16,6 +16,52 @@ import {
   showOutro
 } from '../utils/cli-shared';
 import { emitCliError, emitCliEvent, emitCliResult, isJsonOutput } from '../utils/output';
+import { SETUP_SECTION } from './sections';
+
+const loginCommand = defineCliCommand({
+  rawName: 'login',
+  description: '配置阿里云凭证',
+  options: [
+    { rawName: '--account-id <id>', description: '阿里云 Account ID（CI 场景）' },
+    { rawName: '--ak <accessKeyId>', description: '阿里云 AccessKey ID（CI 场景）' },
+    { rawName: '--sk <accessKeySecret>', description: '阿里云 AccessKey Secret（CI 场景）' },
+    { rawName: '--region <region>', description: `默认地域，默认 ${DEFAULT_ALI_REGION}` },
+    { rawName: '--bootstrap-ram', description: '使用高权限 AK/SK 自动创建 licell 专用 RAM 用户与最小权限 AK/SK（仅保存新 key）' },
+    { rawName: '--bootstrap-user <name>', description: 'bootstrap 模式下 RAM 用户名，默认 licell-operator' },
+    { rawName: '--bootstrap-policy <name>', description: 'bootstrap 模式下自定义策略名，默认 LicellOperatorPolicy' }
+  ]
+});
+
+const authRepairCommand = defineCliCommand({
+  rawName: 'auth repair',
+  description: '修复凭证权限（推荐：用超级 AK/SK 自动补齐 licell 最小权限并继续使用）',
+  options: [
+    { rawName: '--account-id <id>', description: '阿里云 Account ID（CI 场景）' },
+    { rawName: '--ak <accessKeyId>', description: '超级 AccessKey ID（仅用于本次修复，不会保存）' },
+    { rawName: '--sk <accessKeySecret>', description: '超级 AccessKey Secret（仅用于本次修复，不会保存）' },
+    { rawName: '--region <region>', description: `默认地域，默认 ${DEFAULT_ALI_REGION}` },
+    { rawName: '--bootstrap-user <name>', description: '修复目标 RAM 用户名（默认自动识别当前 key 所属用户）' },
+    { rawName: '--bootstrap-policy <name>', description: '修复使用的自定义策略名（默认 LicellOperatorPolicy）' }
+  ]
+});
+
+const logoutCommand = defineCliCommand({
+  rawName: 'logout',
+  description: '清除本地凭证'
+});
+
+const whoamiCommand = defineCliCommand({
+  rawName: 'whoami',
+  description: '查看当前登录身份'
+});
+
+const switchCommand = defineCliCommand({
+  rawName: 'switch',
+  description: '切换默认 region',
+  options: [
+    { rawName: '--region <region>', description: '目标 region（如 cn-hangzhou）' }
+  ]
+});
 
 export async function runInteractiveLogin(options: { accountId?: unknown; ak?: unknown; sk?: unknown; region?: unknown; bootstrapRam?: unknown; bootstrapUser?: unknown; bootstrapPolicy?: unknown } = {}) {
   const interactiveTTY = isInteractiveTTY();
@@ -110,14 +156,7 @@ export async function runInteractiveLogin(options: { accountId?: unknown; ak?: u
 }
 
 export function registerAuthCommands(cli: CAC) {
-  cli.command('login', '配置阿里云凭证')
-    .option('--account-id <id>', '阿里云 Account ID（CI 场景）')
-    .option('--ak <accessKeyId>', '阿里云 AccessKey ID（CI 场景）')
-    .option('--sk <accessKeySecret>', '阿里云 AccessKey Secret（CI 场景）')
-    .option('--region <region>', `默认地域，默认 ${DEFAULT_ALI_REGION}`)
-    .option('--bootstrap-ram', '使用高权限 AK/SK 自动创建 licell 专用 RAM 用户与最小权限 AK/SK（仅保存新 key）')
-    .option('--bootstrap-user <name>', 'bootstrap 模式下 RAM 用户名，默认 licell-operator')
-    .option('--bootstrap-policy <name>', 'bootstrap 模式下自定义策略名，默认 LicellOperatorPolicy')
+  registerCliCommand(cli, loginCommand)
     .action(async (options: { accountId?: unknown; ak?: unknown; sk?: unknown; region?: unknown; bootstrapRam?: unknown; bootstrapUser?: unknown; bootstrapPolicy?: unknown }) => {
       if (!isJsonOutput()) {
         showIntro(pc.bgBlue(pc.white(' ▲ Licell CLI (AliCloud) ')));
@@ -127,13 +166,7 @@ export function registerAuthCommands(cli: CAC) {
       await runInteractiveLogin(options);
     });
 
-  cli.command('auth repair', '修复凭证权限（推荐：用超级 AK/SK 自动补齐 licell 最小权限并继续使用）')
-    .option('--account-id <id>', '阿里云 Account ID（CI 场景）')
-    .option('--ak <accessKeyId>', '超级 AccessKey ID（仅用于本次修复，不会保存）')
-    .option('--sk <accessKeySecret>', '超级 AccessKey Secret（仅用于本次修复，不会保存）')
-    .option('--region <region>', `默认地域，默认 ${DEFAULT_ALI_REGION}`)
-    .option('--bootstrap-user <name>', '修复目标 RAM 用户名（默认自动识别当前 key 所属用户）')
-    .option('--bootstrap-policy <name>', '修复使用的自定义策略名（默认 LicellOperatorPolicy）')
+  registerCliCommand(cli, authRepairCommand)
     .action(async (options: {
       accountId?: unknown;
       ak?: unknown;
@@ -165,7 +198,7 @@ export function registerAuthCommands(cli: CAC) {
       const currentAuth = Config.getAuth();
 
       const result = await runAuthRepairFlow({
-        commandLabel: 'licell auth repair',
+        commandLabel: commandInvocation(authRepairCommand),
         reason: 'manual',
         interactiveTTY,
         currentAuth,
@@ -194,7 +227,7 @@ export function registerAuthCommands(cli: CAC) {
       }
     });
 
-  cli.command('logout', '清除本地凭证')
+  registerCliCommand(cli, logoutCommand)
     .action(() => {
       const existing = Config.getAuth();
       if (!existing) {
@@ -213,7 +246,7 @@ export function registerAuthCommands(cli: CAC) {
       }
     });
 
-  cli.command('whoami', '查看当前登录身份')
+  registerCliCommand(cli, whoamiCommand)
     .action(() => {
       const auth = Config.getAuth();
       if (!auth) {
@@ -243,8 +276,7 @@ export function registerAuthCommands(cli: CAC) {
       }
     });
 
-  cli.command('switch', '切换默认 region')
-    .option('--region <region>', '目标 region（如 cn-hangzhou）')
+  registerCliCommand(cli, switchCommand)
     .action(async (options: { region?: unknown }) => {
       const auth = Config.getAuth();
       if (!auth) {
@@ -292,10 +324,15 @@ export function registerAuthCommands(cli: CAC) {
     });
 }
 
-export const authCommandMetadata: CommandMetadataMap = {
-  auth: {
-    summary: '授权修复与凭证治理。',
-    notes: ['首次配置凭证通常使用 `licell login`；`licell auth repair` 用于补齐 RAM 权限。'],
-    examples: ['licell login', 'licell auth repair', 'licell whoami --output json']
-  }
-};
+export const authCommandModule = defineCommandModule({
+  section: SETUP_SECTION,
+  register: registerAuthCommands,
+  namespaces: {
+    auth: {
+      summary: '授权修复与凭证治理。',
+      notes: ['首次配置凭证通常使用 `licell login`；`licell auth repair` 用于补齐 RAM 权限。'],
+      examples: ['licell login', 'licell auth repair', 'licell whoami --output json']
+    }
+  },
+  commands: [loginCommand, authRepairCommand, logoutCommand, whoamiCommand, switchCommand]
+});

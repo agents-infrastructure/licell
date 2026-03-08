@@ -12,7 +12,11 @@ describe('help utils', () => {
 
     expect(doc?.scope).toBe('root');
     expect(doc?.sections.some((section) => section.title === 'Automation & Tooling')).toBe(true);
+    expect(doc?.blocks.some((block) => block.kind === 'command-groups')).toBe(true);
     expect(doc?.text).toContain('Command Groups:');
+    expect(doc?.text).toContain('Common Tasks:');
+    expect(doc?.text).toContain('第一次上手 licell');
+    expect(doc?.text).toContain('licell setup');
     expect(doc?.text).toContain('licell skills init codex');
     expect(doc?.text).toContain('licell deploy --output json');
   });
@@ -32,6 +36,11 @@ describe('help utils', () => {
       'db public-access'
     ]));
     expect(doc?.text).toContain('licell db <subcommand> [options]');
+    expect(doc?.blocks.some((block) => block.kind === 'decision-guide')).toBe(true);
+    expect(doc?.text).toContain('Decision Guide:');
+    expect(doc?.text).toContain('Inspect:');
+    expect(doc?.text).toContain('Mutate:');
+    expect(doc?.text).toContain('Verify:');
     expect(doc?.text).toContain('Subcommands:');
   });
 
@@ -115,7 +124,7 @@ describe('help utils', () => {
       'oss domain list',
       'oss domain token',
       'oss domain bind',
-      'oss domain rm'
+      'oss domain unbind'
     ]));
     expect(doc?.text).toContain('OSS Bucket 原生自定义域名');
   });
@@ -130,6 +139,10 @@ describe('help utils', () => {
     expect(doc?.key).toBe('mcp');
     expect(doc?.subcommands.map((command) => command.key)).toEqual(expect.arrayContaining(['mcp init', 'mcp serve']));
     expect(doc?.examples).toContain('licell mcp init');
+    expect(doc?.text).toContain('Decision Guide:');
+    expect(doc?.decisionGuide.map((group) => group.phase)).toEqual(expect.arrayContaining(['mutate', 'verify']));
+    expect(doc?.text).toContain('Mutate:');
+    expect(doc?.text).toContain('Verify:');
     expect(doc?.text).toContain('Subcommands:');
   });
 
@@ -169,6 +182,19 @@ describe('help utils', () => {
     expect(doc?.text).toContain('Global Options:');
   });
 
+  it('builds command help for setup with explicit task hints', () => {
+    const doc = buildHelpDocument({
+      argv: ['node', 'src/cli.ts', 'setup', '--help'],
+      version: VERSION
+    });
+
+    expect(doc?.scope).toBe('command');
+    expect(doc?.key).toBe('setup');
+    expect(doc?.text).toContain('Decision Guide:');
+    expect(doc?.text).toContain('Mutate:');
+    expect(doc?.text).toContain('licell setup --agent codex --global --output json');
+  });
+
   it('treats bare namespace as custom help target', () => {
     expect(shouldRenderCustomHelp(['node', 'src/cli.ts', 'db'])).toBe(true);
     expect(resolveHelpRequest(['node', 'src/cli.ts', 'db']).scope).toBe('namespace');
@@ -195,6 +221,11 @@ describe('help utils', () => {
       'licell deploy check',
       'licell deploy --output json'
     ]));
+    expect(doc?.text).toContain('Decision Guide:');
+    expect(doc?.decisionGuide.map((group) => group.phase)).toEqual(expect.arrayContaining(['inspect', 'mutate']));
+    expect(doc?.text).toContain('Inspect:');
+    expect(doc?.text).toContain('Mutate:');
+    expect(doc?.text).toContain('licell deploy check');
     expect(doc?.text).toContain('Option Guidance:');
     expect(doc?.text).toContain('Recommended Flow:');
   });
@@ -226,4 +257,87 @@ describe('help utils', () => {
     expect(doc?.text).toContain('Recommended Flow:');
   });
 
+});
+
+describe('domain help', () => {
+  it('builds canonical help for domain app bind', () => {
+    const doc = buildHelpDocument({
+      argv: ['node', 'src/cli.ts', 'domain', 'app', 'bind', '--help'],
+      version: VERSION
+    });
+
+    expect(doc?.scope).toBe('command');
+    expect(doc?.key).toBe('domain app bind');
+    expect(doc?.aliases).toEqual([]);
+    expect(doc?.result?.outcomeKey).toBe('bound');
+    expect(doc?.result?.fields.some((field) => field.name === 'finalUrl')).toBe(true);
+    expect(doc?.blocks.some((block) => block.kind === 'structured-result')).toBe(true);
+    expect(doc?.text).toContain('licell domain app bind <domain>');
+    expect(doc?.text).toContain('Structured Result:');
+    expect(doc?.text).toContain('`stage` · 命令阶段标识。');
+    expect(doc?.text).toContain('`finalUrl` · 最终访问 URL。');
+    expect(doc?.text).not.toContain('Aliases:');
+  });
+
+  it('builds namespace help for domain app', () => {
+    const doc = buildHelpDocument({
+      argv: ['node', 'src/cli.ts', 'domain', 'app', '--help'],
+      version: VERSION
+    });
+
+    expect(doc?.scope).toBe('namespace');
+    expect(doc?.key).toBe('domain app');
+    expect(doc?.subcommands.map((command) => command.key)).toEqual(expect.arrayContaining([
+      'domain app bind',
+      'domain app unbind'
+    ]));
+    expect(doc?.text).toContain('Decision Guide:');
+    expect(doc?.text).toContain('Mutate:');
+    expect(doc?.text).toContain('Cleanup:');
+    expect(doc?.text).toContain('licell domain app bind api.example.com --target prod --ssl');
+  });
+
+  it('builds namespace help for domain static', () => {
+    const doc = buildHelpDocument({
+      argv: ['node', 'src/cli.ts', 'domain', 'static', '--help'],
+      version: VERSION
+    });
+
+    expect(doc?.scope).toBe('namespace');
+    expect(doc?.key).toBe('domain static');
+    expect(doc?.subcommands.map((command) => command.key)).toEqual(expect.arrayContaining([
+      'domain static bind',
+      'domain static unbind'
+    ]));
+  });
+
+  it('builds namespace help for fn domain', () => {
+    const doc = buildHelpDocument({
+      argv: ['node', 'src/cli.ts', 'fn', 'domain', '--help'],
+      version: VERSION
+    });
+
+    expect(doc?.scope).toBe('namespace');
+    expect(doc?.key).toBe('fn domain');
+    expect(doc?.subcommands.map((command) => command.key)).toEqual(expect.arrayContaining([
+      'fn domain list',
+      'fn domain info',
+      'fn domain bind',
+      'fn domain unbind'
+    ]));
+  });
+
+  it('builds structured result help for fn domain unbind', () => {
+    const doc = buildHelpDocument({
+      argv: ['node', 'src/cli.ts', 'fn', 'domain', 'unbind', '--help'],
+      version: VERSION
+    });
+
+    expect(doc?.scope).toBe('command');
+    expect(doc?.key).toBe('fn domain unbind');
+    expect(doc?.result?.outcomeKey).toBe('unbound');
+    expect(doc?.text).toContain('Structured Result:');
+    expect(doc?.text).toContain('`unbound` · 结果布尔态字段。');
+    expect(doc?.text).toContain('`removedDnsRecordIds` · 被清理的 DNS 记录 ID 列表。');
+  });
 });
