@@ -10,77 +10,55 @@ import {
   atLeastOnePresentValidator,
   booleanProp,
   buildCuratedToolMap,
-  defineCuratedCliWrapperTool,
-  defineCuratedTool,
   defaultTrueFlag,
-  inputSchema,
+  defineCuratedCliWrapperTool,
+  defineDerivedCuratedTool,
   literalTokens,
   mutuallyExclusiveValidator,
   numberProp,
   objectProp,
-  optionalBooleanFlag,
   optionalJsonFlag,
-  optionalNumberFlag,
-  optionalPositionalString,
   optionalStringFlag,
   requireEnum,
-  requiredPositionalString,
-  requiredStringFlag,
   requireTrueValidator,
   requireTrueWhenBoolean,
   stringEnumProp,
   stringProp,
   whenBooleanTrue,
-  withExecutionProps,
   type CuratedMcpCommandTool
 } from './curated-tool-dsl';
 
 const CURATED_MCP_COMMAND_TOOLS = buildCuratedToolMap([
-  defineCuratedTool({
+  defineDerivedCuratedTool({
     name: 'licell_deploy',
     commandSignature: 'deploy',
     tags: [FC_API_DEPLOY_WORKFLOW_TAG],
     workflowRoleByTag: { [FC_API_DEPLOY_WORKFLOW_TAG]: 'entry' },
-    inputSchema: inputSchema(
-      withExecutionProps({
-        type: stringEnumProp('Deployment type.', ['api', 'static']),
-        runtime: stringProp('API runtime: nodejs20/nodejs22/python3.12/python3.13/docker; Static: static/statis.'),
-        entry: stringProp('API entry file (default depends on runtime).'),
-        dist: stringProp('Static site directory (default: dist).'),
-        target: stringProp('FC alias target (e.g. prod/preview). API only.'),
-        domain: stringProp('Full custom domain (e.g. api.example.com). API/Static supported; implies SSL. Static will auto-enable CDN.'),
-        domainSuffix: stringProp('Domain suffix (e.g. example.com) to bind <appName>.<suffix>. API/Static supported.'),
-        enableCdn: booleanProp('Enable CDN after domain bind (API optional; Static with domain already auto-enables). Implies SSL.'),
-        ssl: booleanProp("Enable HTTPS (Let's Encrypt). If domain/enableCdn is set, SSL is implied."),
-        sslForceRenew: booleanProp('Force renew certificate when SSL enabled.'),
-        acrNamespace: stringProp('ACR namespace for docker runtime.'),
-        enableVpc: booleanProp('Enable VPC integration (API only).'),
-        disableVpc: booleanProp('Disable VPC integration (API only, public mode).'),
-        memory: numberProp('Memory size (MB).'),
-        vcpu: numberProp('vCPU cores (e.g. 0.5/1/2).'),
-        instanceConcurrency: numberProp('Instance concurrency.'),
-        timeout: numberProp('Timeout seconds.')
-      }),
-      ['type']
-    ),
-    baseArgv: (toolArgs) => ['deploy', '--type', requireEnum(toolArgs, 'type', ['api', 'static'], 'type must be "api" or "static"')],
-    bindings: [
-      optionalStringFlag('runtime', '--runtime'),
-      optionalStringFlag('entry', '--entry'),
-      optionalStringFlag('dist', '--dist'),
-      optionalStringFlag('target', '--target'),
-      optionalStringFlag('domain', '--domain'),
-      optionalStringFlag('domainSuffix', '--domain-suffix'),
-      optionalBooleanFlag('enableCdn', '--enable-cdn'),
-      optionalBooleanFlag('ssl', '--ssl'),
-      optionalBooleanFlag('sslForceRenew', '--ssl-force-renew'),
-      optionalStringFlag('acrNamespace', '--acr-namespace'),
-      optionalBooleanFlag('enableVpc', '--enable-vpc'),
-      optionalBooleanFlag('disableVpc', '--disable-vpc'),
-      optionalNumberFlag('memory', '--memory'),
-      optionalNumberFlag('vcpu', '--vcpu'),
-      optionalNumberFlag('instanceConcurrency', '--instance-concurrency'),
-      optionalNumberFlag('timeout', '--timeout')
+    requiredInputs: ['type'],
+    inputOverrides: {
+      type: stringEnumProp('Deployment type.', ['api', 'static']),
+      runtime: stringProp('API runtime: nodejs20/nodejs22/python3.12/python3.13/docker; Static: static/statis.'),
+      entry: stringProp('API entry file (default depends on runtime).'),
+      dist: stringProp('Static site directory (default: dist).'),
+      target: stringProp('FC alias target (e.g. prod/preview). API only.'),
+      preview: booleanProp('Create a preview deployment without affecting production traffic.'),
+      domain: stringProp('Full custom domain (e.g. api.example.com). API/Static supported; implies SSL. Static will auto-enable CDN.'),
+      domainSuffix: stringProp('Domain suffix (e.g. example.com) to bind <appName>.<suffix>. API/Static supported.'),
+      enableCdn: booleanProp('Enable CDN after domain bind (API optional; Static with domain already auto-enables). Implies SSL.'),
+      ssl: booleanProp("Enable HTTPS (Let's Encrypt). If domain/enableCdn is set, SSL is implied."),
+      sslForceRenew: booleanProp('Force renew certificate when SSL enabled.'),
+      acrNamespace: stringProp('ACR namespace for docker runtime.'),
+      enableVpc: booleanProp('Enable VPC integration (API only).'),
+      disableVpc: booleanProp('Disable VPC integration (API only, public mode).'),
+      memory: numberProp('Memory size (MB).'),
+      vcpu: numberProp('vCPU cores (e.g. 0.5/1/2).'),
+      instanceConcurrency: numberProp('Instance concurrency.'),
+      timeout: numberProp('Timeout seconds.')
+    },
+    validators: [
+      (toolArgs) => {
+        requireEnum(toolArgs, 'type', ['api', 'static'], 'type must be "api" or "static"');
+      }
     ]
   }),
 
@@ -111,23 +89,21 @@ const CURATED_MCP_COMMAND_TOOLS = buildCuratedToolMap([
     }
   }),
 
-  defineCuratedTool({
+  defineDerivedCuratedTool({
     name: 'licell_init',
+    commandSignature: 'init',
     description:
       'Initialize current directory: write .licell/project.json, and optionally generate scaffold files for supported runtimes.',
-    inputSchema: inputSchema(withExecutionProps({
+    omitInputs: ['yes'],
+    inputOverrides: {
       runtime: stringProp('nodejs20/nodejs22/python3.12/python3.13/docker.'),
       app: stringProp('appName (FC functionName).'),
-      force: booleanProp('Overwrite/generate scaffold in non-empty dir.'),
+      force: booleanProp('Overwrite/generate scaffold in non-empty dir.')
+    },
+    inputExtensions: {
       yes: booleanProp('Non-interactive mode (recommended for MCP). Default true.')
-    })),
-    baseArgv: ['init'],
-    bindings: [
-      optionalStringFlag('runtime', '--runtime'),
-      optionalStringFlag('app', '--app'),
-      optionalBooleanFlag('force', '--force'),
-      defaultTrueFlag('yes', '--yes')
-    ]
+    },
+    extraBindings: [defaultTrueFlag('yes', '--yes')]
   }),
 
   defineCuratedCliWrapperTool({
@@ -150,21 +126,22 @@ const CURATED_MCP_COMMAND_TOOLS = buildCuratedToolMap([
     }
   }),
 
-  defineCuratedTool({
+  defineDerivedCuratedTool({
     name: 'licell_release_prune',
+    commandSignature: 'release prune',
     description: 'Preview or delete old FC published versions. Destructive when apply=true (requires yes=true).',
-    inputSchema: inputSchema(withExecutionProps({
+    annotations: { destructiveHint: true },
+    omitInputs: ['yes'],
+    inputOverrides: {
       keep: numberProp('Keep latest N versions (default 10).'),
       apply: booleanProp('If true, perform deletion. If false/omitted, preview only.'),
+      preview: booleanProp('Operate on preview domain bindings instead of function versions.')
+    },
+    inputExtensions: {
       yes: booleanProp('Required when apply=true (non-interactive double-confirm).')
-    })),
-    annotations: { destructiveHint: true },
-    baseArgv: ['release', 'prune'],
+    },
     validators: [requireTrueWhenBoolean('apply', 'yes', 'apply=true is destructive; set yes=true to confirm')],
-    bindings: [
-      optionalNumberFlag('keep', '--keep'),
-      whenBooleanTrue('apply', literalTokens('--apply', '--yes'))
-    ]
+    extraBindings: [whenBooleanTrue('apply', whenBooleanTrue('yes', literalTokens('--yes')))]
   }),
 
   defineCuratedCliWrapperTool({
@@ -187,22 +164,24 @@ const CURATED_MCP_COMMAND_TOOLS = buildCuratedToolMap([
     }
   }),
 
-  defineCuratedTool({
+  defineDerivedCuratedTool({
     name: 'licell_fn_invoke',
+    commandSignature: 'fn invoke',
     description: 'Invoke FC function synchronously with an optional payload.',
-    inputSchema: inputSchema(withExecutionProps({
+    omitInputs: ['file'],
+    inputOverrides: {
       name: stringProp('Function name. If omitted, uses project appName.'),
       target: stringProp('Qualifier alias/version (e.g. prod/preview/1).'),
-      payload: stringProp('Raw payload text.'),
-      payloadJson: objectProp('JSON payload object (will be JSON.stringify-ed).', { additionalProperties: true })
-    })),
-    baseArgv: ['fn', 'invoke'],
-    validators: [mutuallyExclusiveValidator(['payload', 'payloadJson'], 'Provide only one of payload or payloadJson')],
-    bindings: [
-      optionalPositionalString('name'),
-      optionalStringFlag('target', '--target'),
-      optionalStringFlag('payload', '--payload'),
-      optionalJsonFlag('payloadJson', '--payload')
+      payload: stringProp('Raw payload text.')
+    },
+    inputExtensions: {
+      payloadJson: objectProp('JSON payload object (will be JSON.stringify-ed).', { additionalProperties: true }),
+      file: stringProp('Read payload text from a workspace-relative file path.')
+    },
+    validators: [mutuallyExclusiveValidator(['payload', 'payloadJson', 'file'], 'Provide only one of payload, payloadJson, or file')],
+    extraBindings: [
+      optionalJsonFlag('payloadJson', '--payload'),
+      optionalStringFlag('file', '--file')
     ]
   }),
 
@@ -390,20 +369,23 @@ const CURATED_MCP_COMMAND_TOOLS = buildCuratedToolMap([
     }
   }),
 
-  defineCuratedTool({
+  defineDerivedCuratedTool({
     name: 'licell_supa_lifecycle',
     title: 'Manage Supabase instance lifecycle',
     commandSignature: 'supa <action>',
+    deriveFrom: ['supa restart', 'supa stop', 'supa start'],
     description: 'Manage Supabase instance lifecycle: restart, stop, or start.',
-    inputSchema: inputSchema(withExecutionProps({
-      instanceName: stringProp('Supabase instance name.'),
+    requiredInputs: ['instanceName', 'action'],
+    inputOverrides: {
+      instanceName: stringProp('Supabase instance name.')
+    },
+    inputExtensions: {
       action: stringEnumProp('Lifecycle action.', ['restart', 'stop', 'start'])
-    }), ['instanceName', 'action']),
+    },
     baseArgv: (toolArgs) => [
       'supa',
       requireEnum(toolArgs, 'action', ['restart', 'stop', 'start'], 'action must be restart, stop, or start')
-    ],
-    bindings: [requiredPositionalString('instanceName', 'instanceName is required')]
+    ]
   }),
 
   defineCuratedCliWrapperTool({

@@ -140,7 +140,7 @@
 
 | Tool | 对应 CLI | 说明 | 关键输入 |
 |------|----------|------|----------|
-| `licell_deploy` | `licell deploy` | Deploy current project. API deploys to Function Compute (FC 3.0); Static deploys to OSS hosting. For API, Agent should call licell_fc_deploy_spec + licell_fc_deploy_check before deploy. Safety: mutating — 会创建或更新函数、域名、SSL、CDN 等云端资源。 Decision guide: Inspect → licell deploy spec · licell deploy check \| Mutate → licell deploy --output json. | `type`, `runtime`, `entry`, `dist` |
+| `licell_deploy` | `licell deploy` | Deploy current project. API deploys to Function Compute (FC 3.0); Static deploys to OSS hosting. For API, Agent should call licell_fc_deploy_spec + licell_fc_deploy_check before deploy. Safety: mutating — 会创建或更新函数、域名、SSL、CDN 等云端资源。 Decision guide: Inspect → licell deploy spec · licell deploy check \| Mutate → licell deploy --output json. | `type`, `entry`, `dist`, `runtime` |
 | `licell_dns_records_add` | `licell dns records add` | Add a DNS record (Alidns). Safety: mutating — 该命令会创建或修改云端资源、本地配置，建议先查看当前状态。 Structured JSON result: 结构化结果会返回新建 recordId 和完整记录参数，便于后续自动化追踪。 Key fields: stage, created, domain, recordId, rr, type, value, ttl, line. | `domain`, `rr`, `type`, `value` |
 | `licell_dns_records_list` | `licell dns records list` | List DNS records for a domain (Alidns). | `domain`, `limit` |
 | `licell_dns_records_rm` | `licell dns records rm` | Remove a DNS record by recordId. Destructive (requires yes=true). Safety: destructive — 该命令会删除、回滚、暴露公网访问或轮换关键凭证，执行前请确认影响面。 Structured JSON result: 结构化结果会返回被删除的 recordId。 Key fields: stage, removed, recordId. | `recordId`, `yes` |
@@ -156,7 +156,7 @@
 | `licell_fn_rm` | `licell fn rm` | Delete FC function. Destructive (requires yes=true). Safety: destructive — 该命令会删除、回滚、暴露公网访问或轮换关键凭证，执行前请确认影响面。 | `name`, `force`, `yes` |
 | `licell_init` | `licell init` | Initialize current directory: write .licell/project.json, and optionally generate scaffold files for supported runtimes. Safety: mutating — 该命令会创建或修改云端资源、本地配置，建议先查看当前状态。 Structured JSON result: 返回初始化后的 runtime、应用名与文件写入结果。 Key fields: stage, runtime, appName, mode, writtenFiles, skippedFiles. | `runtime`, `app`, `force`, `yes` |
 | `licell_release_promote` | `licell release promote` | Publish (if needed) and switch an FC alias (e.g. prod/preview) to a version. Safety: mutating — 会切换 alias 指向的线上版本。 | `versionId`, `target` |
-| `licell_release_prune` | `licell release prune` | Preview or delete old FC published versions. Destructive when apply=true (requires yes=true). Safety: destructive — 可能删除历史函数版本或预览域名绑定，建议先预览并确认保留策略。 | `keep`, `apply`, `yes` |
+| `licell_release_prune` | `licell release prune` | Preview or delete old FC published versions. Destructive when apply=true (requires yes=true). Safety: destructive — 可能删除历史函数版本或预览域名绑定，建议先预览并确认保留策略。 | `keep`, `apply`, `preview`, `yes` |
 | `licell_release_rollback` | `licell release rollback` | Switch an FC alias to a specific versionId. Safety: destructive — 会将线上流量回滚到旧版本，执行前请确认目标版本。 | `versionId`, `target` |
 | `licell_supa_add` | `licell supa add` | Provision a new RDS Supabase instance (creates PG, waits until Running, saves env vars). Long-running (~5-10 min). Safety: mutating — 该命令会创建或修改云端资源、本地配置，建议先查看当前状态。 | `name`, `vsw`, `class`, `dbInstance` |
 | `licell_supa_config` | `licell supa config` | View or modify Supabase instance configuration (auth/storage/RAG). Without modification flags, shows current config. | `instanceName`, `setAuth`, `setStorage`, `rag` |

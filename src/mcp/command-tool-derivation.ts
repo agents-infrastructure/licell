@@ -43,6 +43,16 @@ export interface DerivedCommandToolShape {
   optionBindings: DerivedOptionBinding[];
 }
 
+export interface DeriveCommandToolShapeOptions {
+  inputOverrides?: Record<string, DerivedCommandInputOverride | CommandToolSchemaProperty>;
+  omitInputs?: string[];
+  requiredInputs?: string[];
+  includeExecutionProps?: boolean;
+  timeoutDescription?: string;
+  reservedNames?: string[];
+  useArgumentHints?: boolean;
+}
+
 function unique<T>(values: T[]) {
   return [...new Set(values)];
 }
@@ -131,7 +141,6 @@ function inferBindingFromSchema(
   return fallback;
 }
 
-
 function inferOptionBindingFromSchema(
   schema: CommandToolSchemaProperty,
   fallback: 'string' | 'boolean'
@@ -160,19 +169,35 @@ function ensureFiniteNumber(value: unknown, inputName: string) {
   return number;
 }
 
+function schemasEqual(left: CommandToolSchemaProperty | undefined, right: CommandToolSchemaProperty | undefined) {
+  return JSON.stringify(left || null) === JSON.stringify(right || null);
+}
+
+function positionalBindingsEqual(left: DerivedPositionalBinding, right: DerivedPositionalBinding) {
+  return left.inputName === right.inputName
+    && left.rawName === right.rawName
+    && left.required === right.required
+    && left.variadic === right.variadic
+    && left.bindAs === right.bindAs;
+}
+
+function optionBindingsEqual(left: DerivedOptionBinding, right: DerivedOptionBinding) {
+  return left.inputName === right.inputName
+    && left.flag === right.flag
+    && left.rawName === right.rawName
+    && left.description === right.description
+    && left.takesValue === right.takesValue
+    && left.valueRequired === right.valueRequired
+    && left.boolean === right.boolean
+    && left.required === right.required
+    && left.bindAs === right.bindAs;
+}
+
 export function deriveCommandToolShape(
   command: Pick<AgentCommandCatalogEntry, 'args' | 'options' | 'argumentHints'>,
-  options?: {
-    inputOverrides?: Record<string, DerivedCommandInputOverride | CommandToolSchemaProperty>;
-    omitInputs?: string[];
-    requiredInputs?: string[];
-    includeExecutionProps?: boolean;
-    timeoutDescription?: string;
-    reservedNames?: string[];
-    useArgumentHints?: boolean;
-  }
+  options?: DeriveCommandToolShapeOptions
 ): DerivedCommandToolShape {
-  const reserved = new Set<string>(options?.reservedNames || []);
+  const reserved = new Set(options?.reservedNames || []);
   if (options?.includeExecutionProps !== false) {
     reserved.add('cwd');
     reserved.add('timeoutMs');
@@ -249,6 +274,47 @@ export function deriveCommandToolShape(
     properties.cwd = { type: 'string', description: 'Working directory relative to projectRoot (default: projectRoot).' };
     properties.timeoutMs = { type: 'number', description: options?.timeoutDescription || 'Command timeout in milliseconds.' };
   }
+
+  return {
+    properties,
+    required: unique(required),
+    positionalBindings,
+    optionBindings
+  };
+}
+
+export function deriveSharedCommandToolShape(
+  commands: Array<Pick<AgentCommandCatalogEntry, 'args' | 'options' | 'argumentHints'>>,
+  options?: DeriveCommandToolShapeOptions
+): DerivedCommandToolShape {
+  if (commands.length === 0) {
+    throw new Error('deriveSharedCommandToolShape requires at least one command');
+  }
+
+  const shapes = commands.map((command) => deriveCommandToolShape(command, options));
+  if (shapes.length === 1) return shapes[0];
+
+  const [base, ...rest] = shapes;
+  const properties = Object.fromEntries(
+    Object.entries(base.properties).filter(([inputName, schema]) => {
+      return rest.every((shape) => schemasEqual(shape.properties[inputName], schema));
+    })
+  );
+
+  const required = base.required.filter((inputName) => {
+    if (!(inputName in properties)) return false;
+    return rest.every((shape) => shape.required.includes(inputName));
+  });
+
+  const positionalBindings = base.positionalBindings.filter((binding) => {
+    if (!(binding.inputName in properties)) return false;
+    return rest.every((shape) => shape.positionalBindings.some((other) => positionalBindingsEqual(other, binding)));
+  });
+
+  const optionBindings = base.optionBindings.filter((binding) => {
+    if (!(binding.inputName in properties)) return false;
+    return rest.every((shape) => shape.optionBindings.some((other) => optionBindingsEqual(other, binding)));
+  });
 
   return {
     properties,

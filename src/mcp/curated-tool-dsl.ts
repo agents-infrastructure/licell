@@ -2,6 +2,7 @@ import type { CommandTaskHint } from '../utils/command-metadata';
 import {
   appendDerivedBindingsToArgv,
   deriveCommandToolShape,
+  deriveSharedCommandToolShape,
   type CommandToolSchemaProperty,
   type DerivedCommandInputOverride
 } from './command-tool-derivation';
@@ -64,17 +65,35 @@ interface CuratedMcpCommandToolDefinition {
   bindings?: CuratedToolBinding[];
 }
 
-export interface CuratedCliWrapperToolDefinition extends Omit<CuratedMcpCommandToolDefinition, 'inputSchema' | 'baseArgv' | 'bindings'> {
+export interface DerivedCuratedToolDefinition extends Omit<CuratedMcpCommandToolDefinition, 'inputSchema' | 'baseArgv' | 'bindings'> {
   commandSignature: string;
+  deriveFrom?: string | string[];
   inputOverrides?: Record<string, DerivedCommandInputOverride | CommandToolSchemaProperty>;
+  inputExtensions?: Record<string, CommandToolSchemaProperty>;
   omitInputs?: string[];
   requiredInputs?: string[];
   timeoutDescription?: string;
+  baseArgv?: string[] | ((toolArgs: ToolArgs) => string[]);
   extraBindings?: CuratedToolBinding[];
+  derivedBindingsPosition?: 'before' | 'after' | 'omit';
 }
+
+export interface CuratedCliWrapperToolDefinition extends Omit<DerivedCuratedToolDefinition, 'deriveFrom' | 'baseArgv' | 'inputExtensions' | 'derivedBindingsPosition'> {}
 
 const DEFAULT_CWD_DESCRIPTION = 'Working directory relative to projectRoot (default: projectRoot).';
 const DEFAULT_TIMEOUT_DESCRIPTION = 'Command timeout in milliseconds.';
+
+function unique<T>(values: T[]) {
+  return [...new Set(values)];
+}
+
+function resolveRequiredAgentCommand(commandSignature: string) {
+  const matchedCommand = findAgentCommandForTool(commandSignature, commandSignature.split(/\s+/)[0]);
+  if (!matchedCommand) {
+    throw new Error(`Unable to derive curated tool: command ${commandSignature} not found in shared catalog.`);
+  }
+  return matchedCommand;
+}
 
 export function stringProp(description: string, extra?: Record<string, unknown>): CuratedSchemaProperty {
   return { type: 'string', description, ...(extra || {}) };
@@ -209,35 +228,61 @@ function buildCuratedToolMetadata(definition: CuratedMcpCommandToolDefinition, c
   });
 }
 
-export function defineCuratedCliWrapperTool(definition: CuratedCliWrapperToolDefinition): CuratedMcpCommandTool {
-  const matchedCommand = findAgentCommandForTool(definition.commandSignature, definition.commandSignature.split(/\s+/)[0]);
-  if (!matchedCommand) {
-    throw new Error(`Unable to derive curated CLI wrapper for ${definition.name}: command ${definition.commandSignature} not found in shared catalog.`);
-  }
+export function defineDerivedCuratedTool(definition: DerivedCuratedToolDefinition): CuratedMcpCommandTool {
+  const sourceSignatures = Array.isArray(definition.deriveFrom)
+    ? definition.deriveFrom
+    : [definition.deriveFrom || definition.commandSignature];
+  const sourceCommands = sourceSignatures.map(resolveRequiredAgentCommand);
+  const derived = sourceCommands.length > 1
+    ? deriveSharedCommandToolShape(sourceCommands, {
+      inputOverrides: definition.inputOverrides,
+      omitInputs: definition.omitInputs,
+      requiredInputs: definition.requiredInputs,
+      includeExecutionProps: true,
+      timeoutDescription: definition.timeoutDescription,
+      useArgumentHints: true
+    })
+    : deriveCommandToolShape(sourceCommands[0], {
+      inputOverrides: definition.inputOverrides,
+      omitInputs: definition.omitInputs,
+      requiredInputs: definition.requiredInputs,
+      includeExecutionProps: true,
+      timeoutDescription: definition.timeoutDescription,
+      useArgumentHints: true
+    });
 
-  const derived = deriveCommandToolShape(matchedCommand, {
-    inputOverrides: definition.inputOverrides,
-    omitInputs: definition.omitInputs,
-    requiredInputs: definition.requiredInputs,
-    includeExecutionProps: true,
-    timeoutDescription: definition.timeoutDescription,
-    useArgumentHints: true
-  });
+  const properties = {
+    ...derived.properties,
+    ...(definition.inputExtensions || {})
+  };
+  const required = unique((definition.requiredInputs || []).filter((inputName) => inputName in properties));
+  const derivedBindings: CuratedToolBinding[] = [
+    (toolArgs, argv) => appendDerivedBindingsToArgv(derived, toolArgs, argv)
+  ];
+  const extraBindings = definition.extraBindings || [];
+  const bindings = definition.derivedBindingsPosition === 'omit'
+    ? [...extraBindings]
+    : definition.derivedBindingsPosition === 'after'
+      ? [...extraBindings, ...derivedBindings]
+      : [...derivedBindings, ...extraBindings];
 
   return defineCuratedTool({
     ...definition,
     inputSchema: {
       type: 'object',
       additionalProperties: false,
-      properties: derived.properties,
-      ...(derived.required.length > 0 ? { required: derived.required } : {})
+      properties,
+      ...(unique([...derived.required, ...required]).length > 0
+        ? { required: unique([...derived.required, ...required]) }
+        : {})
     },
-    baseArgv: matchedCommand.key.split(' '),
-    bindings: [
-      (toolArgs, argv) => appendDerivedBindingsToArgv(derived, toolArgs, argv),
-      ...(definition.extraBindings || [])
-    ]
+    baseArgv: definition.baseArgv || sourceCommands[0].key.split(' '),
+    bindings
   });
+}
+
+export function defineCuratedCliWrapperTool(definition: CuratedCliWrapperToolDefinition): CuratedMcpCommandTool {
+  return defineDerivedCuratedTool(definition);
 }
 
 export function defineCuratedTool(definition: CuratedMcpCommandToolDefinition): CuratedMcpCommandTool {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildAgentCommandCatalog } from '../utils/command-reference';
-import { appendDerivedBindingsToArgv, deriveCommandToolShape } from '../mcp/command-tool-derivation';
+import { appendDerivedBindingsToArgv, deriveCommandToolShape, deriveSharedCommandToolShape } from '../mcp/command-tool-derivation';
 
 const catalog = buildAgentCommandCatalog();
 
@@ -21,6 +21,26 @@ describe('command tool derivation', () => {
     expect(derived.properties).toHaveProperty('cwd');
     expect(derived.properties).toHaveProperty('timeoutMs');
     expect(derived.optionBindings.find((binding) => binding.inputName === 'dockerDaemon')?.bindAs).toBe('boolean');
+  });
+
+
+  it('derives shared bindings across sibling commands', () => {
+    const commands = ['supa restart', 'supa stop', 'supa start'].map((key) => {
+      const command = catalog.commands.find((entry) => entry.key === key);
+      expect(command).toBeDefined();
+      if (!command) throw new Error(`${key} not found`);
+      return command;
+    });
+
+    const derived = deriveSharedCommandToolShape(commands, {
+      includeExecutionProps: true,
+      useArgumentHints: true
+    });
+
+    expect(Object.keys(derived.properties)).toEqual(['instanceName', 'cwd', 'timeoutMs']);
+    expect(derived.required).toEqual(['instanceName']);
+    expect(derived.positionalBindings.map((binding) => binding.inputName)).toEqual(['instanceName']);
+    expect(derived.optionBindings).toEqual([]);
   });
 
   it('builds argv from derived bindings with required and number inputs', () => {
