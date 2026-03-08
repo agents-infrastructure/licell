@@ -1,6 +1,7 @@
 import { buildAgentCommandCatalog, filterAgentCommandCatalog } from '../utils/command-reference';
 import { getBuiltinUpgradeSafetyHint } from '../utils/install-upgrade-docs';
 import {
+  buildLicellMcpToolAnnotations,
   buildLicellMcpToolMetadata,
   renderLicellMcpToolDescription,
   resolveLicellMcpToolTitle,
@@ -113,10 +114,10 @@ const BUILTIN_MCP_TOOLS = {
       },
       required: ['argv']
     },
-    annotations: {
-      openWorldHint: true,
-      destructiveHint: true
-    },
+    annotations: buildLicellMcpToolAnnotations({
+      metadata: LICELL_CLI_METADATA,
+      fallback: { openWorldHint: true, destructiveHint: true }
+    }),
     metadata: LICELL_CLI_METADATA,
     execute(toolArgs) {
       const argvRaw = toolArgs.argv;

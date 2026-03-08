@@ -49,6 +49,11 @@ export interface LicellMcpToolMetadataEnvelope {
   licell: LicellMcpToolMetadata;
 }
 
+export interface LicellMcpToolAnnotations {
+  destructiveHint?: boolean;
+  openWorldHint?: boolean;
+}
+
 interface CommandSubjectLabels {
   singular: string;
   plural: string;
@@ -198,7 +203,14 @@ export function resolveLicellMcpToolSummary(
   metadata?: LicellMcpToolMetadataEnvelope,
   fallbackSummary?: string
 ) {
-  return metadata?.licell.summary || metadata?.licell.description || normalizeText(fallbackSummary);
+  const explicitSummary = metadata?.licell.summary || metadata?.licell.description || normalizeText(fallbackSummary);
+  if (explicitSummary) return explicitSummary;
+
+  const matchedCommand = findAgentCommandForTool(
+    metadata?.licell.command?.key || metadata?.licell.command?.signature,
+    metadata?.licell.command?.rootCommand
+  );
+  return matchedCommand?.summary || matchedCommand?.description;
 }
 
 export function resolveLicellMcpToolTitle(
@@ -207,6 +219,13 @@ export function resolveLicellMcpToolTitle(
 ) {
   const explicitTitle = normalizeText(metadata?.licell.title) || normalizeText(fallbackTitle);
   if (explicitTitle) return explicitTitle;
+
+  const matchedCommand = findAgentCommandForTool(
+    metadata?.licell.command?.key || metadata?.licell.command?.signature,
+    metadata?.licell.command?.rootCommand
+  );
+  if (matchedCommand?.title) return matchedCommand.title;
+
   const derivedTitle = deriveTitleFromSignature(
     metadata?.licell.command?.signature,
     metadata?.licell.command?.rootCommand
@@ -214,6 +233,33 @@ export function resolveLicellMcpToolTitle(
   if (derivedTitle) return derivedTitle;
   const invocation = buildInvocation(metadata);
   return invocation ? `Run ${invocation}` : 'Run licell tool';
+}
+
+export function resolveLicellMcpToolDestructive(
+  metadata?: LicellMcpToolMetadataEnvelope,
+  fallback = false
+) {
+  return metadata?.licell.safety?.level === 'destructive' || fallback;
+}
+
+export function resolveLicellMcpToolOpenWorld(
+  metadata?: LicellMcpToolMetadataEnvelope,
+  fallback = false
+) {
+  return Boolean(metadata?.licell.openWorld) || fallback;
+}
+
+export function buildLicellMcpToolAnnotations(input: {
+  metadata?: LicellMcpToolMetadataEnvelope;
+  fallback?: LicellMcpToolAnnotations;
+}): LicellMcpToolAnnotations | undefined {
+  const destructiveHint = resolveLicellMcpToolDestructive(input.metadata, Boolean(input.fallback?.destructiveHint));
+  const openWorldHint = resolveLicellMcpToolOpenWorld(input.metadata, Boolean(input.fallback?.openWorldHint));
+  if (!destructiveHint && !openWorldHint) return undefined;
+  return {
+    ...(destructiveHint ? { destructiveHint: true } : {}),
+    ...(openWorldHint ? { openWorldHint: true } : {})
+  } satisfies LicellMcpToolAnnotations;
 }
 
 export function renderLicellMcpToolDescription(
@@ -225,7 +271,7 @@ export function renderLicellMcpToolDescription(
     suffix?: string;
   }
 ) {
-  const primaryText = metadata?.licell.description || metadata?.licell.summary || options?.fallbackDescription || options?.fallbackSummary || '';
+  const primaryText = metadata?.licell.description || resolveLicellMcpToolSummary(metadata, options?.fallbackDescription || options?.fallbackSummary) || '';
   const hints = [
     primaryText,
     buildSafetyHint(metadata?.licell.safety),

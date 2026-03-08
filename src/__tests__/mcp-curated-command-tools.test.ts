@@ -22,6 +22,7 @@ describe('getCuratedMcpCommandTools', () => {
     expect(tools.licell_domain_app_unbind.metadata?.licell.workflows.find((workflow) => workflow.tag === 'domain-app-unbind-workflow')?.role).toBe('entry');
     expect(tools.licell_domain_static_bind.metadata?.licell.workflows.find((workflow) => workflow.tag === 'domain-static-bind-workflow')?.role).toBe('entry');
     expect(tools.licell_domain_static_unbind.metadata?.licell.workflows.find((workflow) => workflow.tag === 'domain-static-unbind-workflow')?.role).toBe('entry');
+    expect(tools.licell_domain_static_unbind.annotations?.destructiveHint).toBe(true);
     expect(tools.licell_deploy.metadata?.licell.description).toContain('Deploy current project');
     expect(tools.licell_domain_app_bind.metadata?.licell.summary).toContain('绑定自定义域名');
     expect(tools.licell_domain_app_unbind.metadata?.licell.summary).toContain('解绑当前应用域名');

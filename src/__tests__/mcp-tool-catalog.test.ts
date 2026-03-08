@@ -35,6 +35,7 @@ describe('buildMcpToolCatalog', () => {
     expect(curatedDomainAppBind?.summary).toContain('绑定自定义域名');
     expect(curatedDomainAppUnbind?.tags).toContain('domain-app-unbind-workflow');
     expect(curatedDomainAppUnbind?.summary).toContain('解绑当前应用域名');
+    expect(curatedDomainAppUnbind?.destructive).toBe(true);
     expect(curatedDomainStaticBind?.tags).toContain('domain-static-bind-workflow');
     expect(curatedDomainStaticBind?.summary).toContain('静态站点');
     expect(curatedDomainStaticUnbind?.tags).toContain('domain-static-unbind-workflow');
@@ -45,6 +46,7 @@ describe('buildMcpToolCatalog', () => {
     expect(generatedDeployCheck?.summary).toContain('预检');
     expect(generatedDeployCheck?.metadata?.licell.preferredOutput).toBe('json');
     expect(generatedDeployCheck?.metadata?.licell.command?.key).toBe('deploy check');
+    expect(generatedDeployCheck?.destructive).toBe(false);
     expect(generatedDeployCheck?.tags).toEqual([]);
   });
 });

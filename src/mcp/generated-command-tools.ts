@@ -1,5 +1,6 @@
-import { buildAgentCommandCatalog, type AgentCommandCatalogEntry } from '../utils/command-reference';
+import { buildAgentCommandCatalog } from '../utils/command-reference';
 import {
+  buildLicellMcpToolAnnotations,
   buildLicellMcpToolMetadataFromAgentCommand,
   renderLicellMcpToolDescription,
   resolveLicellMcpToolTitle,
@@ -88,12 +89,6 @@ function toPositionalDescription(rawName: string, required: boolean, variadic: b
   return `${traits.join(', ')}: ${rawName}`;
 }
 
-function inferDestructive(command: AgentCommandCatalogEntry) {
-  if (command.options.some((option) => option.primaryFlag === '--yes')) return true;
-  const haystack = `${command.key} ${command.description}`.toLowerCase();
-  return /(\brm\b|delete|remove|rollback|prune|cleanup|reset|unbind|destroy|rotate-password|reset-password|删除|清理|解绑|回滚|重置)/i.test(haystack);
-}
-
 export function buildGeneratedMcpCommandTools() {
   const catalog = buildAgentCommandCatalog();
   const tools: Record<string, GeneratedMcpCommandTool> = {};
@@ -138,6 +133,7 @@ export function buildGeneratedMcpCommandTools() {
     properties.timeoutMs = { type: 'number', description: 'Command timeout in milliseconds.' };
 
     const metadata = buildLicellMcpToolMetadataFromAgentCommand(command, { toolKind: 'generated' });
+    const annotations = buildLicellMcpToolAnnotations({ metadata });
     const description = renderLicellMcpToolDescription(metadata, {
       fallbackDescription: command.description,
       suffix: 'Auto-generated from the shared licell CLI registry.'
@@ -155,7 +151,7 @@ export function buildGeneratedMcpCommandTools() {
       },
       commandKey: command.key,
       metadata,
-      ...(inferDestructive(command) ? { annotations: { destructiveHint: true } } : {}),
+      ...(annotations ? { annotations } : {}),
       positionalBindings,
       optionBindings
     };

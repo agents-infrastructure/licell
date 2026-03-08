@@ -29,6 +29,7 @@ describe('buildGeneratedMcpCommandTools', () => {
     expect(tools.licell_cmd_deploy.description).toContain('Decision guide:');
     expect(tools.licell_cmd_deploy.description).toContain('Inspect → licell deploy spec');
     expect(tools.licell_cmd_release_prune.description).toContain('Safety: destructive');
+    expect(tools.licell_cmd_release_prune.annotations?.destructiveHint).toBe(true);
     expect(tools.licell_cmd_dns_records_add.description).toContain('Structured JSON result:');
     expect(tools.licell_cmd_dns_records_add.description).toContain('stage, created, domain, recordId');
   });

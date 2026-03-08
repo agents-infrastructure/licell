@@ -4,6 +4,8 @@ import { getCuratedMcpCommandTools } from './curated-command-tools';
 import { buildGeneratedMcpCommandTools } from './generated-command-tools';
 import {
   cloneLicellMcpToolMetadataEnvelope,
+  resolveLicellMcpToolDestructive,
+  resolveLicellMcpToolOpenWorld,
   resolveLicellMcpToolSummary,
   resolveLicellMcpToolTitle,
   type LicellMcpToolMetadataEnvelope
@@ -61,8 +63,8 @@ export function buildMcpToolCatalog(): McpToolCatalogDocument {
       description: tool.description,
       inputNames: Object.keys(tool.inputSchema.properties),
       requiredInputNames: [...(tool.inputSchema.required || [])],
-      destructive: Boolean(tool.annotations?.destructiveHint),
-      openWorld: Boolean(tool.annotations?.openWorldHint),
+      destructive: resolveLicellMcpToolDestructive(metadata, Boolean(tool.annotations?.destructiveHint)),
+      openWorld: resolveLicellMcpToolOpenWorld(metadata, Boolean(tool.annotations?.openWorldHint)),
       tags: [],
       metadata
     };
@@ -79,8 +81,8 @@ export function buildMcpToolCatalog(): McpToolCatalogDocument {
       description: tool.description,
       inputNames: Object.keys(tool.inputSchema.properties),
       requiredInputNames: [...(tool.inputSchema.required || [])],
-      destructive: Boolean(tool.annotations?.destructiveHint),
-      openWorld: false,
+      destructive: resolveLicellMcpToolDestructive(metadata, Boolean(tool.annotations?.destructiveHint)),
+      openWorld: resolveLicellMcpToolOpenWorld(metadata, false),
       tags: [...(tool.tags || [])],
       metadata,
       commandKey: command?.key,
@@ -102,8 +104,8 @@ export function buildMcpToolCatalog(): McpToolCatalogDocument {
       description: tool.description,
       inputNames: Object.keys(tool.inputSchema.properties),
       requiredInputNames: [...(tool.inputSchema.required || [])],
-      destructive: Boolean(tool.annotations?.destructiveHint),
-      openWorld: false,
+      destructive: resolveLicellMcpToolDestructive(metadata, Boolean(tool.annotations?.destructiveHint)),
+      openWorld: resolveLicellMcpToolOpenWorld(metadata, false),
       tags: [],
       metadata,
       commandKey: tool.commandKey,

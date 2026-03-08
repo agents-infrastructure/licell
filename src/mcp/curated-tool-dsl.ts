@@ -1,5 +1,6 @@
 import type { CommandTaskHint } from '../utils/command-metadata';
 import {
+  buildLicellMcpToolAnnotations,
   buildLicellMcpToolMetadata,
   buildLicellMcpToolMetadataFromAgentCommand,
   findAgentCommandForTool,
@@ -204,7 +205,7 @@ export function defineCuratedTool(definition: CuratedMcpCommandToolDefinition): 
       fallbackDescription: definition.description
     }),
     inputSchema: definition.inputSchema,
-    annotations: definition.annotations,
+    annotations: buildLicellMcpToolAnnotations({ metadata, fallback: definition.annotations }),
     metadata,
     commandSignature,
     rootCommand: commandSignature?.split(/\s+/)[0],
