@@ -7,15 +7,28 @@ import {
 } from './command-catalog';
 import {
   buildCommandOptionInsights,
-  getCommandMetadata,
+  buildCommandResultDescriptor,
+  getCommandDescriptor,
   type CommandActionHint,
+  type CommandDescriptor,
   type CommandFlowStep,
-  type CommandMetadata,
   type CommandOptionInsight,
   type CommandSafetyLevel,
-  type CommandSafetyMetadata
+  type CommandSafetyMetadata,
+  type ResolvedCommandResultDescriptor
 } from './command-metadata';
+import {
+  buildCommandTasks,
+  groupCommandTasks,
+  type CommandTaskEntry as HelpTaskDoc,
+  type CommandTaskGroup as HelpTaskGroup
+} from './command-tasks';
 import { buildCommandReferenceSections, type CommandReferenceSection } from './command-reference';
+import {
+  buildDerivedRecommendedFlow,
+  deriveCommandSafety,
+  deriveNamespaceSafety
+} from './command-semantics';
 
 export type HelpScope = 'root' | 'namespace' | 'command';
 
@@ -41,6 +54,8 @@ export interface HelpSectionDoc {
   commands: HelpCommandEntry[];
 }
 
+export type { HelpTaskDoc, HelpTaskGroup };
+
 export type HelpSafetyLevel = CommandSafetyLevel;
 
 export type HelpSafetyDoc = CommandSafetyMetadata;
@@ -48,6 +63,51 @@ export type HelpSafetyDoc = CommandSafetyMetadata;
 export type HelpOptionInsight = CommandOptionInsight;
 
 export type HelpFlowStep = CommandFlowStep;
+
+export type HelpResultDoc = ResolvedCommandResultDescriptor;
+
+export interface HelpRow {
+  label: string;
+  description: string;
+}
+
+export type HelpBlock =
+  | {
+      kind: 'rows';
+      title: string;
+      rows: HelpRow[];
+    }
+  | {
+      kind: 'items';
+      title: string;
+      items: string[];
+    }
+  | {
+      kind: 'tasks';
+      title: 'Common Tasks';
+      tasks: HelpTaskDoc[];
+    }
+  | {
+      kind: 'decision-guide';
+      title: 'Decision Guide';
+      groups: HelpTaskGroup[];
+      fallbackTasks: HelpTaskDoc[];
+    }
+  | {
+      kind: 'command-groups';
+      title: 'Command Groups';
+      sections: HelpSectionDoc[];
+    }
+  | {
+      kind: 'structured-result';
+      title: 'Structured Result';
+      result: HelpResultDoc;
+    }
+  | {
+      kind: 'recommended-flow';
+      title: 'Recommended Flow';
+      steps: HelpFlowStep[];
+    };
 
 export interface HelpDocument {
   version: string;
@@ -62,14 +122,18 @@ export interface HelpDocument {
   aliases: string[];
   subcommands: HelpCommandEntry[];
   actionHints: HelpActionHint[];
+  tasks: HelpTaskDoc[];
+  decisionGuide: HelpTaskGroup[];
   notes: string[];
   examples: string[];
   agentTips: string[];
   relatedCommands: HelpCommandEntry[];
   sections: HelpSectionDoc[];
   safety?: HelpSafetyDoc;
+  result?: HelpResultDoc;
   optionInsights: HelpOptionInsight[];
   recommendedFlow: HelpFlowStep[];
+  blocks: HelpBlock[];
   text: string;
 }
 
@@ -158,12 +222,12 @@ function toNamespaceEntry(key: string, description: string): HelpCommandEntry {
   };
 }
 
-function padRows(rows: Array<{ label: string; description: string }>) {
+function padRows(rows: HelpRow[]) {
   const width = Math.min(36, Math.max(0, ...rows.map((row) => row.label.length)));
   return rows.map((row) => `  ${row.label.padEnd(width)}  ${row.description}`);
 }
 
-function renderList(title: string, rows: Array<{ label: string; description: string }>) {
+function renderList(title: string, rows: HelpRow[]) {
   if (rows.length === 0) return [] as string[];
   return [title, ...padRows(rows), ''];
 }
@@ -177,8 +241,8 @@ function getSectionForRoot(rootCommand: string, sections: CommandReferenceSectio
   return sections.find((section) => section.roots.includes(rootCommand));
 }
 
-function getEnhancement(key: string): CommandMetadata {
-  return getCommandMetadata(key);
+function getEnhancement(key: string): CommandDescriptor {
+  return getCommandDescriptor(key);
 }
 
 function getGlobalOptions(catalog: CommandCatalog) {
@@ -226,7 +290,8 @@ function collectSuggestionCandidates(catalog: CommandCatalog) {
   return unique([
     ...catalog.rootCommands,
     ...Object.keys(catalog.childCommands),
-    ...catalog.commands.map((command) => command.key)
+    ...catalog.commands.map((command) => command.key),
+    ...Object.keys(catalog.aliasToKey)
   ]);
 }
 
@@ -259,20 +324,26 @@ export function suggestCommands(input: string, catalog: CommandCatalog = getComm
   return scored.slice(0, limit).map((item) => `licell ${item.candidate}`);
 }
 
+function buildTasksBlock(tasks: HelpTaskDoc[]): HelpBlock[] {
+  if (tasks.length === 0) return [] as HelpBlock[];
+  return [{ kind: 'tasks', title: 'Common Tasks', tasks }];
+}
+
+function buildDecisionGuideBlock(groups: HelpTaskGroup[], fallbackTasks: HelpTaskDoc[]): HelpBlock[] {
+  if (fallbackTasks.length === 0) return [] as HelpBlock[];
+  return [{ kind: 'decision-guide', title: 'Decision Guide', groups, fallbackTasks }];
+}
+
 function buildNamespaceSafety(subcommands: HelpCommandEntry[]) {
-  const destructive = subcommands.some((command) => /(rm|prune|rollback|stop)|public-access|rotate-password|reset-password/.test(command.key));
-  const mutating = destructive || subcommands.some((command) => /(add|set|deploy|promote|start|restart|init|upgrade)|whitelist|config/.test(command.key));
-  if (!mutating) return undefined;
+  const safety = deriveNamespaceSafety(subcommands);
+  if (!safety) return undefined;
   return {
-    level: destructive ? 'destructive' : 'mutating',
-    reason: destructive
-      ? '该命令族包含创建/修改/删除高影响子命令；执行前建议先用 list/info/check 获取现状。'
-      : '该命令族包含会修改云端资源或本地配置的子命令。',
+    ...safety,
     confirmFlags: []
   } satisfies HelpSafetyDoc;
 }
 
-function buildCommandSafety(command: CatalogCommand, enhancement: CommandMetadata): HelpSafetyDoc | undefined {
+function buildCommandSafety(command: CatalogCommand, enhancement: CommandDescriptor): HelpSafetyDoc | undefined {
   if (enhancement.safety?.level && enhancement.safety.reason) {
     return {
       level: enhancement.safety.level,
@@ -281,34 +352,22 @@ function buildCommandSafety(command: CatalogCommand, enhancement: CommandMetadat
     };
   }
 
-  const key = command.key;
   const confirmFlags = command.options
     .map((option) => option.primaryFlag)
     .filter((flag) => flag === '--yes' || flag === '--apply' || flag === '--force');
+  const safety = deriveCommandSafety(command.key);
 
-  if (/(rm|prune|rollback|stop)|public-access|rotate-password|reset-password/.test(key)) {
-    return {
-      level: 'destructive',
-      reason: '该命令会删除、回滚、暴露公网访问或轮换关键凭证，执行前请确认影响面。',
-      confirmFlags
-    };
-  }
-
-  if (/(deploy|promote|add|set|start|restart|init|upgrade)|whitelist|config domain|auth repair/.test(key)) {
-    return {
-      level: 'mutating',
-      reason: '该命令会创建或修改云端资源、本地配置，建议先查看当前状态。',
-      confirmFlags
-    };
-  }
-
-  return undefined;
+  if (!safety) return undefined;
+  return {
+    ...safety,
+    confirmFlags
+  };
 }
 
 function buildSafetyDoc(input: {
   scope: HelpScope;
   command?: CatalogCommand;
-  enhancement: CommandMetadata;
+  enhancement: CommandDescriptor;
   subcommands: HelpCommandEntry[];
 }) {
   if (input.scope === 'root') return undefined;
@@ -317,19 +376,9 @@ function buildSafetyDoc(input: {
   return buildCommandSafety(input.command, input.enhancement);
 }
 
-
-function findPreferredSubcommand(subcommands: HelpCommandEntry[], suffixes: string[], excludeKeys: string[] = []) {
-  const excluded = new Set(excludeKeys);
-  for (const suffix of suffixes) {
-    const match = subcommands.find((entry) => !excluded.has(entry.key) && (entry.key === suffix || entry.key.endsWith(` ${suffix}`)));
-    if (match) return match;
-  }
-  return undefined;
-}
-
 function buildRecommendedFlow(
   scope: HelpScope,
-  enhancement: CommandMetadata,
+  enhancement: CommandDescriptor,
   subcommands: HelpCommandEntry[]
 ) {
   if (enhancement.recommendedFlow && enhancement.recommendedFlow.length > 0) {
@@ -341,56 +390,27 @@ function buildRecommendedFlow(
   }
 
   if (scope !== 'namespace' || subcommands.length === 0) return [] as HelpFlowStep[];
-
-  const inspect = findPreferredSubcommand(subcommands, ['list', 'info', 'check', 'spec', 'status', 'whoami', 'logs', 'describe', 'get', 'pull', 'tail']);
-  const mutate = findPreferredSubcommand(subcommands, ['add', 'set', 'deploy', 'init', 'upgrade', 'promote', 'rollback', 'rm', 'prune', 'repair', 'public-access', 'rotate-password', 'reset-password', 'config']);
-  const verify = findPreferredSubcommand(subcommands, ['info', 'list', 'status', 'logs', 'describe', 'get', 'whoami', 'pull', 'tail'], inspect ? [inspect.key] : []);
-  const steps: HelpFlowStep[] = [];
-
-  if (inspect) {
-    steps.push({
-      title: '先获取现状',
-      command: inspect.invocation,
-      reason: '先确认当前资源、配置或上下文，降低误操作概率。'
-    });
-  }
-
-  if (mutate) {
-    steps.push({
-      title: '再执行目标动作',
-      command: mutate.invocation,
-      reason: '在上下文明确后，再进行创建、修改或清理。'
-    });
-  }
-
-  if (verify || inspect) {
-    steps.push({
-      title: '最后校验结果',
-      command: (verify || inspect)!.invocation,
-      reason: '确认结果已经生效，便于继续自动化编排。'
-    });
-  }
-
-  return steps;
+  return buildDerivedRecommendedFlow(subcommands);
 }
 
-function renderOptionInsights(insights: HelpOptionInsight[]) {
-  if (insights.length === 0) return [] as string[];
-  return renderList('Option Guidance:', insights.map((insight) => ({
+function buildOptionGuidanceRows(insights: HelpOptionInsight[]) {
+  return insights.map((insight) => ({
     label: insight.flag,
     description: insight.cautions.length > 0
       ? `${insight.whenToUse} 注意：${insight.cautions.join(' ')}`
       : insight.whenToUse
-  })));
+  }));
 }
 
-function renderRecommendedFlow(steps: HelpFlowStep[]) {
-  if (steps.length === 0) return [] as string[];
-  return renderPlainList('Recommended Flow:', steps.map((step, index) => {
-    const prefix = `${index + 1}. ${step.title}`;
-    const command = step.command ? ` → ${step.command}` : '';
-    return `${prefix}${command} · ${step.reason}`;
-  }));
+function buildStructuredResultItems(result: HelpResultDoc) {
+  const items: string[] = [];
+  if (result.summary) items.push(result.summary);
+  items.push('`stage` · 命令阶段标识。');
+  if (result.outcomeKey) items.push(`\`${result.outcomeKey}\` · 结果布尔态字段。`);
+  for (const field of result.fields) {
+    items.push(`\`${field.name}\`${field.required ? '' : '（optional）'} · ${field.description}`);
+  }
+  return items;
 }
 
 function collectCommandishTokens(argv: string[]) {
@@ -450,13 +470,13 @@ function resolveHelpTarget(argv: string[], catalog: CommandCatalog = getCommandC
 
   for (let length = tokens.length; length > 0; length -= 1) {
     const key = tokens.slice(0, length).join(' ');
-    const exactCommand = catalog.commandsByKey[key];
+    const exactCommand = catalog.commandsByKey[catalog.aliasToKey[key] || key];
     if (exactCommand) {
       return {
         helpRequested,
         bareNamespaceRequested,
         scope: 'command',
-        key,
+        key: exactCommand.key,
         exactCommand,
         extraTokens: tokens.slice(length)
       };
@@ -534,7 +554,7 @@ function buildRelatedCommands(
   key: string,
   rootCommand: string,
   catalog: CommandCatalog,
-  enhancement: CommandMetadata,
+  enhancement: CommandDescriptor,
   subcommands: HelpCommandEntry[]
 ) {
   const explicit = compact((enhancement.related || []).map((relatedKey) => {
@@ -562,7 +582,7 @@ function buildDefaultExamples(
   key: string,
   command: CatalogCommand | undefined,
   subcommands: HelpCommandEntry[],
-  enhancement: CommandMetadata,
+  enhancement: CommandDescriptor,
   extraTokens: string[]
 ) {
   if (enhancement.examples && enhancement.examples.length > 0) return [...enhancement.examples];
@@ -589,7 +609,7 @@ function buildDefaultExamples(
 function buildDefaultAgentTips(
   scope: HelpScope,
   key: string,
-  enhancement: CommandMetadata,
+  enhancement: CommandDescriptor,
   subcommands: HelpCommandEntry[]
 ) {
   const defaults: string[] = [];
@@ -605,6 +625,172 @@ function buildDefaultAgentTips(
   return unique([...(enhancement.agentTips || []), ...defaults]);
 }
 
+function buildRootHelpBlocks(doc: Omit<HelpDocument, 'blocks' | 'text'>): HelpBlock[] {
+  return [
+    ...(doc.examples.length > 0 ? [{ kind: 'items', title: 'Quick Start', items: doc.examples } satisfies HelpBlock] : []),
+    ...buildTasksBlock(doc.tasks),
+    ...(doc.sections.length > 0 ? [{ kind: 'command-groups', title: 'Command Groups', sections: doc.sections } satisfies HelpBlock] : []),
+    ...(doc.globalOptions.length > 0 ? [{
+      kind: 'rows',
+      title: 'Global Options',
+      rows: doc.globalOptions.map((option) => ({ label: option.rawName, description: option.description }))
+    } satisfies HelpBlock] : []),
+    ...([...[...doc.notes, ...doc.agentTips]].filter(Boolean).length > 0 ? [{
+      kind: 'items',
+      title: 'Tips',
+      items: [...doc.notes, ...doc.agentTips]
+    } satisfies HelpBlock] : [])
+  ];
+}
+
+function buildCommandLikeHelpBlocks(doc: Omit<HelpDocument, 'blocks' | 'text'>): HelpBlock[] {
+  return [
+    ...buildDecisionGuideBlock(doc.decisionGuide, doc.tasks),
+    ...(doc.args.length > 0 ? [{
+      kind: 'rows',
+      title: 'Arguments',
+      rows: doc.args.map((arg) => ({
+        label: arg.raw,
+        description: arg.hint || (arg.required ? '必填参数' : '可选参数')
+      }))
+    } satisfies HelpBlock] : []),
+    ...(doc.actionHints.length > 0 ? [{
+      kind: 'rows',
+      title: 'Actions',
+      rows: doc.actionHints.map((hint) => ({ label: hint.name, description: hint.description }))
+    } satisfies HelpBlock] : []),
+    ...(doc.subcommands.length > 0 ? [{
+      kind: 'rows',
+      title: 'Subcommands',
+      rows: doc.subcommands.map((command) => ({
+        label: command.rawName.startsWith(doc.key) ? command.rawName.slice(doc.key.length).trim() || command.rawName : command.rawName,
+        description: command.description
+      }))
+    } satisfies HelpBlock] : []),
+    ...(doc.options.length > 0 ? [{
+      kind: 'rows',
+      title: 'Options',
+      rows: doc.options.map((option) => ({ label: option.rawName, description: option.description }))
+    } satisfies HelpBlock] : []),
+    ...(doc.optionInsights.length > 0 ? [{
+      kind: 'rows',
+      title: 'Option Guidance',
+      rows: buildOptionGuidanceRows(doc.optionInsights)
+    } satisfies HelpBlock] : []),
+    ...(doc.globalOptions.length > 0 ? [{
+      kind: 'rows',
+      title: 'Global Options',
+      rows: doc.globalOptions.map((option) => ({ label: option.rawName, description: option.description }))
+    } satisfies HelpBlock] : []),
+    ...(doc.aliases.length > 0 ? [{
+      kind: 'items',
+      title: 'Aliases',
+      items: doc.aliases.map((alias) => `licell ${alias}`)
+    } satisfies HelpBlock] : []),
+    ...(doc.safety ? [{
+      kind: 'items',
+      title: 'Safety',
+      items: [
+        `${doc.safety.level} · ${doc.safety.reason}`,
+        ...(doc.safety.confirmFlags.length > 0 ? [`confirm flags: ${doc.safety.confirmFlags.join(', ')}`] : [])
+      ]
+    } satisfies HelpBlock] : []),
+    ...(doc.result ? [{ kind: 'structured-result', title: 'Structured Result', result: doc.result } satisfies HelpBlock] : []),
+    ...(doc.recommendedFlow.length > 0 ? [{ kind: 'recommended-flow', title: 'Recommended Flow', steps: doc.recommendedFlow } satisfies HelpBlock] : []),
+    ...(doc.examples.length > 0 ? [{ kind: 'items', title: 'Examples', items: doc.examples } satisfies HelpBlock] : []),
+    ...(doc.relatedCommands.length > 0 ? [{
+      kind: 'items',
+      title: 'Related',
+      items: doc.relatedCommands.map((command) => command.invocation)
+    } satisfies HelpBlock] : []),
+    ...(doc.notes.length > 0 ? [{ kind: 'items', title: 'Notes', items: doc.notes } satisfies HelpBlock] : []),
+    ...(doc.agentTips.length > 0 ? [{ kind: 'items', title: 'Agent Tips', items: doc.agentTips } satisfies HelpBlock] : [])
+  ];
+}
+
+function renderTasksBlock(tasks: HelpTaskDoc[]) {
+  const lines = ['Common Tasks:'];
+  for (const task of tasks) {
+    lines.push(`  - ${task.title} · ${task.description}`);
+    if (task.commands.length > 0) lines.push(`    start with: ${task.commands.join(' · ')}`);
+  }
+  lines.push('');
+  return lines;
+}
+
+function renderDecisionGuideBlock(groups: HelpTaskGroup[], fallbackTasks: HelpTaskDoc[]) {
+  const hasPhasedGuide = groups.some((group) => group.phase !== 'general');
+  if (!hasPhasedGuide) return renderTasksBlock(fallbackTasks);
+
+  const lines = ['Decision Guide:'];
+  for (const group of groups) {
+    if (group.tasks.length === 0 || group.phase === 'general') continue;
+    lines.push(`  ${group.title}:`);
+    for (const task of group.tasks) {
+      lines.push(`    - ${task.title} · ${task.description}`);
+      if (task.commands.length > 0) lines.push(`      start with: ${task.commands.join(' · ')}`);
+    }
+  }
+  const generalTasks = groups.find((group) => group.phase === 'general');
+  if (generalTasks && generalTasks.tasks.length > 0) {
+    lines.push('  General:');
+    for (const task of generalTasks.tasks) {
+      lines.push(`    - ${task.title} · ${task.description}`);
+      if (task.commands.length > 0) lines.push(`      start with: ${task.commands.join(' · ')}`);
+    }
+  }
+  lines.push('');
+  return lines;
+}
+
+function renderCommandGroupsBlock(sections: HelpSectionDoc[]) {
+  const lines = ['Command Groups:'];
+  for (const section of sections) {
+    lines.push(`  ${section.title}`);
+    if (section.summary) lines.push(`    ${section.summary}`);
+    lines.push(...padRows(section.commands.map((command) => ({
+      label: command.key,
+      description: command.description
+    }))).map((line) => `    ${line.trimStart()}`), '');
+  }
+  return lines;
+}
+
+function renderStructuredResultBlock(result: HelpResultDoc) {
+  return renderPlainList('Structured Result:', buildStructuredResultItems(result));
+}
+
+function renderRecommendedFlowBlock(steps: HelpFlowStep[]) {
+  return renderPlainList('Recommended Flow:', steps.map((step, index) => {
+    const prefix = `${index + 1}. ${step.title}`;
+    const command = step.command ? ` → ${step.command}` : '';
+    return `${prefix}${command} · ${step.reason}`;
+  }));
+}
+
+function renderHelpBlock(block: HelpBlock) {
+  switch (block.kind) {
+    case 'rows':
+      return renderList(`${block.title}:`, block.rows);
+    case 'items':
+      return renderPlainList(`${block.title}:`, block.items);
+    case 'tasks':
+      return renderTasksBlock(block.tasks);
+    case 'decision-guide':
+      return renderDecisionGuideBlock(block.groups, block.fallbackTasks);
+    case 'command-groups':
+      return renderCommandGroupsBlock(block.sections);
+    case 'structured-result':
+      return renderStructuredResultBlock(block.result);
+    case 'recommended-flow':
+      return renderRecommendedFlowBlock(block.steps);
+  }
+}
+
+function renderHelpBlocks(blocks: HelpBlock[]) {
+  return blocks.flatMap((block) => renderHelpBlock(block));
+}
+
 function renderRootHelp(doc: Omit<HelpDocument, 'text'>) {
   const lines: string[] = [
     `licell/${doc.version}`,
@@ -616,28 +802,7 @@ function renderRootHelp(doc: Omit<HelpDocument, 'text'>) {
     ''
   ];
 
-  if (doc.examples.length > 0) {
-    lines.push('Quick Start:', ...doc.examples.map((example) => `  ${example}`), '');
-  }
-
-  if (doc.sections.length > 0) {
-    lines.push('Command Groups:');
-    for (const section of doc.sections) {
-      lines.push(`  ${section.title}`);
-      if (section.summary) lines.push(`    ${section.summary}`);
-      lines.push(...padRows(section.commands.map((command) => ({
-        label: command.key,
-        description: command.description
-      }))).map((line) => `    ${line.trimStart()}`), '');
-    }
-  }
-
-  lines.push(...renderList('Global Options:', doc.globalOptions.map((option) => ({
-    label: option.rawName,
-    description: option.description
-  }))));
-
-  lines.push(...renderPlainList('Tips:', [...doc.notes, ...doc.agentTips]));
+  lines.push(...renderHelpBlocks(doc.blocks));
   return `${lines.join('\n').trim()}\n`;
 }
 
@@ -649,71 +814,26 @@ function renderCommandLikeHelp(doc: Omit<HelpDocument, 'text'>) {
     ''
   ];
 
-  if (doc.summary) {
-    lines.push(doc.summary, '');
-  }
-
+  if (doc.summary) lines.push(doc.summary, '');
   lines.push('Usage:', ...doc.usage.map((usage) => `  ${usage}`), '');
-
-  if (doc.args.length > 0) {
-    lines.push(...renderList('Arguments:', doc.args.map((arg) => ({
-      label: arg.raw,
-      description: arg.hint || (arg.required ? '必填参数' : '可选参数')
-    }))));
-  }
-
-  if (doc.actionHints.length > 0) {
-    lines.push(...renderList('Actions:', doc.actionHints.map((hint) => ({
-      label: hint.name,
-      description: hint.description
-    }))));
-  }
-
-  if (doc.subcommands.length > 0) {
-    lines.push(...renderList('Subcommands:', doc.subcommands.map((command) => ({
-      label: command.rawName.startsWith(doc.key) ? command.rawName.slice(doc.key.length).trim() || command.rawName : command.rawName,
-      description: command.description
-    }))));
-  }
-
-  if (doc.options.length > 0) {
-    lines.push(...renderList('Options:', doc.options.map((option) => ({
-      label: option.rawName,
-      description: option.description
-    }))));
-  }
-
-  lines.push(...renderOptionInsights(doc.optionInsights));
-
-  lines.push(...renderList('Global Options:', doc.globalOptions.map((option) => ({
-    label: option.rawName,
-    description: option.description
-  }))));
-
-  if (doc.aliases.length > 0) {
-    lines.push(...renderPlainList('Aliases:', doc.aliases.map((alias) => `licell ${alias}`)));
-  }
-
-  if (doc.safety) {
-    lines.push(...renderPlainList('Safety:', [
-      `${doc.safety.level} · ${doc.safety.reason}`,
-      ...(doc.safety.confirmFlags.length > 0 ? [`confirm flags: ${doc.safety.confirmFlags.join(', ')}`] : [])
-    ]));
-  }
-
-  lines.push(...renderRecommendedFlow(doc.recommendedFlow));
-
-  if (doc.examples.length > 0) {
-    lines.push(...renderPlainList('Examples:', doc.examples));
-  }
-
-  if (doc.relatedCommands.length > 0) {
-    lines.push(...renderPlainList('Related:', doc.relatedCommands.map((command) => command.invocation)));
-  }
-
-  lines.push(...renderPlainList('Notes:', doc.notes));
-  lines.push(...renderPlainList('Agent Tips:', doc.agentTips));
+  lines.push(...renderHelpBlocks(doc.blocks));
   return `${lines.join('\n').trim()}\n`;
+}
+
+function finalizeHelpDocument(baseDoc: Omit<HelpDocument, 'blocks' | 'text'>): HelpDocument {
+  const blocks = baseDoc.scope === 'root'
+    ? buildRootHelpBlocks(baseDoc)
+    : buildCommandLikeHelpBlocks(baseDoc);
+
+  const doc: Omit<HelpDocument, 'text'> = {
+    ...baseDoc,
+    blocks
+  };
+
+  return {
+    ...doc,
+    text: doc.scope === 'root' ? renderRootHelp(doc) : renderCommandLikeHelp(doc)
+  };
 }
 
 export function buildHelpDocument(input: {
@@ -728,7 +848,13 @@ export function buildHelpDocument(input: {
 
   if (resolution.scope === 'root') {
     const enhancement = getEnhancement('help');
-    const baseDoc: Omit<HelpDocument, 'text'> = {
+    const tasks = buildCommandTasks({
+      scope: 'root',
+      enhancement,
+      subcommands: [],
+      sectionTasks: sections.flatMap((section) => section.taskHints || [])
+    });
+    return finalizeHelpDocument({
       version: input.version,
       scope: 'root',
       key: 'help',
@@ -745,19 +871,18 @@ export function buildHelpDocument(input: {
       aliases: [],
       subcommands: [],
       actionHints: [],
+      tasks,
+      decisionGuide: groupCommandTasks(tasks),
       notes: [...(enhancement.notes || [])],
       examples: buildDefaultExamples('root', 'help', undefined, [], enhancement, []),
       agentTips: buildDefaultAgentTips('root', 'help', enhancement, []),
       relatedCommands: [],
       sections: buildRootSectionDocs(catalog, sections),
       safety: undefined,
+      result: undefined,
       optionInsights: buildCommandOptionInsights([], enhancement),
       recommendedFlow: buildRecommendedFlow('root', enhancement, [])
-    };
-    return {
-      ...baseDoc,
-      text: renderRootHelp(baseDoc)
-    };
+    });
   }
 
   if (resolution.scope === 'namespace') {
@@ -765,7 +890,8 @@ export function buildHelpDocument(input: {
     const rootCommand = resolution.key.split(' ')[0] || resolution.key;
     const section = getSectionForRoot(rootCommand, sections);
     const subcommands = buildImmediateChildren(resolution.key, catalog);
-    const baseDoc: Omit<HelpDocument, 'text'> = {
+    const tasks = buildCommandTasks({ scope: 'namespace', enhancement, subcommands });
+    return finalizeHelpDocument({
       version: input.version,
       scope: 'namespace',
       key: resolution.key,
@@ -781,36 +907,28 @@ export function buildHelpDocument(input: {
       aliases: [],
       subcommands,
       actionHints: [...(enhancement.actionHints || [])],
+      tasks,
+      decisionGuide: groupCommandTasks(tasks),
       notes: [...(enhancement.notes || [])],
       examples: buildDefaultExamples('namespace', resolution.key, undefined, subcommands, enhancement, resolution.extraTokens),
       agentTips: buildDefaultAgentTips('namespace', resolution.key, enhancement, subcommands),
       relatedCommands: buildRelatedCommands(resolution.key, rootCommand, catalog, enhancement, subcommands),
       sections: [],
-      safety: buildSafetyDoc({
-        scope: 'namespace',
-        enhancement,
-        subcommands
-      }),
+      safety: buildSafetyDoc({ scope: 'namespace', enhancement, subcommands }),
+      result: undefined,
       optionInsights: buildCommandOptionInsights([], enhancement),
       recommendedFlow: buildRecommendedFlow('namespace', enhancement, subcommands)
-    };
-    return {
-      ...baseDoc,
-      text: renderCommandLikeHelp(baseDoc)
-    };
+    });
   }
 
   const command = resolution.exactCommand!;
   const enhancement = getEnhancement(command.key);
-  const rootCommand = command.rootCommand;
-  const section = getSectionForRoot(rootCommand, sections);
   const subcommands = buildImmediateChildren(command.key, catalog);
   const argumentHints = enhancement.argumentHints || {};
-  const args = command.args.map((arg) => ({
-    ...arg,
-    hint: argumentHints[arg.name]
-  }));
-  const baseDoc: Omit<HelpDocument, 'text'> = {
+  const args = command.args.map((arg) => ({ ...arg, hint: argumentHints[arg.name] }));
+  const tasks = buildCommandTasks({ scope: 'command', enhancement, subcommands });
+
+  return finalizeHelpDocument({
     version: input.version,
     scope: 'command',
     key: command.key,
@@ -827,24 +945,18 @@ export function buildHelpDocument(input: {
     aliases: [...command.aliases],
     subcommands,
     actionHints: [...(enhancement.actionHints || [])],
+    tasks,
+    decisionGuide: groupCommandTasks(tasks),
     notes: [...(enhancement.notes || [])],
     examples: buildDefaultExamples('command', command.key, command, subcommands, enhancement, resolution.extraTokens),
     agentTips: buildDefaultAgentTips('command', command.key, enhancement, subcommands),
-    relatedCommands: buildRelatedCommands(command.key, rootCommand, catalog, enhancement, subcommands),
+    relatedCommands: buildRelatedCommands(command.key, command.rootCommand, catalog, enhancement, subcommands),
     sections: [],
-    safety: buildSafetyDoc({
-      scope: 'command',
-      command,
-      enhancement,
-      subcommands
-    }),
+    safety: buildSafetyDoc({ scope: 'command', command, enhancement, subcommands }),
+    result: buildCommandResultDescriptor(enhancement),
     optionInsights: buildCommandOptionInsights(command.options, enhancement),
     recommendedFlow: buildRecommendedFlow('command', enhancement, subcommands)
-  };
-  return {
-    ...baseDoc,
-    text: renderCommandLikeHelp(baseDoc)
-  };
+  });
 }
 
 export function renderHelpDocument(input: { argv: string[]; version: string; catalog?: CommandCatalog }) {
