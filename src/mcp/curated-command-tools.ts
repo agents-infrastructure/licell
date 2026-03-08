@@ -10,6 +10,7 @@ import {
   atLeastOnePresentValidator,
   booleanProp,
   buildCuratedToolMap,
+  defineCuratedCliWrapperTool,
   defineCuratedTool,
   defaultTrueFlag,
   inputSchema,
@@ -83,40 +84,31 @@ const CURATED_MCP_COMMAND_TOOLS = buildCuratedToolMap([
     ]
   }),
 
-  defineCuratedTool({
+  defineCuratedCliWrapperTool({
     name: 'licell_fc_deploy_spec',
+    commandSignature: 'deploy spec',
     tags: [FC_API_DEPLOY_WORKFLOW_TAG, FC_API_PRECHECK_WORKFLOW_TAG],
     summary: '读取 FC API runtime 的 entry / handler / 资源约束，帮助 Agent 先理解限制与签名模板。',
     description:
       'Return machine-readable FC API runtime specs (handlerContract/eventSchema/responseSchema/examples/validationRules and resource constraints) for agent planning.',
-    inputSchema: inputSchema(withExecutionProps({
+    inputOverrides: {
       runtime: stringProp('Optional runtime filter: nodejs20/nodejs22/python3.12/python3.13/docker.'),
       all: booleanProp('Return all runtime specs.')
-    })),
-    baseArgv: ['deploy', 'spec'],
-    bindings: [
-      optionalPositionalString('runtime'),
-      optionalBooleanFlag('all', '--all')
-    ]
+    }
   }),
 
-  defineCuratedTool({
+  defineCuratedCliWrapperTool({
     name: 'licell_fc_deploy_check',
+    commandSignature: 'deploy check',
     tags: [FC_API_DEPLOY_WORKFLOW_TAG, FC_API_PRECHECK_WORKFLOW_TAG],
     summary: '只读预检当前项目，提前发现 handler、入口文件或 Docker 环境问题，并给出可执行修复建议。',
     description:
       'Read-only validation before FC API deployment. Returns actionable issues (missing handler, wrong entry, Docker prerequisites, etc.) and does not modify project files.',
-    inputSchema: inputSchema(withExecutionProps({
+    inputOverrides: {
       runtime: stringProp('Runtime to validate (default from project/env or nodejs20).'),
       entry: stringProp('Optional entry path override.'),
       dockerDaemon: booleanProp('When runtime=docker, also check local Docker daemon availability.')
-    })),
-    baseArgv: ['deploy', 'check'],
-    bindings: [
-      optionalStringFlag('runtime', '--runtime'),
-      optionalStringFlag('entry', '--entry'),
-      optionalBooleanFlag('dockerDaemon', '--docker-daemon')
-    ]
+    }
   }),
 
   defineCuratedTool({
@@ -138,32 +130,24 @@ const CURATED_MCP_COMMAND_TOOLS = buildCuratedToolMap([
     ]
   }),
 
-  defineCuratedTool({
+  defineCuratedCliWrapperTool({
     name: 'licell_release_promote',
+    commandSignature: 'release promote',
     description: 'Publish (if needed) and switch an FC alias (e.g. prod/preview) to a version.',
-    inputSchema: inputSchema(withExecutionProps({
+    inputOverrides: {
       versionId: stringProp('Optional versionId. If omitted, licell will publish current code or reuse latest published.'),
       target: stringProp('Alias target (default: prod).')
-    })),
-    baseArgv: ['release', 'promote'],
-    bindings: [
-      optionalPositionalString('versionId'),
-      optionalStringFlag('target', '--target')
-    ]
+    }
   }),
 
-  defineCuratedTool({
+  defineCuratedCliWrapperTool({
     name: 'licell_release_rollback',
+    commandSignature: 'release rollback',
     description: 'Switch an FC alias to a specific versionId.',
-    inputSchema: inputSchema(withExecutionProps({
+    inputOverrides: {
       versionId: stringProp('VersionId to rollback to.'),
       target: stringProp('Alias target (default: prod).')
-    }), ['versionId']),
-    baseArgv: ['release', 'rollback'],
-    bindings: [
-      requiredPositionalString('versionId', 'versionId is required'),
-      optionalStringFlag('target', '--target')
-    ]
+    }
   }),
 
   defineCuratedTool({
@@ -183,32 +167,24 @@ const CURATED_MCP_COMMAND_TOOLS = buildCuratedToolMap([
     ]
   }),
 
-  defineCuratedTool({
+  defineCuratedCliWrapperTool({
     name: 'licell_fn_list',
+    commandSignature: 'fn list',
     description: 'List FC functions in current region.',
-    inputSchema: inputSchema(withExecutionProps({
+    inputOverrides: {
       limit: numberProp('Max items (default 20).'),
       prefix: stringProp('Filter by function name prefix.')
-    })),
-    baseArgv: ['fn', 'list'],
-    bindings: [
-      optionalNumberFlag('limit', '--limit'),
-      optionalStringFlag('prefix', '--prefix')
-    ]
+    }
   }),
 
-  defineCuratedTool({
+  defineCuratedCliWrapperTool({
     name: 'licell_fn_info',
+    commandSignature: 'fn info',
     description: 'Get FC function details.',
-    inputSchema: inputSchema(withExecutionProps({
+    inputOverrides: {
       name: stringProp('Function name. If omitted, uses project appName.'),
       target: stringProp('Qualifier alias/version (e.g. prod/preview/1).')
-    })),
-    baseArgv: ['fn', 'info'],
-    bindings: [
-      optionalPositionalString('name'),
-      optionalStringFlag('target', '--target')
-    ]
+    }
   }),
 
   defineCuratedTool({
@@ -230,162 +206,123 @@ const CURATED_MCP_COMMAND_TOOLS = buildCuratedToolMap([
     ]
   }),
 
-  defineCuratedTool({
+  defineCuratedCliWrapperTool({
     name: 'licell_fn_rm',
+    commandSignature: 'fn rm',
     description: 'Delete FC function. Destructive (requires yes=true).',
-    inputSchema: inputSchema(withExecutionProps({
+    annotations: { destructiveHint: true },
+    validators: [requireTrueValidator('yes', 'fn rm is destructive; set yes=true to confirm')],
+    inputOverrides: {
       name: stringProp('Function name. If omitted, uses project appName.'),
       force: booleanProp('Cascade delete triggers/aliases/versions.'),
       yes: booleanProp('Required in non-interactive mode.')
-    })),
-    annotations: { destructiveHint: true },
-    baseArgv: ['fn', 'rm'],
-    validators: [requireTrueValidator('yes', 'fn rm is destructive; set yes=true to confirm')],
-    bindings: [
-      optionalPositionalString('name'),
-      optionalBooleanFlag('force', '--force'),
-      literalTokens('--yes')
-    ]
+    }
   }),
 
-  defineCuratedTool({
+  defineCuratedCliWrapperTool({
     name: 'licell_domain_app_bind',
+    commandSignature: 'domain app bind',
     tags: [DOMAIN_APP_BIND_WORKFLOW_TAG],
     workflowRoleByTag: { [DOMAIN_APP_BIND_WORKFLOW_TAG]: 'entry' },
-    inputSchema: inputSchema(withExecutionProps({
+    inputOverrides: {
       domain: stringProp('Full domain, e.g. api.example.com.'),
       ssl: booleanProp("Enable HTTPS (Let's Encrypt)."),
       sslForceRenew: booleanProp('Force renew certificate.'),
       target: stringProp('Route to FC alias (prod/preview).')
-    }), ['domain']),
-    baseArgv: ['domain', 'app', 'bind'],
-    bindings: [
-      requiredPositionalString('domain', 'domain is required'),
-      optionalBooleanFlag('ssl', '--ssl'),
-      optionalBooleanFlag('sslForceRenew', '--ssl-force-renew'),
-      optionalStringFlag('target', '--target')
-    ]
+    }
   }),
 
-  defineCuratedTool({
+  defineCuratedCliWrapperTool({
     name: 'licell_domain_app_unbind',
+    commandSignature: 'domain app unbind',
     tags: [DOMAIN_APP_UNBIND_WORKFLOW_TAG],
     workflowRoleByTag: { [DOMAIN_APP_UNBIND_WORKFLOW_TAG]: 'entry' },
-    inputSchema: inputSchema(withExecutionProps({
+    annotations: { destructiveHint: true },
+    validators: [requireTrueValidator('yes', 'domain app unbind is destructive; set yes=true to confirm')],
+    inputOverrides: {
       domain: stringProp('Full domain, e.g. api.example.com.'),
       yes: booleanProp('Required in non-interactive mode.')
-    }), ['domain']),
-    annotations: { destructiveHint: true },
-    baseArgv: ['domain', 'app', 'unbind'],
-    validators: [requireTrueValidator('yes', 'domain app unbind is destructive; set yes=true to confirm')],
-    bindings: [
-      requiredPositionalString('domain', 'domain is required'),
-      literalTokens('--yes')
-    ]
+    }
   }),
 
-  defineCuratedTool({
+  defineCuratedCliWrapperTool({
     name: 'licell_domain_static_bind',
+    commandSignature: 'domain static bind',
     tags: [DOMAIN_STATIC_BIND_WORKFLOW_TAG],
     workflowRoleByTag: { [DOMAIN_STATIC_BIND_WORKFLOW_TAG]: 'entry' },
-    inputSchema: inputSchema(withExecutionProps({
+    inputOverrides: {
       domain: stringProp('Full domain, e.g. www.example.com.'),
       bucket: stringProp('Optional OSS bucket override.'),
       ssl: booleanProp("Enable HTTPS (Let's Encrypt)."),
       sslForceRenew: booleanProp('Force renew certificate.')
-    }), ['domain']),
-    baseArgv: ['domain', 'static', 'bind'],
-    bindings: [
-      requiredPositionalString('domain', 'domain is required'),
-      optionalStringFlag('bucket', '--bucket'),
-      optionalBooleanFlag('ssl', '--ssl'),
-      optionalBooleanFlag('sslForceRenew', '--ssl-force-renew')
-    ]
+    }
   }),
 
-  defineCuratedTool({
+  defineCuratedCliWrapperTool({
     name: 'licell_domain_static_unbind',
+    commandSignature: 'domain static unbind',
     tags: [DOMAIN_STATIC_UNBIND_WORKFLOW_TAG],
     workflowRoleByTag: { [DOMAIN_STATIC_UNBIND_WORKFLOW_TAG]: 'entry' },
-    inputSchema: inputSchema(withExecutionProps({
+    annotations: { destructiveHint: true },
+    validators: [requireTrueValidator('yes', 'domain static unbind is destructive; set yes=true to confirm')],
+    inputOverrides: {
       domain: stringProp('Full domain, e.g. www.example.com.'),
       yes: booleanProp('Required in non-interactive mode.')
-    }), ['domain']),
-    annotations: { destructiveHint: true },
-    baseArgv: ['domain', 'static', 'unbind'],
-    validators: [requireTrueValidator('yes', 'domain static unbind is destructive; set yes=true to confirm')],
-    bindings: [
-      requiredPositionalString('domain', 'domain is required'),
-      literalTokens('--yes')
-    ]
+    }
   }),
 
-  defineCuratedTool({
+  defineCuratedCliWrapperTool({
     name: 'licell_dns_records_list',
+    commandSignature: 'dns records list',
     description: 'List DNS records for a domain (Alidns).',
-    inputSchema: inputSchema(withExecutionProps({
+    inputOverrides: {
       domain: stringProp('Root domain, e.g. example.com.'),
       limit: numberProp('Max items (default 100).')
-    }), ['domain']),
-    baseArgv: ['dns', 'records', 'list'],
-    bindings: [
-      requiredPositionalString('domain', 'domain is required'),
-      optionalNumberFlag('limit', '--limit')
-    ]
+    }
   }),
 
-  defineCuratedTool({
+  defineCuratedCliWrapperTool({
     name: 'licell_dns_records_add',
+    commandSignature: 'dns records add',
     description: 'Add a DNS record (Alidns).',
-    inputSchema: inputSchema(withExecutionProps({
+    requiredInputs: ['rr', 'type', 'value'],
+    inputOverrides: {
       domain: stringProp('Root domain, e.g. example.com.'),
       rr: stringProp('RR host, e.g. @/www/api.'),
       type: stringProp('Record type, e.g. A/CNAME/TXT.'),
       value: stringProp('Record value.'),
       ttl: numberProp('TTL seconds (default 600).'),
       line: stringProp('Line (default: default).')
-    }), ['domain', 'rr', 'type', 'value']),
-    baseArgv: ['dns', 'records', 'add'],
-    bindings: [
-      requiredPositionalString('domain', 'domain is required'),
-      requiredStringFlag('rr', '--rr', 'rr is required'),
-      requiredStringFlag('type', '--type', 'type is required'),
-      requiredStringFlag('value', '--value', 'value is required'),
-      optionalNumberFlag('ttl', '--ttl'),
-      optionalStringFlag('line', '--line')
-    ]
+    }
   }),
 
-  defineCuratedTool({
+  defineCuratedCliWrapperTool({
     name: 'licell_dns_records_rm',
+    commandSignature: 'dns records rm',
     description: 'Remove a DNS record by recordId. Destructive (requires yes=true).',
-    inputSchema: inputSchema(withExecutionProps({
+    annotations: { destructiveHint: true },
+    validators: [requireTrueValidator('yes', 'dns records rm is destructive; set yes=true to confirm')],
+    inputOverrides: {
       recordId: stringProp('RecordId from list.'),
       yes: booleanProp('Required in non-interactive mode.')
-    }), ['recordId']),
-    annotations: { destructiveHint: true },
-    baseArgv: ['dns', 'records', 'rm'],
-    validators: [requireTrueValidator('yes', 'dns records rm is destructive; set yes=true to confirm')],
-    bindings: [
-      requiredPositionalString('recordId', 'recordId is required'),
-      literalTokens('--yes')
-    ]
+    }
   }),
 
-  defineCuratedTool({
+  defineCuratedCliWrapperTool({
     name: 'licell_supa_list',
+    commandSignature: 'supa list',
     description: 'List RDS Supabase instances in current region.',
-    inputSchema: inputSchema(withExecutionProps({
+    inputOverrides: {
       limit: numberProp('Max items (default 20).')
-    })),
-    baseArgv: ['supa', 'list'],
-    bindings: [optionalNumberFlag('limit', '--limit')]
+    }
   }),
 
-  defineCuratedTool({
+  defineCuratedCliWrapperTool({
     name: 'licell_supa_add',
+    commandSignature: 'supa add',
     description: 'Provision a new RDS Supabase instance (creates PG, waits until Running, saves env vars). Long-running (~5-10 min).',
-    inputSchema: inputSchema(withExecutionProps({
+    timeoutDescription: 'Command timeout in milliseconds (default 900000 for long provision).',
+    inputOverrides: {
       name: stringProp('App name for the instance.'),
       vsw: stringProp('VSwitch ID (auto-detected if omitted).'),
       class: stringProp('Instance class (default rdsai.supabase.basic).'),
@@ -394,95 +331,63 @@ const CURATED_MCP_COMMAND_TOOLS = buildCuratedToolMap([
       dashboardPassword: stringProp('Dashboard password (auto-generated if omitted).'),
       dbPassword: stringProp('Database password (auto-generated if omitted).'),
       publicNetwork: booleanProp('Enable public NAT gateway.')
-    }, { timeoutDescription: 'Command timeout in milliseconds (default 900000 for long provision).' })),
-    baseArgv: ['supa', 'add'],
-    bindings: [
-      optionalStringFlag('name', '--name'),
-      optionalStringFlag('vsw', '--vsw'),
-      optionalStringFlag('class', '--class'),
-      optionalStringFlag('dbInstance', '--db-instance'),
-      optionalStringFlag('dashboardUser', '--dashboard-user'),
-      optionalStringFlag('dashboardPassword', '--dashboard-password'),
-      optionalStringFlag('dbPassword', '--db-password'),
-      optionalBooleanFlag('publicNetwork', '--public-network')
-    ]
+    }
   }),
 
-  defineCuratedTool({
+  defineCuratedCliWrapperTool({
     name: 'licell_supa_info',
+    commandSignature: 'supa info',
     description: 'Get detailed attributes of a Supabase instance.',
-    inputSchema: inputSchema(withExecutionProps({
+    inputOverrides: {
       instanceName: stringProp('Supabase instance name.')
-    }), ['instanceName']),
-    baseArgv: ['supa', 'info'],
-    bindings: [requiredPositionalString('instanceName', 'instanceName is required')]
+    }
   }),
 
-  defineCuratedTool({
+  defineCuratedCliWrapperTool({
     name: 'licell_supa_connect',
+    commandSignature: 'supa connect',
     description: 'Get Supabase endpoints, DB endpoints, and API keys (anon key, service key, JWT secret).',
-    inputSchema: inputSchema(withExecutionProps({
+    inputOverrides: {
       instanceName: stringProp('Supabase instance name.')
-    }), ['instanceName']),
-    baseArgv: ['supa', 'connect'],
-    bindings: [requiredPositionalString('instanceName', 'instanceName is required')]
+    }
   }),
 
-  defineCuratedTool({
+  defineCuratedCliWrapperTool({
     name: 'licell_supa_config',
+    commandSignature: 'supa config',
     description: 'View or modify Supabase instance configuration (auth/storage/RAG). Without modification flags, shows current config.',
-    inputSchema: inputSchema(withExecutionProps({
+    inputOverrides: {
       instanceName: stringProp('Supabase instance name.'),
       setAuth: stringProp('Set auth config: KEY=VALUE (e.g. GOTRUE_SITE_URL=http://example.com).'),
       setStorage: stringProp('Set storage config: KEY=VALUE.'),
       rag: stringEnumProp('Enable/disable RAG Agent.', ['on', 'off']),
       setRag: stringProp('Set RAG config: KEY=VALUE.')
-    }), ['instanceName']),
-    baseArgv: ['supa', 'config'],
-    bindings: [
-      requiredPositionalString('instanceName', 'instanceName is required'),
-      optionalStringFlag('setAuth', '--set-auth'),
-      optionalStringFlag('setStorage', '--set-storage'),
-      optionalStringFlag('rag', '--rag'),
-      optionalStringFlag('setRag', '--set-rag')
-    ]
+    }
   }),
 
-  defineCuratedTool({
+  defineCuratedCliWrapperTool({
     name: 'licell_supa_whitelist',
+    commandSignature: 'supa whitelist',
     description: 'View or modify Supabase instance IP whitelist. Without modification flags, shows current whitelist.',
-    inputSchema: inputSchema(withExecutionProps({
+    inputOverrides: {
       instanceName: stringProp('Supabase instance name.'),
       set: stringProp('Set whitelist IPs (cover mode, comma-separated).'),
       add: stringProp('Append whitelist IPs (comma-separated).'),
       remove: stringProp('Remove whitelist IPs (comma-separated).'),
       group: stringProp('Whitelist group name (default: default).')
-    }), ['instanceName']),
-    baseArgv: ['supa', 'whitelist'],
-    bindings: [
-      requiredPositionalString('instanceName', 'instanceName is required'),
-      optionalStringFlag('set', '--set'),
-      optionalStringFlag('add', '--add'),
-      optionalStringFlag('remove', '--remove'),
-      optionalStringFlag('group', '--group')
-    ]
+    }
   }),
 
-  defineCuratedTool({
+  defineCuratedCliWrapperTool({
     name: 'licell_supa_reset_password',
+    commandSignature: 'supa reset-password',
     description: 'Reset Supabase dashboard or database password.',
-    inputSchema: inputSchema(withExecutionProps({
+    validators: [atLeastOnePresentValidator(['dashboardPassword', 'dbPassword'], 'Provide dashboardPassword or dbPassword')],
+    inputOverrides: {
       instanceName: stringProp('Supabase instance name.'),
       dashboardPassword: stringProp('New dashboard password.'),
       dbPassword: stringProp('New database password.')
-    }), ['instanceName']),
-    baseArgv: ['supa', 'reset-password'],
-    validators: [atLeastOnePresentValidator(['dashboardPassword', 'dbPassword'], 'Provide dashboardPassword or dbPassword')],
-    bindings: [
-      requiredPositionalString('instanceName', 'instanceName is required'),
-      optionalStringFlag('dashboardPassword', '--dashboard-password'),
-      optionalStringFlag('dbPassword', '--db-password')
-    ]
+    }
   }),
 
   defineCuratedTool({
@@ -501,20 +406,16 @@ const CURATED_MCP_COMMAND_TOOLS = buildCuratedToolMap([
     bindings: [requiredPositionalString('instanceName', 'instanceName is required')]
   }),
 
-  defineCuratedTool({
+  defineCuratedCliWrapperTool({
     name: 'licell_supa_rm',
+    commandSignature: 'supa rm',
     description: 'Delete a Supabase instance. Destructive and irreversible (requires yes=true). Associated PG instance and NAT gateway need manual cleanup.',
-    inputSchema: inputSchema(withExecutionProps({
+    annotations: { destructiveHint: true },
+    validators: [requireTrueValidator('yes', 'supa rm is destructive; set yes=true to confirm')],
+    inputOverrides: {
       instanceName: stringProp('Supabase instance name.'),
       yes: booleanProp('Required in non-interactive mode.')
-    }), ['instanceName']),
-    annotations: { destructiveHint: true },
-    baseArgv: ['supa', 'rm'],
-    validators: [requireTrueValidator('yes', 'supa rm is destructive; set yes=true to confirm')],
-    bindings: [
-      requiredPositionalString('instanceName', 'instanceName is required'),
-      literalTokens('--yes')
-    ]
+    }
   })
 ]);
 

@@ -1,5 +1,11 @@
 import type { CommandTaskHint } from '../utils/command-metadata';
 import {
+  appendDerivedBindingsToArgv,
+  deriveCommandToolShape,
+  type CommandToolSchemaProperty,
+  type DerivedCommandInputOverride
+} from './command-tool-derivation';
+import {
   buildLicellMcpToolAnnotations,
   buildLicellMcpToolMetadata,
   buildLicellMcpToolMetadataFromAgentCommand,
@@ -56,6 +62,15 @@ interface CuratedMcpCommandToolDefinition {
   baseArgv: string[] | ((toolArgs: ToolArgs) => string[]);
   validators?: CuratedToolValidator[];
   bindings?: CuratedToolBinding[];
+}
+
+export interface CuratedCliWrapperToolDefinition extends Omit<CuratedMcpCommandToolDefinition, 'inputSchema' | 'baseArgv' | 'bindings'> {
+  commandSignature: string;
+  inputOverrides?: Record<string, DerivedCommandInputOverride | CommandToolSchemaProperty>;
+  omitInputs?: string[];
+  requiredInputs?: string[];
+  timeoutDescription?: string;
+  extraBindings?: CuratedToolBinding[];
 }
 
 const DEFAULT_CWD_DESCRIPTION = 'Working directory relative to projectRoot (default: projectRoot).';
@@ -191,6 +206,37 @@ function buildCuratedToolMetadata(definition: CuratedMcpCommandToolDefinition, c
     taskHints: definition.taskHints || buildFallbackCuratedTaskHints(definition, commandSignature, description),
     safety: matchedCommand?.safety,
     result: matchedCommand?.result
+  });
+}
+
+export function defineCuratedCliWrapperTool(definition: CuratedCliWrapperToolDefinition): CuratedMcpCommandTool {
+  const matchedCommand = findAgentCommandForTool(definition.commandSignature, definition.commandSignature.split(/\s+/)[0]);
+  if (!matchedCommand) {
+    throw new Error(`Unable to derive curated CLI wrapper for ${definition.name}: command ${definition.commandSignature} not found in shared catalog.`);
+  }
+
+  const derived = deriveCommandToolShape(matchedCommand, {
+    inputOverrides: definition.inputOverrides,
+    omitInputs: definition.omitInputs,
+    requiredInputs: definition.requiredInputs,
+    includeExecutionProps: true,
+    timeoutDescription: definition.timeoutDescription,
+    useArgumentHints: true
+  });
+
+  return defineCuratedTool({
+    ...definition,
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: derived.properties,
+      ...(derived.required.length > 0 ? { required: derived.required } : {})
+    },
+    baseArgv: matchedCommand.key.split(' '),
+    bindings: [
+      (toolArgs, argv) => appendDerivedBindingsToArgv(derived, toolArgs, argv),
+      ...(definition.extraBindings || [])
+    ]
   });
 }
 

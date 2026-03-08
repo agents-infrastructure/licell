@@ -61,6 +61,29 @@ describe('getCuratedMcpCommandTools', () => {
     ]);
   });
 
+
+  it('builds derived wrapper argv for dns add and destructive wrappers', () => {
+    const tools = getCuratedMcpCommandTools();
+    expect(tools.licell_dns_records_add.buildArgv({
+      domain: 'example.com',
+      rr: 'api',
+      type: 'CNAME',
+      value: 'origin.example.com',
+      ttl: 600
+    })).toEqual([
+      'dns', 'records', 'add',
+      'example.com',
+      '--rr', 'api',
+      '--type', 'CNAME',
+      '--value', 'origin.example.com',
+      '--ttl', '600'
+    ]);
+
+    expect(tools.licell_domain_app_unbind.buildArgv({ domain: 'api.example.com', yes: true })).toEqual([
+      'domain', 'app', 'unbind', 'api.example.com', '--yes'
+    ]);
+  });
+
   it('rejects conflicting fn invoke payload inputs', () => {
     const tools = getCuratedMcpCommandTools();
     expect(() => tools.licell_fn_invoke.buildArgv({
