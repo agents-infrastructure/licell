@@ -16,7 +16,17 @@ import { readLicellEnv } from '../utils/env';
 import { getFnCustomDomain, updateFnCustomDomain } from './fc/custom-domain';
 
 const ACME_KEY_PATH = join(homedir(), '.licell-cli', 'acme-account.pem');
-const require = createRequire(import.meta.url);
+const runtimeRequire: NodeJS.Require | undefined = (() => {
+  if (typeof require === 'function') return require;
+  try {
+    const fallbackBase = typeof __filename === 'string'
+      ? __filename
+      : join(process.cwd(), '__licell_require__.cjs');
+    return createRequire(fallbackBase);
+  } catch {
+    return undefined;
+  }
+})();
 const AlidnsClientCtor = resolveSdkCtor<Alidns>(Alidns, '@alicloud/alidns20150109');
 const DAY_MS = 24 * 60 * 60 * 1000;
 export const DEFAULT_SSL_RENEW_BEFORE_DAYS = 30;
@@ -145,7 +155,7 @@ function configureAcmeHttpTimeout() {
     DEFAULT_SSL_ACME_HTTP_RETRY_MAX_ATTEMPTS
   );
   try {
-    const acmeAxios = require('acme-client/src/axios');
+    const acmeAxios = runtimeRequire?.('acme-client/src/axios');
     if (acmeAxios?.defaults) {
       acmeAxios.defaults.timeout = timeoutMs;
       acmeAxios.defaults.acmeSettings = {
