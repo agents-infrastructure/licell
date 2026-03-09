@@ -4,7 +4,7 @@ import { Config } from '../utils/config';
 import { isConflictError, isNotFoundError, isTransientError } from '../utils/alicloud-error';
 import { formatErrorMessage } from '../utils/errors';
 import { withRetry } from '../utils/retry';
-import { ensureDomainCname, normalizeDnsValue } from './dns';
+import { ensureDomainCname, normalizeDnsValue, waitForAuthoritativeCnameTarget } from './dns';
 import { resolveSdkCtor } from '../utils/sdk';
 
 const RpcClientCtor = resolveSdkCtor<$OpenApi.default>($OpenApi.default, '@alicloud/openapi-client');
@@ -344,9 +344,16 @@ export async function ensureCdnDomain(
 export async function removeCdnDomain(domainName: string) {
   const normalizedDomain = normalizeDomain(domainName);
   try {
-    await withRetry(() => callCdnRpc('DeleteCdnDomain', {
-      DomainName: normalizedDomain
-    }));
+    await withRetry(
+      () => callCdnRpc('DeleteCdnDomain', {
+        DomainName: normalizedDomain
+      }),
+      {
+        maxAttempts: 36,
+        baseDelayMs: 5_000,
+        shouldRetry: (err: unknown) => isTransientError(err) || isCdnDomainNotReadyError(err)
+      }
+    );
   } catch (err: unknown) {
     if (isNotFoundError(err)) return;
     throw err;
@@ -376,7 +383,16 @@ export async function enableCdnForDomain(
   }
   await ensureDomainCname(normalizedDomain, result.cdnCname);
   if (options.waitForOnline) {
-    await waitCdnDomainOnline(normalizedDomain);
+    await waitForAuthoritativeCnameTarget(normalizedDomain, result.cdnCname, {
+      maxAttempts: 36,
+      intervalMs: 5_000
+    });
+    try {
+      await waitCdnDomainOnline(normalizedDomain);
+    } catch (err: unknown) {
+      const detail = await getCdnDomain(normalizedDomain);
+      if (isCdnFailedStatus(detail?.status)) throw err;
+    }
   }
   return { ...result, httpsConfigured };
 }

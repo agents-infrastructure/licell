@@ -1,10 +1,12 @@
 import Alidns, * as $Alidns from '@alicloud/alidns20150109';
 import * as $OpenApi from '@alicloud/openapi-client';
+import { Resolver, resolve4 as resolveIpv4, resolve6 as resolveIpv6, resolveCname as resolveDnsCname, resolveNs } from 'dns/promises';
 import { Config } from '../utils/config';
 import { parseRootAndSubdomain } from '../utils/domain';
 import { isConflictError, isInvalidDomainNameError, isNotFoundError } from '../utils/alicloud-error';
 import { withRetry } from '../utils/retry';
 import { resolveSdkCtor } from '../utils/sdk';
+import { sleep } from '../utils/runtime';
 
 const AlidnsClientCtor = resolveSdkCtor<Alidns>(Alidns, '@alicloud/alidns20150109');
 
@@ -37,6 +39,19 @@ export interface WildcardCnameResult {
   targetValue: string;
 }
 
+export interface AuthoritativeDnsSnapshot {
+  domainName: string;
+  nameServerHosts: string[];
+  nameServerIps: string[];
+  cname: string[];
+  addresses: string[];
+}
+
+export interface WaitForAuthoritativeCnameOptions {
+  maxAttempts?: number;
+  intervalMs?: number;
+}
+
 interface DomainRecordLike {
   recordId?: string;
   RR?: string;
@@ -62,6 +77,118 @@ function createDnsClient() {
     accessKeySecret: auth.sk,
     endpoint: 'alidns.aliyuncs.com'
   }));
+}
+
+async function findAuthoritativeNameServerHosts(domainName: string) {
+  const normalizedDomain = domainName.trim().toLowerCase();
+  if (!normalizedDomain) return [];
+
+  const labels = normalizedDomain.split('.').filter((item) => item.length > 0);
+  for (let index = 0; index < labels.length - 1; index += 1) {
+    const candidate = labels.slice(index).join('.');
+    try {
+      const hosts = await resolveNs(candidate);
+      const normalizedHosts = [...new Set(hosts.map((item) => normalizeDnsValue(item)).filter((item) => item.length > 0))];
+      if (normalizedHosts.length > 0) return normalizedHosts;
+    } catch {
+      // continue walking up labels until a delegated zone responds with NS records
+    }
+  }
+
+  return [];
+}
+
+async function resolveNameServerIps(hosts: string[]) {
+  const addresses: string[] = [];
+
+  for (const host of hosts) {
+    try {
+      addresses.push(...await resolveIpv4(host));
+    } catch {
+      // ignore v4 miss and continue with AAAA lookup
+    }
+    try {
+      addresses.push(...await resolveIpv6(host));
+    } catch {
+      // ignore when AAAA is unavailable
+    }
+  }
+
+  return [...new Set(addresses.filter((item) => item.trim().length > 0))];
+}
+
+export async function resolveAuthoritativeDnsSnapshot(domainName: string): Promise<AuthoritativeDnsSnapshot> {
+  const normalizedDomain = domainName.trim().toLowerCase();
+  if (!normalizedDomain) {
+    return {
+      domainName: normalizedDomain,
+      nameServerHosts: [],
+      nameServerIps: [],
+      cname: [],
+      addresses: []
+    };
+  }
+
+  const nameServerHosts = await findAuthoritativeNameServerHosts(normalizedDomain);
+  const nameServerIps = await resolveNameServerIps(nameServerHosts);
+  const resolver = nameServerIps.length > 0 ? new Resolver() : null;
+  if (resolver && nameServerIps.length > 0) {
+    resolver.setServers(nameServerIps);
+  }
+
+  const addresses: string[] = [];
+  const cname: string[] = [];
+  const collect = async (task: () => Promise<string[]>, sink: string[], normalize = false) => {
+    try {
+      const values = await task();
+      sink.push(...values.map((item) => normalize ? normalizeDnsValue(item) : item).filter((item) => item.trim().length > 0));
+    } catch {
+      // ignore missing record types and keep collecting the rest
+    }
+  };
+
+  await collect(() => resolver ? resolver.resolve4(normalizedDomain) : resolveIpv4(normalizedDomain), addresses);
+  await collect(() => resolver ? resolver.resolve6(normalizedDomain) : resolveIpv6(normalizedDomain), addresses);
+  await collect(() => resolver ? resolver.resolveCname(normalizedDomain) : resolveDnsCname(normalizedDomain), cname, true);
+
+  return {
+    domainName: normalizedDomain,
+    nameServerHosts,
+    nameServerIps,
+    cname: [...new Set(cname)],
+    addresses: [...new Set(addresses)]
+  };
+}
+
+export async function waitForAuthoritativeCnameTarget(
+  domainName: string,
+  targetValue: string,
+  options: WaitForAuthoritativeCnameOptions = {}
+) {
+  const normalizedDomain = domainName.trim().toLowerCase();
+  const normalizedTarget = normalizeDnsValue(targetValue);
+  if (!normalizedDomain) throw new Error('域名不能为空');
+  if (!normalizedTarget) throw new Error('目标 CNAME 不能为空');
+
+  const maxAttempts = Math.max(1, Math.floor(options.maxAttempts ?? 36));
+  const intervalMs = Math.max(0, Math.floor(options.intervalMs ?? 5_000));
+  let lastSnapshot: AuthoritativeDnsSnapshot | undefined;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const snapshot = await resolveAuthoritativeDnsSnapshot(normalizedDomain);
+    lastSnapshot = snapshot;
+    if (snapshot.cname.includes(normalizedTarget)) {
+      return snapshot;
+    }
+    if (attempt < maxAttempts && intervalMs > 0) {
+      await sleep(intervalMs);
+    }
+  }
+
+  const observed = lastSnapshot
+    ? [...lastSnapshot.cname, ...lastSnapshot.addresses].join(', ') || '∅'
+    : '∅';
+  throw new Error(`权威 DNS 未收敛到预期 CNAME: ${normalizedDomain} -> ${normalizedTarget}（当前: ${observed}）`);
 }
 
 async function findCnameRecord(

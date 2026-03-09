@@ -1,0 +1,41 @@
+import { describe, expect, it } from 'vitest';
+import {
+  classifyE2eCleanupCommandResult,
+  resolveE2eCleanupCommandCwd,
+  type CapturedCliCommandResult
+} from '../commands/e2e';
+
+describe('e2e cleanup helpers', () => {
+  it('falls back to project root when workspace was already removed', () => {
+    expect(resolveE2eCleanupCommandCwd('/tmp/missing-workspace', '/repo', () => false)).toBe('/repo');
+    expect(resolveE2eCleanupCommandCwd('/tmp/existing-workspace', '/repo', (path) => path === '/tmp/existing-workspace')).toBe('/tmp/existing-workspace');
+  });
+
+  it('treats ignored not-found cleanup failures as skipped using stderr output', () => {
+    const result: CapturedCliCommandResult = {
+      status: 1,
+      signal: null,
+      stdout: '\u001b[?25l│\n\u001b[999D\u001b[J◒  正在级联清理并删除函数 demo\u001b[999D\u001b[J◇  ❌ 删除函数失败\n\u001b[?25h',
+      stderr: "FunctionNotFound: code: 404, function 'demo' does not exist request id: 1-xxx"
+    };
+
+    expect(classifyE2eCleanupCommandResult(result, ['fn', 'rm', 'demo'], ['functionnotfound', 'does not exist'])).toEqual({
+      outcome: 'skipped',
+      message: expect.stringContaining('FunctionNotFound: code: 404')
+    });
+  });
+
+  it('builds a fallback failure message when the child process returns no output', () => {
+    const result: CapturedCliCommandResult = {
+      status: null,
+      signal: null,
+      stdout: '',
+      stderr: ''
+    };
+
+    expect(classifyE2eCleanupCommandResult(result, ['fn', 'rm', 'demo'])).toEqual({
+      outcome: 'failed',
+      message: '命令失败: licell fn rm demo (exit=null)'
+    });
+  });
+});

@@ -72,7 +72,7 @@ vi.mock('../utils/cli-shared', () => ({
   isNoChangesPublishError: (err: unknown) => Boolean(err && typeof err === 'object' && (err as { code?: string }).code === 'NoChanges')
 }));
 
-import { bindAppDomainWorkflow } from '../workflows/domain';
+import { bindAppDomainWorkflow, bindStaticDomainWorkflow } from '../workflows/domain';
 
 describe('bindAppDomainWorkflow', () => {
   beforeEach(() => {
@@ -166,7 +166,7 @@ describe('bindAppDomainWorkflow', () => {
     expect(mockEnableCdnForDomain).toHaveBeenCalledWith(
       'api.example.com',
       '123456.cn-hangzhou.fc.aliyuncs.com',
-      { certificate: 'CERT', privateKey: 'KEY' }
+      { certificate: 'CERT', privateKey: 'KEY', waitForOnline: true }
     );
     expect(result).toMatchObject({
       domainName: 'api.example.com',
@@ -200,13 +200,42 @@ describe('bindAppDomainWorkflow', () => {
     expect(mockEnableCdnForDomain).toHaveBeenCalledWith(
       'api.example.com',
       '123456.cn-hangzhou.fc.aliyuncs.com',
-      {}
+      { waitForOnline: true }
     );
     expect(result).toMatchObject({
       domainHttpsConfigured: true,
       edgeHttpsConfigured: false,
       httpsConfigured: false,
       finalUrl: 'http://api.example.com'
+    });
+  });
+
+  it('waits for CDN domain online in static binding workflow', async () => {
+    mockResolveOssBucketName.mockReturnValue('demo-bucket');
+    mockGetOssBucketInfo.mockResolvedValue({ extranetEndpoint: 'oss-cn-hangzhou.aliyuncs.com' });
+    mockEnableCdnForDomain.mockResolvedValue({
+      cdnCname: 'static.example.com.w.cdngslb.com',
+      created: true,
+      httpsConfigured: true
+    });
+
+    const result = await bindStaticDomainWorkflow(' static.example.com ', {
+      tlsArtifacts: { certificate: 'CERT', privateKey: 'KEY' },
+      preferHttps: true
+    });
+
+    expect(mockEnableCdnForDomain).toHaveBeenCalledWith(
+      'static.example.com',
+      'demo-bucket.oss-cn-hangzhou.aliyuncs.com',
+      { certificate: 'CERT', privateKey: 'KEY', sourceType: 'oss', waitForOnline: true }
+    );
+    expect(result).toMatchObject({
+      domainName: 'static.example.com',
+      bucketName: 'demo-bucket',
+      originDomain: 'demo-bucket.oss-cn-hangzhou.aliyuncs.com',
+      cdnCname: 'static.example.com.w.cdngslb.com',
+      httpsConfigured: true,
+      finalUrl: 'https://static.example.com'
     });
   });
 });

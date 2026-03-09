@@ -101,7 +101,7 @@ export async function promoteFunctionAlias(
     );
   }
 
-  await waitForFcFunctionReadable(appName, client, { qualifier: aliasName });
+  await waitForFcFunctionReadable(appName, client, { qualifier: aliasName, profile: 'mutation' });
 }
 
 async function listAllAliases(appName: string, fcClient: FC20230330) {

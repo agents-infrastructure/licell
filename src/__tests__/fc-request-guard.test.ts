@@ -4,6 +4,7 @@ import * as $FC from '@alicloud/fc20230330';
 import {
   FcOperationTimeoutError,
   callFcWithGuard,
+  getFcGuardConfig,
   waitForFcFunctionReadable,
   withFcOperationDeadline,
   withFcRetry
@@ -106,6 +107,25 @@ describe('fc request guard', () => {
     expect(seenConnectTimeout).toBeGreaterThanOrEqual(30_000);
   });
 
+
+  it('uses a longer default convergence timeout for post-mutation reads', () => {
+    const config = getFcGuardConfig({
+      LICELL_FC_QUALIFIER_READY_TIMEOUT_MS: '30000'
+    });
+
+    expect(config.qualifierReadyTimeoutMs).toBe(30_000);
+    expect(config.mutationReadyTimeoutMs).toBe(180_000);
+  });
+
+  it('lets mutation convergence timeout inherit larger explicit read windows', () => {
+    const config = getFcGuardConfig({
+      LICELL_FC_QUALIFIER_READY_TIMEOUT_MS: '240000'
+    });
+
+    expect(config.qualifierReadyTimeoutMs).toBe(240_000);
+    expect(config.mutationReadyTimeoutMs).toBe(240_000);
+  });
+
   it('waits until function qualifier becomes readable', async () => {
     let attempts = 0;
     const client = {
@@ -133,5 +153,59 @@ describe('fc request guard', () => {
 
     expect(fn.functionName).toBe('demo-fn');
     expect(attempts).toBe(3);
+  });
+
+  it('exposes dedicated mutation convergence timeout', () => {
+    const config = getFcGuardConfig({
+      LICELL_FC_QUALIFIER_READY_TIMEOUT_MS: '1500',
+      LICELL_FC_MUTATION_READY_TIMEOUT_MS: '9000'
+    });
+
+    expect(config.qualifierReadyTimeoutMs).toBe(1500);
+    expect(config.mutationReadyTimeoutMs).toBe(9000);
+  });
+
+  it('uses longer mutation convergence timeout for post-mutation readability waits', async () => {
+    function createClient() {
+      let attempts = 0;
+      const client = {
+        async getFunctionWithOptions() {
+          attempts += 1;
+          if (attempts < 3) {
+            const err = new Error('alias not exist');
+            (err as Error & { code?: string }).code = 'AliasNotFound';
+            throw err;
+          }
+          return {
+            body: {
+              functionName: 'demo-fn'
+            }
+          };
+        }
+      } as unknown as FC20230330;
+      return { client, getAttempts: () => attempts };
+    }
+
+    const env = {
+      LICELL_FC_QUALIFIER_READY_TIMEOUT_MS: '5',
+      LICELL_FC_MUTATION_READY_TIMEOUT_MS: '40',
+      LICELL_FC_QUALIFIER_READY_INTERVAL_MS: '10'
+    };
+
+    const readProbe = createClient();
+    await expect(waitForFcFunctionReadable('demo-fn', readProbe.client, {
+      qualifier: 'preview',
+      env
+    })).rejects.toThrow(/等待函数就绪超时/);
+    expect(readProbe.getAttempts()).toBe(1);
+
+    const mutationProbe = createClient();
+    const fn = await waitForFcFunctionReadable('demo-fn', mutationProbe.client, {
+      qualifier: 'preview',
+      env,
+      profile: 'mutation'
+    });
+    expect(fn.functionName).toBe('demo-fn');
+    expect(mutationProbe.getAttempts()).toBe(3);
   });
 });

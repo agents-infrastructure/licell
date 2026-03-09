@@ -106,6 +106,8 @@ export function renderReadmeQuickReference() {
     'licell e2e cleanup <runId>',
     '```',
     '',
+    '说明：\`licell e2e run --suite full\` 现在会额外覆盖 DNS add/rm、OSS bucket/object CRUD、OSS 原生域名 token/bind/unbind、\`domain app bind/unbind\`、\`deploy --type static --domain ...\` 与 \`domain static bind/unbind\`。如需连同云上资源一起收口，建议配合 \`--cleanup\`。',
+    '',
     '**删除 / 清理说明**',
     '',
     '- 涉及删除、解绑、清理的命令在非交互模式下通常需要显式传入 `--yes`。',

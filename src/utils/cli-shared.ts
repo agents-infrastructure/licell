@@ -8,6 +8,7 @@ import { normalizeFcRuntime } from '../providers/fc';
 import { listFunctionVersions } from '../providers/fc';
 import { isAccessDeniedError, isAuthCredentialInvalidError } from './alicloud-error';
 import { isJsonOutput } from './output';
+import { readLicellEnv } from './env';
 
 export function toPromptValue(input: unknown, fieldName: string) {
   if (isCancel(input)) process.exit(0);
@@ -167,7 +168,17 @@ export function ensureEnvIgnored() {
   writeFileSync(gitignore, `${current}${suffix}${ignoreEntry}\n`);
 }
 
-export function isInteractiveTTY() {
+function parseInteractiveEnvOverride(value: string | undefined) {
+  const normalized = value?.trim().toLowerCase();
+  if (!normalized) return undefined;
+  if (normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on') return true;
+  if (normalized === '0' || normalized === 'false' || normalized === 'no' || normalized === 'off') return false;
+  return undefined;
+}
+
+export function isInteractiveTTY(env: Record<string, string | undefined> = process.env) {
+  const override = parseInteractiveEnvOverride(readLicellEnv(env, 'INTERACTIVE'));
+  if (override !== undefined) return override;
   return Boolean(process.stdin.isTTY && process.stdout.isTTY);
 }
 

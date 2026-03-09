@@ -403,12 +403,12 @@ export function emitCliResult(result: Record<string, unknown>) {
   if (!isJsonOutput()) return;
   outputContext.resultEmitted = true;
   writeJsonRecord({
+    ...result,
     schemaVersion: SCHEMA_VERSION,
     type: 'result',
     ts: new Date().toISOString(),
     command: outputContext.command,
-    ok: true,
-    ...result
+    ok: true
   });
 }
 

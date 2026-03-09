@@ -172,7 +172,8 @@ export async function bindAppDomainWorkflow(
     const cdnResult = await enableCdnForDomain(normalizedDomain, targetFcDomain, {
       ...(tlsArtifacts?.certificate && tlsArtifacts?.privateKey
         ? { certificate: tlsArtifacts.certificate, privateKey: tlsArtifacts.privateKey }
-        : {})
+        : {}),
+      waitForOnline: true
     });
     cdnCname = cdnResult.cdnCname;
     edgeHttpsConfigured = Boolean(cdnResult.httpsConfigured);
@@ -267,7 +268,8 @@ export async function bindStaticDomainWorkflow(
     ...(options.tlsArtifacts?.certificate && options.tlsArtifacts?.privateKey
       ? { certificate: options.tlsArtifacts.certificate, privateKey: options.tlsArtifacts.privateKey }
       : {}),
-    sourceType: 'oss'
+    sourceType: 'oss',
+    waitForOnline: true
   });
 
   return {

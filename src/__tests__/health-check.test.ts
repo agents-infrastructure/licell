@@ -104,4 +104,25 @@ describe('probeHttpHealth', () => {
     }
     expect(Date.now() - startedAt).toBeLessThan(2500);
   });
+
+  it('surfaces nested TLS details when fetch only reports a generic failure', async () => {
+    const result = await probeHttpHealth('https://example.com', {
+      maxAttempts: 1,
+      intervalMs: 0,
+      fetchImpl: async () => {
+        throw Object.assign(new Error('fetch failed'), {
+          cause: {
+            code: 'ERR_TLS_CERT_ALTNAME_INVALID',
+            message: 'Hostname/IP does not match certificate'
+          }
+        });
+      }
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain('ERR_TLS_CERT_ALTNAME_INVALID');
+      expect(result.error).toContain('Hostname/IP does not match certificate');
+    }
+  });
 });

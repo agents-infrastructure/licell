@@ -5,7 +5,7 @@ import { tmpdir } from 'os';
 import { isAbsolute, join, relative, resolve } from 'path';
 import { spawnSync } from 'child_process';
 import { Config, type ProjectNetworkConfig, type ProjectResourcesConfig } from '../../utils/config';
-import { isConflictError } from '../../utils/alicloud-error';
+import { isConflictError, isNotFoundError, isTransientError } from '../../utils/alicloud-error';
 import { formatErrorMessage } from '../../utils/errors';
 import { createFcClient } from './client';
 import { ensureFunctionHttpUrl } from './http';
@@ -21,7 +21,8 @@ import {
 import {
   callFcWithGuard,
   isFcOperationTimeoutError,
-  waitForFcFunctionReadable
+  waitForFcFunctionReadable,
+  type FcReadableProfile
 } from './request-guard';
 import { DEFAULT_FC_RUNTIME, type FcRuntime } from './types';
 
@@ -178,13 +179,51 @@ function functionStateMatches(fn: $FC.Function, expectedBody: Record<string, unk
   return JSON.stringify(buildObservedFunctionState(fn)) === JSON.stringify(buildComparableFunctionState(expectedBody));
 }
 
-async function waitForFunctionState(
+function shouldRetryFunctionRead(err: unknown) {
+  return isTransientError(err) || isFcOperationTimeoutError(err);
+}
+
+type CreateFunctionOutcome = 'created' | 'existing';
+
+async function getFunctionIfExists(
   appName: string,
-  expectedBody: Record<string, unknown>,
   client: ReturnType<typeof createFcClient>['client']
-) {
-  const fn = await waitForFcFunctionReadable(appName, client);
-  return functionStateMatches(fn, expectedBody);
+): Promise<$FC.Function | null> {
+  try {
+    const response = await callFcWithGuard<$FC.GetFunctionResponse>(
+      client as unknown as Record<string, unknown>,
+      'getFunction',
+      [appName, new $FC.GetFunctionRequest({})],
+      {
+        operation: `getFunction(${appName})`,
+        profile: 'read',
+        shouldRetry: (err: unknown) => shouldRetryFunctionRead(err)
+      }
+    );
+    const fn = response.body;
+    return fn?.functionName ? fn : null;
+  } catch (err: unknown) {
+    if (isNotFoundError(err)) return null;
+    throw err;
+  }
+}
+
+async function waitForFunctionIfExists(
+  appName: string,
+  client: ReturnType<typeof createFcClient>['client'],
+  profile: FcReadableProfile = 'read',
+  timeoutMs?: number
+): Promise<$FC.Function | null> {
+  try {
+    return await waitForFcFunctionReadable(appName, client, { profile, timeoutMs });
+  } catch (err: unknown) {
+    if (isFcReadableTimeoutError(err) || isNotFoundError(err)) return null;
+    throw err;
+  }
+}
+
+function isFcReadableTimeoutError(err: unknown) {
+  return formatErrorMessage(err).includes('等待函数就绪超时:');
 }
 
 async function callCreateFunction(
@@ -192,7 +231,13 @@ async function callCreateFunction(
   client: ReturnType<typeof createFcClient>['client'],
   request: $FC.CreateFunctionRequest,
   expectedBody: Record<string, unknown>
-) {
+): Promise<CreateFunctionOutcome> {
+  const recoverCreateOutcome = async () => {
+    const observed = await waitForFunctionIfExists(appName, client, 'mutation', 60_000);
+    if (!observed) return null;
+    return functionStateMatches(observed, expectedBody) ? 'created' : 'existing';
+  };
+
   try {
     await callFcWithGuard(
       client as unknown as Record<string, unknown>,
@@ -203,12 +248,31 @@ async function callCreateFunction(
         profile: 'mutation'
       }
     );
-    await waitForFcFunctionReadable(appName, client);
-    return;
+    await waitForFcFunctionReadable(appName, client, { profile: 'mutation' });
+    return 'created';
   } catch (err: unknown) {
-    if (isConflictError(err)) throw err;
-    if (isFcOperationTimeoutError(err) && await waitForFunctionState(appName, expectedBody, client)) {
-      return;
+    if (isConflictError(err)) return 'existing';
+    if (isFcOperationTimeoutError(err) || isFcReadableTimeoutError(err)) {
+      const recovered = await recoverCreateOutcome();
+      if (recovered) return recovered;
+    }
+    if (isFcReadableTimeoutError(err)) {
+      try {
+        await callFcWithGuard(
+          client as unknown as Record<string, unknown>,
+          'createFunction',
+          [request],
+          {
+            operation: `createFunction(${appName})#retry`,
+            profile: 'mutation'
+          }
+        );
+      } catch (retryErr: unknown) {
+        if (isConflictError(retryErr)) return 'existing';
+        if (!isFcOperationTimeoutError(retryErr)) throw retryErr;
+      }
+      const recoveredAfterRetry = await recoverCreateOutcome();
+      if (recoveredAfterRetry) return recoveredAfterRetry;
     }
     throw err;
   }
@@ -231,11 +295,11 @@ async function callUpdateFunction(
         profile: 'mutation'
       }
     );
-    await waitForFcFunctionReadable(appName, client);
+    await waitForFcFunctionReadable(appName, client, { profile: 'mutation' });
     return;
   } catch (err: unknown) {
     if (isFcOperationTimeoutError(err)) {
-      const after = await waitForFcFunctionReadable(appName, client);
+      const after = await waitForFcFunctionReadable(appName, client, { profile: 'mutation' });
       const changed = after.lastModifiedTime && before.lastModifiedTime
         ? after.lastModifiedTime !== before.lastModifiedTime
         : true;
@@ -294,8 +358,7 @@ export async function deployFC(appName: string, entryFile: string, runtime: FcRu
   const cpu = resources.cpu ?? DEFAULT_CPU;
   validateCpuMemoryRatio(memorySize, cpu);
 
-  const createBody: Record<string, unknown> = {
-    functionName: appName,
+  const updateBody: Record<string, unknown> = {
     runtime: runtimeConfig.runtime,
     handler: runtimeConfig.handler,
     memorySize,
@@ -304,53 +367,49 @@ export async function deployFC(appName: string, entryFile: string, runtime: FcRu
     environmentVariables,
     vpcConfig
   };
-  createBody.cpu = cpu;
-  if (resources.instanceConcurrency !== undefined) createBody.instanceConcurrency = resources.instanceConcurrency;
-  if (code) createBody.code = code;
-  if (runtimeConfig.customRuntimeConfig) createBody.customRuntimeConfig = runtimeConfig.customRuntimeConfig;
-  if (runtimeConfig.customContainerConfig) createBody.customContainerConfig = runtimeConfig.customContainerConfig;
+  updateBody.cpu = cpu;
+  if (resources.instanceConcurrency !== undefined) updateBody.instanceConcurrency = resources.instanceConcurrency;
+  if (code) updateBody.code = code;
+  if (runtimeConfig.customRuntimeConfig) updateBody.customRuntimeConfig = runtimeConfig.customRuntimeConfig;
+  if (runtimeConfig.customContainerConfig) updateBody.customContainerConfig = runtimeConfig.customContainerConfig;
+
+  const createBody: Record<string, unknown> = {
+    functionName: appName,
+    ...updateBody
+  };
 
   const req = new $FC.CreateFunctionRequest({
     body: new $FC.CreateFunctionInput(createBody)
   });
 
-  try {
-    await callCreateFunction(appName, client, req, createBody);
-  } catch (err: unknown) {
-    if (isConflictError(err)) {
-      const updateBody: Record<string, unknown> = {
-        runtime: runtimeConfig.runtime,
-        handler: runtimeConfig.handler,
-        memorySize,
-        diskSize: DEFAULT_DISK_SIZE,
-        timeout,
-        environmentVariables,
-        vpcConfig
-      };
-      updateBody.cpu = cpu;
-      if (resources.instanceConcurrency !== undefined) updateBody.instanceConcurrency = resources.instanceConcurrency;
-      if (code) updateBody.code = code;
-      if (runtimeConfig.customRuntimeConfig) updateBody.customRuntimeConfig = runtimeConfig.customRuntimeConfig;
-      if (runtimeConfig.customContainerConfig) updateBody.customContainerConfig = runtimeConfig.customContainerConfig;
+  const existingFunction = await getFunctionIfExists(appName, client);
+  const shouldUpdate = existingFunction
+    ? true
+    : await (async () => {
+        try {
+          const createOutcome = await callCreateFunction(appName, client, req, createBody);
+          return createOutcome === 'existing';
+        } catch (err: unknown) {
+          if (isInvalidRuntimeValueError(err)) {
+            throw new Error(buildUnsupportedRuntimeMessage(runtime));
+          }
+          throw err;
+        }
+      })();
 
-      try {
-        await callUpdateFunction(appName, client, new $FC.UpdateFunctionRequest({
-          body: new $FC.UpdateFunctionInput(updateBody)
-        }), updateBody);
-      } catch (updateErr: unknown) {
-        if (isInvalidRuntimeValueError(updateErr)) {
-          throw new Error(buildUnsupportedRuntimeMessage(runtime));
-        }
-        if (isRuntimeChangeNotSupportedError(updateErr)) {
-          throw new Error(`当前函数运行时无法原地切换到 ${runtime}。请更换 appName 重新部署，或先手动删除原函数后再重试。`);
-        }
-        throw updateErr;
-      }
-    } else {
-      if (isInvalidRuntimeValueError(err)) {
+  if (shouldUpdate) {
+    try {
+      await callUpdateFunction(appName, client, new $FC.UpdateFunctionRequest({
+        body: new $FC.UpdateFunctionInput(updateBody)
+      }), updateBody);
+    } catch (updateErr: unknown) {
+      if (isInvalidRuntimeValueError(updateErr)) {
         throw new Error(buildUnsupportedRuntimeMessage(runtime));
       }
-      throw err;
+      if (isRuntimeChangeNotSupportedError(updateErr)) {
+        throw new Error(`当前函数运行时无法原地切换到 ${runtime}。请更换 appName 重新部署，或先手动删除原函数后再重试。`);
+      }
+      throw updateErr;
     }
   }
   return ensureFunctionHttpUrl(appName, client);

@@ -18,8 +18,12 @@ import {
   toOptionalString
 } from '../utils/cli-shared';
 import {
+  type E2eManagedDomainResource,
   type E2eManifest,
   type E2eStepRecord,
+  buildE2eManagedBucketName,
+  buildE2eManagedDomain,
+  compactE2eToken,
   ensureEmptyOrMissingDir,
   generateE2eRunId,
   getE2eManifestPath,
@@ -33,7 +37,11 @@ import {
 } from '../utils/e2e';
 import { parseRootAndSubdomain } from '../utils/domain';
 import { formatErrorMessage } from '../utils/errors';
-import { emitCliError, emitCliEvent, emitCliResult, isJsonOutput } from '../utils/output';
+import { resolveAuthoritativeDnsSnapshot } from '../providers/dns';
+import { probeHttpHealth, type ProbeHttpHealthOptions } from '../utils/health-check';
+import { emitCliError, emitCliEvent, emitCliResult, extractJsonRecordsFromOutput, isJsonOutput } from '../utils/output';
+import { sleep } from '../utils/runtime';
+import { readLicellEnv } from '../utils/env';
 import { AUTOMATION_SECTION } from './sections';
 
 interface E2eRunOptions {
@@ -145,9 +153,12 @@ export function buildE2eApiDeployArgs(options: {
   return args;
 }
 
+function getProjectConfigPaths(workspaceDir: string) {
+  return [join(workspaceDir, '.licell', 'project.json'), join(workspaceDir, '.ali', 'project.json')];
+}
+
 function readProjectAppName(workspaceDir: string) {
-  const paths = [join(workspaceDir, '.licell', 'project.json'), join(workspaceDir, '.ali', 'project.json')];
-  for (const path of paths) {
+  for (const path of getProjectConfigPaths(workspaceDir)) {
     if (!existsSync(path)) continue;
     try {
       const data = JSON.parse(readFileSync(path, 'utf8')) as { appName?: unknown };
@@ -161,9 +172,24 @@ function readProjectAppName(workspaceDir: string) {
   return undefined;
 }
 
+function clearProjectDomainSuffix(workspaceDir: string) {
+  for (const path of getProjectConfigPaths(workspaceDir)) {
+    if (!existsSync(path)) continue;
+    try {
+      const data = JSON.parse(readFileSync(path, 'utf8')) as { domainSuffix?: unknown };
+      if (data.domainSuffix === undefined || data.domainSuffix === null) continue;
+      delete data.domainSuffix;
+      writeFileSync(path, `${JSON.stringify(data, null, 2)}\n`);
+      return true;
+    } catch {
+      // ignore invalid file and fallback
+    }
+  }
+  return false;
+}
+
 function readProjectNetwork(workspaceDir: string) {
-  const paths = [join(workspaceDir, '.licell', 'project.json'), join(workspaceDir, '.ali', 'project.json')];
-  for (const path of paths) {
+  for (const path of getProjectConfigPaths(workspaceDir)) {
     if (!existsSync(path)) continue;
     try {
       const data = JSON.parse(readFileSync(path, 'utf8')) as {
@@ -201,10 +227,51 @@ function getE2eBunCacheDir(cwd: string) {
   return cacheDir;
 }
 
+export interface CapturedCliCommandResult {
+  status: number | null;
+  signal: NodeJS.Signals | null;
+  stdout: string;
+  stderr: string;
+}
+
+export function resolveE2eCleanupCommandCwd(
+  workspaceDir: string,
+  projectRoot: string,
+  exists: (path: string) => boolean = existsSync
+) {
+  return exists(workspaceDir) ? workspaceDir : projectRoot;
+}
+
+export function classifyE2eCleanupCommandResult(
+  result: CapturedCliCommandResult,
+  args: string[],
+  ignoreErrorPatterns: string[] = []
+) {
+  if (result.status === 0) {
+    return { outcome: 'ok' as const, message: undefined };
+  }
+
+  const signal = result.signal ? ` signal=${result.signal}` : '';
+  const outputMessage = [result.stderr, result.stdout]
+    .map((chunk) => chunk.trim())
+    .filter((chunk) => chunk.length > 0)
+    .join('\n');
+  const message = outputMessage
+    || `命令失败: licell ${args.join(' ')} (exit=${String(result.status)}${signal})`;
+  const lowerMessage = message.toLowerCase();
+  const ignored = ignoreErrorPatterns.some((pattern) => lowerMessage.includes(pattern));
+  return { outcome: ignored ? 'skipped' as const : 'failed' as const, message };
+}
+
 function buildE2eChildEnv(cwd: string) {
   const tempDir = getE2eTempDir(cwd);
+  const sslAcmeDirectory = readLicellEnv(process.env, 'SSL_ACME_DIRECTORY')?.trim().toLowerCase();
   return {
     ...process.env,
+    LICELL_INTERACTIVE: '0',
+    ...(sslAcmeDirectory === 'staging' && process.env.NODE_TLS_REJECT_UNAUTHORIZED === undefined
+      ? { NODE_TLS_REJECT_UNAUTHORIZED: '0' }
+      : {}),
     TMPDIR: tempDir,
     TMP: tempDir,
     TEMP: tempDir
@@ -226,6 +293,34 @@ function runCliCommand(
     const signal = result.signal ? ` signal=${result.signal}` : '';
     throw new Error(`命令失败: licell ${args.join(' ')} (exit=${String(result.status)}${signal})`);
   }
+}
+
+function runCliCommandCapture(
+  invocation: ReturnType<typeof resolveSelfCliInvocation>,
+  args: string[],
+  cwd: string,
+  options: { replayOutput?: boolean } = {}
+) {
+  const argv = [...invocation.prefixArgs, ...args];
+  const result = spawnSync(invocation.command, argv, {
+    cwd,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    env: buildE2eChildEnv(cwd),
+    encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024
+  });
+  const stdout = result.stdout || '';
+  const stderr = result.stderr || '';
+  if (options.replayOutput) {
+    if (stdout) process.stdout.write(stdout);
+    if (stderr) process.stderr.write(stderr);
+  }
+  return {
+    status: result.status,
+    signal: result.signal,
+    stdout,
+    stderr
+  };
 }
 
 function runSystemCommand(command: string, args: string[], cwd: string) {
@@ -260,9 +355,130 @@ function createStaticFixture(workspaceDir: string, runId: string) {
   return distDir;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function appendJsonOutputArgs(args: string[]) {
+  return args.some((token) => token === '--output' || token.startsWith('--output='))
+    ? [...args]
+    : [...args, '--output', 'json'];
+}
+
+function getLatestCliResultRecord(output: string) {
+  const records = extractJsonRecordsFromOutput(output);
+  for (let index = records.length - 1; index >= 0; index -= 1) {
+    const record = records[index];
+    if (isRecord(record) && record.type === 'result') return record;
+  }
+  return undefined;
+}
+
+function getLatestCliErrorMessage(output: string) {
+  const records = extractJsonRecordsFromOutput(output);
+  for (let index = records.length - 1; index >= 0; index -= 1) {
+    const record = records[index];
+    if (!isRecord(record) || record.type !== 'error') continue;
+    const error = isRecord(record.error) ? record.error : undefined;
+    if (error && typeof error.message === 'string' && error.message.trim().length > 0) {
+      return error.message.trim();
+    }
+  }
+  return undefined;
+}
+
+function readRequiredString(value: unknown, label: string) {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    throw new Error(`${label} 缺失或为空`);
+  }
+  return value.trim();
+}
+
+function readRequiredRecord(value: unknown, label: string) {
+  if (!isRecord(value)) {
+    throw new Error(`${label} 缺失或格式非法`);
+  }
+  return value;
+}
+
+function persistManifest(manifest: E2eManifest) {
+  manifest.updatedAt = nowIso();
+  saveE2eManifest(manifest, manifest.projectRoot);
+}
+
 function applyStepRecord(manifest: E2eManifest, step: E2eStepRecord) {
   manifest.steps.push(step);
   manifest.updatedAt = nowIso();
+}
+
+function ensureDnsRecordIds(manifest: E2eManifest) {
+  manifest.resources.dnsRecordIds = manifest.resources.dnsRecordIds || [];
+  return manifest.resources.dnsRecordIds;
+}
+
+function ensureManagedBuckets(manifest: E2eManifest) {
+  manifest.resources.managedBuckets = manifest.resources.managedBuckets || [];
+  return manifest.resources.managedBuckets;
+}
+
+function ensureManagedDomains(manifest: E2eManifest) {
+  manifest.resources.managedDomains = manifest.resources.managedDomains || [];
+  return manifest.resources.managedDomains;
+}
+
+function sameManagedDomain(left: E2eManagedDomainResource, right: E2eManagedDomainResource) {
+  return left.workflow === right.workflow && left.domain === right.domain && (left.bucket || '') === (right.bucket || '');
+}
+
+function trackDnsRecordId(ctx: E2eStepContext, recordId: string) {
+  const list = ensureDnsRecordIds(ctx.manifest);
+  if (!list.includes(recordId)) {
+    list.push(recordId);
+    persistManifest(ctx.manifest);
+  }
+}
+
+function untrackDnsRecordId(ctx: E2eStepContext, recordId: string) {
+  const list = ensureDnsRecordIds(ctx.manifest);
+  const next = list.filter((item) => item !== recordId);
+  if (next.length !== list.length) {
+    ctx.manifest.resources.dnsRecordIds = next;
+    persistManifest(ctx.manifest);
+  }
+}
+
+function trackManagedBucket(ctx: E2eStepContext, bucket: string) {
+  const list = ensureManagedBuckets(ctx.manifest);
+  if (!list.includes(bucket)) {
+    list.push(bucket);
+    persistManifest(ctx.manifest);
+  }
+}
+
+function untrackManagedBucket(ctx: E2eStepContext, bucket: string) {
+  const list = ensureManagedBuckets(ctx.manifest);
+  const next = list.filter((item) => item !== bucket);
+  if (next.length !== list.length) {
+    ctx.manifest.resources.managedBuckets = next;
+    persistManifest(ctx.manifest);
+  }
+}
+
+function trackManagedDomain(ctx: E2eStepContext, domainResource: E2eManagedDomainResource) {
+  const list = ensureManagedDomains(ctx.manifest);
+  if (!list.some((item) => sameManagedDomain(item, domainResource))) {
+    list.push(domainResource);
+    persistManifest(ctx.manifest);
+  }
+}
+
+function untrackManagedDomain(ctx: E2eStepContext, domainResource: E2eManagedDomainResource) {
+  const list = ensureManagedDomains(ctx.manifest);
+  const next = list.filter((item) => !sameManagedDomain(item, domainResource));
+  if (next.length !== list.length) {
+    ctx.manifest.resources.managedDomains = next;
+    persistManifest(ctx.manifest);
+  }
 }
 
 function runStep(ctx: E2eStepContext, name: string, args: string[]) {
@@ -283,7 +499,7 @@ function runStep(ctx: E2eStepContext, name: string, args: string[]) {
       startedAt,
       endedAt: nowIso()
     });
-    saveE2eManifest(ctx.manifest);
+    saveE2eManifest(ctx.manifest, ctx.manifest.projectRoot);
     emitCliEvent({ stage: `e2e.${name}`, action: name, status: 'ok' });
   } catch (err: unknown) {
     applyStepRecord(ctx.manifest, {
@@ -294,7 +510,62 @@ function runStep(ctx: E2eStepContext, name: string, args: string[]) {
       endedAt: nowIso(),
       error: formatErrorMessage(err)
     });
-    saveE2eManifest(ctx.manifest);
+    saveE2eManifest(ctx.manifest, ctx.manifest.projectRoot);
+    emitCliEvent({
+      stage: `e2e.${name}`,
+      action: name,
+      status: 'failed',
+      message: formatErrorMessage(err)
+    });
+    throw err;
+  }
+}
+
+function runJsonStep<T extends Record<string, unknown>>(ctx: E2eStepContext, name: string, args: string[]): T {
+  const jsonArgs = appendJsonOutputArgs(args);
+  const startedAt = nowIso();
+  const command = `licell ${jsonArgs.join(' ')}`;
+  emitCliEvent({
+    stage: `e2e.${name}`,
+    action: name,
+    status: 'start',
+    data: { command }
+  });
+  try {
+    const result = runCliCommandCapture(ctx.invocation, jsonArgs, ctx.workspaceDir);
+    const combinedOutput = `${result.stdout}\n${result.stderr}`;
+    if (result.status !== 0) {
+      if (result.stdout) process.stdout.write(result.stdout);
+      if (result.stderr) process.stderr.write(result.stderr);
+      const signal = result.signal ? ` signal=${result.signal}` : '';
+      const message = getLatestCliErrorMessage(combinedOutput)
+        || `命令失败: licell ${jsonArgs.join(' ')} (exit=${String(result.status)}${signal})`;
+      throw new Error(message);
+    }
+    const payload = getLatestCliResultRecord(combinedOutput);
+    if (!payload) {
+      throw new Error(`命令未返回 JSON 结果: licell ${jsonArgs.join(' ')}`);
+    }
+    applyStepRecord(ctx.manifest, {
+      name,
+      command,
+      status: 'ok',
+      startedAt,
+      endedAt: nowIso()
+    });
+    saveE2eManifest(ctx.manifest, ctx.manifest.projectRoot);
+    emitCliEvent({ stage: `e2e.${name}`, action: name, status: 'ok' });
+    return payload as T;
+  } catch (err: unknown) {
+    applyStepRecord(ctx.manifest, {
+      name,
+      command,
+      status: 'failed',
+      startedAt,
+      endedAt: nowIso(),
+      error: formatErrorMessage(err)
+    });
+    saveE2eManifest(ctx.manifest, ctx.manifest.projectRoot);
     emitCliEvent({
       stage: `e2e.${name}`,
       action: name,
@@ -314,7 +585,7 @@ function runStepIf(ctx: E2eStepContext, condition: boolean, name: string, args: 
       startedAt: nowIso(),
       endedAt: nowIso()
     });
-    saveE2eManifest(ctx.manifest);
+    saveE2eManifest(ctx.manifest, ctx.manifest.projectRoot);
     return;
   }
   runStep(ctx, name, args);
@@ -338,7 +609,7 @@ function runExternalStep(ctx: E2eStepContext, name: string, command: string, arg
       startedAt,
       endedAt: nowIso()
     });
-    saveE2eManifest(ctx.manifest);
+    saveE2eManifest(ctx.manifest, ctx.manifest.projectRoot);
     emitCliEvent({ stage: `e2e.${name}`, action: name, status: 'ok' });
   } catch (err: unknown) {
     applyStepRecord(ctx.manifest, {
@@ -349,7 +620,7 @@ function runExternalStep(ctx: E2eStepContext, name: string, command: string, arg
       endedAt: nowIso(),
       error: formatErrorMessage(err)
     });
-    saveE2eManifest(ctx.manifest);
+    saveE2eManifest(ctx.manifest, ctx.manifest.projectRoot);
     emitCliEvent({
       stage: `e2e.${name}`,
       action: name,
@@ -360,16 +631,112 @@ function runExternalStep(ctx: E2eStepContext, name: string, command: string, arg
   }
 }
 
+async function runInlineStep(
+  ctx: E2eStepContext,
+  name: string,
+  command: string,
+  action: () => Promise<void> | void
+) {
+  const startedAt = nowIso();
+  emitCliEvent({
+    stage: `e2e.${name}`,
+    action: name,
+    status: 'start',
+    data: { command }
+  });
+  try {
+    await action();
+    applyStepRecord(ctx.manifest, {
+      name,
+      command,
+      status: 'ok',
+      startedAt,
+      endedAt: nowIso()
+    });
+    saveE2eManifest(ctx.manifest, ctx.manifest.projectRoot);
+    emitCliEvent({ stage: `e2e.${name}`, action: name, status: 'ok' });
+  } catch (err: unknown) {
+    applyStepRecord(ctx.manifest, {
+      name,
+      command,
+      status: 'failed',
+      startedAt,
+      endedAt: nowIso(),
+      error: formatErrorMessage(err)
+    });
+    saveE2eManifest(ctx.manifest, ctx.manifest.projectRoot);
+    emitCliEvent({
+      stage: `e2e.${name}`,
+      action: name,
+      status: 'failed',
+      message: formatErrorMessage(err)
+    });
+    throw err;
+  }
+}
+
+async function runProbeStep(
+  ctx: E2eStepContext,
+  name: string,
+  baseUrl: string,
+  options: ProbeHttpHealthOptions = {}
+) {
+  await runInlineStep(ctx, name, `probe ${baseUrl}`, async () => {
+    const result = await probeHttpHealth(baseUrl, options);
+    if (!result.ok) {
+      throw new Error(result.error);
+    }
+  });
+}
+
+function isFcWildcardOrGatewayValue(value: string) {
+  const normalized = value.trim().toLowerCase();
+  return normalized.includes('.fc.aliyuncs.com') || normalized.includes('.fcapp.run');
+}
+
+async function runStaticDomainProbeStep(
+  ctx: E2eStepContext,
+  name: string,
+  domain: string,
+  baseUrl: string,
+  options: ProbeHttpHealthOptions = {}
+) {
+  await runInlineStep(ctx, name, `probe ${baseUrl}`, async () => {
+    const result = await probeHttpHealth(baseUrl, options);
+    if (result.ok) return;
+    const snapshot = await resolveAuthoritativeDnsSnapshot(domain);
+    const settledCname = snapshot.cname.find((value) => !isFcWildcardOrGatewayValue(value));
+    if (result.error.includes('请求失败') && settledCname) {
+      emitCliEvent({
+        stage: `e2e.${name}`,
+        action: name,
+        status: 'info',
+        message: `静态域名权威 CNAME 已切到 CDN，但边缘 HTTPS 仍在传播: ${result.error}`,
+        data: {
+          domain,
+          authoritativeCname: snapshot.cname,
+          authoritativeAddresses: snapshot.addresses,
+          nameServerHosts: snapshot.nameServerHosts,
+          nameServerIps: snapshot.nameServerIps
+        }
+      });
+      return;
+    }
+    throw new Error(result.error);
+  });
+}
+
 function resolveRunCapabilities(options: {
   domain?: string;
   domainSuffix?: string;
   enableCdn: boolean;
   includeStatic: boolean;
+  includeDomainWorkflows: boolean;
   useVpc: boolean;
 }): Array<'fc' | 'dns' | 'oss' | 'rds' | 'redis' | 'cdn' | 'logs' | 'vpc'> {
   const caps: Array<'fc' | 'dns' | 'oss' | 'rds' | 'redis' | 'cdn' | 'logs' | 'vpc'> = ['fc', 'oss', 'rds', 'redis', 'logs'];
-  if (options.domain || options.domainSuffix) caps.push('dns');
-  if (options.enableCdn) caps.push('cdn');
+  if (options.domain || options.domainSuffix || options.includeDomainWorkflows) caps.push('dns');
+  if (options.enableCdn || options.includeDomainWorkflows) caps.push('cdn');
   if (options.includeStatic) caps.push('oss');
   if (options.useVpc) caps.push('vpc');
   return [...new Set(caps)];
@@ -377,6 +744,12 @@ function resolveRunCapabilities(options: {
 
 function resolveStaticBucketName(appName: string, accountId: string) {
   return `licell-${appName}-${accountId.substring(0, 4)}`.toLowerCase();
+}
+
+function resolveFullSmokeRootDomain(domain?: string, domainSuffix?: string) {
+  if (domainSuffix) return domainSuffix;
+  if (!domain) return undefined;
+  return parseRootAndSubdomain(domain).rootDomain;
 }
 
 async function executeE2eRun(options: E2eRunOptions) {
@@ -395,8 +768,13 @@ async function executeE2eRun(options: E2eRunOptions) {
   const skipStatic = Boolean(options.skipStatic);
   const domain = domainInput ? normalizeCustomDomain(domainInput) : undefined;
   const domainSuffix = domainSuffixInput ? normalizeDomainSuffix(domainSuffixInput) : undefined;
+  const sslAcmeMode = readLicellEnv(process.env, 'SSL_ACME_DIRECTORY')?.trim().toLowerCase();
+  if (sslAcmeMode === 'staging' && process.env.NODE_TLS_REJECT_UNAUTHORIZED === undefined) {
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+  }
   if (domain && domainSuffix) throw new Error('--domain 与 --domain-suffix 不能同时使用');
 
+  const fullSmokeRootDomain = resolveFullSmokeRootDomain(domain, domainSuffix);
   const enableCdn = Boolean(options.enableCdn);
   if (enableCdn && !domain && !domainSuffix) {
     throw new Error('--enable-cdn 需要配合 --domain 或 --domain-suffix');
@@ -426,6 +804,9 @@ async function executeE2eRun(options: E2eRunOptions) {
     runtime,
     resources: {
       appName,
+      dnsRecordIds: [],
+      managedBuckets: [],
+      managedDomains: [],
       ...(domain ? { domain } : {}),
       ...(domainSuffix ? { domainSuffix } : {})
     },
@@ -455,11 +836,15 @@ async function executeE2eRun(options: E2eRunOptions) {
     `target: ${target}`,
     `api function: ${appName}`,
     `network: ${useVpc ? 'vpc(shared licell-vpc)' : 'public(no-vpc)'}`,
+    ...(sslAcmeMode ? [`ssl acme: ${sslAcmeMode}`] : []),
     ...(domain ? [`fixed domain: ${domain}`] : []),
     ...(domainSuffix ? [`domain suffix: ${domainSuffix}`] : []),
     ...(enableCdn ? ['cdn: enabled'] : []),
     ...(enablePreview ? ['preview deploy: enabled'] : []),
-    ...(suite === 'full' && !skipStatic ? ['static deploy: enabled'] : ['static deploy: skipped'])
+    ...(suite === 'full' ? [
+      `dns/domain smoke: ${fullSmokeRootDomain ? 'enabled' : 'skipped (missing domain/domain-suffix)'}`,
+      `static deploy: ${skipStatic ? 'skipped' : 'enabled'}`
+    ] : [])
   ]);
 
   let runError: unknown;
@@ -485,6 +870,7 @@ async function executeE2eRun(options: E2eRunOptions) {
           domainSuffix,
           enableCdn,
           includeStatic: suite === 'full' && !skipStatic,
+          includeDomainWorkflows: suite === 'full' && Boolean(fullSmokeRootDomain),
           useVpc
         })
       },
@@ -499,8 +885,7 @@ async function executeE2eRun(options: E2eRunOptions) {
         if (!manifest.resources.domain && manifest.resources.domainSuffix) {
           manifest.resources.domain = `${appNameFromConfig}.${manifest.resources.domainSuffix}`;
         }
-        manifest.updatedAt = nowIso();
-        saveE2eManifest(manifest, projectRoot);
+        persistManifest(manifest);
         printSection('创建资源', [
           `fc function: ${appNameFromConfig}`,
           ...(manifest.resources.domain ? [`domain: ${manifest.resources.domain}`] : [])
@@ -521,7 +906,7 @@ async function executeE2eRun(options: E2eRunOptions) {
           manifest.resources.vpcId = networkFromConfig.vpcId;
           manifest.resources.vswId = networkFromConfig.vswId;
           if (networkFromConfig.sgId) manifest.resources.sgId = networkFromConfig.sgId;
-          saveE2eManifest(manifest, projectRoot);
+          persistManifest(manifest);
         }
 
         runStep(ctx, 'fn-list', ['fn', 'list', '--prefix', appNameFromConfig, '--limit', '20']);
@@ -547,8 +932,8 @@ async function executeE2eRun(options: E2eRunOptions) {
           runStep(ctx, 'deploy-api-preview', previewApiArgs);
 
           if (suite === 'full' && !skipStatic) {
-            const staticDistDir = createStaticFixture(workspaceDir, `${runId}-preview`);
-            const previewStaticArgs = ['deploy', '--type', 'static', '--dist', staticDistDir, '--preview'];
+            const previewStaticDistDir = createStaticFixture(workspaceDir, `${runId}-preview`);
+            const previewStaticArgs = ['deploy', '--type', 'static', '--dist', previewStaticDistDir, '--preview'];
             previewStaticArgs.push('--domain-suffix', domainSuffix);
             runStep(ctx, 'deploy-static-preview', previewStaticArgs);
           }
@@ -581,13 +966,51 @@ async function executeE2eRun(options: E2eRunOptions) {
 
         if (suite === 'full') {
           runStep(ctx, 'whoami', ['whoami']);
+          const auth = Config.requireAuth();
+          const runToken = compactE2eToken(runId);
+          const staticDistDir = createStaticFixture(workspaceDir, runId);
+          const downloadDir = join(workspaceDir, 'e2e-downloads');
+          mkdirSync(downloadDir, { recursive: true });
+
+          const scratchBucket = buildE2eManagedBucketName(auth.accountId, runId, 'oss');
+          const scratchPrefix = `scratch-${runToken.slice(-12)}`;
+          const scratchIndexKey = `${scratchPrefix}/index.html`;
+          const scratchHealthKey = `${scratchPrefix}/health.txt`;
+          const scratchDownloadPath = join(downloadDir, 'scratch-index.html');
+          const scratchSyncDir = join(downloadDir, 'sync');
+
+          trackManagedBucket(ctx, scratchBucket);
+          runStep(ctx, 'oss-create', ['oss', 'create', scratchBucket, '--acl', 'private', '--storage-class', 'standard', '--public-access-block', 'on']);
+          runStep(ctx, 'oss-info', ['oss', 'info', scratchBucket]);
+          runStep(ctx, 'oss-update', ['oss', 'update', scratchBucket, '--acl', 'public-read', '--public-access-block', 'off']);
+          runStep(ctx, 'oss-upload-scratch', ['oss', 'upload', scratchBucket, '--source-dir', staticDistDir, '--target-dir', scratchPrefix]);
+          runStep(ctx, 'oss-ls-scratch', ['oss', 'ls', scratchBucket, scratchPrefix, '--limit', '20']);
+          runStep(ctx, 'oss-object-info', ['oss', 'object', 'info', scratchBucket, scratchIndexKey]);
+          runStep(ctx, 'oss-object-get', ['oss', 'object', 'get', scratchBucket, scratchIndexKey, scratchDownloadPath]);
+          await runInlineStep(ctx, 'oss-object-get-verify', `verify ${scratchDownloadPath}`, async () => {
+            const content = readFileSync(scratchDownloadPath, 'utf8');
+            if (!content.includes(`licell e2e ${runId}`)) {
+              throw new Error(`下载对象内容校验失败: ${scratchDownloadPath}`);
+            }
+          });
+          mkdirSync(scratchSyncDir, { recursive: true });
+          runStep(ctx, 'oss-sync-down', ['oss', 'sync', 'down', scratchBucket, scratchPrefix, '--dest-dir', scratchSyncDir]);
+          await runInlineStep(ctx, 'oss-sync-down-verify', `verify ${join(scratchSyncDir, 'index.html')}`, async () => {
+            const content = readFileSync(join(scratchSyncDir, 'index.html'), 'utf8');
+            if (!content.includes(`licell e2e ${runId}`)) {
+              throw new Error(`同步目录内容校验失败: ${join(scratchSyncDir, 'index.html')}`);
+            }
+          });
+          runStep(ctx, 'oss-object-rm', ['oss', 'object', 'rm', scratchBucket, scratchHealthKey, '--yes']);
+
           if (!skipStatic) {
-            const auth = Config.requireAuth();
-            const staticDistDir = createStaticFixture(workspaceDir, runId);
+            if (manifest.resources.domainSuffix && clearProjectDomainSuffix(workspaceDir)) {
+              console.log(pc.gray('已临时清除项目 domainSuffix，避免 plain static deploy 误走固定域名 workflow'));
+            }
             runStep(ctx, 'deploy-static', ['deploy', '--type', 'static', '--dist', staticDistDir]);
             ctx.state.hasDeployedStatic = true;
             manifest.resources.staticBucket = resolveStaticBucketName(appNameFromConfig, auth.accountId);
-            saveE2eManifest(manifest, projectRoot);
+            persistManifest(manifest);
             printSection('静态资源', [
               `oss bucket: ${manifest.resources.staticBucket}`,
               `upload prefix: e2e-upload-${runId}`
@@ -606,12 +1029,101 @@ async function executeE2eRun(options: E2eRunOptions) {
               '20'
             ]);
           }
+
+          if (fullSmokeRootDomain) {
+            const manualDnsRr = `smoke-${runToken.slice(-12)}`;
+            const manualDnsValue = `licell-${runToken.slice(-18)}`;
+            const manualDnsResult = runJsonStep<Record<string, unknown>>(ctx, 'dns-records-add', [
+              'dns', 'records', 'add',
+              fullSmokeRootDomain,
+              '--rr', manualDnsRr,
+              '--type', 'TXT',
+              '--value', manualDnsValue
+            ]);
+            const manualDnsRecordId = readRequiredString(manualDnsResult.recordId, 'dns records add.recordId');
+            trackDnsRecordId(ctx, manualDnsRecordId);
+            runStep(ctx, 'dns-records-list-full', ['dns', 'records', 'list', fullSmokeRootDomain, '--limit', '20']);
+            runJsonStep<Record<string, unknown>>(ctx, 'dns-records-rm', ['dns', 'records', 'rm', manualDnsRecordId, '--yes']);
+            untrackDnsRecordId(ctx, manualDnsRecordId);
+
+            const ossDomain = buildE2eManagedDomain(fullSmokeRootDomain, runId, 'oss');
+            const ossManagedDomain: E2eManagedDomainResource = { workflow: 'oss', domain: ossDomain, bucket: scratchBucket };
+            trackManagedDomain(ctx, ossManagedDomain);
+            const tokenResult = runJsonStep<Record<string, unknown>>(ctx, 'oss-domain-token', ['oss', 'domain', 'token', scratchBucket, ossDomain]);
+            const dnsVerification = readRequiredRecord(tokenResult.dnsVerification, 'oss domain token.dnsVerification');
+            const tokenRootDomain = readRequiredString(dnsVerification.rootDomain, 'oss domain token.rootDomain');
+            const tokenRr = readRequiredString(dnsVerification.rr, 'oss domain token.rr');
+            const tokenValue = readRequiredString(dnsVerification.value, 'oss domain token.value');
+            const tokenDnsResult = runJsonStep<Record<string, unknown>>(ctx, 'dns-records-add-oss-token', [
+              'dns', 'records', 'add',
+              tokenRootDomain,
+              '--rr', tokenRr,
+              '--type', 'TXT',
+              '--value', tokenValue
+            ]);
+            const tokenDnsRecordId = readRequiredString(tokenDnsResult.recordId, 'dns records add oss token.recordId');
+            trackDnsRecordId(ctx, tokenDnsRecordId);
+            await runInlineStep(ctx, 'oss-domain-token-settle', 'wait 20000ms for oss token dns', async () => {
+              await sleep(20_000);
+            });
+            runStep(ctx, 'oss-domain-bind', ['oss', 'domain', 'bind', scratchBucket, ossDomain]);
+            runStep(ctx, 'oss-domain-list', ['oss', 'domain', 'list', scratchBucket]);
+            runStep(ctx, 'oss-domain-unbind', ['oss', 'domain', 'unbind', scratchBucket, ossDomain, '--yes']);
+            untrackManagedDomain(ctx, ossManagedDomain);
+            runJsonStep<Record<string, unknown>>(ctx, 'dns-records-rm-oss-token', ['dns', 'records', 'rm', tokenDnsRecordId, '--yes']);
+            untrackDnsRecordId(ctx, tokenDnsRecordId);
+
+            const appDomain = buildE2eManagedDomain(fullSmokeRootDomain, runId, 'app');
+            const appManagedDomain: E2eManagedDomainResource = { workflow: 'app', domain: appDomain };
+            trackManagedDomain(ctx, appManagedDomain);
+            runStep(ctx, 'domain-app-bind', ['domain', 'app', 'bind', appDomain, '--target', target, '--ssl']);
+            await runProbeStep(ctx, 'domain-app-probe', `https://${appDomain}`, {
+              maxAttempts: 10,
+              intervalMs: 3000,
+              timeoutMs: 6000,
+              allowClientError: false
+            });
+            runStep(ctx, 'domain-app-unbind', ['domain', 'app', 'unbind', appDomain, '--yes']);
+            untrackManagedDomain(ctx, appManagedDomain);
+
+            if (!skipStatic && manifest.resources.staticBucket) {
+              const staticDeployDomain = buildE2eManagedDomain(fullSmokeRootDomain, runId, 'static-deploy');
+              const staticDeployManagedDomain: E2eManagedDomainResource = { workflow: 'static', domain: staticDeployDomain };
+              trackManagedDomain(ctx, staticDeployManagedDomain);
+              runStep(ctx, 'deploy-static-domain', ['deploy', '--type', 'static', '--dist', staticDistDir, '--domain', staticDeployDomain, '--ssl']);
+              await runStaticDomainProbeStep(ctx, 'deploy-static-domain-probe', staticDeployDomain, `https://${staticDeployDomain}`, {
+                paths: ['/'],
+                maxAttempts: 36,
+                intervalMs: 5000,
+                timeoutMs: 10000,
+                allowClientError: false
+              });
+              runStep(ctx, 'domain-static-unbind-deploy', ['domain', 'static', 'unbind', staticDeployDomain, '--yes']);
+              untrackManagedDomain(ctx, staticDeployManagedDomain);
+
+              const staticBindDomain = buildE2eManagedDomain(fullSmokeRootDomain, runId, 'static-bind');
+              const staticBindManagedDomain: E2eManagedDomainResource = { workflow: 'static', domain: staticBindDomain };
+              trackManagedDomain(ctx, staticBindManagedDomain);
+              runStep(ctx, 'domain-static-bind', ['domain', 'static', 'bind', staticBindDomain, '--bucket', manifest.resources.staticBucket, '--ssl']);
+              await runStaticDomainProbeStep(ctx, 'domain-static-probe', staticBindDomain, `https://${staticBindDomain}`, {
+                paths: ['/'],
+                maxAttempts: 36,
+                intervalMs: 5000,
+                timeoutMs: 10000,
+                allowClientError: false
+              });
+              runStep(ctx, 'domain-static-unbind', ['domain', 'static', 'unbind', staticBindDomain, '--yes']);
+              untrackManagedDomain(ctx, staticBindManagedDomain);
+            }
+          }
+
+          runStep(ctx, 'oss-rm-scratch', ['oss', 'rm', scratchBucket, '--recursive', '--yes']);
+          untrackManagedBucket(ctx, scratchBucket);
         }
       }
     );
     manifest.status = 'succeeded';
-    manifest.updatedAt = nowIso();
-    saveE2eManifest(manifest, projectRoot);
+    persistManifest(manifest);
     printSection('E2E 结果', [
       `runId: ${runId}`,
       `status: ${manifest.status}`,
@@ -620,7 +1132,6 @@ async function executeE2eRun(options: E2eRunOptions) {
       ...(manifest.resources.staticBucket ? [`oss bucket: ${manifest.resources.staticBucket}`] : []),
       ...(manifest.resources.vpcId ? [`vpc: ${manifest.resources.vpcId}/${manifest.resources.vswId || '-'}`] : [])
     ]);
-    console.log(pc.green(`✅ E2E run 完成（${runId}）`));
     emitCliResult({
       stage: 'e2e',
       runId,
@@ -643,7 +1154,7 @@ async function executeE2eRun(options: E2eRunOptions) {
     console.log(pc.gray('\n自动进入清理阶段...'));
     try {
       await cleanupByManifest(manifest, {
-        yes,
+        yes: yes || autoCleanup,
         keepWorkspace: false,
         invocation,
         interactiveTTY
@@ -680,32 +1191,59 @@ async function cleanupByManifest(
   const errors: string[] = [];
   const details: string[] = [];
   const workspaceDir = manifest.workspaceDir;
+  const commandCwd = resolveE2eCleanupCommandCwd(workspaceDir, manifest.projectRoot);
   const appName = manifest.resources.appName;
   const domain = manifest.resources.domain;
   const staticBucket = manifest.resources.staticBucket;
+  const dnsRecordIds = [...new Set(manifest.resources.dnsRecordIds || [])];
+  const managedBuckets = [...new Set(manifest.resources.managedBuckets || [])];
+  const managedDomains = [...(manifest.resources.managedDomains || [])];
+  const domainTargets = [
+    ...((domain ? [{ workflow: 'app', domain } as E2eManagedDomainResource] : [])),
+    ...managedDomains
+  ].filter((item, index, list) => list.findIndex((candidate) => sameManagedDomain(candidate, item)) === index);
+  const bucketTargets = [
+    ...(staticBucket ? [staticBucket] : []),
+    ...managedBuckets
+  ].filter((bucket, index, list) => list.indexOf(bucket) === index);
   const vpcId = manifest.resources.vpcId;
   const vswId = manifest.resources.vswId;
   const hasApiDeploy = hasSuccessfulE2eStep(manifest, ['deploy-api', 'deploy-api-preview']);
-  const hasStaticDeploy = hasSuccessfulE2eStep(manifest, ['deploy-static', 'deploy-static-preview']);
+  const hasStaticDeploy = hasSuccessfulE2eStep(manifest, ['deploy-static', 'deploy-static-preview', 'deploy-static-domain']);
 
-  const runCleanupCommand = (
+  const retryableCleanupPatterns = ['servicebusy', 'operationconflict', 'throttl', 'timeout', 'temporarily', 'transient'];
+  const ignoredDomainPatterns = ['not found', 'does not exist', '不存在', 'already absent', 'no such'];
+  const ignoredDnsPatterns = ['not found', '不存在', 'recordid', 'no such'];
+
+  const runCleanupCommand = async (
     name: string,
     args: string[],
-    options?: { ignoreErrorPatterns?: string[] }
+    cleanupOptions?: { ignoreErrorPatterns?: string[]; maxAttempts?: number }
   ) => {
-    try {
-      runCliCommand(invocation, args, workspaceDir);
-      details.push(`${name}: ok`);
-    } catch (err: unknown) {
-      const message = formatErrorMessage(err);
-      const lowerMessage = message.toLowerCase();
-      const ignored = (options?.ignoreErrorPatterns || []).some((pattern) => lowerMessage.includes(pattern));
-      if (ignored) {
+    const maxAttempts = Math.max(1, cleanupOptions?.maxAttempts || 3);
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      const result = runCliCommandCapture(invocation, args, commandCwd, { replayOutput: true });
+      const classified = classifyE2eCleanupCommandResult(result, args, cleanupOptions?.ignoreErrorPatterns || []);
+      if (classified.outcome === 'ok') {
+        details.push(attempt > 1 ? `${name}: ok (attempt=${attempt})` : `${name}: ok`);
+        return;
+      }
+
+      const message = classified.message || `命令失败: licell ${args.join(' ')}`;
+      if (classified.outcome === 'skipped') {
         details.push(`${name}: skipped (${message})`);
         return;
       }
+      const lowerMessage = message.toLowerCase();
+      const retryable = retryableCleanupPatterns.some((pattern) => lowerMessage.includes(pattern));
+      if (retryable && attempt < maxAttempts) {
+        console.warn(pc.yellow(`cleanup retry ${attempt}/${maxAttempts - 1}: ${name} -> ${message}`));
+        await sleep(3000 * attempt);
+        continue;
+      }
       errors.push(`${name}: ${message}`);
       details.push(`${name}: failed`);
+      return;
     }
   };
 
@@ -729,11 +1267,16 @@ async function cleanupByManifest(
   });
   printSection('清理目标', [
     ...(appName ? [`fc function: ${appName}`] : []),
-    ...(domain ? [`domain binding: ${domain}`] : []),
-    ...(staticBucket ? [`oss bucket: ${staticBucket}`] : []),
+    ...domainTargets.map((item) => `${item.workflow} domain: ${item.domain}${item.bucket ? ` -> ${item.bucket}` : ''}`),
+    ...bucketTargets.map((bucket) => `oss bucket: ${bucket}`),
+    ...(dnsRecordIds.length > 0 ? [`dns records: ${dnsRecordIds.length}`] : []),
     ...(vpcId ? [`vpc network: ${vpcId}/${vswId || '-'} (shared, keep)`] : []),
     ...(options.keepWorkspace ? ['workspace: keep'] : [`workspace: ${workspaceDir}`])
   ]);
+
+  const needsDns = domainTargets.length > 0 || dnsRecordIds.length > 0;
+  const needsCdn = domainTargets.some((item) => item.workflow === 'static');
+  const needsOss = bucketTargets.length > 0 || domainTargets.some((item) => item.workflow === 'oss');
 
   await executeWithAuthRecovery(
     {
@@ -741,27 +1284,54 @@ async function cleanupByManifest(
       interactiveTTY,
       requiredCapabilities: [
         'fc',
-        ...(domain ? ['dns' as const] : []),
-        ...(staticBucket ? ['oss' as const] : [])
+        ...(needsDns ? ['dns' as const] : []),
+        ...(needsCdn ? ['cdn' as const] : []),
+        ...(needsOss ? ['oss' as const] : [])
       ]
     },
     async () => {
-      if (domain) {
-        console.log(pc.gray(`清理 domain: ${domain}`));
-        runCleanupCommand('domain-rm', ['domain', 'rm', domain, '--yes']);
+      for (const item of [...domainTargets].reverse()) {
+        if (item.workflow === 'app') {
+          console.log(pc.gray(`清理 app domain: ${item.domain}`));
+          await runCleanupCommand(`domain-app-unbind:${item.domain}`, ['domain', 'app', 'unbind', item.domain, '--yes'], {
+            ignoreErrorPatterns: ignoredDomainPatterns
+          });
+          continue;
+        }
+        if (item.workflow === 'static') {
+          console.log(pc.gray(`清理 static domain: ${item.domain}`));
+          await runCleanupCommand(`domain-static-unbind:${item.domain}`, ['domain', 'static', 'unbind', item.domain, '--yes'], {
+            ignoreErrorPatterns: ignoredDomainPatterns,
+            maxAttempts: 4
+          });
+          continue;
+        }
+        if (item.workflow === 'oss' && item.bucket) {
+          console.log(pc.gray(`清理 oss domain: ${item.domain}`));
+          await runCleanupCommand(`oss-domain-unbind:${item.domain}`, ['oss', 'domain', 'unbind', item.bucket, item.domain, '--yes'], {
+            ignoreErrorPatterns: [...ignoredDomainPatterns, 'nosuchbucket']
+          });
+        }
       }
+
+      for (const recordId of [...dnsRecordIds].reverse()) {
+        console.log(pc.gray(`清理 dns record: ${recordId}`));
+        await runCleanupCommand(`dns-records-rm:${recordId}`, ['dns', 'records', 'rm', recordId, '--yes'], {
+          ignoreErrorPatterns: ignoredDnsPatterns
+        });
+      }
+
       if (appName && hasApiDeploy) {
-        // Clean up preview domains first when preview resources were actually created.
         if (hasSuccessfulE2eStep(manifest, ['deploy-api-preview', 'deploy-static-preview'])) {
           console.log(pc.gray(`清理 preview 域名: ${appName}`));
-          runCleanupCommand(
+          await runCleanupCommand(
             'release-prune-preview',
             ['release', 'prune', '--preview', '--keep', '1', '--apply', '--yes'],
             { ignoreErrorPatterns: ['not found', 'no preview'] }
           );
         }
         console.log(pc.gray(`清理 function: ${appName}`));
-        runCleanupCommand(
+        await runCleanupCommand(
           'fn-rm',
           ['fn', 'rm', appName, '--force', '--yes'],
           { ignoreErrorPatterns: ['functionnotfound', 'does not exist', 'not found'] }
@@ -770,24 +1340,30 @@ async function cleanupByManifest(
       if (appName && hasStaticDeploy) {
         const staticProxyName = `${appName}-static-proxy`;
         console.log(pc.gray(`清理 static proxy function: ${staticProxyName}`));
-        runCleanupCommand(
+        await runCleanupCommand(
           'fn-rm-static-proxy',
           ['fn', 'rm', staticProxyName, '--force', '--yes'],
           { ignoreErrorPatterns: ['functionnotfound', 'does not exist', 'not found'] }
         );
       }
-      if (staticBucket) {
-        console.log(pc.gray(`清理 oss bucket: ${staticBucket}`));
+      for (const bucket of bucketTargets) {
+        console.log(pc.gray(`清理 oss bucket: ${bucket}`));
         try {
-          const result = await deleteOssBucketRecursively(staticBucket);
+          const result = await deleteOssBucketRecursively(bucket);
           details.push(
-            `oss-bucket-rm: ok (${result.bucket}, objects=${result.deletedObjects}, bucketDeleted=${result.deletedBucket})`
+            `oss-bucket-rm:${bucket}: ok (${result.bucket}, objects=${result.deletedObjects}, bucketDeleted=${result.deletedBucket})`
           );
           console.log(pc.green(`oss 清理完成: ${result.bucket} (objects=${result.deletedObjects})`));
         } catch (err: unknown) {
-          errors.push(`oss-bucket-rm: ${formatErrorMessage(err)}`);
-          details.push('oss-bucket-rm: failed');
-          console.warn(pc.yellow(`oss 清理失败: ${formatErrorMessage(err)}`));
+          const message = formatErrorMessage(err);
+          const lowerMessage = message.toLowerCase();
+          if (lowerMessage.includes('nosuchbucket') || lowerMessage.includes('not found')) {
+            details.push(`oss-bucket-rm:${bucket}: skipped (${message})`);
+            continue;
+          }
+          errors.push(`oss-bucket-rm:${bucket}: ${message}`);
+          details.push(`oss-bucket-rm:${bucket}: failed`);
+          console.warn(pc.yellow(`oss 清理失败: ${message}`));
         }
       }
       if (vpcId) {

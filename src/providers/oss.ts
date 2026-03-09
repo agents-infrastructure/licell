@@ -896,11 +896,16 @@ export async function deployOSS(appName: string, distDir: string, options?: { ta
   const { auth } = createOssClient();
   const bucket = `licell-${appName}-${auth.accountId.substring(0, 4)}`.toLowerCase();
 
-  await createOssBucket(bucket, {
-    acl: 'public-read',
-    allowExisting: true,
-    allowPublicAclBlockedFallback: true
-  });
+  try {
+    await getOssBucketInfo(bucket);
+  } catch (err: unknown) {
+    if (!isNotFoundError(err)) throw err;
+    await createOssBucket(bucket, {
+      acl: 'public-read',
+      allowExisting: true,
+      allowPublicAclBlockedFallback: true
+    });
+  }
 
   const uploadResult = await uploadDirectoryToBucket(bucket, distDir, { targetDir: options?.targetDir });
   return uploadResult.baseUrl;
@@ -922,9 +927,10 @@ export async function createOssBucket(bucketName: string, options: CreateOssBuck
   }
 
   let created = true;
-  const createBucketConfiguration = options.storageClass || options.dataRedundancyType
+  const normalizedStorageClass = options.storageClass === 'Standard' ? undefined : options.storageClass;
+  const createBucketConfiguration = normalizedStorageClass || options.dataRedundancyType
     ? new $OSS.CreateBucketConfiguration({
-      ...(options.storageClass ? { storageClass: options.storageClass } : {}),
+      ...(normalizedStorageClass ? { storageClass: normalizedStorageClass } : {}),
       ...(options.dataRedundancyType ? { dataRedundancyType: options.dataRedundancyType } : {})
     })
     : undefined;

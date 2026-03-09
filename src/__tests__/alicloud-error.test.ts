@@ -68,6 +68,9 @@ describe('alicloud-error unified error classification', () => {
     it('detects ECONNRESET', () => {
       expect(isTransientError(makeError('', 'ECONNRESET'))).toBe(true);
     });
+    it('detects ServiceBusy retry-later responses', () => {
+      expect(isTransientError(makeError('ServiceBusy', 'please retry later'))).toBe(true);
+    });
     it('returns false for permanent error', () => {
       expect(isTransientError(makeError('InvalidParameter', 'bad param'))).toBe(false);
     });

@@ -365,6 +365,10 @@ function hasHelpFlag(argv: string[]) {
   return argv.slice(2).some((token) => token === '--help' || token === '-h');
 }
 
+function hasVersionFlag(argv: string[]) {
+  return argv.slice(2).some((token) => token === '--version' || token === '-v');
+}
+
 function hasNonOutputOption(argv: string[]) {
   for (let index = 2; index < argv.length; index += 1) {
     const token = argv[index];
@@ -436,6 +440,7 @@ function resolveHelpTarget(argv: string[], catalog: CommandCatalog = getCommandC
 }
 
 export function shouldRenderCustomHelp(argv: string[]) {
+  if (hasVersionFlag(argv)) return false;
   const resolution = resolveHelpTarget(argv);
   if (resolution.scope === 'root') return true;
   if (resolution.helpRequested) return resolution.scope === 'command' || resolution.scope === 'namespace';

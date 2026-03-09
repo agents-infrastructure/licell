@@ -90,6 +90,22 @@ describe('output utils', () => {
     expect(records[1].type).toBe('result');
   });
 
+
+  it('keeps result record metadata even when payload has a type field', () => {
+    initOutputContext('json', ['node', 'src/cli.ts', 'dns', 'records', 'add']);
+    const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+
+    emitCommandResult({ domain: 'bazhuayu.xyz', type: 'TXT', recordId: '123' });
+
+    const raw = writeSpy.mock.calls.map((args) => String(args[0])).join('');
+    const records = extractJsonRecordsFromOutput(raw) as any[];
+    expect(records).toHaveLength(1);
+    expect(records[0].type).toBe('result');
+    expect(records[0].recordId).toBe('123');
+    expect(records[0].ok).toBe(true);
+
+    writeSpy.mockRestore();
+  });
   it('auto-infers stage and bound outcome from command context', () => {
     initOutputContext('json', ['node', 'src/cli.ts', 'domain', 'app', 'bind']);
     const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);

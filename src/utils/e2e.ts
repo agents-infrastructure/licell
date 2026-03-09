@@ -22,6 +22,12 @@ export interface E2eCleanupRecord {
   errors?: string[];
 }
 
+export interface E2eManagedDomainResource {
+  workflow: 'app' | 'static' | 'oss';
+  domain: string;
+  bucket?: string;
+}
+
 export interface E2eManifest {
   runId: string;
   suite: E2eSuite;
@@ -38,6 +44,8 @@ export interface E2eManifest {
     domainSuffix?: string;
     staticBucket?: string;
     dnsRecordIds?: string[];
+    managedBuckets?: string[];
+    managedDomains?: E2eManagedDomainResource[];
     vpcId?: string;
     vswId?: string;
     sgId?: string;
@@ -45,6 +53,39 @@ export interface E2eManifest {
   steps: E2eStepRecord[];
   cleanup?: E2eCleanupRecord;
   notes?: string[];
+}
+
+function normalizeE2eNameSegment(input: string) {
+  const normalized = input.trim().toLowerCase()
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return normalized || 'e2e';
+}
+
+export function compactE2eToken(input: string) {
+  return normalizeE2eNameSegment(input).replace(/-/g, '');
+}
+
+export function buildE2eManagedBucketName(accountId: string, runId: string, purpose: string) {
+  const accountToken = accountId.trim().toLowerCase().replace(/[^a-z0-9]+/g, '').slice(0, 4) || 'acct';
+  const bucket = [
+    'licell',
+    normalizeE2eNameSegment(purpose),
+    compactE2eToken(runId).slice(-16),
+    accountToken
+  ].join('-');
+  return bucket.slice(0, 63).replace(/-+$/g, '');
+}
+
+export function buildE2eManagedDomain(rootDomain: string, runId: string, prefix: string) {
+  const root = rootDomain.trim().toLowerCase().replace(/^\.+|\.+$/g, '');
+  if (!root) throw new Error('rootDomain 不能为空');
+  const label = [
+    normalizeE2eNameSegment(prefix),
+    compactE2eToken(runId).slice(-24)
+  ].join('-').slice(0, 63).replace(/-+$/g, '');
+  return `${label}.${root}`;
 }
 
 export function normalizeE2eSuite(input: string | undefined): E2eSuite {

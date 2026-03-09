@@ -9,6 +9,7 @@ import { getFcTimeoutConfig, parsePositiveIntEnv } from '../../utils/sdk';
 
 const DEFAULT_FC_OPERATION_TIMEOUT_BUFFER_MS = 10_000;
 const DEFAULT_FC_QUALIFIER_READY_TIMEOUT_MS = 30_000;
+const DEFAULT_FC_MUTATION_READY_TIMEOUT_MS = 180_000;
 const DEFAULT_FC_QUALIFIER_READY_INTERVAL_MS = 2_000;
 const DEFAULT_FC_RETRY_MAX_ATTEMPTS = 3;
 const DEFAULT_FC_MUTATION_RETRY_MAX_ATTEMPTS = 4;
@@ -30,12 +31,14 @@ function trace(operation: string, message: string, env: Record<string, string | 
 }
 
 export type FcRetryProfile = 'read' | 'mutation';
+export type FcReadableProfile = 'read' | 'mutation';
 
 export interface FcGuardConfig {
   connectTimeoutMs: number;
   readTimeoutMs: number;
   operationTimeoutMs: number;
   qualifierReadyTimeoutMs: number;
+  mutationReadyTimeoutMs: number;
   qualifierReadyIntervalMs: number;
   retryMaxAttempts: number;
   retryBaseDelayMs: number;
@@ -43,6 +46,10 @@ export interface FcGuardConfig {
 
 export function getFcGuardConfig(env: Record<string, string | undefined> = process.env): FcGuardConfig {
   const { connectTimeoutMs, readTimeoutMs } = getFcTimeoutConfig(env);
+  const qualifierReadyTimeoutMs = parsePositiveIntEnv(
+    readLicellEnv(env, 'FC_QUALIFIER_READY_TIMEOUT_MS'),
+    DEFAULT_FC_QUALIFIER_READY_TIMEOUT_MS
+  );
   return {
     connectTimeoutMs,
     readTimeoutMs,
@@ -50,9 +57,10 @@ export function getFcGuardConfig(env: Record<string, string | undefined> = proce
       readLicellEnv(env, 'FC_OPERATION_TIMEOUT_MS'),
       readTimeoutMs + DEFAULT_FC_OPERATION_TIMEOUT_BUFFER_MS
     ),
-    qualifierReadyTimeoutMs: parsePositiveIntEnv(
-      readLicellEnv(env, 'FC_QUALIFIER_READY_TIMEOUT_MS'),
-      DEFAULT_FC_QUALIFIER_READY_TIMEOUT_MS
+    qualifierReadyTimeoutMs,
+    mutationReadyTimeoutMs: parsePositiveIntEnv(
+      readLicellEnv(env, 'FC_MUTATION_READY_TIMEOUT_MS'),
+      Math.max(DEFAULT_FC_MUTATION_READY_TIMEOUT_MS, qualifierReadyTimeoutMs)
     ),
     qualifierReadyIntervalMs: parsePositiveIntEnv(
       readLicellEnv(env, 'FC_QUALIFIER_READY_INTERVAL_MS'),
@@ -73,6 +81,10 @@ function resolveRetryMaxAttempts(config: FcGuardConfig, profile: FcRetryProfile)
   return profile === 'mutation'
     ? Math.max(config.retryMaxAttempts, DEFAULT_FC_MUTATION_RETRY_MAX_ATTEMPTS)
     : config.retryMaxAttempts;
+}
+
+function resolveReadableTimeout(config: FcGuardConfig, profile: FcReadableProfile) {
+  return profile === 'mutation' ? config.mutationReadyTimeoutMs : config.qualifierReadyTimeoutMs;
 }
 
 export function createFcRuntimeOptions(
@@ -248,19 +260,30 @@ function shouldRetryQualifierRead(err: unknown) {
   return isNotFoundError(err) || isTransientError(err) || isFcOperationTimeoutError(err);
 }
 
+function resolveFcReadableTimeoutMs(
+  config: FcGuardConfig,
+  profile: FcRetryProfile,
+  explicitTimeoutMs?: number
+) {
+  if (explicitTimeoutMs !== undefined) return explicitTimeoutMs;
+  return profile === 'mutation' ? config.mutationReadyTimeoutMs : config.qualifierReadyTimeoutMs;
+}
+
 export async function waitForFcFunctionReadable(
   functionName: string,
   client: FC20230330,
   options: {
     qualifier?: string;
     env?: Record<string, string | undefined>;
+    profile?: FcReadableProfile;
     timeoutMs?: number;
     intervalMs?: number;
   } = {}
 ): Promise<$FC.Function> {
   const env = options.env ?? process.env;
   const config = getFcGuardConfig(env);
-  const timeoutMs = options.timeoutMs ?? config.qualifierReadyTimeoutMs;
+  const profile = options.profile ?? 'read';
+  const timeoutMs = options.timeoutMs ?? resolveReadableTimeout(config, profile);
   const intervalMs = options.intervalMs ?? config.qualifierReadyIntervalMs;
   const qualifier = options.qualifier?.trim() || undefined;
   const startedAt = Date.now();

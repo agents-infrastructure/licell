@@ -647,6 +647,8 @@ licell e2e list
 licell e2e cleanup <runId>
 ```
 
+说明：`licell e2e run --suite full` 现在会额外覆盖 DNS add/rm、OSS bucket/object CRUD、OSS 原生域名 token/bind/unbind、`domain app bind/unbind`、`deploy --type static --domain ...` 与 `domain static bind/unbind`。如需连同云上资源一起收口，建议配合 `--cleanup`。
+
 **删除 / 清理说明**
 
 - 涉及删除、解绑、清理的命令在非交互模式下通常需要显式传入 `--yes`。
@@ -889,8 +891,10 @@ licell deploy \
 | `LICELL_BINARY_URL`                | 安装脚本指定二进制地址                  | latest release 资产      |
 | `LICELL_ARCHIVE_URL`               | 安装脚本源码回退地址                    | repo main tarball        |
 | `LICELL_GITHUB_TOKEN`              | 安装脚本访问私有源 token                | -                        |
-| `LICELL_FC_CONNECT_TIMEOUT_MS`     | FC API 连接超时                         | `60000`                  |
-| `LICELL_FC_READ_TIMEOUT_MS`        | FC API 读超时                           | `600000`                 |
+| `LICELL_FC_CONNECT_TIMEOUT_MS`     | FC API 连接超时                         | `15000`                  |
+| `LICELL_FC_READ_TIMEOUT_MS`        | FC API 读超时                           | `180000`                 |
+| `LICELL_FC_QUALIFIER_READY_TIMEOUT_MS` | 普通 FC/alias 可读性等待超时         | `30000`                  |
+| `LICELL_FC_MUTATION_READY_TIMEOUT_MS`  | create/update/publish 后收敛等待超时 | `180000`                 |
 | `LICELL_SSL_RENEW_BEFORE_DAYS`     | SSL 续签阈值天数                        | `30`                     |
 | `LICELL_SSL_DNS_READY_TIMEOUT_MS`  | DNS TXT 生效等待超时                    | `180000`                 |
 | `LICELL_SSL_SKIP_CHALLENGE_VERIFY` | 设为 `0` 启用本地 challenge verify      | `1`                      |

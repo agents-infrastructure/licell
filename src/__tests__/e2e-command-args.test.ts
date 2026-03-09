@@ -32,4 +32,22 @@ describe('buildE2eApiDeployArgs', () => {
       '--enable-vpc'
     ]);
   });
+
+  it('supports fixed-domain preview deploys', () => {
+    expect(buildE2eApiDeployArgs({
+      runtime: 'nodejs22',
+      useVpc: false,
+      domainSuffix: 'bazhuayu.xyz',
+      enableCdn: false,
+      preview: true
+    })).toEqual([
+      'deploy',
+      '--type', 'api',
+      '--runtime', 'nodejs22',
+      '--preview',
+      '--entry', 'src/index.ts',
+      '--disable-vpc',
+      '--domain-suffix', 'bazhuayu.xyz'
+    ]);
+  });
 });

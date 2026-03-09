@@ -1,6 +1,8 @@
 import { sleep } from './runtime';
 import { request as httpRequest } from 'http';
 import { request as httpsRequest } from 'https';
+import { resolve4, resolve6 } from 'dns/promises';
+import { isIP } from 'net';
 
 const DEFAULT_PATHS = ['/healthz', '/'];
 const DEFAULT_MAX_ATTEMPTS = 4;
@@ -51,9 +53,30 @@ function buildProbeUrl(baseUrl: string, path: string) {
 function formatProbeError(err: unknown) {
   if (err instanceof Error) {
     if (err.name === 'AbortError') return '请求超时';
+    const causeCode = String((err as { cause?: { code?: unknown } }).cause?.code || '').trim();
+    const causeMessage = String((err as { cause?: { message?: unknown } }).cause?.message || '').trim();
+    if (err.message === 'fetch failed') {
+      const detail = [causeCode, causeMessage].filter((item) => item.length > 0).join(' ');
+      return detail || err.message;
+    }
+    if (causeCode && !err.message.includes(causeCode)) {
+      return `${err.message} (${causeCode})`;
+    }
     return err.message;
   }
   return String(err);
+}
+
+function shouldFallbackToAuthoritativeDns(err: unknown) {
+  if (!(err instanceof Error)) return false;
+  const code = String((err as { code?: unknown }).code || (err as { cause?: { code?: unknown } }).cause?.code || '').toUpperCase();
+  const message = `${err.message} ${String((err as { cause?: { message?: unknown } }).cause?.message || '')}`.toLowerCase();
+  return code === 'ENOTFOUND'
+    || code === 'EAI_AGAIN'
+    || code === 'ENODATA'
+    || message.includes('enotfound')
+    || message.includes('could not resolve')
+    || message.includes('name not resolved');
 }
 
 async function fetchWithTimeout(url: string, timeoutMs: number, fetchImpl: ProbeFetch) {
@@ -84,8 +107,27 @@ async function fetchWithTimeout(url: string, timeoutMs: number, fetchImpl: Probe
   }
 }
 
-async function requestStatusWithTimeout(url: string, timeoutMs: number): Promise<number> {
-  const target = new URL(url);
+async function resolveAuthoritativeAddresses(hostname: string) {
+  const addresses: string[] = [];
+  try {
+    addresses.push(...await resolve4(hostname));
+  } catch {
+    // ignore and continue with AAAA lookup
+  }
+  try {
+    addresses.push(...await resolve6(hostname));
+  } catch {
+    // ignore when AAAA is unavailable
+  }
+  return [...new Set(addresses.filter((item) => item.trim().length > 0))];
+}
+
+function buildRequestPath(target: URL) {
+  const pathname = target.pathname && target.pathname.length > 0 ? target.pathname : '/';
+  return `${pathname}${target.search}`;
+}
+
+function requestStatusOnce(target: URL, timeoutMs: number, resolvedAddress?: string): Promise<number> {
   const isHttps = target.protocol === 'https:';
   const requestFn = isHttps ? httpsRequest : httpRequest;
 
@@ -98,14 +140,28 @@ async function requestStatusWithTimeout(url: string, timeoutMs: number): Promise
       {
         method: 'GET',
         headers: {
-          'user-agent': 'licell-health-check/1.0'
+          'user-agent': 'licell-health-check/1.0',
+          host: target.host
         },
-        ...(isHttps ? { minVersion: 'TLSv1.2', maxVersion: 'TLSv1.2' } : {})
+        ...(resolvedAddress
+          ? {
+              lookup: ((_hostname: string, _options: unknown, callback: (err: Error | null, address: string, family: number) => void) => {
+                callback(null, resolvedAddress, isIP(resolvedAddress) || 4);
+              }) as never
+            }
+          : {}),
+        ...(isHttps
+          ? {
+              servername: target.hostname,
+              minVersion: 'TLSv1.2',
+              maxVersion: 'TLSv1.2'
+            }
+          : {}),
+        path: buildRequestPath(target)
       },
       (res) => {
         if (timer) clearTimeout(timer);
         const statusCode = res.statusCode ?? 0;
-        // We only need the status code; don't wait for a potentially long-lived body/connection.
         res.resume();
         res.once('error', () => {});
         if (!settled) {
@@ -130,6 +186,41 @@ async function requestStatusWithTimeout(url: string, timeoutMs: number): Promise
   });
 }
 
+async function requestStatusWithTimeout(
+  url: string,
+  timeoutMs: number,
+  options: { authoritativeDnsFallback?: boolean } = {}
+): Promise<number> {
+  const target = new URL(url);
+  try {
+    return await requestStatusOnce(target, timeoutMs);
+  } catch (err: unknown) {
+    if (!options.authoritativeDnsFallback) throw err;
+    const addresses = await resolveAuthoritativeAddresses(target.hostname);
+    let lastError = err;
+    for (const address of addresses) {
+      try {
+        return await requestStatusOnce(target, timeoutMs, address);
+      } catch (candidateErr: unknown) {
+        lastError = candidateErr;
+      }
+    }
+    throw lastError;
+  }
+}
+
+async function readProbeStatus(url: string, timeoutMs: number, fetchImpl?: ProbeFetch) {
+  if (!fetchImpl) {
+    return await requestStatusWithTimeout(url, timeoutMs, { authoritativeDnsFallback: true });
+  }
+  try {
+    return (await fetchWithTimeout(url, timeoutMs, fetchImpl)).status;
+  } catch (err: unknown) {
+    if (!shouldFallbackToAuthoritativeDns(err)) throw err;
+    return await requestStatusWithTimeout(url, timeoutMs, { authoritativeDnsFallback: true });
+  }
+}
+
 export async function probeHttpHealth(baseUrl: string, options: ProbeHttpHealthOptions = {}): Promise<ProbeHttpHealthResult> {
   const target = baseUrl.trim();
   if (!target) {
@@ -150,9 +241,7 @@ export async function probeHttpHealth(baseUrl: string, options: ProbeHttpHealthO
     for (const path of paths) {
       const checkedUrl = buildProbeUrl(target, path);
       try {
-        const status = fetchImpl
-          ? (await fetchWithTimeout(checkedUrl, timeoutMs, fetchImpl)).status
-          : await requestStatusWithTimeout(checkedUrl, timeoutMs);
+        const status = await readProbeStatus(checkedUrl, timeoutMs, fetchImpl);
         if (status < successStatusUpperBoundExclusive) {
           if (path === '/healthz' && status === 404 && paths.includes('/')) {
             lastError = `GET ${checkedUrl} 返回 404`;

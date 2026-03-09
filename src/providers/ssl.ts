@@ -2,6 +2,7 @@ import * as acme from 'acme-client';
 import Alidns, * as $Alidns from '@alicloud/alidns20150109';
 import * as $OpenApi from '@alicloud/openapi-client';
 import { createPrivateKey, X509Certificate } from 'crypto';
+import { createRequire } from 'module';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { homedir } from 'os';
@@ -15,10 +16,15 @@ import { readLicellEnv } from '../utils/env';
 import { getFnCustomDomain, updateFnCustomDomain } from './fc/custom-domain';
 
 const ACME_KEY_PATH = join(homedir(), '.licell-cli', 'acme-account.pem');
+const require = createRequire(import.meta.url);
 const AlidnsClientCtor = resolveSdkCtor<Alidns>(Alidns, '@alicloud/alidns20150109');
 const DAY_MS = 24 * 60 * 60 * 1000;
 export const DEFAULT_SSL_RENEW_BEFORE_DAYS = 30;
 const DEFAULT_SSL_DNS_PROPAGATION_TIMEOUT_MS = 180_000;
+const DEFAULT_SSL_ACME_HTTP_TIMEOUT_MS = 30_000;
+const DEFAULT_SSL_ACME_HTTP_RETRY_MAX_ATTEMPTS = 0;
+const DEFAULT_SSL_ACME_AUTO_TIMEOUT_MS = 300_000;
+const DEFAULT_SSL_CLEANUP_TIMEOUT_MS = 30_000;
 const SSL_DNS_PROPAGATION_INTERVAL_MS = 5_000;
 const DEFAULT_ACME_TXT_TTL_SECONDS = 600;
 
@@ -51,6 +57,161 @@ export interface SslBindingArtifacts {
 export interface ResolvedIssueSslOptions {
   forceRenew: boolean;
   renewBeforeDays: number;
+}
+
+interface AcmeChallengeLike {
+  type: string;
+  url?: string;
+  token?: string;
+  status?: string;
+}
+
+interface AcmeAuthorizationLike {
+  url?: string;
+  status?: string;
+  identifier: {
+    value: string;
+  };
+  challenges: AcmeChallengeLike[];
+}
+
+interface AcmeOrderLike {
+  url?: string;
+  status?: string;
+  finalize?: string;
+  certificate?: string;
+  authorizations?: string[];
+}
+
+interface AcmeClientLike {
+  getAccountUrl(): string;
+  createAccount(data?: {
+    termsOfServiceAgreed?: boolean;
+    contact?: string[];
+  }): Promise<unknown>;
+  createOrder(data: {
+    identifiers: Array<{ type: 'dns'; value: string }>;
+  }): Promise<AcmeOrderLike>;
+  getAuthorizations(order: AcmeOrderLike): Promise<AcmeAuthorizationLike[]>;
+  getChallengeKeyAuthorization(challenge: AcmeChallengeLike): Promise<string>;
+  verifyChallenge(authz: AcmeAuthorizationLike, challenge: AcmeChallengeLike): Promise<boolean>;
+  completeChallenge(challenge: AcmeChallengeLike): Promise<AcmeChallengeLike>;
+  waitForValidStatus<T extends AcmeOrderLike | AcmeAuthorizationLike | AcmeChallengeLike>(item: T): Promise<T>;
+  deactivateAuthorization(authz: AcmeAuthorizationLike): Promise<AcmeAuthorizationLike>;
+  finalizeOrder(order: AcmeOrderLike, csr: Buffer | string): Promise<AcmeOrderLike>;
+  getCertificate(order: AcmeOrderLike, preferredChain?: string | null): Promise<string>;
+}
+
+interface RunAcmeDns01FlowOptions {
+  client: AcmeClientLike;
+  domains: string[];
+  csr: Buffer | string;
+  email?: string;
+  preferredChain?: string | null;
+  spinner: Spinner;
+  skipChallengeVerification: boolean;
+  totalTimeoutMs: number;
+  labelPrefix?: string;
+  onChallengeCreate: (domain: string, txtValue: string) => Promise<void>;
+  onChallengeRemove: (domain: string, txtValue: string) => Promise<void>;
+}
+
+function parseTimeoutMs(input: string | undefined, fallback: number) {
+  if (!input) return fallback;
+  const parsed = Number.parseInt(input, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return parsed;
+}
+
+function parseNonNegativeInt(input: string | undefined, fallback: number) {
+  if (!input) return fallback;
+  const parsed = Number.parseInt(input, 10);
+  if (!Number.isFinite(parsed) || parsed < 0) return fallback;
+  return parsed;
+}
+
+export function resolveAcmeDirectoryUrl(env: Record<string, string | undefined> = process.env) {
+  const value = readLicellEnv(env, 'SSL_ACME_DIRECTORY')?.trim().toLowerCase();
+  if (!value || value === 'production' || value === 'prod') return acme.directory.letsencrypt.production;
+  if (value === 'staging' || value === 'stage') return acme.directory.letsencrypt.staging;
+  if (value.startsWith('https://') || value.startsWith('http://')) return value;
+  throw new Error(`无效的 ACME directory 配置: ${value}`);
+}
+
+function configureAcmeHttpTimeout() {
+  const timeoutMs = parseTimeoutMs(readLicellEnv(process.env, 'SSL_ACME_HTTP_TIMEOUT_MS'), DEFAULT_SSL_ACME_HTTP_TIMEOUT_MS);
+  const retryMaxAttempts = parseNonNegativeInt(
+    readLicellEnv(process.env, 'SSL_ACME_HTTP_RETRY_MAX_ATTEMPTS'),
+    DEFAULT_SSL_ACME_HTTP_RETRY_MAX_ATTEMPTS
+  );
+  try {
+    const acmeAxios = require('acme-client/src/axios');
+    if (acmeAxios?.defaults) {
+      acmeAxios.defaults.timeout = timeoutMs;
+      acmeAxios.defaults.acmeSettings = {
+        ...(acmeAxios.defaults.acmeSettings || {}),
+        retryMaxAttempts
+      };
+    }
+  } catch {
+    // best-effort: internal acme-client transport may not be accessible in all bundling modes
+  }
+  return { timeoutMs, retryMaxAttempts };
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label} 超时（>${timeoutMs}ms）`)), timeoutMs);
+      })
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+function formatUnknownError(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function readBooleanEnv(value: string | undefined) {
+  const normalized = value?.trim().toLowerCase();
+  return normalized === '1' || normalized === 'true' || normalized === 'on' || normalized === 'yes';
+}
+
+function isSslTraceEnabled(env: Record<string, string | undefined> = process.env) {
+  return readBooleanEnv(readLicellEnv(env, 'SSL_TRACE'));
+}
+
+function traceSsl(message: string, env: Record<string, string | undefined> = process.env) {
+  if (!isSslTraceEnabled(env)) return;
+  console.error(`[licell][ssl] ${new Date().toISOString()} ${message}`);
+}
+
+function createAcmeStageRunner(totalTimeoutMs: number, labelPrefix: string) {
+  const startedAt = Date.now();
+  return async function runStage<T>(stage: string, task: () => Promise<T>): Promise<T> {
+    const remainingMs = totalTimeoutMs - (Date.now() - startedAt);
+    const stageLabel = `${labelPrefix}/${stage}`;
+    if (remainingMs <= 0) {
+      throw new Error(`${stageLabel} 超时（>${totalTimeoutMs}ms）`);
+    }
+    traceSsl(`${stageLabel}: start`);
+    try {
+      const result = await withTimeout(Promise.resolve().then(task), remainingMs, stageLabel);
+      traceSsl(`${stageLabel}: ok`);
+      return result;
+    } catch (error) {
+      const normalizedError = error instanceof Error && error.message.startsWith(stageLabel)
+        ? error
+        : new Error(`${stageLabel}: ${formatUnknownError(error)}`);
+      traceSsl(`${stageLabel}: failed: ${formatUnknownError(normalizedError)}`);
+      throw normalizedError;
+    }
+  };
 }
 
 function toFcPemPrivateKey(key: Buffer) {
@@ -118,6 +279,19 @@ function normalizeTxtValue(value: string) {
   return value.trim().replace(/^"+|"+$/g, '');
 }
 
+function normalizeAcmeIdentifierDomain(domain: string) {
+  return domain.trim().replace(/^\*\./, '');
+}
+
+function resolveAcmeChallengeRecord(domain: string) {
+  const normalizedDomain = normalizeAcmeIdentifierDomain(domain);
+  const { rootDomain, subDomain } = parseRootAndSubdomain(normalizedDomain);
+  return {
+    rootDomain,
+    challengeRecord: subDomain === '@' ? '_acme-challenge' : `_acme-challenge.${subDomain}`
+  };
+}
+
 async function listChallengeTxtRecords(
   dnsClient: Alidns,
   rootDomain: string,
@@ -135,9 +309,29 @@ async function listChallengeTxtRecords(
         pageSize: 100
       })));
       records.push(...((response.body?.domainRecords?.record || []) as DnsRecordLike[]));
-    } catch { /* some candidate subDomain formats may not exist, safe to skip */ }
+    } catch {
+      // some candidate subDomain formats may not exist, safe to skip
+    }
   }
   return records;
+}
+
+async function clearChallengeTxtRecords(
+  dnsClient: Alidns,
+  rootDomain: string,
+  challengeRecord: string
+) {
+  const deleted = new Set<string>();
+  const records = await listChallengeTxtRecords(dnsClient, rootDomain, challengeRecord);
+  for (const record of records) {
+    if (!record.recordId || deleted.has(record.recordId)) continue;
+    deleted.add(record.recordId);
+    try {
+      await withRetry(() => dnsClient.deleteDomainRecord(new $Alidns.DeleteDomainRecordRequest({ recordId: record.recordId })));
+    } catch {
+      // best-effort cleanup: stale challenge records are harmless
+    }
+  }
 }
 
 async function waitForChallengeTxtReady(
@@ -170,6 +364,142 @@ type DaysRemainingResolver = (certificatePem: string, nowMs?: number) => number 
 interface IssueDecision {
   issue: boolean;
   message: string;
+}
+
+export function selectPreferredAcmeChallenge<T extends { type?: string }>(
+  challenges: T[],
+  challengePriority: string[] = ['dns-01']
+): T | null {
+  for (const preferredType of challengePriority) {
+    const challenge = challenges.find((item) => item.type === preferredType);
+    if (challenge) return challenge;
+  }
+  return null;
+}
+
+export async function runAcmeDns01Flow({
+  client,
+  domains,
+  csr,
+  email,
+  preferredChain = null,
+  spinner,
+  skipChallengeVerification,
+  totalTimeoutMs,
+  labelPrefix = 'ACME dns-01',
+  onChallengeCreate,
+  onChallengeRemove
+}: RunAcmeDns01FlowOptions) {
+  const runStage = createAcmeStageRunner(totalTimeoutMs, labelPrefix);
+  const cleanupTimeoutMs = Math.min(DEFAULT_SSL_CLEANUP_TIMEOUT_MS, Math.max(5_000, totalTimeoutMs));
+  const accountPayload: {
+    termsOfServiceAgreed: true;
+    contact?: string[];
+  } = { termsOfServiceAgreed: true };
+
+  if (email) {
+    accountPayload.contact = [`mailto:${email}`];
+  }
+
+  try {
+    client.getAccountUrl();
+    traceSsl(`${labelPrefix}/getAccountUrl: ok`);
+  } catch {
+    traceSsl(`${labelPrefix}/getAccountUrl: missing`);
+    spinner.message('👤 未发现 ACME 账户，正在注册...');
+    await runStage('createAccount', () => client.createAccount(accountPayload));
+  }
+
+  spinner.message(`📨 正在创建 ACME 订单（${domains.join(', ')}）...`);
+  const order = await runStage('createOrder', () => client.createOrder({
+    identifiers: domains.map((value) => ({ type: 'dns' as const, value }))
+  }));
+
+  spinner.message('🔎 正在获取域名授权挑战...');
+  const authorizations = await runStage('getAuthorizations', () => client.getAuthorizations(order));
+
+  for (const authz of authorizations) {
+    const identifier = authz.identifier.value;
+    if (authz.status === 'valid') {
+      spinner.message(`✅ 域名授权已有效，跳过 challenge（${identifier}）`);
+      continue;
+    }
+
+    const challenge = selectPreferredAcmeChallenge(authz.challenges, ['dns-01']);
+    if (!challenge) {
+      throw new Error(`${labelPrefix}/selectChallenge(${identifier}) 无可用 dns-01 challenge`);
+    }
+
+    let challengeSubmitted = false;
+    const txtValue = await runStage(
+      `getChallengeKeyAuthorization(${identifier})`,
+      () => client.getChallengeKeyAuthorization(challenge)
+    );
+
+    try {
+      spinner.message(`📝 正在配置 DNS TXT 记录（${identifier}）...`);
+      await runStage(
+        `challengeCreate(${identifier})`,
+        () => onChallengeCreate(identifier, txtValue)
+      );
+
+      if (skipChallengeVerification) {
+        spinner.message(`🌐 DNS TXT 已就绪，等待 Let's Encrypt 验证（${identifier}）...`);
+      } else {
+        spinner.message(`🔍 正在本地校验 ACME challenge（${identifier}）...`);
+        await runStage(
+          `verifyChallenge(${identifier})`,
+          () => client.verifyChallenge(authz, challenge)
+        );
+      }
+
+      spinner.message(`📬 正在提交 ACME challenge（${identifier}）...`);
+      await runStage(
+        `completeChallenge(${identifier})`,
+        () => client.completeChallenge(challenge)
+      );
+      challengeSubmitted = true;
+
+      spinner.message(`⏳ 正在等待 Let's Encrypt 验证通过（${identifier}）...`);
+      await runStage(
+        `waitForValidStatus(challenge:${identifier})`,
+        () => client.waitForValidStatus(challenge)
+      );
+    } catch (error) {
+      if (!challengeSubmitted) {
+        try {
+          await withTimeout(
+            client.deactivateAuthorization(authz),
+            cleanupTimeoutMs,
+            `${labelPrefix}/deactivateAuthorization(${identifier})`
+          );
+        } catch (deactivateError) {
+          spinner.message(`⚠️ ACME 授权停用失败（${identifier}）: ${formatUnknownError(deactivateError)}`);
+        }
+      }
+      throw error;
+    } finally {
+      try {
+        await withTimeout(
+          onChallengeRemove(identifier, txtValue),
+          cleanupTimeoutMs,
+          `${labelPrefix}/challengeRemove(${identifier})`
+        );
+      } catch (cleanupError) {
+        spinner.message(`⚠️ DNS TXT 清理失败（${identifier}）: ${formatUnknownError(cleanupError)}`);
+      }
+    }
+  }
+
+  spinner.message('📦 正在完成 ACME 订单...');
+  const finalizedOrder = await runStage('finalizeOrder', () => client.finalizeOrder(order, csr));
+  const validOrder = await runStage(
+    'waitForValidStatus(order)',
+    () => client.waitForValidStatus(finalizedOrder)
+  );
+
+  spinner.message('📥 正在下载证书链...');
+  return runStage('getCertificate', () => client.getCertificate(validOrder, preferredChain));
 }
 
 export function shouldIssueNewCertificate(
@@ -247,7 +577,9 @@ export async function issueAndBindSSLWithArtifacts(
   if (bindToFcDomain) {
     try {
       existingDomain = await getFnCustomDomain(domain) as ExistingDomainLike | null;
-    } catch { /* best-effort: existing domain query may fail if domain not yet bound */ }
+    } catch {
+      // best-effort: existing domain query may fail if domain not yet bound
+    }
   }
 
   const decision = bindToFcDomain
@@ -274,61 +606,52 @@ export async function issueAndBindSSLWithArtifacts(
     };
   }
 
-  const { rootDomain, subDomain } = parseRootAndSubdomain(domain);
-  const recordIds: string[] = [];
+  const { rootDomain } = resolveAcmeChallengeRecord(domain);
 
-  spinner.message('🔒 正在向 Let\'s Encrypt 注册 ACME 账户并发起证书申请...');
+  const acmeDirectoryUrl = resolveAcmeDirectoryUrl();
+  const acmeDirectoryLabel = acmeDirectoryUrl === acme.directory.letsencrypt.staging ? "Let's Encrypt staging" : "Let's Encrypt";
+  traceSsl(`ACME directory: ${acmeDirectoryUrl}`);
+  spinner.message(`🔒 正在向 ${acmeDirectoryLabel} 注册 ACME 账户并发起证书申请...`);
+  const { timeoutMs: acmeHttpTimeoutMs, retryMaxAttempts: acmeHttpRetryMaxAttempts } = configureAcmeHttpTimeout();
+  const acmeAutoTimeoutMs = parseTimeoutMs(readLicellEnv(process.env, 'SSL_ACME_AUTO_TIMEOUT_MS'), DEFAULT_SSL_ACME_AUTO_TIMEOUT_MS);
   acme.setLogger(() => {});
   const accountKey = await getOrCreateAccountKey();
-  const client = new acme.Client({ directoryUrl: acme.directory.letsencrypt.production, accountKey });
+  const client = new acme.Client({
+    directoryUrl: acmeDirectoryUrl,
+    accountKey,
+    backoffAttempts: 5,
+    backoffMin: 3_000,
+    backoffMax: 10_000
+  });
   const [certKey, csr] = await acme.crypto.createCsr({ commonName: domain });
+  spinner.message(`🔒 正在向 ${acmeDirectoryLabel} 注册 ACME 账户并发起证书申请（HTTP timeout=${acmeHttpTimeoutMs}ms, retry=${acmeHttpRetryMaxAttempts}）...`);
 
-  const clearChallengeTxtRecords = async (challengeRecord: string) => {
-    const deleted = new Set<string>();
-    const records = await listChallengeTxtRecords(dnsClient, rootDomain, challengeRecord);
-    for (const record of records) {
-      if (!record.recordId || deleted.has(record.recordId)) continue;
-      deleted.add(record.recordId);
-      try {
-        await withRetry(() => dnsClient.deleteDomainRecord(new $Alidns.DeleteDomainRecordRequest({ recordId: record.recordId })));
-      } catch { /* best-effort cleanup: stale challenge records are harmless */ }
-    }
-  };
-
-  const cert = await client.auto({
+  const cert = await runAcmeDns01Flow({
+    client,
+    domains: [domain],
     csr,
     email: `admin@${rootDomain}`,
-    termsOfServiceAgreed: true,
-    challengePriority: ['dns-01'],
+    spinner,
     skipChallengeVerification,
-    challengeCreateFn: async (_authz: any, _challenge: any, keyAuthorization: string) => {
-      const challengeRecord = subDomain === '@' ? '_acme-challenge' : `_acme-challenge.${subDomain}`;
-      // acme-client already returns DNS-01 keyAuthorization in TXT-ready format.
-      const txtValue = keyAuthorization;
+    totalTimeoutMs: acmeAutoTimeoutMs,
+    labelPrefix: `ACME 证书签发(${domain})`,
+    onChallengeCreate: async (identifier, txtValue) => {
+      const { rootDomain: challengeRootDomain, challengeRecord } = resolveAcmeChallengeRecord(identifier);
       spinner.message(`📝 正在自动配置 DNS TXT 记录 (${challengeRecord}) ...`);
-      await clearChallengeTxtRecords(challengeRecord);
-      const addRecordRes = await withRetry(() => dnsClient.addDomainRecord(new $Alidns.AddDomainRecordRequest({
-        domainName: rootDomain,
+      await clearChallengeTxtRecords(dnsClient, challengeRootDomain, challengeRecord);
+      await withRetry(() => dnsClient.addDomainRecord(new $Alidns.AddDomainRecordRequest({
+        domainName: challengeRootDomain,
         RR: challengeRecord,
         type: 'TXT',
         value: txtValue,
         TTL: DEFAULT_ACME_TXT_TTL_SECONDS
       })));
-      if (addRecordRes.body?.recordId) recordIds.push(addRecordRes.body.recordId);
-      await waitForChallengeTxtReady(dnsClient, rootDomain, challengeRecord, txtValue, spinner);
+      await waitForChallengeTxtReady(dnsClient, challengeRootDomain, challengeRecord, txtValue, spinner);
       spinner.message(`🌐 DNS TXT 已就绪，等待 Let's Encrypt 验证 (${challengeRecord}) ...`);
     },
-    challengeRemoveFn: async () => {
-      for (const recordId of recordIds) {
-        try {
-          await withRetry(() => dnsClient.deleteDomainRecord(new $Alidns.DeleteDomainRecordRequest({ recordId })));
-        } catch (cleanupErr: unknown) {
-          const msg = cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr);
-          if (!msg.toLowerCase().includes('notfound') && !msg.toLowerCase().includes('not found')) {
-            spinner.message(`⚠️ DNS TXT 记录清理失败 (recordId=${recordId}): ${msg}`);
-          }
-        }
-      }
+    onChallengeRemove: async (identifier) => {
+      const { rootDomain: challengeRootDomain, challengeRecord } = resolveAcmeChallengeRecord(identifier);
+      await clearChallengeTxtRecords(dnsClient, challengeRootDomain, challengeRecord);
     }
   });
 

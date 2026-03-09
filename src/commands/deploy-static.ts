@@ -107,9 +107,9 @@ export async function executeStaticDeploy(
     const fixedDomainUrl = `${ctx.enableSSL ? 'https' : 'http'}://${staticDeployResult.fixedDomain}`;
     const fixedProbe = await probeHttpHealth(fixedDomainUrl, {
       paths: ['/'],
-      maxAttempts: ctx.enableCdn ? 10 : 6,
-      intervalMs: ctx.enableCdn ? 3000 : 2000,
-      timeoutMs: ctx.enableCdn ? 6000 : 5000,
+      maxAttempts: 20,
+      intervalMs: 5000,
+      timeoutMs: 8000,
       allowClientError: false
     });
     if (fixedProbe.ok) {
