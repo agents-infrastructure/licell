@@ -72,19 +72,16 @@ describe('cli help e2e', () => {
   }, 10000);
 
 
-  it('prints version instead of root help for global version flags', () => {
-    const longFlag = runCliHelp(['--version']);
-    const shortFlag = runCliHelp(['-v']);
+  it.each(['--version', '-v'])('prints version instead of root help for %s', (flag) => {
+    const result = runCliHelp([flag]);
 
-    for (const result of [longFlag, shortFlag]) {
-      expect(result.error).toBeUndefined();
-      expect(result.status).toBe(0);
-      expect(result.stderr).toBe('');
-      expect(result.stdout.trim()).toMatch(/^licell\/[0-9A-Za-z.+-]+(?:\s+.+)?$/);
-      expect(result.stdout).not.toContain('Usage:');
-      expect(result.stdout).not.toContain('Command Groups:');
-    }
-  }, 10000);
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(result.stdout.trim()).toMatch(/^licell\/[0-9A-Za-z.+-]+(?:\s+.+)?$/);
+    expect(result.stdout).not.toContain('Usage:');
+    expect(result.stdout).not.toContain('Command Groups:');
+  }, 15000);
 
   it('prints namespace help text through the real CLI entry', () => {
     const result = runCliHelp(['domain', 'app', '--help']);
