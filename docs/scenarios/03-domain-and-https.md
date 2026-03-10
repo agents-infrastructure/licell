@@ -34,9 +34,9 @@ licell deploy \
 1. 自动计算最终域名，例如应用名叫做 `payment-service`，此时域名为
    `payment-service.my-startup.com`。
 2. 自动检查阿里云 DNS，增加 CNAME 指向当前你部署的函数。
-3. 发现有 `--ssl` 被传递，**接管 Let's Encrypt 会话进程，全自动使用 DNS API
+3. 发现有 `--ssl` 被传递，**优先接管 Let's Encrypt ACME 会话，全自动使用 DNS API
    添加隐藏的 TXT 记录供 ACME
-   证明你持有了此域名，证书下发后存入阿里云服务器中**。
+   证明你持有了此域名；如果 Let's Encrypt 命中限额，则自动 fallback 到 ZeroSSL ACME 继续签发，证书下发后再存入阿里云服务器中**。
 4. 把所有的清理操作完成，反馈给你一个拥有锁头标志的安全 HTTPS 地址。
 
 如果想要全局生效这个公司后缀配置：您可以设置
@@ -62,8 +62,7 @@ licell deploy \
 ```
 
 Licell 监测到你是 static (静态站部署) 并且传递了 `--domain` 参数，它默认会
-**自动开启 CDN 部署，并将你的 OSS 挂载为 CDN 源站，同时全自动生成 HTTPS Let's
-Encrypt 证书** 并下发到 CDN 节点中。
+**自动开启 CDN 部署，并将你的 OSS 挂载为 CDN 源站，同时全自动生成 HTTPS 证书** 并下发到 CDN 节点中；默认优先走 Let's Encrypt，命中限额时自动切换到 ZeroSSL ACME。
 
 <!-- BEGIN GENERATED:SCENARIO_DOMAIN_STATIC_BIND_WORKFLOW -->
 > 如果你是通过 Agent / MCP 执行这一步，推荐直接调用下面这条共享 workflow 入口：

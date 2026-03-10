@@ -320,6 +320,14 @@ licell deploy --type static --dist dist --domain static.your-domain.xyz
 - DNS CNAME 收敛
 - HTTPS 证书签发与 CDN 边缘证书配置
 
+### HTTPS / ACME 说明
+
+- 默认优先使用 `Let's Encrypt` 通过 `DNS-01` 自动签发证书
+- 当 `Let's Encrypt` 命中 ACME rate limit 时，会自动 fallback 到 `ZeroSSL ACME` 继续签发
+- ZeroSSL fallback 默认会基于 ACME 账户邮箱自动获取 EAB；也可显式提供 `LICELL_SSL_ZEROSSL_EAB_KID` / `LICELL_SSL_ZEROSSL_EAB_HMAC_KEY`
+- 如需走显式 API key 路径，也可设置 `LICELL_SSL_ZEROSSL_ACCESS_KEY`
+- ZeroSSL 的 EAB 凭据会安全缓存到 `~/.licell-cli/acme/zerossl-eab.json`，后续签发可复用
+
 ## 发布、回滚、环境
 
 ```bash
