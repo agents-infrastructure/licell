@@ -24,7 +24,7 @@ export function isConflictError(err: unknown): boolean {
 
 export function isNotFoundError(err: unknown): boolean {
   return matchesAny(extractErrorText(err), [
-    'notfound', 'no such', '404', 'entitynotexist', 'not exist'
+    'notfound', 'no such', 'nosuchbucket', 'nosuchkey', '404', 'entitynotexist', 'not exist'
   ]);
 }
 

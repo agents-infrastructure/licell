@@ -4,7 +4,12 @@ const mockPutBucketWithOptions = vi.fn();
 const mockGetBucketInfoWithOptions = vi.fn();
 const mockPutBucketAclWithOptions = vi.fn();
 const mockGetBucketAclWithOptions = vi.fn();
+const mockPutObjectWithOptions = vi.fn();
 const mockExecute = vi.fn();
+const mockIsConflictError = vi.fn();
+const mockIsAccessDeniedError = vi.fn();
+const mockIsNotFoundError = vi.fn();
+const mockIsTransientError = vi.fn();
 
 vi.mock('../utils/config', () => ({
   Config: {
@@ -23,6 +28,7 @@ vi.mock('@alicloud/oss20190517', () => ({
     getBucketInfoWithOptions = mockGetBucketInfoWithOptions;
     putBucketAclWithOptions = mockPutBucketAclWithOptions;
     getBucketAclWithOptions = mockGetBucketAclWithOptions;
+    putObjectWithOptions = mockPutObjectWithOptions;
     execute = mockExecute;
   },
   CreateBucketConfiguration: class CreateBucketConfiguration {
@@ -41,6 +47,16 @@ vi.mock('@alicloud/oss20190517', () => ({
     }
   },
   PutBucketAclHeaders: class PutBucketAclHeaders {
+    constructor(input: unknown) {
+      Object.assign(this, input);
+    }
+  },
+  PutObjectRequest: class PutObjectRequest {
+    constructor(input: unknown) {
+      Object.assign(this, input);
+    }
+  },
+  PutObjectHeaders: class PutObjectHeaders {
     constructor(input: unknown) {
       Object.assign(this, input);
     }
@@ -88,10 +104,10 @@ vi.mock('../utils/retry', () => ({
 }));
 
 vi.mock('../utils/alicloud-error', () => ({
-  isConflictError: () => false,
-  isAccessDeniedError: () => false,
-  isNotFoundError: () => false,
-  isTransientError: () => false
+  isConflictError: (err: unknown) => mockIsConflictError(err),
+  isAccessDeniedError: (err: unknown) => mockIsAccessDeniedError(err),
+  isNotFoundError: (err: unknown) => mockIsNotFoundError(err),
+  isTransientError: (err: unknown) => mockIsTransientError(err)
 }));
 
 describe('createOssBucket', () => {
@@ -100,7 +116,12 @@ describe('createOssBucket', () => {
     mockGetBucketInfoWithOptions.mockReset();
     mockPutBucketAclWithOptions.mockReset();
     mockGetBucketAclWithOptions.mockReset();
+    mockPutObjectWithOptions.mockReset();
     mockExecute.mockReset();
+    mockIsConflictError.mockReset();
+    mockIsAccessDeniedError.mockReset();
+    mockIsNotFoundError.mockReset();
+    mockIsTransientError.mockReset();
 
     mockPutBucketWithOptions.mockResolvedValue({});
     mockGetBucketInfoWithOptions.mockResolvedValue({
@@ -113,7 +134,12 @@ describe('createOssBucket', () => {
     });
     mockPutBucketAclWithOptions.mockResolvedValue({});
     mockGetBucketAclWithOptions.mockResolvedValue({ body: { acl: 'private' } });
+    mockPutObjectWithOptions.mockResolvedValue({ headers: { etag: '"etag-demo"' } });
     mockExecute.mockResolvedValue({ body: {} });
+    mockIsConflictError.mockReturnValue(false);
+    mockIsAccessDeniedError.mockReturnValue(false);
+    mockIsNotFoundError.mockReturnValue(false);
+    mockIsTransientError.mockReturnValue(false);
   });
 
   it('omits Standard storageClass from createBucketConfiguration', async () => {
@@ -132,5 +158,72 @@ describe('createOssBucket', () => {
 
     const request = mockPutBucketWithOptions.mock.calls[0]?.[1];
     expect(request?.createBucketConfiguration?.storageClass).toBe('IA');
+  });
+
+  it('uploads object content with binary body and content type', async () => {
+    const { uploadOssObjectContent } = await import('../providers/oss');
+
+    const result = await uploadOssObjectContent('demo-bucket', 'auth-transfer/demo.json', Buffer.from('hello'), {
+      contentType: 'application/json'
+    });
+
+    expect(mockPutObjectWithOptions).toHaveBeenCalledTimes(1);
+    const request = mockPutObjectWithOptions.mock.calls[0]?.[2];
+    const headers = mockPutObjectWithOptions.mock.calls[0]?.[3];
+    expect(request?.body).toBeTruthy();
+    expect(headers?.commonHeaders?.['content-type']).toBe('application/json');
+    expect(headers?.commonHeaders?.['content-length']).toBe('5');
+    expect(result).toMatchObject({
+      bucket: 'demo-bucket',
+      key: 'auth-transfer/demo.json',
+      contentLength: 5,
+      contentType: 'application/json',
+      etag: '"etag-demo"'
+    });
+  });
+
+  it('creates signed GET url for private object restore', async () => {
+    const { createSignedOssGetUrl } = await import('../providers/oss');
+
+    const result = createSignedOssGetUrl('demo-bucket', 'auth-transfer/demo.json', 3600);
+    const url = new URL(result.url);
+
+    expect(url.hostname).toBe('demo-bucket.oss-cn-hangzhou.aliyuncs.com');
+    expect(url.pathname).toBe('/auth-transfer/demo.json');
+    expect(url.searchParams.get('OSSAccessKeyId')).toBe('test-ak');
+    expect(url.searchParams.get('Expires')).toBeTruthy();
+    expect(url.searchParams.get('Signature')).toBeTruthy();
+    expect(result.bucket).toBe('demo-bucket');
+    expect(result.key).toBe('auth-transfer/demo.json');
+    expect(result.expiresAt).toMatch(/T/);
+  });
+
+  it('treats inaccessible conflict bucket as unavailable name', async () => {
+    const { createOssBucket } = await import('../providers/oss');
+    const conflict = new Error('BucketAlreadyExists: The requested bucket name is not available.');
+    (conflict as Error & { code?: string }).code = 'BucketAlreadyExists';
+    const notFound = new Error('NoSuchBucket');
+    (notFound as Error & { code?: string }).code = 'NoSuchBucket';
+
+    mockPutBucketWithOptions.mockRejectedValue(conflict);
+    mockGetBucketInfoWithOptions.mockRejectedValue(notFound);
+    mockIsConflictError.mockReturnValue(true);
+    mockIsNotFoundError.mockImplementation((err: unknown) => (err as { code?: string })?.code === 'NoSuchBucket');
+
+    await expect(createOssBucket('demo-bucket', { allowExisting: true })).rejects.toThrow(/名称不可用/);
+  });
+
+  it('reuses accessible existing bucket when allowExisting is enabled', async () => {
+    const { createOssBucket } = await import('../providers/oss');
+    const conflict = new Error('BucketAlreadyExists');
+    (conflict as Error & { code?: string }).code = 'BucketAlreadyExists';
+
+    mockPutBucketWithOptions.mockRejectedValue(conflict);
+    mockIsConflictError.mockReturnValue(true);
+
+    const result = await createOssBucket('demo-bucket', { allowExisting: true });
+
+    expect(result.created).toBe(false);
+    expect(mockGetBucketInfoWithOptions).toHaveBeenCalled();
   });
 });

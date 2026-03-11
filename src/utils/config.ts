@@ -68,6 +68,7 @@ export interface ProjectConfig {
 
 export interface GlobalConfig {
   domainSuffix?: string;
+  authTransferBuckets?: Record<string, string>;
 }
 
 interface SetProjectOptions {

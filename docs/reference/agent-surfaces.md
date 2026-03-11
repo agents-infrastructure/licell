@@ -13,7 +13,9 @@
 | 命令 | 说明 | 生成 MCP Tool | 关键选项 |
 |------|------|----------------|----------|
 | `licell login` | 配置阿里云凭证 | `licell_cmd_login` | `--account-id`, `--ak`, `--sk` |
+| `licell auth export [passkey]` | 加密打包当前 licell 全局凭证状态到私有 OSS，并生成 restore token | `licell_cmd_auth_export` | `--bucket`, `--expires-hours` |
 | `licell auth repair` | 修复凭证权限（推荐：用超级 AK/SK 自动补齐 licell 最小权限并继续使用） | `licell_cmd_auth_repair` | `--account-id`, `--ak`, `--sk` |
+| `licell auth restore <token> [passkey]` | 使用 restore token + passkey 一键恢复 licell 全局凭证状态 | `licell_cmd_auth_restore` | `--yes` |
 | `licell logout` | 清除本地凭证 | `licell_cmd_logout` | — |
 | `licell whoami` | 查看当前登录身份 | `licell_cmd_whoami` | — |
 | `licell switch` | 切换默认 region | `licell_cmd_switch` | `--region` |
@@ -180,7 +182,9 @@
 
 | Tool | 对应 CLI | 说明 | 关键输入 |
 |------|----------|------|----------|
+| `licell_cmd_auth_export` | `licell auth export` | 把当前机器的 licell 全局登录状态加密备份到私有 OSS，并返回一条可跨机器 restore 的 token。 Safety: mutating — 会读取本机 ~/.licell-cli 凭证状态，加密后上传到私有 OSS Bucket。 Auto-generated from the shared licell CLI registry. | `passkey`, `bucket`, `expiresHours` |
 | `licell_cmd_auth_repair` | `licell auth repair` | 修复凭证权限（推荐：用超级 AK/SK 自动补齐 licell 最小权限并继续使用） Safety: mutating — 该命令会创建或修改云端资源、本地配置，建议先查看当前状态。 Auto-generated from the shared licell CLI registry. | `accountId`, `ak`, `sk`, `region` |
+| `licell_cmd_auth_restore` | `licell auth restore` | 通过 token 下载加密 bundle，并恢复 ~/.licell-cli 下的 auth/config/acme 状态。 Safety: mutating — 会把解密后的全局凭证状态写回 ~/.licell-cli/。 Auto-generated from the shared licell CLI registry. | `token`, `passkey`, `yes` |
 | `licell_cmd_config_domain` | `licell config domain` | 查看或设置全局默认域名后缀 Safety: mutating — 该命令会创建或修改云端资源、本地配置，建议先查看当前状态。 Structured JSON result: 返回当前或更新后的全局域名后缀。 Key fields: stage, domainSuffix, action. Auto-generated from the shared licell CLI registry. | `suffix`, `unset` |
 | `licell_cmd_init` | `licell init` | 初始化 FC 项目（空目录生成脚手架，已有项目写入 licell 配置） Safety: mutating — 该命令会创建或修改云端资源、本地配置，建议先查看当前状态。 Structured JSON result: 返回初始化后的 runtime、应用名与文件写入结果。 Key fields: stage, runtime, appName, mode, writtenFiles, skippedFiles. Auto-generated from the shared licell CLI registry. | `runtime`, `app`, `force`, `yes` |
 | `licell_cmd_login` | `licell login` | 配置阿里云凭证 Auto-generated from the shared licell CLI registry. | `accountId`, `ak`, `sk`, `region` |

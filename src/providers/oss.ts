@@ -1,6 +1,7 @@
 import OSSClient, * as $OSS from '@alicloud/oss20190517';
 import * as $OpenApi from '@alicloud/openapi-client';
 import openapiUtilModule from '@alicloud/openapi-util';
+import { createHmac } from 'crypto';
 
 // Resolve CJS/ESM interop: bun bundler may wrap default export as { default: [class] }
 const openapiUtil = (() => {
@@ -12,6 +13,7 @@ const openapiUtil = (() => {
 import * as $Util from '@alicloud/tea-util';
 import { createReadStream, createWriteStream, existsSync, lstatSync, mkdirSync, readdirSync, realpathSync, rmSync, statSync } from 'fs';
 import { basename, dirname, isAbsolute, join, relative } from 'path';
+import { Readable } from 'stream';
 import { pipeline } from 'stream/promises';
 import mime from 'mime-types';
 import { Config } from '../utils/config';
@@ -91,6 +93,21 @@ export interface OssDownloadObjectResult {
   etag?: string;
 }
 
+export interface OssPutObjectContentResult {
+  bucket: string;
+  key: string;
+  contentLength: number;
+  contentType: string;
+  etag?: string;
+}
+
+export interface OssSignedGetUrlResult {
+  bucket: string;
+  key: string;
+  url: string;
+  expiresAt: string;
+}
+
 export interface OssDeleteObjectResult {
   bucket: string;
   key: string;
@@ -158,19 +175,38 @@ function isOssEmptyXmlResponseError(err: unknown) {
   return stack.includes('gateway-oss') || stack.includes('darabonba-map');
 }
 
+export function isOssBucketNameUnavailableError(err: unknown) {
+  const code = String((err as { code?: unknown })?.code || '').toLowerCase();
+  const message = String((err as { message?: unknown })?.message || '').toLowerCase();
+  return code === 'bucketalreadyexists'
+    || code === 'ossbucketnameunavailable'
+    || message.includes('bucket name is not available')
+    || message.includes('bucket namespace is shared')
+    || message.includes('bucket 名称不可用');
+}
+
 async function assertBucketAccessible(
   client: InstanceType<typeof OssClientCtor>,
   bucket: string,
   runtime: $Util.RuntimeOptions
 ) {
-  try {
-    await client.getBucketInfoWithOptions(bucket, {}, runtime);
-  } catch (infoErr: unknown) {
-    if (isAccessDeniedError(infoErr)) {
-      throw new Error(`OSS Bucket 已被占用且当前账号无权限访问: ${bucket}，请更换 appName 后重试`);
+  await withRetry(
+    async () => {
+      try {
+        await client.getBucketInfoWithOptions(bucket, {}, runtime);
+      } catch (infoErr: unknown) {
+        if (isAccessDeniedError(infoErr)) {
+          throw new Error(`OSS Bucket 已被占用且当前账号无权限访问: ${bucket}，请更换 appName 后重试`);
+        }
+        throw infoErr;
+      }
+    },
+    {
+      maxAttempts: 5,
+      baseDelayMs: 800,
+      shouldRetry: isEventuallyConsistentOssError
     }
-    throw infoErr;
-  }
+  );
 }
 
 function toArray<T>(value: T | T[] | undefined | null): T[] {
@@ -295,6 +331,13 @@ export function normalizeOssObjectKey(objectKey: string) {
   return normalized;
 }
 
+function normalizeSignedUrlExpirySeconds(expiresSeconds: number) {
+  if (!Number.isFinite(expiresSeconds) || expiresSeconds <= 0) {
+    throw new Error('签名 URL 过期时间必须大于 0 秒');
+  }
+  return Math.max(1, Math.floor(expiresSeconds));
+}
+
 function toSafeLocalPathSegments(relativeObjectKey: string) {
   const normalized = normalizeOssObjectKey(relativeObjectKey);
   const segments = normalized.split('/').filter(Boolean);
@@ -372,6 +415,10 @@ function isPublicAcl(acl: OssBucketAcl | undefined) {
 function isBucketNotEmptyError(err: unknown) {
   const text = `${String((err as { code?: unknown })?.code || '')} ${String((err as { message?: unknown })?.message || '')}`.toLowerCase();
   return text.includes('bucketnotempty') || (text.includes('bucket') && text.includes('not empty'));
+}
+
+function isEventuallyConsistentOssError(err: unknown) {
+  return isTransientError(err) || isNotFoundError(err);
 }
 
 function isDomainVerificationRequiredError(err: unknown) {
@@ -807,6 +854,45 @@ async function putOssObjectWithContentType(
   await client.execute(params, request, runtime);
 }
 
+async function putOssObjectContentInternal(
+  client: InstanceType<typeof OssClientCtor>,
+  runtime: $Util.RuntimeOptions,
+  bucket: string,
+  key: string,
+  content: Buffer,
+  contentType: string
+): Promise<OssPutObjectContentResult> {
+  const response = await withRetry(
+    () => client.putObjectWithOptions(
+      bucket,
+      key,
+      new $OSS.PutObjectRequest({
+        body: Readable.from(content)
+      }),
+      new $OSS.PutObjectHeaders({
+        commonHeaders: {
+          'content-type': contentType,
+          'content-length': String(content.length)
+        }
+      }),
+      runtime
+    ),
+    {
+      maxAttempts: 4,
+      baseDelayMs: 800,
+      shouldRetry: isEventuallyConsistentOssError
+    }
+  );
+
+  return {
+    bucket,
+    key,
+    contentLength: content.length,
+    contentType,
+    etag: getHeaderValue(response.headers, 'etag')
+  };
+}
+
 async function downloadOssObjectToFile(
   client: InstanceType<typeof OssClientCtor>,
   runtime: $Util.RuntimeOptions,
@@ -947,8 +1033,17 @@ export async function createOssBucket(bucketName: string, options: CreateOssBuck
   } catch (err: unknown) {
     if (isOssEmptyXmlResponseError(err)) {
       await assertBucketAccessible(client, bucket, runtime);
-    } else if (isConflictError(err)) {
-      await assertBucketAccessible(client, bucket, runtime);
+    } else if (isConflictError(err) || isOssBucketNameUnavailableError(err)) {
+      try {
+        await assertBucketAccessible(client, bucket, runtime);
+      } catch (infoErr: unknown) {
+        if (isNotFoundError(infoErr) || isOssEmptyXmlResponseError(infoErr)) {
+          const tagged = new Error(`OSS Bucket 名称不可用: ${bucket}（可能被其他账号占用，或刚删除尚未释放）`) as Error & { code?: string };
+          tagged.code = 'OssBucketNameUnavailable';
+          throw tagged;
+        }
+        throw infoErr;
+      }
       if (!options.allowExisting) {
         throw new Error(`OSS Bucket 已存在: ${bucket}`);
       }
@@ -960,19 +1055,40 @@ export async function createOssBucket(bucketName: string, options: CreateOssBuck
 
   if (options.allowExisting || created) {
     if (acl !== 'private' || options.allowPublicAclBlockedFallback) {
-      await setOssBucketAclInternal(client, runtime, bucket, acl, {
-        allowPublicAclBlockedFallback: options.allowPublicAclBlockedFallback
-      });
+      await withRetry(
+        () => setOssBucketAclInternal(client, runtime, bucket, acl, {
+          allowPublicAclBlockedFallback: options.allowPublicAclBlockedFallback
+        }),
+        {
+          maxAttempts: 5,
+          baseDelayMs: 800,
+          shouldRetry: isEventuallyConsistentOssError
+        }
+      );
     }
     if (publicAccessBlock !== undefined) {
-      await setOssBucketPublicAccessBlockInternal(client, runtime, bucket, publicAccessBlock);
+      await withRetry(
+        () => setOssBucketPublicAccessBlockInternal(client, runtime, bucket, publicAccessBlock),
+        {
+          maxAttempts: 5,
+          baseDelayMs: 800,
+          shouldRetry: isEventuallyConsistentOssError
+        }
+      );
     }
   }
 
   return {
     bucket,
     created,
-    info: await getOssBucketInfo(bucket)
+    info: await withRetry(
+      () => getOssBucketInfo(bucket),
+      {
+        maxAttempts: 5,
+        baseDelayMs: 800,
+        shouldRetry: isEventuallyConsistentOssError
+      }
+    )
   };
 }
 
@@ -1280,6 +1396,49 @@ export async function downloadOssObject(bucketName: string, objectKey: string, f
   const normalizedFilePath = filePath.trim();
   if (!normalizedFilePath) throw new Error('本地文件路径不能为空');
   return downloadOssObjectToFile(client, runtime, bucket, key, normalizedFilePath);
+}
+
+export async function uploadOssObjectContent(
+  bucketName: string,
+  objectKey: string,
+  content: Buffer | string,
+  options: { contentType?: string } = {}
+): Promise<OssPutObjectContentResult> {
+  const { client, runtime } = createOssClient();
+  const bucket = normalizeBucketName(bucketName);
+  const key = normalizeOssObjectKey(objectKey);
+  const buffer = Buffer.isBuffer(content) ? content : Buffer.from(content);
+  const contentType = options.contentType?.trim() || DEFAULT_OSS_CONTENT_TYPE;
+  return putOssObjectContentInternal(client, runtime, bucket, key, buffer, contentType);
+}
+
+export function createSignedOssGetUrl(
+  bucketName: string,
+  objectKey: string,
+  expiresSeconds: number
+): OssSignedGetUrlResult {
+  const { auth } = createOssClient();
+  const bucket = normalizeBucketName(bucketName);
+  const key = normalizeOssObjectKey(objectKey);
+  const safeExpiresSeconds = normalizeSignedUrlExpirySeconds(expiresSeconds);
+  const expiresUnix = Math.floor(Date.now() / 1000) + safeExpiresSeconds;
+  const canonicalResource = `/${bucket}/${key}`;
+  const signature = createHmac('sha1', auth.sk)
+    .update(`GET\n\n\n${expiresUnix}\n${canonicalResource}`, 'utf8')
+    .digest('base64');
+  const pathname = key.split('/').map((segment) => encodeURIComponent(segment)).join('/');
+  const query = new URLSearchParams({
+    OSSAccessKeyId: auth.ak,
+    Expires: String(expiresUnix),
+    Signature: signature
+  });
+
+  return {
+    bucket,
+    key,
+    url: `https://${bucket}.oss-${auth.region}.aliyuncs.com/${pathname}?${query.toString()}`,
+    expiresAt: new Date(expiresUnix * 1000).toISOString()
+  };
 }
 
 export async function deleteOssObject(bucketName: string, objectKey: string): Promise<OssDeleteObjectResult> {

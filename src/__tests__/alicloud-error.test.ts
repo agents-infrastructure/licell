@@ -45,6 +45,9 @@ describe('alicloud-error unified error classification', () => {
     it('detects EntityNotExist code', () => {
       expect(isNotFoundError(makeError('EntityNotExist.User', ''))).toBe(true);
     });
+    it('detects OSS NoSuchBucket code', () => {
+      expect(isNotFoundError(makeError('NoSuchBucket', 'The specified bucket does not exist.'))).toBe(true);
+    });
     it('detects 404 in message', () => {
       expect(isNotFoundError(makeError('', 'HTTP 404'))).toBe(true);
     });

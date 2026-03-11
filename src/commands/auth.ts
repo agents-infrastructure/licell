@@ -2,10 +2,11 @@ import type { CAC } from 'cac';
 import { defineCommandModule, commandInvocation, defineCliCommand, registerCliCommand } from './module';
 import { text, password, confirm, isCancel } from '@clack/prompts';
 import pc from 'picocolors';
+import { createHash } from 'crypto';
 import { Config, DEFAULT_ALI_REGION } from '../utils/config';
 import { readEnvWithFallback } from '../utils/env';
 import { bootstrapLicellRamAccess } from '../providers/ram';
-import { runAuthRepairFlow } from '../utils/auth-recovery';
+import { executeWithAuthRecovery, runAuthRepairFlow } from '../utils/auth-recovery';
 import {
   toPromptValue,
   isInteractiveTTY,
@@ -15,7 +16,22 @@ import {
   showIntro,
   showOutro
 } from '../utils/cli-shared';
+import { createOssBucket, createSignedOssGetUrl, isOssBucketNameUnavailableError, uploadOssObjectContent } from '../providers/oss';
 import { emitCliError, emitCliEvent, emitCliResult, isJsonOutput } from '../utils/output';
+import {
+  buildAuthTransferBucketName,
+  buildAuthTransferBucketCandidates,
+  buildAuthTransferObjectKey,
+  collectAuthTransferSnapshot,
+  createEncryptedAuthTransferBundle,
+  decodeAuthTransferBundle,
+  decodeAuthTransferToken,
+  encodeAuthTransferToken,
+  getConfiguredAuthTransferBucket,
+  hasExistingAuthTransferTargets,
+  restoreAuthTransferArchive,
+  setConfiguredAuthTransferBucket
+} from '../utils/auth-transfer';
 import { SETUP_SECTION } from './sections';
 
 const loginCommand = defineCliCommand({
@@ -45,6 +61,67 @@ const authRepairCommand = defineCliCommand({
   ]
 });
 
+const authExportCommand = defineCliCommand({
+  rawName: 'auth export [passkey]',
+  description: '加密打包当前 licell 全局凭证状态到私有 OSS，并生成 restore token',
+  options: [
+    { rawName: '--bucket <bucket>', description: '指定导出到哪个 OSS Bucket；默认按账号+region 推导并自动创建' },
+    { rawName: '--expires-hours <hours>', description: 'restore token 内签名下载链接的有效小时数，默认 168' }
+  ],
+  descriptor: {
+    safety: {
+      level: 'mutating',
+      reason: '会读取本机 ~/.licell-cli 凭证状态，加密后上传到私有 OSS Bucket。'
+    },
+    summary: '把当前机器的 licell 全局登录状态加密备份到私有 OSS，并返回一条可跨机器 restore 的 token。',
+    examples: [
+      'licell auth export',
+      'licell auth export my-passphrase-123',
+      'licell auth export --expires-hours 72 --output json'
+    ],
+    optionInsights: {
+      '--bucket': {
+        whenToUse: '需要把 auth bundle 上传到指定 Bucket，而不是默认的账号级 auth Bucket 时使用。',
+        cautions: ['目标 Bucket 需要属于当前账号且允许 PutObject。']
+      },
+      '--expires-hours': {
+        whenToUse: '需要控制 restore token 内签名下载链接的有效时间时使用。',
+        cautions: ['超时后 token 将无法直接 restore，但 OSS 对象仍保留在 Bucket 中。']
+      }
+    },
+    notes: [
+      '默认会一起打包 ~/.licell-cli/auth.json、~/.licell-cli/config.json、~/.licell-cli/acme/ 下的文件。',
+      'OSS 对象默认放在 private + public-access-block=on 的 Bucket 中，restore 通过时效性签名 URL 拉取。',
+      'restore token 不包含明文 AK/SK；真正敏感内容在对象内，需 passkey 才能解密。'
+    ]
+  }
+});
+
+const authRestoreCommand = defineCliCommand({
+  rawName: 'auth restore <token> [passkey]',
+  description: '使用 restore token + passkey 一键恢复 licell 全局凭证状态',
+  options: [
+    { rawName: '--yes', description: '检测到本地已有 ~/.licell-cli 文件时，跳过二次确认并直接覆盖' }
+  ],
+  descriptor: {
+    safety: {
+      level: 'mutating',
+      reason: '会把解密后的全局凭证状态写回 ~/.licell-cli/。',
+      confirmFlags: ['--yes']
+    },
+    summary: '通过 token 下载加密 bundle，并恢复 ~/.licell-cli 下的 auth/config/acme 状态。',
+    examples: [
+      'licell auth restore licell-auth-v1.<token>',
+      'licell auth restore licell-auth-v1.<token> my-passphrase-123',
+      'licell auth restore licell-auth-v1.<token> --yes'
+    ],
+    notes: [
+      'restore 不依赖当前机器已登录；它通过 token 内的时效性签名 URL 从 OSS 拉取 bundle。',
+      '如果本地已存在 ~/.licell-cli/auth.json / config.json / acme 文件，默认会先确认再覆盖。'
+    ]
+  }
+});
+
 const logoutCommand = defineCliCommand({
   rawName: 'logout',
   description: '清除本地凭证'
@@ -62,6 +139,108 @@ const switchCommand = defineCliCommand({
     { rawName: '--region <region>', description: '目标 region（如 cn-hangzhou）' }
   ]
 });
+
+function parsePositiveHours(value: unknown, fallbackHours: number) {
+  const normalized = toOptionalString(value);
+  if (!normalized) return fallbackHours;
+  const parsed = Number(normalized);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error('--expires-hours 必须是大于 0 的数字');
+  }
+  return parsed;
+}
+
+async function resolvePasskey(
+  rawPasskey: unknown,
+  options: {
+    interactiveTTY: boolean;
+    prompt: string;
+    confirmPrompt?: string;
+  }
+) {
+  const provided = toOptionalString(rawPasskey);
+  if (provided) {
+    if (provided.trim().length < 12) throw new Error('passkey 长度至少需要 12 个字符');
+    return provided.trim();
+  }
+  if (!options.interactiveTTY) {
+    throw new Error('非交互模式下需要显式传入 passkey');
+  }
+  const first = toPromptValue(await password({ message: options.prompt }), 'passkey').trim();
+  if (first.length < 12) throw new Error('passkey 长度至少需要 12 个字符');
+  if (!options.confirmPrompt) return first;
+  const second = toPromptValue(await password({ message: options.confirmPrompt }), 'passkey 确认').trim();
+  if (first !== second) throw new Error('两次输入的 passkey 不一致');
+  return first;
+}
+
+async function downloadSignedAuthBundle(url: string, expectedSha256: string) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 30_000);
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      redirect: 'follow',
+      signal: controller.signal
+    });
+    if (!response.ok) {
+      throw new Error(`下载 auth bundle 失败: HTTP ${response.status}`);
+    }
+    const content = Buffer.from(await response.arrayBuffer());
+    const actualSha256 = createHash('sha256').update(content).digest('hex');
+    if (actualSha256 !== expectedSha256) {
+      throw new Error(`auth bundle 校验失败: expected=${expectedSha256}, actual=${actualSha256}`);
+    }
+    return content;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function ensureAuthTransferBucket(options: { accountId: string; region: string; requestedBucket?: string }) {
+  const requestedBucket = toOptionalString(options.requestedBucket)?.toLowerCase();
+  const globalConfig = Config.getGlobalConfig();
+  const configuredBucket = requestedBucket
+    ? undefined
+    : getConfiguredAuthTransferBucket(globalConfig.authTransferBuckets, options.accountId, options.region);
+  const candidates = requestedBucket
+    ? [requestedBucket]
+    : Array.from(new Set([
+      ...(configuredBucket ? [configuredBucket] : []),
+      ...buildAuthTransferBucketCandidates(options.accountId, options.region)
+    ]));
+
+  let lastError: unknown;
+  for (const candidate of candidates) {
+    try {
+      const bucketResult = await createOssBucket(candidate, {
+        acl: 'private',
+        allowExisting: true,
+        publicAccessBlock: true
+      });
+      if (!requestedBucket) {
+        const nextRegistry = setConfiguredAuthTransferBucket(
+          globalConfig.authTransferBuckets,
+          options.accountId,
+          options.region,
+          candidate
+        );
+        Config.setGlobalConfig({ authTransferBuckets: nextRegistry });
+      }
+      return {
+        bucket: candidate,
+        bucketResult
+      };
+    } catch (err: unknown) {
+      if (requestedBucket || !isOssBucketNameUnavailableError(err)) {
+        throw err;
+      }
+      lastError = err;
+    }
+  }
+
+  throw lastError || new Error(`无法为当前账号分配可用的 auth transfer bucket (${options.accountId}, ${options.region})`);
+}
 
 export async function runInteractiveLogin(options: { accountId?: unknown; ak?: unknown; sk?: unknown; region?: unknown; bootstrapRam?: unknown; bootstrapUser?: unknown; bootstrapPolicy?: unknown } = {}) {
   const interactiveTTY = isInteractiveTTY();
@@ -227,6 +406,148 @@ export function registerAuthCommands(cli: CAC) {
       }
     });
 
+  registerCliCommand(cli, authExportCommand)
+    .action(async (passkey: unknown, options: { bucket?: unknown; expiresHours?: unknown }) => {
+      const interactiveTTY = isInteractiveTTY();
+      const run = async () => {
+        const auth = Config.requireAuth();
+        const resolvedPasskey = await resolvePasskey(passkey, {
+          interactiveTTY,
+          prompt: '输入导出 passkey（至少 12 位）:',
+          confirmPrompt: '再次输入 passkey 确认:'
+        });
+        const snapshot = collectAuthTransferSnapshot();
+        const bundle = createEncryptedAuthTransferBundle(resolvedPasskey, snapshot);
+        const expiresHours = parsePositiveHours(options.expiresHours, 168);
+        const objectKey = buildAuthTransferObjectKey();
+
+        const { bucket, bucketResult } = await ensureAuthTransferBucket({
+          accountId: auth.accountId,
+          region: auth.region,
+          requestedBucket: toOptionalString(options.bucket) || undefined
+        });
+        await uploadOssObjectContent(bucket, objectKey, bundle.content, {
+          contentType: 'application/vnd.licell.auth-bundle+json'
+        });
+        const signedGet = createSignedOssGetUrl(bucket, objectKey, Math.ceil(expiresHours * 3600));
+        const token = encodeAuthTransferToken({
+          schemaVersion: '1.0',
+          kind: 'licell-auth-restore',
+          bucket,
+          key: objectKey,
+          region: auth.region,
+          signedGetUrl: signedGet.url,
+          expiresAt: signedGet.expiresAt,
+          objectSha256: bundle.sha256,
+          createdAt: new Date().toISOString()
+        });
+        const restoreCommand = `licell auth restore '${token}' '<passkey>'`;
+        const revokeCommand = `licell oss object rm ${bucket} ${objectKey} --yes`;
+
+        if (isJsonOutput()) {
+          emitCliResult({
+            stage: 'auth.export',
+            action: 'export',
+            bucket,
+            key: objectKey,
+            bucketCreated: bucketResult.created,
+            expiresAt: signedGet.expiresAt,
+            fileCount: bundle.fileCount,
+            includes: {
+              auth: snapshot.includedAuth,
+              globalConfig: snapshot.includedGlobalConfig,
+              acmeFiles: snapshot.includedAcmeFiles
+            },
+            token,
+            restoreCommand,
+            revokeCommand
+          });
+        } else {
+          console.log(`\nbucket:          ${pc.cyan(bucket)}`);
+          console.log(`object:          ${pc.cyan(objectKey)}`);
+          console.log(`bucket created:  ${pc.cyan(bucketResult.created ? 'yes' : 'no')}`);
+          console.log(`expiresAt:       ${pc.cyan(signedGet.expiresAt)}`);
+          console.log(`files:           ${pc.cyan(String(bundle.fileCount))}`);
+          console.log(`\nrestore token:\n${pc.cyan(token)}\n`);
+          console.log(`restore:         ${pc.cyan(restoreCommand)}`);
+          console.log(`revoke:          ${pc.cyan(revokeCommand)}\n`);
+          showOutro('Done.');
+        }
+      };
+
+      if (!isJsonOutput()) {
+        showIntro(pc.bgBlue(pc.white(' ▲ Licell Auth Export ')));
+      } else {
+        emitCliEvent({ stage: 'auth.export', action: 'export', status: 'start' });
+      }
+      await executeWithAuthRecovery(
+        {
+          commandLabel: commandInvocation(authExportCommand),
+          interactiveTTY,
+          requiredCapabilities: ['oss']
+        },
+        run
+      );
+    });
+
+  registerCliCommand(cli, authRestoreCommand)
+    .action(async (token: string, passkey: unknown, options: { yes?: unknown }) => {
+      const interactiveTTY = isInteractiveTTY();
+      if (!isJsonOutput()) {
+        showIntro(pc.bgBlue(pc.white(' ▲ Licell Auth Restore ')));
+      } else {
+        emitCliEvent({ stage: 'auth.restore', action: 'restore', status: 'start' });
+      }
+
+      const payload = decodeAuthTransferToken(token);
+      if (new Date(payload.expiresAt).getTime() <= Date.now()) {
+        throw new Error(`restore token 已过期: ${payload.expiresAt}`);
+      }
+      const resolvedPasskey = await resolvePasskey(passkey, {
+        interactiveTTY,
+        prompt: '输入 restore passkey:'
+      });
+      const bundleContent = await downloadSignedAuthBundle(payload.signedGetUrl, payload.objectSha256);
+      const archive = decodeAuthTransferBundle(bundleContent, resolvedPasskey);
+      const existingTargets = hasExistingAuthTransferTargets(archive);
+
+      if (existingTargets.length > 0 && !Boolean(options.yes)) {
+        if (!interactiveTTY) {
+          throw new Error('检测到本机已存在 ~/.licell-cli 文件；非交互模式下请追加 --yes 允许覆盖');
+        }
+        const proceed = await confirm({
+          message: `检测到 ${existingTargets.length} 个已存在的 ~/.licell-cli 文件，是否覆盖恢复？`,
+          initialValue: false
+        });
+        if (isCancel(proceed)) process.exit(0);
+        if (!proceed) {
+          showOutro(pc.yellow('已取消恢复。'));
+          return;
+        }
+      }
+
+      const result = restoreAuthTransferArchive(archive);
+      if (isJsonOutput()) {
+        emitCliResult({
+          stage: 'auth.restore',
+          action: 'restore',
+          bucket: payload.bucket,
+          key: payload.key,
+          expiresAt: payload.expiresAt,
+          restoredFiles: result.restoredFiles,
+          overwrittenFiles: existingTargets.length,
+          targetDir: result.targetDir
+        });
+      } else {
+        console.log(`\nbucket:          ${pc.cyan(payload.bucket)}`);
+        console.log(`object:          ${pc.cyan(payload.key)}`);
+        console.log(`restored files:  ${pc.cyan(String(result.restoredFiles))}`);
+        console.log(`overwritten:     ${pc.cyan(String(existingTargets.length))}`);
+        console.log(`target dir:      ${pc.cyan(result.targetDir)}\n`);
+        showOutro(pc.green('✅ licell 全局凭证状态已恢复'));
+      }
+    });
+
   registerCliCommand(cli, logoutCommand)
     .action(() => {
       const existing = Config.getAuth();
@@ -330,9 +651,12 @@ export const authCommandModule = defineCommandModule({
   namespaces: {
     auth: {
       summary: '授权修复与凭证治理。',
-      notes: ['首次配置凭证通常使用 `licell login`；`licell auth repair` 用于补齐 RAM 权限。'],
-      examples: ['licell login', 'licell auth repair', 'licell whoami --output json']
+      notes: [
+        '首次配置凭证通常使用 `licell login`；`licell auth repair` 用于补齐 RAM 权限。',
+        '`licell auth export` / `licell auth restore` 可把当前 ~/.licell-cli 全局状态加密转移到另一台机器。'
+      ],
+      examples: ['licell login', 'licell auth repair', 'licell auth export', 'licell auth restore <token>']
     }
   },
-  commands: [loginCommand, authRepairCommand, logoutCommand, whoamiCommand, switchCommand]
+  commands: [loginCommand, authRepairCommand, authExportCommand, authRestoreCommand, logoutCommand, whoamiCommand, switchCommand]
 });

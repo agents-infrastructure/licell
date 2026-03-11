@@ -499,7 +499,9 @@ licell e2e cleanup <runId>
 | 命令 | 说明 | 关键选项 |
 |------|------|----------|
 | `licell login` | 配置阿里云凭证 | `--account-id`, `--ak`, `--sk` |
+| `licell auth export [passkey]` | 加密打包当前 licell 全局凭证状态到私有 OSS，并生成 restore token | `--bucket`, `--expires-hours` |
 | `licell auth repair` | 修复凭证权限（推荐：用超级 AK/SK 自动补齐 licell 最小权限并继续使用） | `--account-id`, `--ak`, `--sk` |
+| `licell auth restore <token> [passkey]` | 使用 restore token + passkey 一键恢复 licell 全局凭证状态 | `--yes` |
 | `licell logout` | 清除本地凭证 | — |
 | `licell whoami` | 查看当前登录身份 | — |
 | `licell switch` | 切换默认 region | `--region` |
