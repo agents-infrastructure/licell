@@ -55,14 +55,20 @@ describe('output utils', () => {
   it('builds structured missing-args input error record', () => {
     initOutputContext('json', ['node', 'src/cli.ts', 'dns', 'records', 'list']);
     const record = buildCliErrorRecord(new Error('missing required args for command `dns records list <domain>`')) as any;
+    expect(record.ok).toBe(false);
     expect(record.error.category).toBe('input');
     expect(record.error.code).toBe('CLI_MISSING_REQUIRED_ARGS');
     expect(record.remediation[0].commandTemplate).toBe('licell dns records list <domain>');
     expect(record.remediation[0].commandKey).toBe('dns records list');
     expect(record.remediation[0].priority).toBe('primary');
+    expect(record.nextCommands[0].commandTemplate).toBe('licell dns records list <domain>');
+    expect(record.nextCommands[0].commandKey).toBe('dns records list');
+    expect(record.nextCommands[0].intent).toBe('inspect');
+    expect(record.nextCommands[0].priority).toBe('primary');
     expect(record.nextActions[0].commandTemplate).toBe('licell dns records list <domain>');
     expect(record.nextActions[0].commandKey).toBe('dns records list');
     expect(record.nextActions[0].priority).toBe('primary');
+    expect(record.nextActions[0].source).toBe('error-remediation');
   });
 
   it('builds structured deploy precheck error with details', () => {
@@ -82,10 +88,48 @@ describe('output utils', () => {
     expect(record.details.entry).toBe('src/main.py');
     expect(record.remediation.some((tip: any) => tip.type === 'read_spec')).toBe(true);
     expect(record.remediation.some((tip: any) => tip.type === 'run_precheck')).toBe(true);
+    expect(record.nextCommands.map((command: any) => command.commandKey)).toEqual([
+      'deploy spec',
+      'deploy check'
+    ]);
     expect(record.nextActions.map((action: any) => action.commandKey)).toEqual([
       'deploy spec',
       'deploy check'
     ]);
+    expect(record.nextActions.every((action: any) => action.source === 'error-remediation')).toBe(true);
+  });
+
+  it('prefers login and restore guidance for missing auth state', () => {
+    initOutputContext('json', ['node', 'src/cli.ts', 'deploy']);
+    const record = buildCliErrorRecord(new Error('未登录，请先执行 `licell login`')) as any;
+
+    expect(record.error.category).toBe('auth');
+    expect(record.error.code).toBe('AUTH_MISSING_CREDENTIAL');
+    expect(record.nextCommands.map((command: any) => command.commandKey)).toEqual([
+      'login',
+      'auth restore'
+    ]);
+    expect(record.nextCommands.map((command: any) => command.intent)).toEqual([
+      'login',
+      'restore'
+    ]);
+    expect(record.nextActions.map((action: any) => action.commandTemplate)).toEqual([
+      'licell login',
+      'licell auth restore <token> [passkey]'
+    ]);
+  });
+
+  it('uses suggested command help for unknown-command parse errors', () => {
+    initOutputContext('json', ['node', 'src/cli.ts', 'deployy']);
+    const record = buildCliErrorRecord(new Error('未知命令: deployy'), {
+      stage: 'parse',
+      details: { command: 'deployy', suggestions: ['deploy', 'doctor'] }
+    }) as any;
+
+    expect(record.error.code).toBe('CLI_UNKNOWN_COMMAND');
+    expect(record.nextCommands[0].commandTemplate).toBe('licell deploy --help');
+    expect(record.nextActions[0].commandTemplate).toBe('licell deploy --help');
+    expect(record.nextActions[0].source).toBe('error-remediation');
   });
 
   it('extracts json records from mixed output', () => {

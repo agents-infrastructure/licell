@@ -8,6 +8,7 @@ import {
 } from './alicloud-error';
 import { formatErrorMessage } from './errors';
 import { inferCommandTaskPhaseFromText, type CommandTaskEntryPhase } from './command-tasks';
+import type { ResolvedCommandNextAction } from './command-next-actions';
 
 export type CliOutputMode = 'text' | 'json';
 export type CliErrorCategory =
@@ -34,6 +35,25 @@ export interface CliErrorRemediationItem {
   phase: CommandTaskEntryPhase;
   priority: 'primary' | 'secondary';
   order: number;
+}
+
+export type CliErrorCommandIntent =
+  | 'inspect'
+  | 'verify'
+  | 'login'
+  | 'restore'
+  | 'repair'
+  | 'configure'
+  | 'deploy'
+  | 'bind'
+  | 'release';
+
+export interface CliErrorNextCommand {
+  commandTemplate: string;
+  commandKey: string | null;
+  description: string | null;
+  intent: CliErrorCommandIntent;
+  priority: 'primary' | 'secondary';
 }
 
 interface OutputContext {
@@ -200,6 +220,15 @@ function extractErrorDetails(err: unknown) {
   return { ...err.details };
 }
 
+function extractErrorSuggestions(details?: Record<string, unknown>) {
+  if (!details) return [] as string[];
+  if (!Array.isArray(details.suggestions)) return [] as string[];
+  return details.suggestions
+    .filter((item): item is string => typeof item === 'string')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 function detectErrorCategory(message: string, err: unknown): CliErrorCategory {
   const lower = message.toLowerCase();
   const rawCode = extractErrorCode(err);
@@ -307,6 +336,18 @@ interface CliErrorGuidanceSeed {
   phase?: CommandTaskEntryPhase;
 }
 
+interface CliErrorGuidanceCommand {
+  title: string;
+  description: string;
+  commandTemplate: string;
+  commandKey: string | null;
+  commandDescription: string | null;
+  phase: CommandTaskEntryPhase;
+  intent: CliErrorCommandIntent;
+  priority: 'primary' | 'secondary';
+  order: number;
+}
+
 function inferErrorCommandKey(commandTemplate: string) {
   const trimmed = commandTemplate.trim();
   if (!trimmed.startsWith('licell ')) return null;
@@ -324,35 +365,102 @@ function inferErrorCommandKey(commandTemplate: string) {
   return commandTokens.length > 0 ? commandTokens.join(' ') : null;
 }
 
-function buildCliErrorNextActions(tips: CliErrorGuidanceSeed[]) {
-  return tips
-    .map((tip) => {
-      const commandTemplate = tip.commandTemplate.trim();
-      if (!commandTemplate) return null;
-      const commandKey = inferErrorCommandKey(commandTemplate);
-      return {
-        title: tip.title,
-        description: tip.reason,
-        commandTemplate,
-        commandKey,
-        commandDescription: null,
-        phase: tip.phase || inferCommandTaskPhaseFromText([commandKey, commandTemplate, tip.title, tip.reason].filter(Boolean).join(' ')) || 'general',
-        priority: 'secondary' as const,
-        order: 0
-      };
-    })
-    .filter((action): action is NonNullable<typeof action> => Boolean(action))
-    .map((action, index) => ({
-      ...action,
-      priority: index === 0 ? 'primary' as const : 'secondary' as const,
-      order: index + 1
-    }));
+function inferCliErrorCommandIntent(commandTemplate: string, commandKey: string | null): CliErrorCommandIntent {
+  const key = (commandKey || '').trim();
+  if (key === 'login') return 'login';
+  if (key === 'auth restore') return 'restore';
+  if (key === 'auth repair') return 'repair';
+  if (key === 'doctor' || key === 'deploy check') return 'verify';
+  if (
+    key === 'whoami'
+    || key === 'help'
+    || key.endsWith(' list')
+    || key.endsWith(' info')
+    || key === 'logs'
+    || key === 'deploy spec'
+    || key.startsWith('dns records list')
+  ) {
+    return 'inspect';
+  }
+  if (
+    key === 'init'
+    || key === 'switch'
+    || key.startsWith('config ')
+    || key.startsWith('env set')
+  ) {
+    return 'configure';
+  }
+  if (key.startsWith('domain ') || key.startsWith('fn domain ') || key.startsWith('oss domain ')) {
+    return 'bind';
+  }
+  if (key.startsWith('release ')) return 'release';
+  if (key === 'deploy' || key.startsWith('oss upload') || key.startsWith('oss sync up')) return 'deploy';
+  return commandTemplate.includes('doctor') ? 'verify' : 'inspect';
 }
 
-function buildCliErrorGuidance(message: string, category: CliErrorCategory, err: unknown) {
+function buildCliErrorGuidanceCommands(tips: CliErrorGuidanceSeed[]) {
+  const results: CliErrorGuidanceCommand[] = [];
+  const seen = new Set<string>();
+
+  for (const tip of tips) {
+    const commandTemplate = tip.commandTemplate.trim();
+    if (!commandTemplate) continue;
+    if (seen.has(commandTemplate)) continue;
+    seen.add(commandTemplate);
+
+    const commandKey = inferErrorCommandKey(commandTemplate);
+    const intent = inferCliErrorCommandIntent(commandTemplate, commandKey);
+    results.push({
+      title: tip.title,
+      description: tip.reason,
+      commandTemplate,
+      commandKey,
+      commandDescription: null,
+      phase: tip.phase || inferCommandTaskPhaseFromText([commandKey, commandTemplate, tip.title, tip.reason].filter(Boolean).join(' ')) || 'general',
+      intent,
+      priority: results.length === 0 ? 'primary' : 'secondary',
+      order: results.length + 1
+    });
+  }
+
+  return results;
+}
+
+function buildCliErrorNextCommands(items: CliErrorGuidanceCommand[]) {
+  return items.map((item) => ({
+    commandTemplate: item.commandTemplate,
+    commandKey: item.commandKey,
+    description: item.commandDescription,
+    intent: item.intent,
+    priority: item.priority
+  })) satisfies CliErrorNextCommand[];
+}
+
+function buildCliErrorNextActions(items: CliErrorGuidanceCommand[]) {
+  return items.map((item) => ({
+    title: item.title,
+    description: item.description,
+    commandTemplate: item.commandTemplate,
+    commandKey: item.commandKey,
+    commandDescription: item.commandDescription,
+    phase: item.phase,
+    priority: item.priority,
+    order: item.order,
+    source: 'error-remediation'
+  })) satisfies ResolvedCommandNextAction[];
+}
+
+function buildCliErrorGuidance(
+  message: string,
+  category: CliErrorCategory,
+  err: unknown,
+  details?: Record<string, unknown>
+) {
   const tips: CliErrorGuidanceSeed[] = [];
   const usage = parseMissingArgsUsage(message);
   const rawCode = extractErrorCode(err);
+  const lower = message.toLowerCase();
+  const suggestions = extractErrorSuggestions(details);
   if (usage) {
     tips.push({
       type: 'fix_input',
@@ -384,15 +492,53 @@ function buildCliErrorGuidance(message: string, category: CliErrorCategory, err:
     });
   }
   if (category === 'input' && !usage && rawCode !== 'DEPLOY_PRECHECK_FAILED') {
+    const isUnknownCommand = lower.includes('unknown command') || lower.includes('未知命令');
+    const helpTarget = isUnknownCommand
+      ? (suggestions[0] ? `licell ${suggestions[0]} --help` : 'licell --help')
+      : `licell ${outputContext.command} --help`.trim();
     tips.push({
       type: 'fix_input',
       title: '先看命令帮助',
       reason: 'invalid or missing CLI arguments',
-      commandTemplate: `licell ${outputContext.command} --help`.trim(),
+      commandTemplate: helpTarget,
       phase: 'inspect'
     });
   }
-  if (category === 'auth' || category === 'permission') {
+  if (category === 'auth') {
+    const missingCredential = lower.includes('未登录') || lower.includes('please login');
+    if (missingCredential || isAuthCredentialInvalidError(err)) {
+      tips.push({
+        type: 'login',
+        title: '重新登录',
+        reason: missingCredential ? 'no active credential' : 'credential is invalid or expired',
+        commandTemplate: 'licell login',
+        phase: 'mutate'
+      });
+      tips.push({
+        type: 'restore_auth',
+        title: '恢复团队授权包',
+        reason: 'reuse a team-issued restore token instead of re-entering credentials',
+        commandTemplate: 'licell auth restore <token> [passkey]',
+        phase: 'mutate'
+      });
+    } else {
+      tips.push({
+        type: 'repair_auth',
+        title: '修复授权状态',
+        reason: 'credentials missing/invalid or insufficient permissions',
+        commandTemplate: 'licell auth repair --account-id <id> --ak <super-ak> --sk <super-sk>',
+        phase: 'mutate'
+      });
+      tips.push({
+        type: 'login',
+        title: '重新登录',
+        reason: 'refresh the saved credential locally',
+        commandTemplate: 'licell login',
+        phase: 'mutate'
+      });
+    }
+  }
+  if (category === 'permission') {
     tips.push({
       type: 'repair_auth',
       title: '修复授权状态',
@@ -400,15 +546,6 @@ function buildCliErrorGuidance(message: string, category: CliErrorCategory, err:
       commandTemplate: 'licell auth repair --account-id <id> --ak <super-ak> --sk <super-sk>',
       phase: 'mutate'
     });
-    if (category === 'auth') {
-      tips.push({
-        type: 'login',
-        title: '重新登录',
-        reason: 'no active credential',
-        commandTemplate: 'licell login',
-        phase: 'mutate'
-      });
-    }
   }
   if (category === 'network') {
     tips.push({
@@ -420,7 +557,9 @@ function buildCliErrorGuidance(message: string, category: CliErrorCategory, err:
     });
   }
 
-  const nextActions = buildCliErrorNextActions(tips);
+  const commands = buildCliErrorGuidanceCommands(tips);
+  const nextCommands = buildCliErrorNextCommands(commands);
+  const nextActions = buildCliErrorNextActions(commands);
 
   const actionByCommandTemplate = new Map(nextActions.map((action) => [action.commandTemplate, action] as const));
   const remediation: CliErrorRemediationItem[] = tips.map((tip, index) => {
@@ -440,6 +579,7 @@ function buildCliErrorGuidance(message: string, category: CliErrorCategory, err:
 
   return {
     remediation,
+    nextCommands,
     nextActions
   };
 }
@@ -609,11 +749,13 @@ export function buildCliErrorRecord(
   const code = detectErrorCode(message, err, category);
   const provider = extractProviderContext(err);
   const retryable = category === 'network';
-  const guidance = buildCliErrorGuidance(message, category, err);
+  const contextDetails = context?.details && Object.keys(context.details).length > 0 ? context.details : undefined;
+  const guidance = buildCliErrorGuidance(message, category, err, contextDetails);
   const record: Record<string, unknown> = {
     kind: LICELL_CLI_RECORD_KIND,
     schemaVersion: LICELL_CLI_RECORD_SCHEMA_VERSION,
     type: 'error',
+    ok: false,
     ts: new Date().toISOString(),
     command: context?.command || outputContext.command,
     stage: context?.stage || 'runtime',
@@ -624,6 +766,7 @@ export function buildCliErrorRecord(
       retryable
     },
     remediation: guidance.remediation,
+    nextCommands: guidance.nextCommands,
     nextActions: guidance.nextActions
   };
   if (provider) record.provider = provider;
