@@ -2,6 +2,14 @@
 
 > 本文档由 licell 的共享 CLI / MCP 注册表自动生成；命令或工具变更会同步到 README / Skills / MCP / Shell Completion / 本页。
 
+## Schema Contracts
+
+- `licell <command> --help --output json`：读取 `help.kind` 与 `help.schemaVersion`；当前为 `licell-help@1.0`。
+- `licell_command_catalog`：读取 `kind` 与 `schemaVersion`；当前为 `licell-agent-command-catalog@1.0`。
+- `licell_command_catalog` 同时显式声明依赖的 help schema：`licell-help@1.0`。
+- 所有 MCP tools 的 `metadata.licell` 都会暴露 `schemas.help` 与 `schemas.commandCatalog`；当前分别为 `licell-help@1.0` / `licell-agent-command-catalog@1.0`。
+- Agent 侧做强约束解析时，先匹配 `kind`，再检查 `schemaVersion`；未知更高版本应走兼容分支或降级为文本解析。
+
 ## CLI 命令目录
 
 > 下表直接来自共享 CLI 注册表；生成 MCP Tool 名称也从同一份目录派生。

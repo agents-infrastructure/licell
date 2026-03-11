@@ -1,7 +1,8 @@
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
-import { buildCommandReferenceSections } from './command-reference';
+import { buildAgentCommandCatalog, buildCommandReferenceSections } from './command-reference';
 import { syncGeneratedSection, syncTextFile } from './generated-docs';
+import { LICELL_HELP_KIND, LICELL_HELP_SCHEMA_VERSION } from './help';
 import {
   README_UPGRADE_GUIDANCE_END,
   README_UPGRADE_GUIDANCE_START,
@@ -17,6 +18,7 @@ import {
   renderWorkflowDocGeneratedSection,
   syncWorkflowDocGeneratedSection
 } from './workflow-doc-sections';
+import { buildMcpToolCatalog } from '../mcp/tool-catalog';
 
 export {
   README_MCP_DOMAIN_WORKFLOWS_END,
@@ -61,8 +63,19 @@ export function renderReadmeMcpDomainWorkflows() {
 
 export function renderReadmeQuickReference() {
   const sections = buildCommandReferenceSections();
+  const commandCatalog = buildAgentCommandCatalog();
+  const mcpCatalog = buildMcpToolCatalog();
+  const sampleToolMetadata = mcpCatalog.tools.find((tool) => tool.metadata?.licell)?.metadata?.licell;
   const parts: string[] = [
     '> 本节由 licell CLI 注册表自动生成；命令变更会同步到 README / docs/reference/agent-surfaces.md / Skills / MCP / Shell Completion。',
+    '',
+    '### Agent Contract',
+    '',
+    `- \`licell <command> --help --output json\`：先读取 \`help.kind\` / \`help.schemaVersion\`；当前为 \`${LICELL_HELP_KIND}@${LICELL_HELP_SCHEMA_VERSION}\`。`,
+    `- \`licell_command_catalog\`：先读取 \`kind\` / \`schemaVersion\`；当前为 \`${commandCatalog.kind}@${commandCatalog.schemaVersion}\`。`,
+    sampleToolMetadata
+      ? `- MCP tools 的 \`metadata.licell\` 会显式声明 \`schemas.help\` / \`schemas.commandCatalog\`；当前为 \`${sampleToolMetadata.schemas.help.kind}@${sampleToolMetadata.schemas.help.schemaVersion}\` / \`${sampleToolMetadata.schemas.commandCatalog.kind}@${sampleToolMetadata.schemas.commandCatalog.schemaVersion}\`。`
+      : '- MCP tools 的 `metadata.licell` 会显式声明 `schemas.help` / `schemas.commandCatalog`。',
     '',
     '### 命令总览'
   ];

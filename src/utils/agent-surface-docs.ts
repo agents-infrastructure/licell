@@ -23,6 +23,26 @@ function summarizeToolInputs(tool: McpToolCatalogEntry) {
   return selected.length > 0 ? selected.map((name) => `\`${name}\``).join(', ') : '—';
 }
 
+function renderAgentContractBlock(options?: { headingLevel?: 2 | 3 }) {
+  const headingLevel = options?.headingLevel || 2;
+  const heading = `${'#'.repeat(headingLevel)} Schema Contracts`;
+  const commandCatalog = buildAgentCommandCatalog();
+  const mcpCatalog = buildMcpToolCatalog();
+  const sampleToolMetadata = mcpCatalog.tools.find((tool) => tool.metadata?.licell)?.metadata?.licell;
+
+  return [
+    heading,
+    '',
+    '- `licell <command> --help --output json`：读取 `help.kind` 与 `help.schemaVersion`；当前为 `licell-help@1.0`。',
+    `- \`licell_command_catalog\`：读取 \`kind\` 与 \`schemaVersion\`；当前为 \`${commandCatalog.kind}@${commandCatalog.schemaVersion}\`。`,
+    `- \`licell_command_catalog\` 同时显式声明依赖的 help schema：\`${commandCatalog.schemas.help.kind}@${commandCatalog.schemas.help.schemaVersion}\`。`,
+    sampleToolMetadata
+      ? `- 所有 MCP tools 的 \`metadata.licell\` 都会暴露 \`schemas.help\` 与 \`schemas.commandCatalog\`；当前分别为 \`${sampleToolMetadata.schemas.help.kind}@${sampleToolMetadata.schemas.help.schemaVersion}\` / \`${sampleToolMetadata.schemas.commandCatalog.kind}@${sampleToolMetadata.schemas.commandCatalog.schemaVersion}\`。`
+      : '- 所有 MCP tools 的 `metadata.licell` 都会暴露 `schemas.help` 与 `schemas.commandCatalog`。',
+    '- Agent 侧做强约束解析时，先匹配 `kind`，再检查 `schemaVersion`；未知更高版本应走兼容分支或降级为文本解析。'
+  ].join('\n');
+}
+
 function renderCommandSurfaceTable() {
   const sections = buildCommandReferenceSections();
   const agentCatalog = buildAgentCommandCatalog();
@@ -83,6 +103,8 @@ export function renderSkillMcpToolReference() {
     '',
     '以下 MCP Tool 清单由 licell MCP 注册表自动生成；新增或修改 tool 后，Skills / 文档 / MCP server 会同步反映。',
     '',
+    renderAgentContractBlock({ headingLevel: 3 }),
+    '',
     '### Builtin Tools',
     '',
     renderMcpToolTable(builtinTools),
@@ -109,6 +131,8 @@ export function renderAgentSurfaceReferenceDoc() {
     '# Agent Surface Reference',
     '',
     '> 本文档由 licell 的共享 CLI / MCP 注册表自动生成；命令或工具变更会同步到 README / Skills / MCP / Shell Completion / 本页。',
+    '',
+    renderAgentContractBlock(),
     '',
     renderCommandSurfaceTable(),
     '',

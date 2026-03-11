@@ -9,6 +9,9 @@ describe('renderSkillMcpToolReference', () => {
   it('renders builtin and curated MCP tool sections from shared registry', () => {
     const output = renderSkillMcpToolReference();
     expect(output).toContain('## MCP Tool Reference');
+    expect(output).toContain('### Schema Contracts');
+    expect(output).toContain('licell-help@1.0');
+    expect(output).toContain('licell-agent-command-catalog@1.0');
     expect(output).toContain('### Builtin Tools');
     expect(output).toContain('`licell_cli`');
     expect(output).toContain('### Curated Workflow Tools');
@@ -21,6 +24,8 @@ describe('renderAgentSurfaceReferenceDoc', () => {
   it('renders CLI, builtin MCP, curated MCP, and generated MCP sections', () => {
     const output = renderAgentSurfaceReferenceDoc();
     expect(output).toContain('# Agent Surface Reference');
+    expect(output).toContain('## Schema Contracts');
+    expect(output).toContain('先匹配 `kind`，再检查 `schemaVersion`');
     expect(output).toContain('## CLI 命令目录');
     expect(output).toContain('`licell_cli`');
     expect(output).toContain('`licell_fc_deploy_spec`');

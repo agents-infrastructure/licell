@@ -47,6 +47,8 @@ describe('syncReadmeQuickReferenceSection', () => {
     const output = syncReadmeQuickReferenceSection(input);
     expect(output).toContain(README_QUICK_REFERENCE_START);
     expect(output).toContain(README_QUICK_REFERENCE_END);
+    expect(output).toContain('### Agent Contract');
+    expect(output).toContain('licell-help@1.0');
     expect(output).toContain('### 命令总览');
     expect(output).not.toContain('old content');
     expect(output).toContain('workflow content');
@@ -134,6 +136,7 @@ describe('syncReadmeGeneratedSections', () => {
     expect(synced).toBe(readme);
     expect(readme).toContain(renderReadmeUpgradeGuidance().trim());
     expect(readme).toContain(renderReadmeQuickReference().trim());
+    expect(readme).toContain('### Agent Contract');
     expect(readme).toContain(renderReadmeMcpFcApiWorkflow().trim());
     expect(readme).toContain(renderReadmeMcpDomainWorkflows().trim());
   });

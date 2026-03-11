@@ -57,6 +57,8 @@ describe('getSkillFiles', () => {
     expect(file.content).toContain('`licell upgrade --dry-run`');
     expect(file.content).toContain('licell CLI 注册表自动生成');
     expect(file.content).toContain('## MCP Tool Reference');
+    expect(file.content).toContain('### Schema Contracts');
+    expect(file.content).toContain('licell-help@1.0');
     expect(file.content).toContain('`licell_cli`');
     expect(file.content).toContain('`licell_deploy`');
   });

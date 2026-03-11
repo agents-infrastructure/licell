@@ -548,6 +548,12 @@ licell e2e cleanup <runId>
 <!-- BEGIN GENERATED:README_QUICK_REFERENCE -->
 > 本节由 licell CLI 注册表自动生成；命令变更会同步到 README / docs/reference/agent-surfaces.md / Skills / MCP / Shell Completion。
 
+### Agent Contract
+
+- `licell <command> --help --output json`：先读取 `help.kind` / `help.schemaVersion`；当前为 `licell-help@1.0`。
+- `licell_command_catalog`：先读取 `kind` / `schemaVersion`；当前为 `licell-agent-command-catalog@1.0`。
+- MCP tools 的 `metadata.licell` 会显式声明 `schemas.help` / `schemas.commandCatalog`；当前为 `licell-help@1.0` / `licell-agent-command-catalog@1.0`。
+
 ### 命令总览
 
 #### Setup & Identity
