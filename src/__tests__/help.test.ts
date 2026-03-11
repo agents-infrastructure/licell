@@ -235,6 +235,8 @@ describe('help utils', () => {
     ]));
     expect(doc?.text).toContain('Structured Result:');
     expect(doc?.text).toContain('`healthy` · 是否不存在 error 级阻塞项。');
+    expect(doc?.text).toContain('`checks[].remediation[].type`');
+    expect(doc?.text).toContain('`checks[].nextCommands[].priority`');
     expect(doc?.text).toContain('Decision Guide:');
     expect(doc?.text).toContain('Inspect:');
   });

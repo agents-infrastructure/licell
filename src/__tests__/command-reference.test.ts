@@ -69,6 +69,8 @@ describe('buildAgentCommandCatalog', () => {
     expect(doctor?.summary).toContain('诊断本机登录态');
     expect(doctor?.options.some((option) => option.primaryFlag === '--runtime')).toBe(true);
     expect(doctor?.result?.outcomeKey).toBe('healthy');
+    expect(doctor?.result?.fields.some((field) => field.name === 'checks[].remediation[].type')).toBe(true);
+    expect(doctor?.result?.fields.some((field) => field.name === 'checks[].nextCommands[].priority')).toBe(true);
     expect(doctor?.generatedMcpToolName).toBe('licell_cmd_doctor');
 
     const domainAppBind = catalog.commands.find((command) => command.key === 'domain app bind');

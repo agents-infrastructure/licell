@@ -21,7 +21,8 @@ const doctorCommand = defineCliCommand({
     notes: [
       '默认包含云端只读探测，会检查身份、权限、deploy target 与域名入口一致性，但不会创建或修改任何云端资源。',
       '当前目录不是 licell 项目时，项目相关检查会以 warn/skip 呈现。',
-      '如果只想排查本地文件与入口契约，可追加 `--offline`。'
+      '如果只想排查本地文件与入口契约，可追加 `--offline`。',
+      '`checks[].remediation[]` 与 `checks[].nextCommands[]` 都是稳定的结构化 guidance，可直接供 Agent / 自动化消费。'
     ],
     examples: [
       'licell doctor',
@@ -63,10 +64,13 @@ const doctorCommand = defineCliCommand({
     automation: {
       preferredOutput: 'json',
       explicitInputs: ['--runtime', '--entry', '--docker-daemon', '--offline'],
-      notes: ['Agent / 脚本应优先使用 `--output json`，读取 `healthy`、统计字段与 `checks[]`。']
+      notes: [
+        'Agent / 脚本应优先使用 `--output json`，读取 `healthy`、统计字段与 `checks[]`。',
+        '阻塞项优先读取 `checks[].nextCommands[]` 的 `priority=primary` 项；`remediation[]` 用于解释原因和修复语义。'
+      ]
     },
     result: {
-      summary: '返回本机诊断汇总、计数和逐项检查结果。',
+      summary: '返回本机诊断汇总、计数和逐项检查结果；每个检查项都附带结构化修复建议与后续命令。',
       outcomeKey: 'healthy',
       fields: [
         { name: 'stage', description: '固定为 `doctor`。', required: true },
@@ -77,7 +81,22 @@ const doctorCommand = defineCliCommand({
         { name: 'errorCount', description: 'error 检查项数量。', required: true },
         { name: 'skipCount', description: 'skip 检查项数量。', required: true },
         { name: 'context', description: '当前 cwd、命中的配置文件路径，以及本次解析出的 runtime/entry/offline。', required: true },
-        { name: 'checks', description: '逐项诊断结果；`remediation[]` 为结构化修复建议，`nextCommands[]` 为结构化后续命令提示。', required: true }
+        { name: 'checks', description: '逐项诊断结果数组。', required: true },
+        { name: 'checks[].id', description: '稳定的检查项标识，例如 `auth.credentials`、`deploy.precheck`、`domain.consistency`。', required: true },
+        { name: 'checks[].status', description: '检查项状态：`ok` / `warn` / `error` / `skip`。', required: true },
+        { name: 'checks[].summary', description: '面向人类的简短诊断结论。', required: true },
+        { name: 'checks[].details[]', description: '可直接展示的补充细节。', required: true },
+        { name: 'checks[].remediation[]', description: '结构化修复建议数组；既可给人看，也可给 Agent 解释修复意图。', required: true },
+        { name: 'checks[].remediation[].type', description: '`note` 或 `command`；`command` 表示该修复建议本身就是一条可执行命令。', required: true },
+        { name: 'checks[].remediation[].text', description: '修复建议的人类可读文案。', required: true },
+        { name: 'checks[].remediation[].commandTemplate', description: '若该建议关联命令，则提供可直接展示/填参的命令模板。', required: false },
+        { name: 'checks[].remediation[].commandKey', description: '若能匹配到 CLI 注册表，则给出稳定 command key。', required: false },
+        { name: 'checks[].remediation[].intent', description: '建议命令的语义意图，如 `repair` / `verify` / `deploy` / `bind`。', required: false },
+        { name: 'checks[].nextCommands[]', description: '结构化后续命令提示数组；通常按优先级给出下一步。', required: true },
+        { name: 'checks[].nextCommands[].commandTemplate', description: '建议执行的命令模板。', required: true },
+        { name: 'checks[].nextCommands[].commandKey', description: '若能匹配到 CLI 注册表，则给出稳定 command key。', required: false },
+        { name: 'checks[].nextCommands[].intent', description: '命令的语义意图，如 `inspect` / `verify` / `repair` / `deploy`。', required: true },
+        { name: 'checks[].nextCommands[].priority', description: '`primary` 为首选下一步，`secondary` 为补充路径。', required: true }
       ]
     },
     related: ['login', 'init', 'deploy check', 'deploy spec']
