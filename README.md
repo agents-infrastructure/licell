@@ -2,7 +2,7 @@
 
 [English README](./README.en.md)
 
-Licell 是一个面向阿里云、同时面向 AI Agent 的部署与运维 CLI。
+Licell 是一个面向阿里云的部署与运维 CLI，同时兼顾人类用户与 AI Agent。
 
 它不是把一堆云资源命令简单堆在一起，而是围绕一条主线工作流来设计：
 
@@ -11,7 +11,7 @@ Licell 是一个面向阿里云、同时面向 AI Agent 的部署与运维 CLI�
 - 一套可组合的资源原子命令：`fn` / `oss` / `dns` / `domain`
 - 一套面向 Agent 的统一表面：`--help` / `--output json` / `mcp` / `skills`
 
-默认地域为 `cn-hangzhou`。用于 Agent 自动化时，建议使用独立测试账号或独立地域，不要直接共用生产环境。
+默认地域为 `cn-hangzhou`。用于 Agent 自动化时，建议使用独立测试账号或独立地域，不要直接共用生产环境。团队协作下，推荐采用后文的“团队授权分发”模式。
 
 ---
 
@@ -157,7 +157,7 @@ Licell 有三类核心状态：
 
 ## 团队授权分发（推荐）
 
-如果你的团队里只有少数人应该直接接触高权限 AK/SK，推荐把 `licell login` 和日常使用拆开：
+如果你的团队里只有少数人应该直接持有高权限 AK/SK，推荐把“授权”和“使用”拆开：
 
 - SRE / 平台团队在受控机器上执行一次 `licell login`
 - 然后执行 `licell auth export <passkey>`
@@ -178,17 +178,17 @@ licell auth restore 'licell-auth-v1....' 'Team-Shared-Passkey' --yes
 
 这套流程适合：
 
-- 团队内部快速分发已授权的 `licell` 使用环境
-- 给低优先级权限成员提供受控使用能力
-- 给临时机器、CI 调试机、外包协作机快速恢复环境
+- 团队内部批量分发已授权的 `licell` 使用环境
+- 让不直接持有高权限凭证的成员快速开始使用
+- 给临时机器、CI 调试机、协作设备快速恢复环境
 
-安全约束：
+使用与安全建议：
 
-- 导出的真实敏感内容仍然在加密 bundle 里，不在 restore token 明文中
-- bundle 会上传到私有 OSS Bucket，restore 依赖带时效的签名下载链接
+- `token` 和 `passkey` 应分开发送，不要放在同一条消息里
+- `restore token` 虽然不是明文凭证，但仍应按敏感信息处理
 - `passkey` 至少 12 位，建议通过密码管理器或单独 IM 通道发送
-- 若需要失效某次分发，可删除导出对象；`auth export` 输出里会给出对应的 revoke 命令
-- 若团队凭证轮换，应重新 `login` / `auth export`，不要继续分发旧 token
+- 若需要失效某次分发，可删除对应导出对象，或重新导出新的 token
+- 若团队凭证轮换，应重新执行 `login` / `auth export`，不要继续分发旧 token
 
 ---
 

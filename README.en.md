@@ -2,7 +2,7 @@
 
 [中文 README](./README.md)
 
-Licell is an Alibaba Cloud deployment and operations CLI designed for both humans and AI agents.
+Licell is an Alibaba Cloud CLI for deployment and operations, designed for both humans and AI agents.
 
 It is not just a bag of cloud commands. It is organized around one primary delivery flow:
 
@@ -11,7 +11,7 @@ It is not just a bag of cloud commands. It is organized around one primary deliv
 - one set of atomic resource commands: `fn` / `oss` / `dns` / `domain`
 - one agent-facing surface: `--help` / `--output json` / `mcp` / `skills`
 
-Default region is `cn-hangzhou`. For agent automation, it is strongly recommended to use a dedicated test account or isolated region instead of sharing a production environment directly.
+Default region is `cn-hangzhou`. For agent automation, use a dedicated test account or isolated region instead of sharing a production environment directly. For team sharing, use the team auth distribution workflow described below.
 
 ---
 
@@ -148,6 +148,41 @@ Compatibility notes:
 
 - Licell still supports some legacy `~/.ali-cli/*` paths
 - current canonical global path is `~/.licell-cli/*`
+
+## Team Auth Distribution
+
+If only a small set of people in your team should directly hold high-privilege AK/SK credentials, split “authorization” from “daily usage”:
+
+- the SRE or platform team runs `licell login` on a controlled machine
+- then runs `licell auth export <passkey>`
+- shares the restore token with other team members
+- sends the `passkey` through a separate channel
+- other machines run `licell auth restore <token> <passkey>` without doing `login` again
+
+Example:
+
+```bash
+# SRE machine
+licell login --region cn-hangzhou
+licell auth export 'Team-Shared-Passkey'
+
+# team member machine
+licell auth restore 'licell-auth-v1....' 'Team-Shared-Passkey' --yes
+```
+
+This workflow is useful for:
+
+- distributing a ready-to-use Licell environment across a team
+- enabling contributors who should not directly hold high-privilege credentials
+- restoring the same environment on temporary machines, CI debug hosts, or collaboration devices
+
+Usage and security guidance:
+
+- send the `token` and `passkey` separately
+- treat the `restore token` as sensitive, even though it is not a plain-text credential
+- use a passkey with at least 12 characters
+- if a shared bundle should no longer be usable, delete the exported object or create a new export
+- after credential rotation, run `login` and `auth export` again instead of reusing older tokens
 
 ---
 
