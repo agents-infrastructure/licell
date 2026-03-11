@@ -128,10 +128,13 @@ function buildSafetyHint(safety?: CommandSafetyMetadata) {
 
 function buildStructuredResultHint(result?: AgentCommandResult) {
   if (!result) return '';
+  const resultFieldNames = result.fieldTree.length > 0
+    ? result.fieldTree.map((field) => field.name)
+    : result.fields.map((field) => field.name);
   const fieldNames = unique([
     'stage',
     ...(result.outcomeKey ? [result.outcomeKey] : []),
-    ...result.fields.map((field) => field.name)
+    ...resultFieldNames
   ]);
   const summary = result.summary ? ` ${result.summary}` : '';
   return `Structured JSON result:${summary} Key fields: ${fieldNames.join(', ')}.`;
