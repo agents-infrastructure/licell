@@ -99,14 +99,41 @@ licell
 
 Running bare `licell` is the quickest way to enter the first-run flow.
 
-### Other installation sources
+### Next step after install: finish auth first
 
-You can also use:
+For most users, the next important step is not the install source. It is getting auth working.
 
-- npm installation, if you already manage CLI tools in a Node environment
-- GitHub Release standalone artifacts, if you want pinned binary distribution
+If you hold your own AK/SK credentials:
 
-Upgrade behavior depends on how Licell was installed.
+```bash
+licell login --bootstrap-ram
+```
+
+If your team distributes shared auth from SRE or the platform team:
+
+```bash
+licell auth restore '<token>' '<passkey>' --yes
+```
+
+For team usage, see the [Team Auth Distribution](#team-auth-distribution) section below.
+
+### Other install sources and upgrades
+
+- npm global install and GitHub Release binaries are also supported
+- for upgrades, run `licell upgrade`
+- only read the detailed upgrade rules below if you actually need them
+
+<details>
+<summary>Detailed install and upgrade behavior</summary>
+
+- `licell upgrade` follows the current installation source by default
+- if Licell was installed globally with `npm` / `pnpm` / `yarn` / `bun`, it will reuse that package manager for upgrade
+- if Licell is running from project-local dependencies, `node_modules/.bin/licell`, or a dev-linked checkout, it will not do a global self-upgrade by default
+- the install script and standalone binaries come from the same `releases/latest` source; Licell prefers prebuilt single-file executables and falls back to source installation when needed
+- passing `--repo` or `--script-url` forces the GitHub Release upgrade path
+- use `licell upgrade --dry-run` when you need to inspect the exact plan first
+
+</details>
 
 ---
 

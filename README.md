@@ -97,13 +97,34 @@ curl -fsSL https://github.com/agents-infrastructure/licell/releases/latest/downl
 licell
 ```
 
-裸执行 `licell` 会进入更适合新手和 Agent 环境初始化的引导流程。
+裸执行 `licell` 会进入适合新手和 Agent 的首次引导流程。
 
-### 也可以从 npm / release artifact 使用
+### 安装后下一步：先完成授权
 
-- npm 安装适合已有 Node 工具链环境
-- GitHub Release 中的 standalone artifact 适合固定版本分发
-- 不同安装来源，升级策略不同；下面的“安装与升级”区块会自动同步最新说明
+大多数用户安装后真正要做的不是研究安装来源，而是先把授权跑通。
+
+如果你自己持有 AK/SK：
+
+```bash
+licell login --bootstrap-ram
+```
+
+如果你是团队成员，由 SRE / 平台团队统一分发授权：
+
+```bash
+licell auth restore '<token>' '<passkey>' --yes
+```
+
+团队协作场景，优先看下方的[团队授权分发（推荐）](#团队授权分发推荐)。
+
+### 其他安装方式与升级
+
+- 也支持 npm 全局安装和 GitHub Release 二进制分发
+- 升级时直接运行 `licell upgrade`
+- 如果你关心具体升级来源或升级渠道，再看下面这份说明
+
+<details>
+<summary>安装与升级的详细说明</summary>
 
 <!-- BEGIN GENERATED:README_UPGRADE_GUIDANCE -->
 - `licell upgrade` 会优先按“当前正在执行的安装来源”升级
@@ -113,6 +134,8 @@ licell
 - 如显式传入 `--repo` 或 `--script-url`，则强制走 GitHub release 升级渠道
 - 可通过 `--channel auto|release|npm|pnpm|yarn|bun` 显式覆盖升级渠道；推荐先用 `licell upgrade --dry-run` 预览计划
 <!-- END GENERATED:README_UPGRADE_GUIDANCE -->
+
+</details>
 
 ---
 
