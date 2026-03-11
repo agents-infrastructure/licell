@@ -163,6 +163,20 @@ describe('probeDoctorDomainConsistency', () => {
 
     expect(result.status).toBe('error');
     expect(result.details.join('\n')).toContain('missing alias: prod');
+    expect(result.nextActions).toEqual([
+      expect.objectContaining({
+        commandTemplate: 'licell domain app bind <domain>',
+        phase: 'mutate',
+        priority: 'primary',
+        source: 'doctor-next-command'
+      }),
+      expect.objectContaining({
+        commandTemplate: 'licell doctor',
+        phase: 'verify',
+        priority: 'secondary',
+        source: 'doctor-next-command'
+      })
+    ]);
   });
 
   it('accepts static domain when cdn origin and dns are aligned with bucket origin', async () => {

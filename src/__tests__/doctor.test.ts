@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { tmpdir } from 'os';
-import { runLicellDoctor } from '../utils/doctor';
+import { renderLicellDoctorReport, runLicellDoctor } from '../utils/doctor';
 
 function createTempDir(prefix: string) {
   return mkdtempSync(join(tmpdir(), prefix));
@@ -211,6 +211,31 @@ describe('runLicellDoctor', () => {
           source: 'doctor-next-command'
         })
       ]);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('renders next actions before legacy next commands in tty output', async () => {
+    const home = createTempDir('licell-doctor-home-');
+    const root = createTempDir('licell-doctor-project-');
+    vi.stubEnv('HOME', home);
+
+    try {
+      writeJson(join(root, '.licell', 'project.json'), {
+        appName: 'doctor-demo',
+        runtime: 'nodejs22',
+        envs: {}
+      });
+      writeText(join(root, 'src', 'index.ts'), 'export default async function app() { return { statusCode: 200, body: "ok" }; }\n');
+
+      const report = await runLicellDoctor({ cwd: root, offline: true });
+      const text = renderLicellDoctorReport(report);
+
+      expect(text).toContain('next: licell login');
+      expect(text).toContain('alt: licell auth restore <token> [passkey]');
+      expect(text).not.toContain('next: licell auth restore <token> [passkey]');
     } finally {
       rmSync(home, { recursive: true, force: true });
       rmSync(root, { recursive: true, force: true });

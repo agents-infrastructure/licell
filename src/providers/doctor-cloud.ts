@@ -18,14 +18,17 @@ import { AUTH_CAPABILITY_LABELS, type AuthCapability } from '../utils/auth-recov
 import type { AuthConfig, ProjectConfig } from '../utils/config';
 import { parseRootAndSubdomain } from '../utils/domain';
 import {
+  buildDoctorNextActions,
   doctorNextCommand,
   doctorNextCommands,
   doctorRemediationCommand,
   doctorRemediationNote,
   type LicellDoctorNextCommand,
   type LicellDoctorRemediation,
+  normalizeDoctorNextCommands,
   normalizeDoctorRemediationItems
 } from '../utils/doctor-guidance';
+import { cloneResolvedCommandNextActions, type ResolvedCommandNextAction } from '../utils/command-next-actions';
 import { formatErrorMessage } from '../utils/errors';
 import { resolveSdkCtor } from '../utils/sdk';
 
@@ -43,6 +46,7 @@ export interface DoctorCloudCheckResult {
   details: string[];
   remediation: LicellDoctorRemediation[];
   nextCommands?: LicellDoctorNextCommand[];
+  nextActions?: ResolvedCommandNextAction[];
   data?: Record<string, unknown>;
 }
 
@@ -98,6 +102,20 @@ interface DoctorDomainInspection {
 
 function unique<T>(values: T[]) {
   return [...new Set(values)];
+}
+
+function normalizeDoctorCloudCheckResult<T extends DoctorCloudCheckResult>(input: T): T {
+  const nextCommands = normalizeDoctorNextCommands(input.nextCommands || []);
+  return {
+    ...input,
+    details: [...input.details],
+    remediation: normalizeDoctorRemediationItems(input.remediation),
+    nextCommands,
+    nextActions: input.nextActions
+      ? cloneResolvedCommandNextActions(input.nextActions)
+      : buildDoctorNextActions(nextCommands),
+    ...(input.data ? { data: { ...input.data } } : {})
+  };
 }
 
 function toOptionalString(value: unknown) {
@@ -928,16 +946,16 @@ export async function probeDoctorDomainConsistency(input: DoctorCloudDiagnostics
   const plan = resolveDoctorDeployTargetPlan(input);
   if (plan.mode === 'skip') {
     if (plan.reason === 'missing_project') {
-      return {
+      return normalizeDoctorCloudCheckResult({
         status: 'skip',
         summary: '当前目录不是 licell 项目，跳过域名一致性检查。',
         details: [],
         remediation: []
-      };
+      });
     }
 
     if (plan.reason === 'missing_app_name') {
-      return {
+      return normalizeDoctorCloudCheckResult({
         status: 'skip',
         summary: '项目未配置 appName，跳过域名一致性检查。',
         details: [],
@@ -946,10 +964,10 @@ export async function probeDoctorDomainConsistency(input: DoctorCloudDiagnostics
           intent: 'verify'
         })],
         nextCommands: doctorNextCommands('licell init --app my-app', 'licell doctor')
-      };
+      });
     }
 
-    return {
+    return normalizeDoctorCloudCheckResult({
       status: 'skip',
       summary: '当前项目未显式声明 deploy type/runtime，跳过域名一致性检查。',
       details: [],
@@ -958,28 +976,28 @@ export async function probeDoctorDomainConsistency(input: DoctorCloudDiagnostics
         intent: 'verify'
       })],
       nextCommands: doctorNextCommands('licell init --runtime nodejs22', 'licell doctor --runtime <runtime>')
-    };
+    });
   }
 
   if (!input.project) {
-    return {
+    return normalizeDoctorCloudCheckResult({
       status: 'skip',
       summary: '当前目录不是 licell 项目，跳过域名一致性检查。',
       details: [],
       remediation: []
-    };
+    });
   }
 
   try {
-    return plan.mode === 'api'
+    return normalizeDoctorCloudCheckResult(plan.mode === 'api'
       ? await probeApiDomainConsistency({ ...input, project: input.project })
-      : await probeStaticDomainConsistency({ ...input, project: input.project });
+      : await probeStaticDomainConsistency({ ...input, project: input.project }));
   } catch (err: unknown) {
-    return classifyCloudError(err, {
+    return normalizeDoctorCloudCheckResult(classifyCloudError(err, {
       label: 'Domain consistency',
       required: false,
       accessDeniedSummary: '无法完整读取当前项目关联的域名 / DNS / CDN 状态。'
-    });
+    }));
   }
 }
 
@@ -1505,7 +1523,7 @@ export async function probeDoctorDeployTarget(input: DoctorCloudDiagnosticsInput
   const plan = resolveDoctorDeployTargetPlan(input);
   if (plan.mode === 'skip') {
     if (plan.reason === 'missing_project') {
-      return {
+      return normalizeDoctorCloudCheckResult({
         status: 'skip',
         summary: '当前目录不是 licell 项目，跳过 deploy target 一致性检查。',
         details: [],
@@ -1514,11 +1532,11 @@ export async function probeDoctorDeployTarget(input: DoctorCloudDiagnosticsInput
           mode: 'skip',
           reason: plan.reason
         }
-      };
+      });
     }
 
     if (plan.reason === 'missing_app_name') {
-      return {
+      return normalizeDoctorCloudCheckResult({
         status: 'skip',
         summary: '项目未配置 appName，跳过云端 deploy target 一致性检查。',
         details: [],
@@ -1531,10 +1549,10 @@ export async function probeDoctorDeployTarget(input: DoctorCloudDiagnosticsInput
           mode: 'skip',
           reason: plan.reason
         }
-      };
+      });
     }
 
-    return {
+    return normalizeDoctorCloudCheckResult({
       status: 'skip',
       summary: '当前项目未显式声明 deploy type/runtime，跳过云端 deploy target 一致性检查。',
       details: [],
@@ -1547,11 +1565,11 @@ export async function probeDoctorDeployTarget(input: DoctorCloudDiagnosticsInput
         mode: 'skip',
         reason: plan.reason
       }
-    };
+    });
   }
 
   if (!input.project) {
-    return {
+    return normalizeDoctorCloudCheckResult({
       status: 'skip',
       summary: '当前目录不是 licell 项目，跳过 deploy target 一致性检查。',
       details: [],
@@ -1560,12 +1578,12 @@ export async function probeDoctorDeployTarget(input: DoctorCloudDiagnosticsInput
         mode: 'skip',
         reason: 'missing_project'
       }
-    };
+    });
   }
 
-  return plan.mode === 'api'
+  return normalizeDoctorCloudCheckResult(await (plan.mode === 'api'
     ? probeApiDeployTarget({ ...input, project: input.project })
-    : probeStaticDeployTarget({ ...input, project: input.project });
+    : probeStaticDeployTarget({ ...input, project: input.project })));
 }
 
 export function summarizeDoctorCapabilityProbes(
@@ -1597,7 +1615,7 @@ export function summarizeDoctorCapabilityProbes(
     }));
   }
 
-  return {
+  return normalizeDoctorCloudCheckResult({
     status,
     summary,
     details,
@@ -1610,7 +1628,7 @@ export function summarizeDoctorCapabilityProbes(
       optional: plan.optional,
       probes
     }
-  };
+  }) as DoctorCloudDiagnostics['capabilities'];
 }
 
 export async function runDoctorCloudDiagnostics(input: DoctorCloudDiagnosticsInput): Promise<DoctorCloudDiagnostics> {
@@ -1633,10 +1651,10 @@ export async function runDoctorCloudDiagnostics(input: DoctorCloudDiagnosticsInp
   ]);
 
   return {
-    identity,
-    ramProfile,
-    deployTarget,
-    domainConsistency,
+    identity: normalizeDoctorCloudCheckResult(identity),
+    ramProfile: normalizeDoctorCloudCheckResult(ramProfile),
+    deployTarget: normalizeDoctorCloudCheckResult(deployTarget),
+    domainConsistency: normalizeDoctorCloudCheckResult(domainConsistency),
     capabilities: summarizeDoctorCapabilityProbes(probes, plan)
   };
 }

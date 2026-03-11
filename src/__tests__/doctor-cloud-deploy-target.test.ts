@@ -87,6 +87,26 @@ describe('probeDoctorDeployTarget', () => {
     expect(result.status).toBe('error');
     expect(result.summary).toContain('阻塞项');
     expect(result.details.join('\n')).toContain('broken aliases: prod');
+    expect(result.nextActions).toEqual([
+      expect.objectContaining({
+        commandTemplate: 'licell deploy --type api',
+        phase: 'mutate',
+        priority: 'primary',
+        source: 'doctor-next-command'
+      }),
+      expect.objectContaining({
+        commandTemplate: 'licell release promote --target <alias>',
+        phase: 'mutate',
+        priority: 'secondary',
+        source: 'doctor-next-command'
+      }),
+      expect.objectContaining({
+        commandTemplate: 'licell fn info',
+        phase: 'inspect',
+        priority: 'secondary',
+        source: 'doctor-next-command'
+      })
+    ]);
   });
 
   it('reports empty static bucket as warning', async () => {
@@ -123,5 +143,19 @@ describe('probeDoctorDeployTarget', () => {
     expect(result.status).toBe('warn');
     expect(result.summary).toContain('待收敛项');
     expect(result.details.join('\n')).toContain('sampleObjectCount: 0');
+    expect(result.nextActions).toEqual([
+      expect.objectContaining({
+        commandTemplate: 'licell deploy --type static',
+        phase: 'mutate',
+        priority: 'primary',
+        source: 'doctor-next-command'
+      }),
+      expect.objectContaining({
+        commandTemplate: 'licell oss upload <bucket>',
+        phase: 'mutate',
+        priority: 'secondary',
+        source: 'doctor-next-command'
+      })
+    ]);
   });
 });

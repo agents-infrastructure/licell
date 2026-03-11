@@ -807,6 +807,7 @@ export async function runLicellDoctor(options: LicellDoctorRunOptions = {}): Pro
       details: cloud.domainConsistency.details,
       remediation: cloud.domainConsistency.remediation,
       nextCommands: cloud.domainConsistency.nextCommands || [],
+      ...(cloud.domainConsistency.nextActions ? { nextActions: cloud.domainConsistency.nextActions } : {}),
       ...(cloud.domainConsistency.data ? { data: cloud.domainConsistency.data } : {})
     }));
     checks.push(createCheck({
@@ -818,6 +819,7 @@ export async function runLicellDoctor(options: LicellDoctorRunOptions = {}): Pro
       details: cloud.deployTarget.details,
       remediation: cloud.deployTarget.remediation,
       nextCommands: cloud.deployTarget.nextCommands || [],
+      ...(cloud.deployTarget.nextActions ? { nextActions: cloud.deployTarget.nextActions } : {}),
       ...(cloud.deployTarget.data ? { data: cloud.deployTarget.data } : {})
     }));
     checks.push(createCheck({
@@ -829,6 +831,7 @@ export async function runLicellDoctor(options: LicellDoctorRunOptions = {}): Pro
       details: cloud.identity.details,
       remediation: cloud.identity.remediation,
       nextCommands: cloud.identity.nextCommands || [],
+      ...(cloud.identity.nextActions ? { nextActions: cloud.identity.nextActions } : {}),
       ...(cloud.identity.data ? { data: cloud.identity.data } : {})
     }));
     checks.push(createCheck({
@@ -840,6 +843,7 @@ export async function runLicellDoctor(options: LicellDoctorRunOptions = {}): Pro
       details: cloud.ramProfile.details,
       remediation: cloud.ramProfile.remediation,
       nextCommands: cloud.ramProfile.nextCommands || [],
+      ...(cloud.ramProfile.nextActions ? { nextActions: cloud.ramProfile.nextActions } : {}),
       ...(cloud.ramProfile.data ? { data: cloud.ramProfile.data } : {})
     }));
     checks.push(createCheck({
@@ -851,6 +855,7 @@ export async function runLicellDoctor(options: LicellDoctorRunOptions = {}): Pro
       details: cloud.capabilities.details,
       remediation: cloud.capabilities.remediation,
       nextCommands: cloud.capabilities.nextCommands || [],
+      ...(cloud.capabilities.nextActions ? { nextActions: cloud.capabilities.nextActions } : {}),
       data: cloud.capabilities.data
     }));
   }
@@ -898,7 +903,12 @@ function renderCheckDetails(check: LicellDoctorCheck) {
       lines.push(`    ${pc.yellow('fix:')} ${item.text}`);
     }
   }
-  if (check.nextCommands.length > 0 && check.status !== 'ok') {
+  if (check.nextActions.length > 0 && check.status !== 'ok') {
+    for (const action of check.nextActions) {
+      const label = action.priority === 'primary' ? 'next' : 'alt';
+      lines.push(`    ${pc.cyan(`${label}:`)} ${action.commandTemplate}`);
+    }
+  } else if (check.nextCommands.length > 0 && check.status !== 'ok') {
     for (const command of check.nextCommands) {
       lines.push(`    ${pc.cyan('next:')} ${command.commandTemplate}`);
     }

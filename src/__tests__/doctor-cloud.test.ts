@@ -69,6 +69,22 @@ describe('summarizeDoctorCapabilityProbes', () => {
 
     expect(summary.status).toBe('error');
     expect(summary.summary).toContain('直接相关');
+    expect(summary.nextActions).toEqual([
+      expect.objectContaining({
+        commandTemplate: 'licell auth repair',
+        commandKey: 'auth repair',
+        phase: 'mutate',
+        priority: 'primary',
+        source: 'doctor-next-command'
+      }),
+      expect.objectContaining({
+        commandTemplate: 'licell switch --region <region>',
+        commandKey: 'switch',
+        phase: 'mutate',
+        priority: 'secondary',
+        source: 'doctor-next-command'
+      })
+    ]);
   });
 
   it('returns warn when only optional capabilities have issues', () => {
@@ -98,6 +114,13 @@ describe('summarizeDoctorCapabilityProbes', () => {
 
     expect(summary.status).toBe('warn');
     expect(summary.summary).toContain('optional issue');
+    expect(summary.nextActions?.[0]).toMatchObject({
+      commandTemplate: 'licell auth repair',
+      commandKey: 'auth repair',
+      phase: 'mutate',
+      priority: 'primary',
+      source: 'doctor-next-command'
+    });
   });
 });
 
