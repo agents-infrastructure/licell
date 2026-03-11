@@ -5,6 +5,7 @@ const mockGetBucketInfoWithOptions = vi.fn();
 const mockPutBucketAclWithOptions = vi.fn();
 const mockGetBucketAclWithOptions = vi.fn();
 const mockPutObjectWithOptions = vi.fn();
+const mockHeadObjectWithOptions = vi.fn();
 const mockExecute = vi.fn();
 const mockIsConflictError = vi.fn();
 const mockIsAccessDeniedError = vi.fn();
@@ -29,6 +30,7 @@ vi.mock('@alicloud/oss20190517', () => ({
     putBucketAclWithOptions = mockPutBucketAclWithOptions;
     getBucketAclWithOptions = mockGetBucketAclWithOptions;
     putObjectWithOptions = mockPutObjectWithOptions;
+    headObjectWithOptions = mockHeadObjectWithOptions;
     execute = mockExecute;
   },
   CreateBucketConfiguration: class CreateBucketConfiguration {
@@ -57,6 +59,16 @@ vi.mock('@alicloud/oss20190517', () => ({
     }
   },
   PutObjectHeaders: class PutObjectHeaders {
+    constructor(input: unknown) {
+      Object.assign(this, input);
+    }
+  },
+  HeadObjectRequest: class HeadObjectRequest {
+    constructor(input: unknown) {
+      Object.assign(this, input);
+    }
+  },
+  HeadObjectHeaders: class HeadObjectHeaders {
     constructor(input: unknown) {
       Object.assign(this, input);
     }
@@ -117,6 +129,7 @@ describe('createOssBucket', () => {
     mockPutBucketAclWithOptions.mockReset();
     mockGetBucketAclWithOptions.mockReset();
     mockPutObjectWithOptions.mockReset();
+    mockHeadObjectWithOptions.mockReset();
     mockExecute.mockReset();
     mockIsConflictError.mockReset();
     mockIsAccessDeniedError.mockReset();
@@ -135,6 +148,7 @@ describe('createOssBucket', () => {
     mockPutBucketAclWithOptions.mockResolvedValue({});
     mockGetBucketAclWithOptions.mockResolvedValue({ body: { acl: 'private' } });
     mockPutObjectWithOptions.mockResolvedValue({ headers: { etag: '"etag-demo"' } });
+    mockHeadObjectWithOptions.mockResolvedValue({ headers: { etag: '"verified-etag"' } });
     mockExecute.mockResolvedValue({ body: {} });
     mockIsConflictError.mockReturnValue(false);
     mockIsAccessDeniedError.mockReturnValue(false);
@@ -180,6 +194,32 @@ describe('createOssBucket', () => {
       contentType: 'application/json',
       etag: '"etag-demo"'
     });
+  });
+
+  it('treats empty xml putObject response as success after head verification', async () => {
+    const { uploadOssObjectContent } = await import('../providers/oss');
+    const emptyXmlError = new Error('not a valid value for parameter body');
+
+    mockPutObjectWithOptions.mockRejectedValue(emptyXmlError);
+
+    const result = await uploadOssObjectContent('demo-bucket', 'auth-transfer/demo.json', Buffer.from('hello'), {
+      contentType: 'application/json'
+    });
+
+    expect(mockHeadObjectWithOptions).toHaveBeenCalledTimes(1);
+    expect(result.etag).toBe('"verified-etag"');
+  });
+
+  it('treats empty xml putBucket response without stack as success', async () => {
+    const { createOssBucket } = await import('../providers/oss');
+    const emptyXmlError = new Error('not a valid value for parameter');
+
+    mockPutBucketWithOptions.mockRejectedValue(emptyXmlError);
+
+    const result = await createOssBucket('demo-bucket');
+
+    expect(mockGetBucketInfoWithOptions).toHaveBeenCalled();
+    expect(result.bucket).toBe('demo-bucket');
   });
 
   it('creates signed GET url for private object restore', async () => {

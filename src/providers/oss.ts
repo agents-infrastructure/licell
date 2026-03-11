@@ -172,7 +172,10 @@ function isOssEmptyXmlResponseError(err: unknown) {
   const message = String((err as { message?: unknown })?.message || '').toLowerCase();
   if (!message.includes('not a valid value for parameter')) return false;
   const stack = String((err as { stack?: unknown })?.stack || '').toLowerCase();
-  return stack.includes('gateway-oss') || stack.includes('darabonba-map');
+  if (stack.includes('gateway-oss') || stack.includes('darabonba-map')) return true;
+  const code = String((err as { code?: unknown })?.code || '').toLowerCase();
+  const statusCode = String((err as { statusCode?: unknown })?.statusCode || '').toLowerCase();
+  return !code && !statusCode;
 }
 
 export function isOssBucketNameUnavailableError(err: unknown) {
@@ -833,25 +836,36 @@ async function putOssObjectWithContentType(
   sourceFile: string,
   contentType: string
 ) {
-  const request = new $OpenApi.OpenApiRequest({
-    hostMap: { bucket },
-    headers: {
-      'content-type': contentType
-    },
-    stream: createReadStream(sourceFile)
-  });
-  const params = new $OpenApi.Params({
-    action: 'PutObject',
-    version: '2019-05-17',
-    protocol: 'HTTPS',
-    pathname: `/${key}`,
-    method: 'PUT',
-    authType: 'AK',
-    style: 'ROA',
-    reqBodyType: 'binary',
-    bodyType: 'binary'
-  });
-  await client.execute(params, request, runtime);
+  try {
+    const request = new $OpenApi.OpenApiRequest({
+      hostMap: { bucket },
+      headers: {
+        'content-type': contentType
+      },
+      stream: createReadStream(sourceFile)
+    });
+    const params = new $OpenApi.Params({
+      action: 'PutObject',
+      version: '2019-05-17',
+      protocol: 'HTTPS',
+      pathname: `/${key}`,
+      method: 'PUT',
+      authType: 'AK',
+      style: 'ROA',
+      reqBodyType: 'binary',
+      bodyType: 'binary'
+    });
+    await client.execute(params, request, runtime);
+  } catch (err: unknown) {
+    if (!isOssEmptyXmlResponseError(err)) throw err;
+    await client.headObjectWithOptions(
+      bucket,
+      key,
+      new $OSS.HeadObjectRequest({}),
+      new $OSS.HeadObjectHeaders({}),
+      runtime
+    );
+  }
 }
 
 async function putOssObjectContentInternal(
@@ -862,34 +876,53 @@ async function putOssObjectContentInternal(
   content: Buffer,
   contentType: string
 ): Promise<OssPutObjectContentResult> {
-  const response = await withRetry(
-    () => client.putObjectWithOptions(
-      bucket,
-      key,
-      new $OSS.PutObjectRequest({
-        body: Readable.from(content)
-      }),
-      new $OSS.PutObjectHeaders({
-        commonHeaders: {
-          'content-type': contentType,
-          'content-length': String(content.length)
-        }
-      }),
-      runtime
-    ),
-    {
-      maxAttempts: 4,
-      baseDelayMs: 800,
-      shouldRetry: isEventuallyConsistentOssError
-    }
-  );
+  let response: Awaited<ReturnType<InstanceType<typeof OssClientCtor>['putObjectWithOptions']>> | undefined;
+  try {
+    response = await withRetry(
+      () => client.putObjectWithOptions(
+        bucket,
+        key,
+        new $OSS.PutObjectRequest({
+          body: Readable.from(content)
+        }),
+        new $OSS.PutObjectHeaders({
+          commonHeaders: {
+            'content-type': contentType,
+            'content-length': String(content.length)
+          }
+        }),
+        runtime
+      ),
+      {
+        maxAttempts: 4,
+        baseDelayMs: 800,
+        shouldRetry: isEventuallyConsistentOssError
+      }
+    );
+  } catch (err: unknown) {
+    if (!isOssEmptyXmlResponseError(err)) throw err;
+    response = await withRetry(
+      () => client.headObjectWithOptions(
+        bucket,
+        key,
+        new $OSS.HeadObjectRequest({}),
+        new $OSS.HeadObjectHeaders({}),
+        runtime
+      ),
+      {
+        maxAttempts: 4,
+        baseDelayMs: 800,
+        shouldRetry: isEventuallyConsistentOssError
+      }
+    );
+  }
 
   return {
     bucket,
     key,
     contentLength: content.length,
     contentType,
-    etag: getHeaderValue(response.headers, 'etag')
+    etag: getHeaderValue(response?.headers, 'etag')
   };
 }
 
