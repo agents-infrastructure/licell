@@ -21,7 +21,7 @@ import {
   type AuthCapability
 } from '../utils/auth-recovery';
 import { createSpinner, isInteractiveTTY, showIntro, showOutro, tryNormalizeFcRuntime } from '../utils/cli-shared';
-import { emitCliError, emitCliEvent, emitCommandResult, isJsonOutput } from '../utils/output';
+import { emitCliError, emitCliEvent, emitCommandEvent, emitCommandResult, isJsonOutput } from '../utils/output';
 import { resolveDeployContext, type DeployCliOptions } from './deploy-context';
 import { executeApiDeploy } from './deploy-api';
 import { executeStaticDeploy } from './deploy-static';
@@ -313,7 +313,7 @@ export function registerDeployCommand(cli: CAC) {
       if (!isJsonOutput()) {
         showIntro(pc.bgBlue(pc.white(' ▲ Deploying to Aliyun ')));
       } else {
-        emitCliEvent({ stage: 'deploy', action: 'deploy', status: 'start' });
+        emitCommandEvent({ command: 'deploy', status: 'start' });
       }
       const s = createSpinner();
       const interactiveTTY = isInteractiveTTY();
@@ -341,7 +341,7 @@ export function registerDeployCommand(cli: CAC) {
             continue;
           }
           try {
-            emitCliEvent({
+            emitCommandEvent({
               stage: 'deploy.preflight',
               action: 'resolve-context',
               status: 'info',
@@ -367,16 +367,16 @@ export function registerDeployCommand(cli: CAC) {
             let healthCheckLogs: string[] = [];
 
             if (ctx.type === 'api') {
-              emitCliEvent({ stage: 'deploy.api', action: 'execute', status: 'start' });
+              emitCommandEvent({ stage: 'deploy.api', action: 'execute', status: 'start' });
               const result = await executeApiDeploy(ctx, s);
               if (!result) return;
-              emitCliEvent({ stage: 'deploy.api', action: 'execute', status: 'ok' });
+              emitCommandEvent({ stage: 'deploy.api', action: 'execute', status: 'ok' });
               ({ url, promotedVersion, fixedDomain, previewDomain, previewVersion, healthCheckLogs } = result);
             } else {
-              emitCliEvent({ stage: 'deploy.static', action: 'execute', status: 'start' });
+              emitCommandEvent({ stage: 'deploy.static', action: 'execute', status: 'start' });
               const result = await executeStaticDeploy(ctx, s);
               if (!result) return;
-              emitCliEvent({ stage: 'deploy.static', action: 'execute', status: 'ok' });
+              emitCommandEvent({ stage: 'deploy.static', action: 'execute', status: 'ok' });
               ({ url, fixedDomain, previewDomain, previewVersion, healthCheckLogs } = result);
             }
 

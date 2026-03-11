@@ -4,7 +4,7 @@ import { select, isCancel } from '@clack/prompts';
 import pc from 'picocolors';
 import { createSpinner, isInteractiveTTY, showIntro, showOutro } from '../utils/cli-shared';
 import { formatErrorMessage } from '../utils/errors';
-import { emitCliError, emitCliEvent, emitCommandResult, isJsonOutput } from '../utils/output';
+import { emitCliError, emitCommandEvent, emitCommandResult, isJsonOutput } from '../utils/output';
 import { AUTOMATION_SECTION } from './sections';
 
 type AgentType = 'claude' | 'codex';
@@ -74,7 +74,7 @@ export function registerSkillsCommands(cli: CAC) {
       if (!isJsonOutput()) {
         showIntro(pc.bgBlue(pc.white(' 🛠 Licell Skills Init ')));
       } else {
-        emitCliEvent({ stage: 'skills', action: 'skills init', status: 'start' });
+        emitCommandEvent({ command: 'skills init', stage: 'skills', status: 'start' });
       }
 
       const interactiveTTY = isInteractiveTTY();

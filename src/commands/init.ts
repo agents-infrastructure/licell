@@ -5,7 +5,7 @@ import pc from 'picocolors';
 import { Config } from '../utils/config';
 import { formatErrorMessage } from '../utils/errors';
 import { createSpinner, isInteractiveTTY, showIntro, showOutro, toPromptValue } from '../utils/cli-shared';
-import { emitCliError, emitCliEvent, emitCommandResult, isJsonOutput } from '../utils/output';
+import { emitCliError, emitCommandEvent, emitCommandResult, isJsonOutput } from '../utils/output';
 import {
   detectWorkspaceTemplateAndRuntime,
   deriveDefaultAppName,
@@ -78,7 +78,7 @@ export function registerInitCommand(cli: CAC) {
       if (!isJsonOutput()) {
         showIntro(pc.bgBlue(pc.white(' ⚡ Licell Project Init ')));
       } else {
-        emitCliEvent({ stage: 'init', action: 'init', status: 'start' });
+        emitCommandEvent({ command: 'init', status: 'start' });
       }
 
       const interactiveTTY = isInteractiveTTY();

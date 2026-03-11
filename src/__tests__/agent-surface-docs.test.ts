@@ -11,6 +11,7 @@ describe('renderSkillMcpToolReference', () => {
     expect(output).toContain('## MCP Tool Reference');
     expect(output).toContain('### Schema Contracts');
     expect(output).toContain('@@LICELL_JSON@@');
+    expect(output).toContain('对 `type=event` 的 record');
     expect(output).toContain('对 `type=error` 的 record');
     expect(output).toContain('licell-cli-record@1.0');
     expect(output).toContain('licell-help@1.0');
@@ -31,6 +32,7 @@ describe('renderAgentSurfaceReferenceDoc', () => {
     expect(output).toContain('# Agent Surface Reference');
     expect(output).toContain('## Schema Contracts');
     expect(output).toContain('@@LICELL_JSON@@');
+    expect(output).toContain('对 `type=event` 的 record');
     expect(output).toContain('对 `type=error` 的 record');
     expect(output).toContain('先匹配 `kind`，再检查 `schemaVersion`');
     expect(output).toContain('`fieldTree[]`');

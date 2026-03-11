@@ -49,6 +49,7 @@ describe('syncReadmeQuickReferenceSection', () => {
     expect(output).toContain(README_QUICK_REFERENCE_END);
     expect(output).toContain('### Agent Contract');
     expect(output).toContain('@@LICELL_JSON@@');
+    expect(output).toContain('对 `type=event` 的 record');
     expect(output).toContain('对 `type=error` 的 record');
     expect(output).toContain('licell-cli-record');
     expect(output).toContain('licell-help@1.0');
@@ -142,6 +143,7 @@ describe('syncReadmeGeneratedSections', () => {
     expect(readme).toContain(renderReadmeUpgradeGuidance().trim());
     expect(readme).toContain(renderReadmeQuickReference().trim());
     expect(readme).toContain('### Agent Contract');
+    expect(readme).toContain('对 `type=event` 的 record');
     expect(readme).toContain(renderReadmeMcpFcApiWorkflow().trim());
     expect(readme).toContain(renderReadmeMcpDomainWorkflows().trim());
   });

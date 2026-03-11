@@ -3,6 +3,8 @@ import {
   LICELL_JSON_PREFIX,
   LICELL_CLI_RECORD_KIND,
   buildCliErrorRecord,
+  emitCliEvent,
+  emitCommandEvent,
   emitCommandResult,
   extractJsonRecordsFromOutput,
   initOutputContext,
@@ -164,6 +166,78 @@ describe('output utils', () => {
 
     writeSpy.mockRestore();
   });
+
+  it('normalizes event actions and enriches lifecycle fields', () => {
+    initOutputContext('json', ['node', 'src/cli.ts', 'deploy']);
+    const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    try {
+      emitCliEvent({
+        stage: 'auth',
+        action: 'auth repair',
+        status: 'failed',
+        message: 'permission denied'
+      });
+
+      const raw = writeSpy.mock.calls.map((args) => String(args[0])).join('');
+      const records = extractJsonRecordsFromOutput(raw) as any[];
+      expect(records).toHaveLength(1);
+      expect(records[0].type).toBe('event');
+      expect(records[0].action).toBe('auth-repair');
+      expect(records[0].status).toBe('failed');
+      expect(records[0].source).toBe('command');
+      expect(records[0].terminal).toBe(true);
+      expect(records[0].ok).toBe(false);
+    } finally {
+      writeSpy.mockRestore();
+    }
+  });
+
+  it('infers command event stage and action from command context', () => {
+    initOutputContext('json', ['node', 'src/cli.ts', 'skills', 'init']);
+    const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    try {
+      emitCommandEvent({ status: 'start' });
+
+      const raw = writeSpy.mock.calls.map((args) => String(args[0])).join('');
+      const records = extractJsonRecordsFromOutput(raw) as any[];
+      expect(records).toHaveLength(1);
+      expect(records[0].type).toBe('event');
+      expect(records[0].stage).toBe('skills.init');
+      expect(records[0].action).toBe('init');
+      expect(records[0].status).toBe('start');
+      expect(records[0].source).toBe('command');
+      expect(records[0].terminal).toBe(false);
+      expect(records[0].ok).toBeUndefined();
+    } finally {
+      writeSpy.mockRestore();
+    }
+  });
+
+  it('marks stream events with stream source and stream metadata', () => {
+    initOutputContext('json', ['node', 'src/cli.ts', 'upgrade']);
+    const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    try {
+      emitCommandEvent({
+        stage: 'upgrade.install',
+        action: 'stdout',
+        status: 'info',
+        source: 'stream',
+        message: 'downloading...'
+      });
+
+      const raw = writeSpy.mock.calls.map((args) => String(args[0])).join('');
+      const records = extractJsonRecordsFromOutput(raw) as any[];
+      expect(records).toHaveLength(1);
+      expect(records[0].type).toBe('event');
+      expect(records[0].action).toBe('stdout');
+      expect(records[0].source).toBe('stream');
+      expect(records[0].data.stream).toBe('stdout');
+      expect(records[0].terminal).toBe(false);
+    } finally {
+      writeSpy.mockRestore();
+    }
+  });
+
   it('auto-infers stage and bound outcome from command context', () => {
     initOutputContext('json', ['node', 'src/cli.ts', 'domain', 'app', 'bind']);
     const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);

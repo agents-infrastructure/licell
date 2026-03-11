@@ -35,6 +35,7 @@ function renderAgentContractBlock(options?: { headingLevel?: 2 | 3 }) {
     heading,
     '',
     `- 原始 CLI JSON 流会使用前缀 \`${LICELL_JSON_PREFIX}\` 输出逐行 JSON record；每条 record 当前都满足 \`${LICELL_CLI_RECORD_KIND}@${LICELL_CLI_RECORD_SCHEMA_VERSION}\`，再通过 \`type=event|result|error\` 区分记录类型。`,
+    '- 对 `type=event` 的 record，优先读取稳定字段 `stage` / `action` / `status` / `source` / `terminal`；需要额外上下文时再读取可选 `message` / `data`。',
     '- 对 `type=error` 的 record，优先读取 `nextActions[]` 获取首选补救步骤；`nextCommands[]` 与 `remediation[]` 作为兼容层继续保留。',
     '- `licell <command> --help --output json`：读取 `help.kind` 与 `help.schemaVersion`；当前为 `licell-help@1.0`。',
     `- \`licell_command_catalog\`：读取 \`kind\` 与 \`schemaVersion\`；当前为 \`${commandCatalog.kind}@${commandCatalog.schemaVersion}\`。`,

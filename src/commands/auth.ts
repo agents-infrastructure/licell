@@ -17,7 +17,7 @@ import {
   showOutro
 } from '../utils/cli-shared';
 import { createOssBucket, createSignedOssGetUrl, isOssBucketNameUnavailableError, uploadOssObjectContent } from '../providers/oss';
-import { emitCliError, emitCliEvent, emitCommandResult, isJsonOutput } from '../utils/output';
+import { emitCliError, emitCliEvent, emitCommandEvent, emitCommandResult, isJsonOutput } from '../utils/output';
 import {
   buildAuthTransferBucketName,
   buildAuthTransferBucketCandidates,
@@ -477,7 +477,7 @@ export function registerAuthCommands(cli: CAC) {
       if (!isJsonOutput()) {
         showIntro(pc.bgBlue(pc.white(' ▲ Licell CLI (AliCloud) ')));
       } else {
-        emitCliEvent({ stage: 'auth', action: 'login', status: 'start' });
+        emitCommandEvent({ command: 'login', stage: 'auth', status: 'start' });
       }
       await runInteractiveLogin(options);
     });
@@ -494,7 +494,7 @@ export function registerAuthCommands(cli: CAC) {
       if (!isJsonOutput()) {
         showIntro(pc.bgBlue(pc.white(' ▲ Licell Auth Repair ')));
       } else {
-        emitCliEvent({ stage: 'auth', action: 'auth repair', status: 'start' });
+        emitCommandEvent({ command: 'auth repair', stage: 'auth', status: 'start' });
       }
       const interactiveTTY = isInteractiveTTY();
       const accountIdOpt = toOptionalString(options.accountId)
@@ -613,7 +613,7 @@ export function registerAuthCommands(cli: CAC) {
       if (!isJsonOutput()) {
         showIntro(pc.bgBlue(pc.white(' ▲ Licell Auth Export ')));
       } else {
-        emitCliEvent({ stage: 'auth.export', action: 'export', status: 'start' });
+        emitCommandEvent({ command: 'auth export', stage: 'auth.export', status: 'start' });
       }
       await executeWithAuthRecovery(
         {
@@ -631,7 +631,7 @@ export function registerAuthCommands(cli: CAC) {
       if (!isJsonOutput()) {
         showIntro(pc.bgBlue(pc.white(' ▲ Licell Auth Restore ')));
       } else {
-        emitCliEvent({ stage: 'auth.restore', action: 'restore', status: 'start' });
+        emitCommandEvent({ command: 'auth restore', stage: 'auth.restore', status: 'start' });
       }
 
       const resolvedToken = await resolveRestoreToken(token, interactiveTTY);

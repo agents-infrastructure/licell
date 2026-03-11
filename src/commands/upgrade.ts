@@ -7,7 +7,7 @@ import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileS
 import { dirname, join, resolve } from 'path';
 import { tmpdir } from 'os';
 import { createSpinner, showIntro, showOutro, toOptionalString } from '../utils/cli-shared';
-import { emitCliEvent, emitCommandResult, isJsonOutput } from '../utils/output';
+import { emitCliEvent, emitCommandEvent, emitCommandResult, isJsonOutput } from '../utils/output';
 import { AUTOMATION_SECTION } from './sections';
 
 const DEFAULT_UPGRADE_REPO = 'agents-infrastructure/licell';
@@ -459,18 +459,20 @@ export function registerUpgradeCommand(cli: CAC) {
           const stdout = typeof install.stdout === 'string' ? install.stdout.trim() : '';
           const stderr = typeof install.stderr === 'string' ? install.stderr.trim() : '';
           if (stdout) {
-            emitCliEvent({
+            emitCommandEvent({
               stage: 'upgrade.install',
               action: 'stdout',
               status: 'info',
+              source: 'stream',
               message: stdout
             });
           }
           if (stderr) {
-            emitCliEvent({
+            emitCommandEvent({
               stage: 'upgrade.install',
               action: 'stderr',
               status: 'info',
+              source: 'stream',
               message: stderr
             });
           }
@@ -514,7 +516,7 @@ export function registerUpgradeCommand(cli: CAC) {
               }
             } else {
               if (isJsonOutput()) {
-                emitCliEvent({
+                emitCommandEvent({
                   stage: 'upgrade',
                   action: 'checksum',
                   status: 'info',
@@ -527,7 +529,7 @@ export function registerUpgradeCommand(cli: CAC) {
           } catch (err: unknown) {
             if (err instanceof Error && err.message.includes('SHA256 校验失败')) throw err;
             if (isJsonOutput()) {
-              emitCliEvent({
+              emitCommandEvent({
                 stage: 'upgrade',
                 action: 'checksum',
                 status: 'info',
@@ -558,18 +560,20 @@ export function registerUpgradeCommand(cli: CAC) {
           const stdout = typeof install.stdout === 'string' ? install.stdout.trim() : '';
           const stderr = typeof install.stderr === 'string' ? install.stderr.trim() : '';
           if (stdout) {
-            emitCliEvent({
+            emitCommandEvent({
               stage: 'upgrade.install',
               action: 'stdout',
               status: 'info',
+              source: 'stream',
               message: stdout
             });
           }
           if (stderr) {
-            emitCliEvent({
+            emitCommandEvent({
               stage: 'upgrade.install',
               action: 'stderr',
               status: 'info',
+              source: 'stream',
               message: stderr
             });
           }

@@ -4,7 +4,7 @@ import { select, confirm, isCancel } from '@clack/prompts';
 import pc from 'picocolors';
 import { createSpinner, isInteractiveTTY, showIntro, showOutro } from '../utils/cli-shared';
 import { formatErrorMessage } from '../utils/errors';
-import { emitCliError, emitCliEvent, emitCommandResult, isJsonOutput } from '../utils/output';
+import { emitCliError, emitCommandEvent, emitCommandResult, isJsonOutput } from '../utils/output';
 import { ensureMcpJsonConfig, ensureGlobalClaudeMcpConfig, ensureGlobalCodexMcpConfig } from './mcp';
 
 type Scope = 'global' | 'project';
@@ -237,7 +237,7 @@ export function registerSetupCommand(cli: CAC) {
       if (!jsonMode) {
         showIntro(pc.bgBlue(pc.white(' 🛠 Licell Setup ')));
       } else {
-        emitCliEvent({ stage: 'setup', action: 'setup', status: 'start' });
+        emitCommandEvent({ command: 'setup', status: 'start' });
       }
 
       await runInteractiveSetup(options);

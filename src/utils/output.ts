@@ -24,6 +24,8 @@ export type CliErrorCategory =
 export const LICELL_JSON_PREFIX = '@@LICELL_JSON@@';
 export const LICELL_CLI_RECORD_KIND = 'licell-cli-record' as const;
 export const LICELL_CLI_RECORD_SCHEMA_VERSION = '1.0' as const;
+export type CliEventStatus = 'start' | 'ok' | 'failed' | 'skipped' | 'info';
+export type CliEventSource = 'command' | 'console' | 'stream';
 
 export interface CliErrorRemediationItem {
   type: string;
@@ -54,6 +56,25 @@ export interface CliErrorNextCommand {
   description: string | null;
   intent: CliErrorCommandIntent;
   priority: 'primary' | 'secondary';
+}
+
+export interface CliEventRecordInput {
+  stage: string;
+  action?: string;
+  status: CliEventStatus;
+  message?: string;
+  data?: Record<string, unknown>;
+  source?: CliEventSource;
+}
+
+export interface EmitCommandEventOptions {
+  command?: string;
+  stage?: string;
+  action?: string;
+  status: CliEventStatus;
+  message?: string;
+  data?: Record<string, unknown>;
+  source?: CliEventSource;
 }
 
 interface OutputContext {
@@ -202,6 +223,25 @@ function buildCliRecordEnvelope(type: 'event' | 'result' | 'error', record: Reco
 function sanitizeCode(raw: string) {
   const normalized = raw.replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
   return normalized.length > 0 ? normalized.toUpperCase() : 'UNKNOWN';
+}
+
+function normalizeCliEventAction(action: string | undefined) {
+  const trimmed = (action || '').trim();
+  if (!trimmed) return 'run';
+  const normalized = trimmed
+    .replace(/[^A-Za-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .toLowerCase();
+  return normalized || 'run';
+}
+
+function inferCommandEventAction(command = outputContext.command) {
+  const tokens = command.trim().split(/\s+/).filter(Boolean);
+  return tokens[tokens.length - 1] || 'run';
+}
+
+function isTerminalCliEventStatus(status: CliEventStatus) {
+  return status === 'ok' || status === 'failed' || status === 'skipped';
 }
 
 function parseMissingArgsUsage(message: string) {
@@ -584,15 +624,41 @@ function buildCliErrorGuidance(
   };
 }
 
-export function emitCliEvent(event: {
-  stage: string;
-  action: string;
-  status: 'start' | 'ok' | 'failed' | 'skipped' | 'info';
-  message?: string;
-  data?: Record<string, unknown>;
-}) {
+export function emitCliEvent(event: CliEventRecordInput) {
   if (!isJsonOutput()) return;
-  writeJsonRecord(buildCliRecordEnvelope('event', event));
+  const action = normalizeCliEventAction(event.action);
+  const source = event.source || (action === 'stdout' || action === 'stderr' ? 'stream' : 'command');
+  const terminal = isTerminalCliEventStatus(event.status);
+  const data = event.data
+    ? { ...event.data }
+    : ((action === 'stdout' || action === 'stderr') ? {} : undefined);
+  if ((action === 'stdout' || action === 'stderr') && data && typeof data.stream !== 'string') {
+    data.stream = action;
+  }
+
+  writeJsonRecord(buildCliRecordEnvelope('event', {
+    stage: event.stage,
+    action,
+    status: event.status,
+    source,
+    terminal,
+    ...(event.status === 'ok' ? { ok: true } : {}),
+    ...(event.status === 'failed' ? { ok: false } : {}),
+    ...(event.message ? { message: event.message } : {}),
+    ...(data && Object.keys(data).length > 0 ? { data } : {})
+  }));
+}
+
+export function emitCommandEvent(options: EmitCommandEventOptions) {
+  const command = options.command || outputContext.command;
+  emitCliEvent({
+    stage: options.stage || commandStage(command),
+    action: options.action || inferCommandEventAction(command),
+    status: options.status,
+    ...(options.message ? { message: options.message } : {}),
+    ...(options.data ? { data: options.data } : {}),
+    ...(options.source ? { source: options.source } : {})
+  });
 }
 
 export function installJsonConsoleBridge() {
@@ -621,7 +687,8 @@ export function installJsonConsoleBridge() {
         action,
         status: 'info',
         message,
-        data: { source: 'console', level: action }
+        source: 'console',
+        data: { level: action }
       });
     } finally {
       consoleBridgeActive = false;
