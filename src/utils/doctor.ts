@@ -798,9 +798,7 @@ export async function runLicellDoctor(options: LicellDoctorRunOptions = {}): Pro
       summary: cloud.domainConsistency.summary,
       details: cloud.domainConsistency.details,
       remediation: cloud.domainConsistency.remediation,
-      nextCommands: cloud.domainConsistency.status !== 'ok'
-        ? ['licell fn domain list', 'licell domain app bind <domain>', 'licell domain static bind <domain>']
-        : [],
+      nextCommands: cloud.domainConsistency.nextCommands || [],
       ...(cloud.domainConsistency.data ? { data: cloud.domainConsistency.data } : {})
     }));
     checks.push(createCheck({
@@ -811,9 +809,7 @@ export async function runLicellDoctor(options: LicellDoctorRunOptions = {}): Pro
       summary: cloud.deployTarget.summary,
       details: cloud.deployTarget.details,
       remediation: cloud.deployTarget.remediation,
-      nextCommands: cloud.deployTarget.status !== 'ok'
-        ? ['licell doctor --output json', 'licell deploy --type api', 'licell deploy --type static']
-        : [],
+      nextCommands: cloud.deployTarget.nextCommands || [],
       ...(cloud.deployTarget.data ? { data: cloud.deployTarget.data } : {})
     }));
     checks.push(createCheck({
@@ -824,7 +820,7 @@ export async function runLicellDoctor(options: LicellDoctorRunOptions = {}): Pro
       summary: cloud.identity.summary,
       details: cloud.identity.details,
       remediation: cloud.identity.remediation,
-      nextCommands: cloud.identity.status !== 'ok' ? ['licell login', 'licell auth repair'] : [],
+      nextCommands: cloud.identity.nextCommands || [],
       ...(cloud.identity.data ? { data: cloud.identity.data } : {})
     }));
     checks.push(createCheck({
@@ -835,7 +831,7 @@ export async function runLicellDoctor(options: LicellDoctorRunOptions = {}): Pro
       summary: cloud.ramProfile.summary,
       details: cloud.ramProfile.details,
       remediation: cloud.ramProfile.remediation,
-      nextCommands: cloud.ramProfile.status !== 'ok' ? ['licell auth repair'] : [],
+      nextCommands: cloud.ramProfile.nextCommands || [],
       ...(cloud.ramProfile.data ? { data: cloud.ramProfile.data } : {})
     }));
     checks.push(createCheck({
@@ -846,7 +842,7 @@ export async function runLicellDoctor(options: LicellDoctorRunOptions = {}): Pro
       summary: cloud.capabilities.summary,
       details: cloud.capabilities.details,
       remediation: cloud.capabilities.remediation,
-      nextCommands: cloud.capabilities.status !== 'ok' ? ['licell auth repair', 'licell switch --region <region>'] : [],
+      nextCommands: cloud.capabilities.nextCommands || [],
       data: cloud.capabilities.data
     }));
   }

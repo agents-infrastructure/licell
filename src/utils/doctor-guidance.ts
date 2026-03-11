@@ -121,6 +121,12 @@ export function doctorNextCommand(
   };
 }
 
+export function doctorNextCommands(...commandTemplates: string[]) {
+  return commandTemplates.map((commandTemplate, index) => doctorNextCommand(commandTemplate, {
+    priority: index === 0 ? 'primary' : 'secondary'
+  }));
+}
+
 export function normalizeDoctorRemediationItems(items: Array<string | LicellDoctorRemediation>) {
   const results = items.map((item) => typeof item === 'string' ? doctorRemediationNote(item) : item);
   const seen = new Set<string>();

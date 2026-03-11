@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { tmpdir } from 'os';
-import { doctorRemediationCommand } from '../utils/doctor-guidance';
+import { doctorNextCommands, doctorRemediationCommand } from '../utils/doctor-guidance';
 
 const { runDoctorCloudDiagnosticsMock } = vi.hoisted(() => ({
   runDoctorCloudDiagnosticsMock: vi.fn()
@@ -42,14 +42,33 @@ describe('runLicellDoctor cloud integration', () => {
     vi.stubEnv('HOME', home);
     runDoctorCloudDiagnosticsMock.mockResolvedValue({
       identity: { status: 'ok', summary: 'identity ok', details: [], remediation: [] },
-      ramProfile: { status: 'warn', summary: 'ram warn', details: [], remediation: [doctorRemediationCommand('licell auth repair')] },
-      domainConsistency: { status: 'warn', summary: 'domain warn', details: ['dns pending'], remediation: [doctorRemediationCommand('licell domain app bind api.example.com')] },
-      deployTarget: { status: 'warn', summary: 'target warn', details: ['alias missing'], remediation: [doctorRemediationCommand('licell release promote --target prod')] },
+      ramProfile: {
+        status: 'warn',
+        summary: 'ram warn',
+        details: [],
+        remediation: [doctorRemediationCommand('licell auth repair')],
+        nextCommands: doctorNextCommands('licell auth repair')
+      },
+      domainConsistency: {
+        status: 'warn',
+        summary: 'domain warn',
+        details: ['dns pending'],
+        remediation: [doctorRemediationCommand('licell domain app bind api.example.com')],
+        nextCommands: doctorNextCommands('licell domain app bind <domain>', 'licell doctor')
+      },
+      deployTarget: {
+        status: 'warn',
+        summary: 'target warn',
+        details: ['alias missing'],
+        remediation: [doctorRemediationCommand('licell release promote --target prod')],
+        nextCommands: doctorNextCommands('licell release promote --target prod', 'licell fn info')
+      },
       capabilities: {
         status: 'error',
         summary: 'capabilities blocked',
         details: ['fc blocked'],
         remediation: [doctorRemediationCommand('licell auth repair')],
+        nextCommands: doctorNextCommands('licell auth repair', 'licell switch --region <region>'),
         data: {
           required: ['fc'],
           optional: ['dns'],

@@ -18,8 +18,11 @@ import { AUTH_CAPABILITY_LABELS, type AuthCapability } from '../utils/auth-recov
 import type { AuthConfig, ProjectConfig } from '../utils/config';
 import { parseRootAndSubdomain } from '../utils/domain';
 import {
+  doctorNextCommand,
+  doctorNextCommands,
   doctorRemediationCommand,
   doctorRemediationNote,
+  type LicellDoctorNextCommand,
   type LicellDoctorRemediation,
   normalizeDoctorRemediationItems
 } from '../utils/doctor-guidance';
@@ -39,6 +42,7 @@ export interface DoctorCloudCheckResult {
   summary: string;
   details: string[];
   remediation: LicellDoctorRemediation[];
+  nextCommands?: LicellDoctorNextCommand[];
   data?: Record<string, unknown>;
 }
 
@@ -246,10 +250,8 @@ function classifyCloudError(
       status: 'error',
       summary: input.invalidCredentialSummary || `${input.label} 校验失败：AK/SK 无效或已失效。`,
       details: [formatErrorMessage(err)],
-      remediation: [doctorRemediationNote('执行 login 重新登录，或执行 auth restore 恢复有效凭证。', {
-        commandTemplate: 'licell login',
-        intent: 'login'
-      })]
+      remediation: [doctorRemediationNote('执行 login 重新登录，或执行 auth restore 恢复有效凭证。')],
+      nextCommands: doctorNextCommands('licell login', 'licell auth restore <token> [passkey]')
     };
   }
   if (isAccessDeniedError(err)) {
@@ -259,7 +261,8 @@ function classifyCloudError(
       details: [formatErrorMessage(err)],
       remediation: [doctorRemediationCommand('licell auth repair', {
         text: '执行 auth repair，为当前凭证补齐 licell 所需权限。'
-      })]
+      })],
+      nextCommands: doctorNextCommands('licell auth repair')
     };
   }
   if (isUnsupportedRegionError(err)) {
@@ -270,7 +273,8 @@ function classifyCloudError(
       remediation: [doctorRemediationNote('切换到支持该服务的 region，或避免在当前工作流使用该服务。', {
         commandTemplate: 'licell switch --region <region>',
         intent: 'configure'
-      })]
+      })],
+      nextCommands: doctorNextCommands('licell switch --region <region>', 'licell doctor')
     };
   }
   if (isTransientError(err)) {
@@ -281,7 +285,8 @@ function classifyCloudError(
       remediation: [doctorRemediationNote('稍后重试 doctor，确认网络和阿里云控制面状态。', {
         commandTemplate: 'licell doctor',
         intent: 'verify'
-      })]
+      })],
+      nextCommands: doctorNextCommands('licell doctor')
     };
   }
   return {
@@ -291,7 +296,8 @@ function classifyCloudError(
     remediation: [doctorRemediationNote('检查错误详情，必要时修复权限，或切换 region 后重试。', {
       commandTemplate: 'licell auth repair',
       intent: 'repair'
-    })]
+    })],
+    nextCommands: doctorNextCommands('licell auth repair', 'licell doctor')
   };
 }
 
@@ -315,6 +321,7 @@ async function probeCallerIdentity(auth: AuthConfig): Promise<DoctorCloudCheckRe
           commandTemplate: 'licell login',
           intent: 'login'
         })],
+        nextCommands: doctorNextCommands('licell login', 'licell whoami'),
         data: { accountId, arn, userId }
       };
     }
@@ -346,7 +353,8 @@ async function probeRamProfile(auth: AuthConfig): Promise<DoctorCloudCheckResult
       details: ['authSource: manual/unknown'],
       remediation: [doctorRemediationCommand('licell auth repair', {
         text: '建议执行 auth repair，为当前账号补齐 licell 推荐的 bootstrap RAM 配置。'
-      })]
+      })],
+      nextCommands: doctorNextCommands('licell auth repair')
     };
   }
 
@@ -357,7 +365,8 @@ async function probeRamProfile(auth: AuthConfig): Promise<DoctorCloudCheckResult
       details: [`ramUser: ${auth.ramUser || '(missing)'}`, `ramPolicy: ${auth.ramPolicy || '(missing)'}`],
       remediation: [doctorRemediationCommand('licell auth repair', {
         text: '执行 auth repair，回填或修复 bootstrap 元数据。'
-      })]
+      })],
+      nextCommands: doctorNextCommands('licell auth repair')
     };
   }
 
@@ -392,6 +401,7 @@ async function probeRamProfile(auth: AuthConfig): Promise<DoctorCloudCheckResult
         remediation: [doctorRemediationCommand('licell auth repair', {
           text: '执行 auth repair，自动补齐 RAM 用户、策略和当前 key 的绑定关系。'
         })],
+        nextCommands: doctorNextCommands('licell auth repair'),
         data: {
           userExists: inspection.userExists,
           policyExists: inspection.policyExists,
@@ -497,6 +507,9 @@ function summarizeDoctorDomainInspections(
       summary: `${mode === 'api' ? 'API' : 'Static'} 域名入口存在 ${errorCount} 个阻塞项。`,
       details,
       remediation,
+      nextCommands: mode === 'api'
+        ? doctorNextCommands('licell domain app bind <domain>', 'licell doctor')
+        : doctorNextCommands('licell domain static bind <domain>', 'licell doctor'),
       data: {
         mode,
         domainCount: inspections.length,
@@ -511,6 +524,9 @@ function summarizeDoctorDomainInspections(
       summary: `${mode === 'api' ? 'API' : 'Static'} 域名入口已发现，但还有 ${warnCount} 个待收敛项。`,
       details,
       remediation,
+      nextCommands: mode === 'api'
+        ? doctorNextCommands('licell domain app bind <domain>', 'licell doctor')
+        : doctorNextCommands('licell domain static bind <domain>', 'licell doctor'),
       data: {
         mode,
         domainCount: inspections.length,
@@ -928,7 +944,8 @@ export async function probeDoctorDomainConsistency(input: DoctorCloudDiagnostics
         remediation: [doctorRemediationNote('为项目补齐 appName 后再执行 doctor。', {
           commandTemplate: 'licell doctor',
           intent: 'verify'
-        })]
+        })],
+        nextCommands: doctorNextCommands('licell init --app my-app', 'licell doctor')
       };
     }
 
@@ -939,7 +956,8 @@ export async function probeDoctorDomainConsistency(input: DoctorCloudDiagnostics
       remediation: [doctorRemediationNote('为项目写入 runtime，或显式传入 runtime 后再执行 doctor。', {
         commandTemplate: 'licell doctor --runtime <runtime>',
         intent: 'verify'
-      })]
+      })],
+      nextCommands: doctorNextCommands('licell init --runtime nodejs22', 'licell doctor --runtime <runtime>')
     };
   }
 
@@ -1289,6 +1307,7 @@ async function probeApiDeployTarget(input: DoctorCloudDiagnosticsInput & { proje
         summary: `API deploy target 存在 ${blockingIssues.length} 个阻塞项。`,
         details,
         remediation: normalizeDoctorRemediationItems(remediation),
+        nextCommands: doctorNextCommands('licell deploy --type api', 'licell release promote --target <alias>', 'licell fn info'),
         data: {
           mode: 'api',
           functionName,
@@ -1309,6 +1328,7 @@ async function probeApiDeployTarget(input: DoctorCloudDiagnosticsInput & { proje
         summary: `API deploy target 已找到，但还有 ${warnings.length} 个待收敛项。`,
         details,
         remediation: normalizeDoctorRemediationItems(remediation),
+        nextCommands: doctorNextCommands('licell release promote --target prod', 'licell fn info'),
         data: {
           mode: 'api',
           functionName,
@@ -1346,6 +1366,7 @@ async function probeApiDeployTarget(input: DoctorCloudDiagnosticsInput & { proje
           commandTemplate: 'licell deploy --type api',
           intent: 'deploy'
         })],
+        nextCommands: doctorNextCommands('licell deploy --type api', 'licell switch --region <region>'),
         data: {
           mode: 'api',
           functionName,
@@ -1409,6 +1430,7 @@ async function probeStaticDeployTarget(input: DoctorCloudDiagnosticsInput & { pr
         summary: `Static deploy target 存在 ${blockingIssues.length} 个阻塞项。`,
         details,
         remediation: normalizeDoctorRemediationItems(remediation),
+        nextCommands: doctorNextCommands('licell deploy --type static', 'licell doctor'),
         data: {
           mode: 'static',
           appName,
@@ -1427,6 +1449,7 @@ async function probeStaticDeployTarget(input: DoctorCloudDiagnosticsInput & { pr
         summary: `Static deploy target 已找到，但还有 ${warnings.length} 个待收敛项。`,
         details,
         remediation: normalizeDoctorRemediationItems(remediation),
+        nextCommands: doctorNextCommands('licell deploy --type static', 'licell oss upload <bucket>'),
         data: {
           mode: 'static',
           appName,
@@ -1462,6 +1485,7 @@ async function probeStaticDeployTarget(input: DoctorCloudDiagnosticsInput & { pr
           commandTemplate: 'licell deploy --type static',
           intent: 'deploy'
         })],
+        nextCommands: doctorNextCommands('licell deploy --type static', 'licell switch --region <region>'),
         data: {
           mode: 'static',
           appName,
@@ -1502,6 +1526,7 @@ export async function probeDoctorDeployTarget(input: DoctorCloudDiagnosticsInput
           commandTemplate: 'licell doctor',
           intent: 'verify'
         })],
+        nextCommands: doctorNextCommands('licell init --app my-app', 'licell doctor'),
         data: {
           mode: 'skip',
           reason: plan.reason
@@ -1517,6 +1542,7 @@ export async function probeDoctorDeployTarget(input: DoctorCloudDiagnosticsInput
         commandTemplate: 'licell doctor --runtime <runtime>',
         intent: 'verify'
       })],
+      nextCommands: doctorNextCommands('licell init --runtime nodejs22', 'licell doctor --runtime <runtime>'),
       data: {
         mode: 'skip',
         reason: plan.reason
@@ -1576,6 +1602,9 @@ export function summarizeDoctorCapabilityProbes(
     summary,
     details,
     remediation: normalizeDoctorRemediationItems(remediation),
+    nextCommands: probes.some((probe) => probe.status !== 'ok')
+      ? doctorNextCommands('licell auth repair', 'licell switch --region <region>')
+      : [],
     data: {
       required: plan.required,
       optional: plan.optional,
