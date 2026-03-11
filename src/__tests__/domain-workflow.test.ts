@@ -10,6 +10,7 @@ const {
   mockIssueAndBindSSLWithArtifacts,
   mockGetOssBucketInfo,
   mockResolveOssBucketName,
+  mockResolveOssBucketOriginDomain,
   mockPublishFunctionVersion,
   mockPromoteFunctionAlias,
   mockRemoveFnCustomDomain,
@@ -26,6 +27,7 @@ const {
   mockIssueAndBindSSLWithArtifacts: vi.fn(),
   mockGetOssBucketInfo: vi.fn(),
   mockResolveOssBucketName: vi.fn(),
+  mockResolveOssBucketOriginDomain: vi.fn(),
   mockPublishFunctionVersion: vi.fn(),
   mockPromoteFunctionAlias: vi.fn(),
   mockRemoveFnCustomDomain: vi.fn(),
@@ -59,7 +61,8 @@ vi.mock('../providers/ssl', () => ({
 
 vi.mock('../providers/oss', () => ({
   getOssBucketInfo: mockGetOssBucketInfo,
-  resolveOssBucketName: mockResolveOssBucketName
+  resolveOssBucketName: mockResolveOssBucketName,
+  resolveOssBucketOriginDomain: mockResolveOssBucketOriginDomain
 }));
 
 vi.mock('../providers/fc', () => ({
@@ -88,6 +91,7 @@ describe('bindAppDomainWorkflow', () => {
     mockIssueAndBindSSLWithArtifacts.mockReset();
     mockGetOssBucketInfo.mockReset();
     mockResolveOssBucketName.mockReset();
+    mockResolveOssBucketOriginDomain.mockReset();
     mockPublishFunctionVersion.mockReset();
     mockPromoteFunctionAlias.mockReset();
     mockRemoveFnCustomDomain.mockReset();
@@ -228,6 +232,7 @@ describe('bindAppDomainWorkflow', () => {
 
   it('waits for CDN domain online in static binding workflow', async () => {
     mockResolveOssBucketName.mockReturnValue('demo-bucket');
+    mockResolveOssBucketOriginDomain.mockReturnValue('demo-bucket.oss-cn-hangzhou.aliyuncs.com');
     mockGetOssBucketInfo.mockResolvedValue({ extranetEndpoint: 'oss-cn-hangzhou.aliyuncs.com' });
     mockEnableCdnForDomain.mockResolvedValue({
       cdnCname: 'static.example.com.w.cdngslb.com',

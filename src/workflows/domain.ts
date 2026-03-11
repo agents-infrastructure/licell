@@ -3,7 +3,7 @@ import type { Spinner } from '../utils/errors';
 import { ensureDomainCname, normalizeDnsValue, removeDomainCname, waitForAuthoritativeCnameTarget } from '../providers/dns';
 import { enableCdnForDomain, removeCdnDomain } from '../providers/cdn';
 import { issueAndBindSSLWithArtifacts } from '../providers/ssl';
-import { getOssBucketInfo, resolveOssBucketName } from '../providers/oss';
+import { getOssBucketInfo, resolveOssBucketName, resolveOssBucketOriginDomain } from '../providers/oss';
 import {
   publishFunctionVersion,
   promoteFunctionAlias,
@@ -253,15 +253,6 @@ function resolveStaticBucketName(bucketName?: string) {
   return resolveOssBucketName(appName);
 }
 
-function resolveBucketOriginDomain(bucketName: string, endpoint?: string) {
-  const rawEndpoint = (endpoint || `oss-${Config.requireAuth().region}.aliyuncs.com`).trim();
-  const normalizedEndpoint = rawEndpoint
-    .replace(/^https?:\/\//, '')
-    .replace(/\/$/, '');
-  if (normalizedEndpoint.startsWith(`${bucketName}.`)) return normalizedEndpoint;
-  return `${bucketName}.${normalizedEndpoint}`;
-}
-
 export async function bindStaticDomainWorkflow(
   domainName: string,
   options: BindStaticDomainWorkflowOptions = {}
@@ -271,7 +262,7 @@ export async function bindStaticDomainWorkflow(
 
   const bucketName = resolveStaticBucketName(options.bucketName);
   const bucketInfo = await getOssBucketInfo(bucketName);
-  const originDomain = resolveBucketOriginDomain(bucketName, bucketInfo.extranetEndpoint);
+  const originDomain = resolveOssBucketOriginDomain(bucketName, bucketInfo.extranetEndpoint);
   const result = await enableCdnForDomain(normalizedDomain, originDomain, {
     ...(options.tlsArtifacts?.certificate && options.tlsArtifacts?.privateKey
       ? { certificate: options.tlsArtifacts.certificate, privateKey: options.tlsArtifacts.privateKey }

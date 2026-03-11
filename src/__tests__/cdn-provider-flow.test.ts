@@ -251,3 +251,102 @@ describe('enableCdnForDomain', () => {
     expect(detailCalls).toBeGreaterThan(0);
   });
 });
+
+describe('cdn read helpers', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    mockCallApi.mockReset();
+  });
+
+  it('parses CDN detail origins from DescribeCdnDomainDetail', async () => {
+    mockCallApi.mockImplementation(async (params: { action?: string }) => {
+      if (params.action !== 'DescribeCdnDomainDetail') throw new Error(`unexpected action: ${params.action}`);
+      return {
+        body: {
+          GetDomainDetailModel: {
+            DomainName: 'STATIC.EXAMPLE.COM',
+            Cname: 'static.example.com.w.kunluncan.com.',
+            DomainStatus: 'online',
+            ServerCertificateStatus: 'on',
+            Sources: {
+              Source: [
+                {
+                  Content: 'bucket.oss-cn-hangzhou.aliyuncs.com',
+                  Type: 'oss',
+                  Port: '80',
+                  Priority: '20',
+                  Weight: '10'
+                }
+              ]
+            }
+          }
+        }
+      };
+    });
+
+    const { getCdnDomainDetail } = await import('../providers/cdn');
+    await expect(getCdnDomainDetail('static.example.com')).resolves.toEqual({
+      domainName: 'static.example.com',
+      cname: 'static.example.com.w.kunluncan.com',
+      status: 'online',
+      serverCertificateStatus: 'on',
+      origins: [
+        {
+          content: 'bucket.oss-cn-hangzhou.aliyuncs.com',
+          type: 'oss',
+          port: '80',
+          priority: '20',
+          weight: '10'
+        }
+      ]
+    });
+  });
+
+  it('filters CDN list by prefix and normalizes nested origins', async () => {
+    mockCallApi.mockImplementation(async (params: { action?: string }) => {
+      if (params.action !== 'DescribeUserDomains') throw new Error(`unexpected action: ${params.action}`);
+      return {
+        body: {
+          Domains: {
+            PageData: [
+              {
+                DomainName: 'STATIC.EXAMPLE.COM',
+                Cname: 'static.example.com.w.kunluncan.com.',
+                DomainStatus: 'online',
+                SourceInfos: {
+                  SourceInfo: [
+                    {
+                      Content: 'bucket.oss-cn-hangzhou.aliyuncs.com',
+                      Type: 'oss'
+                    }
+                  ]
+                }
+              },
+              {
+                DomainName: 'api.example.com',
+                Cname: 'api.example.com.w.kunluncan.com'
+              }
+            ]
+          },
+          TotalCount: 2
+        }
+      };
+    });
+
+    const { listCdnDomains } = await import('../providers/cdn');
+    await expect(listCdnDomains(20, { prefix: 'static.' })).resolves.toEqual([
+      {
+        domainName: 'static.example.com',
+        cname: 'static.example.com.w.kunluncan.com',
+        status: 'online',
+        serverCertificateStatus: undefined,
+        origins: [
+          {
+            content: 'bucket.oss-cn-hangzhou.aliyuncs.com',
+            type: 'oss'
+          }
+        ]
+      }
+    ]);
+  });
+});

@@ -8,23 +8,26 @@ import { renderLicellDoctorReport, runLicellDoctor } from '../utils/doctor';
 
 const doctorCommand = defineCliCommand({
   rawName: 'doctor',
-  description: '诊断本机 licell 登录态、项目配置与本地部署前置条件',
+  description: '诊断本机 licell 登录态、云端权限/目标资源/域名入口、项目配置与部署前置条件',
   options: [
     { rawName: '--runtime <runtime>', description: '覆盖项目 runtime 做 deploy 诊断（如 nodejs22 / python3.13 / docker）' },
     { rawName: '--entry <entry>', description: '覆盖 deploy 入口文件路径（默认按项目配置与 runtime 推断）' },
-    { rawName: '--docker-daemon', description: '当 runtime=docker 时，附带检查本机 Docker daemon 是否可用' }
+    { rawName: '--docker-daemon', description: '当 runtime=docker 时，附带检查本机 Docker daemon 是否可用' },
+    { rawName: '--offline', description: '只做本地诊断，跳过云端只读身份/权限/capability probe' }
   ],
   descriptor: {
     title: 'Diagnose local licell readiness',
-    summary: '诊断本机登录态、全局默认配置、当前目录项目配置，以及 FC API 的本地 deploy precheck。',
+    summary: '诊断本机登录态、云端身份/权限/目标资源/域名入口、当前目录项目配置，以及 FC API 的 deploy precheck。',
     notes: [
-      '只做本地、低副作用诊断；不会创建或修改任何云端资源。',
-      '当前目录不是 licell 项目时，项目相关检查会以 warn/skip 呈现。'
+      '默认包含云端只读探测，会检查身份、权限、deploy target 与域名入口一致性，但不会创建或修改任何云端资源。',
+      '当前目录不是 licell 项目时，项目相关检查会以 warn/skip 呈现。',
+      '如果只想排查本地文件与入口契约，可追加 `--offline`。'
     ],
     examples: [
       'licell doctor',
       'licell doctor --runtime nodejs22 --entry src/index.ts',
-      'licell doctor --runtime docker --docker-daemon --output json'
+      'licell doctor --runtime docker --docker-daemon --output json',
+      'licell doctor --offline'
     ],
     taskHints: [
       {
@@ -46,6 +49,10 @@ const doctorCommand = defineCliCommand({
       '--docker-daemon': {
         whenToUse: 'runtime=docker 时，需要连同本机 Docker daemon 可用性一起诊断。',
         cautions: ['只在 docker runtime 下有实际效果。']
+      },
+      '--offline': {
+        whenToUse: '当前网络受限，或你只想排查本地 auth/project/entry 文件状态时使用。',
+        cautions: ['会跳过云端身份、RAM 权限和 region capability probe。']
       }
     },
     recommendedFlow: [
@@ -55,7 +62,7 @@ const doctorCommand = defineCliCommand({
     ],
     automation: {
       preferredOutput: 'json',
-      explicitInputs: ['--runtime', '--entry', '--docker-daemon'],
+      explicitInputs: ['--runtime', '--entry', '--docker-daemon', '--offline'],
       notes: ['Agent / 脚本应优先使用 `--output json`，读取 `healthy`、统计字段与 `checks[]`。']
     },
     result: {
@@ -69,7 +76,7 @@ const doctorCommand = defineCliCommand({
         { name: 'warnCount', description: 'warn 检查项数量。', required: true },
         { name: 'errorCount', description: 'error 检查项数量。', required: true },
         { name: 'skipCount', description: 'skip 检查项数量。', required: true },
-        { name: 'context', description: '当前 cwd、命中的配置文件路径，以及本次解析出的 runtime/entry。', required: true },
+        { name: 'context', description: '当前 cwd、命中的配置文件路径，以及本次解析出的 runtime/entry/offline。', required: true },
         { name: 'checks', description: '逐项诊断结果，含 status / summary / remediation / nextCommands。', required: true }
       ]
     },
@@ -81,15 +88,17 @@ interface DoctorOptions {
   runtime?: string;
   entry?: string;
   dockerDaemon?: boolean;
+  offline?: boolean;
 }
 
 export function registerDoctorCommands(cli: CAC) {
   registerCliCommand(cli, doctorCommand)
-    .action((options: DoctorOptions) => {
-      const report = runLicellDoctor({
+    .action(async (options: DoctorOptions) => {
+      const report = await runLicellDoctor({
         runtime: options.runtime,
         entry: options.entry,
-        checkDockerDaemon: options.dockerDaemon
+        checkDockerDaemon: options.dockerDaemon,
+        offline: options.offline
       });
 
       if (isJsonOutput()) {

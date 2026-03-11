@@ -104,17 +104,19 @@ export async function promoteFunctionAlias(
   await waitForFcFunctionReadable(appName, client, { qualifier: aliasName, profile: 'mutation' });
 }
 
-async function listAllAliases(appName: string, fcClient: FC20230330) {
+export async function listFunctionAliases(appName: string, limit = 100, fcClient?: FC20230330) {
+  const client = fcClient ?? createFcClient().client;
   const aliases: $FC.Alias[] = [];
   let nextToken: string | undefined;
+  let remaining = Math.max(limit, 1);
   const MAX_PAGES = 50;
 
-  for (let page = 0; page < MAX_PAGES; page += 1) {
+  for (let page = 0; page < MAX_PAGES && remaining > 0; page += 1) {
     const response = await callFcWithGuard<$FC.ListAliasesResponse>(
-      fcClient as unknown as Record<string, unknown>,
+      client as unknown as Record<string, unknown>,
       'listAliases',
       [appName, new $FC.ListAliasesRequest({
-        limit: 100,
+        limit: Math.min(100, remaining),
         nextToken
       })],
       {
@@ -124,6 +126,7 @@ async function listAllAliases(appName: string, fcClient: FC20230330) {
     );
     const rows = response.body?.aliases || [];
     aliases.push(...rows);
+    remaining -= rows.length;
     nextToken = response.body?.nextToken;
     if (!nextToken || rows.length === 0) break;
   }
@@ -144,7 +147,7 @@ export async function pruneFunctionVersions(
   const { client } = createFcClient();
   const normalizedKeep = Number.isFinite(keep) && keep > 0 ? Math.floor(keep) : 10;
   const versions = await listFunctionVersions(appName, 1000, client);
-  const aliases = await listAllAliases(appName, client);
+  const aliases = await listFunctionAliases(appName, 1000, client);
   const aliasProtectedSet = new Set<string>();
 
   for (const alias of aliases) {

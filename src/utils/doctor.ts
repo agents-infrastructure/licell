@@ -3,11 +3,12 @@ import { homedir } from 'os';
 import { join, resolve } from 'path';
 import pc from 'picocolors';
 import { runFcApiDeployPrecheck } from '../providers/fc';
+import { runDoctorCloudDiagnostics } from '../providers/doctor-cloud';
 import { normalizeAuth, normalizeProject, type AuthConfig, type ProjectConfig } from './config';
 import { parseDeployRuntimeOption } from './deploy-runtime';
 
 export type LicellDoctorCheckStatus = 'ok' | 'warn' | 'error' | 'skip';
-export type LicellDoctorCheckCategory = 'auth' | 'global' | 'project' | 'deploy';
+export type LicellDoctorCheckCategory = 'auth' | 'global' | 'project' | 'deploy' | 'cloud' | 'domain';
 
 export interface LicellDoctorCheck {
   id: string;
@@ -26,6 +27,7 @@ export interface LicellDoctorRunOptions {
   runtime?: string;
   entry?: string;
   checkDockerDaemon?: boolean;
+  offline?: boolean;
 }
 
 export interface LicellDoctorReport {
@@ -44,6 +46,7 @@ export interface LicellDoctorReport {
     projectFile: string | null;
     runtime: string | null;
     entry: string | null;
+    offline: boolean;
   };
   checks: LicellDoctorCheck[];
 }
@@ -77,6 +80,7 @@ interface LicellDoctorContext {
   effectiveRuntime: DoctorResolvedRuntime | null;
   entry: string | null;
   checkDockerDaemon: boolean;
+  offline: boolean;
 }
 
 interface DoctorCheckDefinition {
@@ -176,7 +180,8 @@ function createDoctorContext(options: LicellDoctorRunOptions = {}): LicellDoctor
     project,
     effectiveRuntime,
     entry: toOptionalString(options.entry) || null,
-    checkDockerDaemon: Boolean(options.checkDockerDaemon)
+    checkDockerDaemon: Boolean(options.checkDockerDaemon),
+    offline: Boolean(options.offline)
   };
 }
 
@@ -680,9 +685,162 @@ function countStatuses(checks: LicellDoctorCheck[]) {
   return counts;
 }
 
-export function runLicellDoctor(options: LicellDoctorRunOptions = {}): LicellDoctorReport {
+export async function runLicellDoctor(options: LicellDoctorRunOptions = {}): Promise<LicellDoctorReport> {
   const context = createDoctorContext(options);
   const checks = DOCTOR_CHECKS.map((definition) => definition.run(context));
+  const authCheck = checks.find((check) => check.id === 'auth.credentials');
+  const auth = context.authProbe.exists && context.authProbe.parseOk ? normalizeAuth(context.authProbe.raw) : null;
+
+  if (context.offline) {
+    checks.push(createCheck({
+      id: 'domain.consistency',
+      title: 'Domain consistency',
+      category: 'domain',
+      status: 'skip',
+      summary: '已显式启用 offline 模式，跳过云端域名一致性检查。',
+      details: [],
+      remediation: [],
+      nextCommands: ['licell doctor']
+    }));
+    checks.push(createCheck({
+      id: 'deploy.target',
+      title: 'Deploy target',
+      category: 'deploy',
+      status: 'skip',
+      summary: '已显式启用 offline 模式，跳过云端 deploy target 一致性检查。',
+      details: [],
+      remediation: [],
+      nextCommands: ['licell doctor']
+    }));
+    checks.push(createCheck({
+      id: 'cloud.offline',
+      title: 'Cloud diagnostics',
+      category: 'cloud',
+      status: 'skip',
+      summary: '已显式启用 offline 模式，跳过所有云端只读探测。',
+      details: [],
+      remediation: [],
+      nextCommands: ['licell doctor --output json']
+    }));
+  } else if (!auth || authCheck?.status === 'error') {
+    checks.push(createCheck({
+      id: 'domain.consistency',
+      title: 'Domain consistency',
+      category: 'domain',
+      status: 'skip',
+      summary: '本地 auth 未就绪，跳过云端域名一致性检查。',
+      details: [],
+      remediation: [],
+      nextCommands: []
+    }));
+    checks.push(createCheck({
+      id: 'deploy.target',
+      title: 'Deploy target',
+      category: 'deploy',
+      status: 'skip',
+      summary: '本地 auth 未就绪，跳过云端 deploy target 一致性检查。',
+      details: [],
+      remediation: [],
+      nextCommands: []
+    }));
+    checks.push(createCheck({
+      id: 'cloud.identity',
+      title: 'Cloud identity',
+      category: 'cloud',
+      status: 'skip',
+      summary: '本地 auth 未就绪，跳过云端身份与权限探测。',
+      details: [],
+      remediation: [],
+      nextCommands: []
+    }));
+    checks.push(createCheck({
+      id: 'cloud.ram',
+      title: 'Cloud RAM profile',
+      category: 'cloud',
+      status: 'skip',
+      summary: '本地 auth 未就绪，跳过 RAM 权限探测。',
+      details: [],
+      remediation: [],
+      nextCommands: []
+    }));
+    checks.push(createCheck({
+      id: 'cloud.capabilities',
+      title: 'Cloud capabilities',
+      category: 'cloud',
+      status: 'skip',
+      summary: '本地 auth 未就绪，跳过 region capability probe。',
+      details: [],
+      remediation: [],
+      nextCommands: []
+    }));
+  } else {
+    const cloud = await runDoctorCloudDiagnostics({
+      auth,
+      project: context.project,
+      deployTypeHint: context.effectiveRuntime?.deployTypeHint,
+      runtime: context.effectiveRuntime?.runtime || null
+    });
+    checks.push(createCheck({
+      id: 'domain.consistency',
+      title: 'Domain consistency',
+      category: 'domain',
+      status: cloud.domainConsistency.status,
+      summary: cloud.domainConsistency.summary,
+      details: cloud.domainConsistency.details,
+      remediation: cloud.domainConsistency.remediation,
+      nextCommands: cloud.domainConsistency.status !== 'ok'
+        ? ['licell fn domain list', 'licell domain app bind <domain>', 'licell domain static bind <domain>']
+        : [],
+      ...(cloud.domainConsistency.data ? { data: cloud.domainConsistency.data } : {})
+    }));
+    checks.push(createCheck({
+      id: 'deploy.target',
+      title: 'Deploy target',
+      category: 'deploy',
+      status: cloud.deployTarget.status,
+      summary: cloud.deployTarget.summary,
+      details: cloud.deployTarget.details,
+      remediation: cloud.deployTarget.remediation,
+      nextCommands: cloud.deployTarget.status !== 'ok'
+        ? ['licell doctor --output json', 'licell deploy --type api', 'licell deploy --type static']
+        : [],
+      ...(cloud.deployTarget.data ? { data: cloud.deployTarget.data } : {})
+    }));
+    checks.push(createCheck({
+      id: 'cloud.identity',
+      title: 'Cloud identity',
+      category: 'cloud',
+      status: cloud.identity.status,
+      summary: cloud.identity.summary,
+      details: cloud.identity.details,
+      remediation: cloud.identity.remediation,
+      nextCommands: cloud.identity.status !== 'ok' ? ['licell login', 'licell auth repair'] : [],
+      ...(cloud.identity.data ? { data: cloud.identity.data } : {})
+    }));
+    checks.push(createCheck({
+      id: 'cloud.ram',
+      title: 'Cloud RAM profile',
+      category: 'cloud',
+      status: cloud.ramProfile.status,
+      summary: cloud.ramProfile.summary,
+      details: cloud.ramProfile.details,
+      remediation: cloud.ramProfile.remediation,
+      nextCommands: cloud.ramProfile.status !== 'ok' ? ['licell auth repair'] : [],
+      ...(cloud.ramProfile.data ? { data: cloud.ramProfile.data } : {})
+    }));
+    checks.push(createCheck({
+      id: 'cloud.capabilities',
+      title: 'Cloud capabilities',
+      category: 'cloud',
+      status: cloud.capabilities.status,
+      summary: cloud.capabilities.summary,
+      details: cloud.capabilities.details,
+      remediation: cloud.capabilities.remediation,
+      nextCommands: cloud.capabilities.status !== 'ok' ? ['licell auth repair', 'licell switch --region <region>'] : [],
+      data: cloud.capabilities.data
+    }));
+  }
+
   const counts = countStatuses(checks);
   const resolvedRuntime = context.effectiveRuntime?.runtime || null;
   const resolvedEntry = context.entry || null;
@@ -702,7 +860,8 @@ export function runLicellDoctor(options: LicellDoctorRunOptions = {}): LicellDoc
       globalConfigFile: context.globalConfigProbe.exists ? context.globalConfigProbe.path : null,
       projectFile: context.projectProbe.exists ? context.projectProbe.path : null,
       runtime: resolvedRuntime,
-      entry: resolvedEntry
+      entry: resolvedEntry,
+      offline: context.offline
     },
     checks
   };

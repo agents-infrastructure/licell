@@ -166,7 +166,8 @@ process.once('beforeExit', (code) => {
 const helpResolution = resolveHelpRequest(argv);
 const shouldHandleHelp = shouldRenderCustomHelp(argv);
 const isUpgradeCommand = argv.some((a) => a === 'upgrade');
-const updateCheckPromise = (!isJsonOutput() && !isUpgradeCommand && !shouldHandleHelp && argv.length > 2)
+const isVersionRequest = argv.slice(2).some((arg) => arg === '--version' || arg === '-v');
+const updateCheckPromise = (!isJsonOutput() && !isUpgradeCommand && !shouldHandleHelp && !isVersionRequest && argv.length > 2)
   ? checkForUpdate(cliVersion).catch(() => null)
   : Promise.resolve(null);
 

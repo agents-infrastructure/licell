@@ -18,7 +18,7 @@ function writeText(filePath: string, content: string) {
   writeFileSync(filePath, content, 'utf8');
 }
 
-function getCheck(report: ReturnType<typeof runLicellDoctor>, id: string) {
+function getCheck(report: Awaited<ReturnType<typeof runLicellDoctor>>, id: string) {
   const check = report.checks.find((item) => item.id === id);
   if (!check) throw new Error(`missing check: ${id}`);
   return check;
@@ -29,7 +29,7 @@ describe('runLicellDoctor', () => {
     vi.unstubAllEnvs();
   });
 
-  it('reports healthy auth + project + fc precheck flow', () => {
+  it('reports healthy auth + project + fc precheck flow', async () => {
     const home = createTempDir('licell-doctor-home-');
     const root = createTempDir('licell-doctor-project-');
     vi.stubEnv('HOME', home);
@@ -48,7 +48,7 @@ describe('runLicellDoctor', () => {
       });
       writeText(join(root, 'src', 'index.ts'), 'export default async function app() { return { statusCode: 200, body: "ok" }; }\n');
 
-      const report = runLicellDoctor({ cwd: root });
+      const report = await runLicellDoctor({ cwd: root, offline: true });
 
       expect(report.healthy).toBe(true);
       expect(getCheck(report, 'auth.credentials').status).toBe('ok');
@@ -56,6 +56,8 @@ describe('runLicellDoctor', () => {
       expect(getCheck(report, 'project.app').status).toBe('ok');
       expect(getCheck(report, 'deploy.runtime').status).toBe('ok');
       expect(getCheck(report, 'deploy.precheck').status).toBe('ok');
+      expect(getCheck(report, 'domain.consistency').status).toBe('skip');
+      expect(getCheck(report, 'deploy.target').status).toBe('skip');
       expect(report.errorCount).toBe(0);
     } finally {
       rmSync(home, { recursive: true, force: true });
@@ -63,7 +65,7 @@ describe('runLicellDoctor', () => {
     }
   });
 
-  it('flags missing auth as blocking', () => {
+  it('flags missing auth as blocking', async () => {
     const home = createTempDir('licell-doctor-home-');
     const root = createTempDir('licell-doctor-project-');
     vi.stubEnv('HOME', home);
@@ -76,10 +78,12 @@ describe('runLicellDoctor', () => {
       });
       writeText(join(root, 'src', 'index.ts'), 'export default async function app() { return { statusCode: 200, body: "ok" }; }\n');
 
-      const report = runLicellDoctor({ cwd: root });
+      const report = await runLicellDoctor({ cwd: root, offline: true });
 
       expect(report.healthy).toBe(false);
       expect(getCheck(report, 'auth.credentials').status).toBe('error');
+      expect(getCheck(report, 'domain.consistency').status).toBe('skip');
+      expect(getCheck(report, 'deploy.target').status).toBe('skip');
       expect(report.errorCount).toBeGreaterThan(0);
     } finally {
       rmSync(home, { recursive: true, force: true });
@@ -87,7 +91,7 @@ describe('runLicellDoctor', () => {
     }
   });
 
-  it('skips fc precheck for static runtime projects', () => {
+  it('skips fc precheck for static runtime projects', async () => {
     const home = createTempDir('licell-doctor-home-');
     const root = createTempDir('licell-doctor-project-');
     vi.stubEnv('HOME', home);
@@ -105,11 +109,14 @@ describe('runLicellDoctor', () => {
         envs: {}
       });
 
-      const report = runLicellDoctor({ cwd: root });
+      const report = await runLicellDoctor({ cwd: root, offline: true });
 
       expect(report.healthy).toBe(true);
       expect(getCheck(report, 'deploy.runtime').status).toBe('skip');
       expect(getCheck(report, 'deploy.precheck').status).toBe('skip');
+      expect(getCheck(report, 'domain.consistency').status).toBe('skip');
+      expect(getCheck(report, 'deploy.target').status).toBe('skip');
+      expect(getCheck(report, 'cloud.offline').status).toBe('skip');
     } finally {
       rmSync(home, { recursive: true, force: true });
       rmSync(root, { recursive: true, force: true });

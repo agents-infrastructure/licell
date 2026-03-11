@@ -1035,6 +1035,16 @@ export function resolveOssBucketName(appName: string) {
   return `licell-${appName}-${auth.accountId.substring(0, 4)}`.toLowerCase();
 }
 
+export function resolveOssBucketOriginDomain(bucketName: string, endpoint?: string) {
+  const bucket = normalizeBucketName(bucketName);
+  const rawEndpoint = (endpoint || `oss-${Config.requireAuth().region}.aliyuncs.com`).trim();
+  const normalizedEndpoint = rawEndpoint
+    .replace(/^https?:\/\//, '')
+    .replace(/\/$/, '');
+  if (normalizedEndpoint.startsWith(`${bucket}.`)) return normalizedEndpoint;
+  return `${bucket}.${normalizedEndpoint}`;
+}
+
 export async function createOssBucket(bucketName: string, options: CreateOssBucketOptions = {}): Promise<CreateOssBucketResult> {
   const { client, runtime } = createOssClient();
   const bucket = normalizeBucketName(bucketName);

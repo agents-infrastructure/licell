@@ -667,7 +667,7 @@ licell e2e cleanup <runId>
 
 | 命令 | 说明 | 关键选项 |
 |------|------|----------|
-| `licell doctor` | 诊断本机 licell 登录态、项目配置与本地部署前置条件 | `--runtime`, `--entry`, `--docker-daemon` |
+| `licell doctor` | 诊断本机 licell 登录态、云端权限/目标资源/域名入口、项目配置与部署前置条件 | `--runtime`, `--entry`, `--docker-daemon` |
 | `licell mcp` | MCP：让 Agent 通过 licell 执行部署/发布/运维（默认先初始化，再启动 stdio server） | `--project-root`, `--server-name` |
 | `licell mcp init` | 写入/更新项目内 `.mcp.json` 配置 | `--project-root`, `--server-name` |
 | `licell mcp serve` | 以 stdio 方式启动 licell MCP server | `--project-root` |

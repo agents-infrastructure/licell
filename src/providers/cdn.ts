@@ -14,11 +14,20 @@ const DEFAULT_CDN_DOMAIN_READY_INTERVAL_MS = 5_000;
 const DEFAULT_CDN_HTTPS_READY_TIMEOUT_MS = 10 * 60_000;
 const DEFAULT_CDN_HTTPS_READY_INTERVAL_MS = 3_000;
 
-interface CdnDomainDetail {
+export interface CdnDomainOrigin {
+  content: string;
+  type?: string;
+  port?: string;
+  priority?: string;
+  weight?: string;
+}
+
+export interface CdnDomainDetail {
   domainName: string;
   cname?: string;
   status?: string;
   serverCertificateStatus?: string;
+  origins?: CdnDomainOrigin[];
 }
 
 interface CdnEnableResult {
@@ -27,7 +36,7 @@ interface CdnEnableResult {
   httpsConfigured?: boolean;
 }
 
-type CdnSourceType = 'domain' | 'oss';
+export type CdnSourceType = 'domain' | 'oss';
 type CdnScope = 'domestic' | 'overseas' | 'global';
 
 interface CdnEnableOptions {
@@ -165,6 +174,46 @@ function formatWaitSeconds(ms: number) {
   return `${Math.ceil(ms / 1000)}s`;
 }
 
+function toSourceRows(value: unknown): Record<string, unknown>[] {
+  if (Array.isArray(value)) return value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object');
+  if (!value || typeof value !== 'object') return [];
+  const record = value as Record<string, unknown>;
+  const directKeys = ['Source', 'source', 'SourcesData', 'sourcesData', 'SourceInfo', 'sourceInfo'];
+  for (const key of directKeys) {
+    const nested = record[key];
+    if (Array.isArray(nested)) return nested.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object');
+  }
+  const nestedKeys = ['Sources', 'sources', 'SourceInfos', 'sourceInfos'];
+  for (const key of nestedKeys) {
+    const nested = record[key];
+    const rows = toSourceRows(nested);
+    if (rows.length > 0) return rows;
+  }
+  return [];
+}
+
+function toCdnDomainOrigins(value: unknown): CdnDomainOrigin[] | undefined {
+  const rows = toSourceRows(value);
+  const origins = rows
+    .map((row) => {
+      const contentRaw = String(row.Content || row.content || '').trim();
+      if (!contentRaw) return null;
+      const typeRaw = String(row.Type || row.type || '').trim().toLowerCase();
+      const portRaw = String(row.Port || row.port || '').trim();
+      const priorityRaw = String(row.Priority || row.priority || '').trim();
+      const weightRaw = String(row.Weight || row.weight || '').trim();
+      return {
+        content: normalizeDnsValue(contentRaw),
+        ...(typeRaw ? { type: typeRaw } : {}),
+        ...(portRaw ? { port: portRaw } : {}),
+        ...(priorityRaw ? { priority: priorityRaw } : {}),
+        ...(weightRaw ? { weight: weightRaw } : {})
+      } satisfies CdnDomainOrigin;
+    })
+    .filter((item): item is CdnDomainOrigin => Boolean(item));
+  return origins.length > 0 ? origins : undefined;
+}
+
 function toCdnDomainRow(row: unknown): CdnDomainDetail | undefined {
   if (!row || typeof row !== 'object') return undefined;
   const item = row as Record<string, unknown>;
@@ -177,7 +226,8 @@ function toCdnDomainRow(row: unknown): CdnDomainDetail | undefined {
     status: normalizeDomainStatus(item.DomainStatus || item.domainStatus),
     serverCertificateStatus: normalizeServerCertificateStatus(
       item.ServerCertificateStatus || item.serverCertificateStatus || item.SslProtocol || item.sslProtocol
-    )
+    ),
+    origins: toCdnDomainOrigins(item.Sources || item.sources || item.SourceInfos || item.sourceInfos)
   };
 }
 
@@ -227,7 +277,7 @@ async function getCdnDomain(domainName: string): Promise<CdnDomainDetail | undef
   return undefined;
 }
 
-async function getCdnDomainDetail(domainName: string): Promise<CdnDomainDetail | undefined> {
+export async function getCdnDomainDetail(domainName: string): Promise<CdnDomainDetail | undefined> {
   const normalizedDomain = normalizeDomain(domainName);
   try {
     const response = await withRetry(() => callCdnRpc('DescribeCdnDomainDetail', {
@@ -238,6 +288,32 @@ async function getCdnDomainDetail(domainName: string): Promise<CdnDomainDetail |
     if (isNotFoundError(err)) return undefined;
     throw err;
   }
+}
+
+export async function listCdnDomains(limit = 100, filters: { prefix?: string } = {}): Promise<CdnDomainDetail[]> {
+  const results: CdnDomainDetail[] = [];
+  const safeLimit = Math.max(1, Math.min(Math.floor(limit), 2000));
+  const pageSize = Math.min(100, safeLimit);
+  const prefix = filters.prefix?.trim().toLowerCase();
+
+  for (let pageNumber = 1; pageNumber <= 50 && results.length < safeLimit; pageNumber += 1) {
+    const response = await withRetry(() => callCdnRpc('DescribeUserDomains', {
+      PageNumber: pageNumber,
+      PageSize: pageSize
+    }));
+    const rows = extractPageData(response.body);
+    for (const row of rows) {
+      const item = toCdnDomainRow(row);
+      if (!item) continue;
+      if (prefix && !item.domainName.startsWith(prefix)) continue;
+      results.push(item);
+      if (results.length >= safeLimit) break;
+    }
+    const totalCount = Number((response.body as { TotalCount?: unknown } | undefined)?.TotalCount || 0);
+    if (rows.length === 0 || (totalCount > 0 && pageNumber * pageSize >= totalCount)) break;
+  }
+
+  return results;
 }
 
 async function addCdnDomain(

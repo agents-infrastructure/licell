@@ -9,7 +9,7 @@ import { readEnvWithFallback } from './env';
 export type AuthIssueKind = 'missing_auth' | 'access_denied' | 'invalid_credentials' | 'unknown';
 export type AuthCapability = 'fc' | 'dns' | 'oss' | 'rds' | 'rdsai' | 'redis' | 'cdn' | 'vpc' | 'cr' | 'logs';
 
-const CAPABILITY_LABELS: Record<AuthCapability, string> = {
+export const AUTH_CAPABILITY_LABELS: Record<AuthCapability, string> = {
   fc: '函数计算',
   dns: '云解析 DNS',
   oss: 'OSS',
@@ -113,7 +113,7 @@ export function resolveAuthCapabilityActions(capabilities: AuthCapability[]) {
 function describeCapabilities(capabilities: AuthCapability[]) {
   const normalized = normalizeCapabilities(capabilities);
   if (normalized.length === 0) return '';
-  return normalized.map((capability) => CAPABILITY_LABELS[capability]).join(' / ');
+  return normalized.map((capability) => AUTH_CAPABILITY_LABELS[capability]).join(' / ');
 }
 
 function ensureProceedInInteractive(commandLabel: string, reason: AuthIssueKind | 'manual') {

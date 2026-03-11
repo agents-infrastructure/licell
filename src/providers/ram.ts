@@ -128,6 +128,10 @@ export const LICELL_POLICY_ACTIONS = [
   // SLS (Log Service, read-only)
   'log:GetLogs',
   // RAM (pass role to FC for service role + SLR creation)
+  'ram:GetUser',
+  'ram:GetPolicy',
+  'ram:GetPolicyVersion',
+  'ram:ListAccessKeys',
   'ram:PassRole',
   'ram:GetRole',
   'ram:CreateServiceLinkedRole'
@@ -159,6 +163,17 @@ export interface RepairRamAccessInput {
 
 export interface RepairRamAccessResult extends BootstrapRamAccessResult {
   mode: 'updated-existing-key' | 'rotated-new-key';
+}
+
+export interface LicellRamAccessInspection {
+  userName: string;
+  policyName: string;
+  userExists: boolean;
+  policyExists: boolean;
+  currentAccessKeyId?: string;
+  currentAccessKeyBound: boolean;
+  currentAccessKeyStatus?: string;
+  missingActions: string[];
 }
 
 export function normalizeRamUserName(input?: string) {
@@ -193,6 +208,32 @@ function buildLicellPolicyDocumentFromActions(actions: string[]) {
       }
     ]
   });
+}
+
+function listMissingActions(policyDocumentRaw: string | undefined, requiredActions: string[]) {
+  const policyDoc = parsePolicyDocument(policyDocumentRaw);
+  if (!policyDoc || typeof policyDoc !== 'object') {
+    return [...new Set(requiredActions)].sort();
+  }
+
+  const statementsRaw = policyDoc.Statement;
+  const statements = Array.isArray(statementsRaw)
+    ? statementsRaw
+    : statementsRaw && typeof statementsRaw === 'object'
+      ? [statementsRaw]
+      : [];
+
+  const allowedActions = new Set<string>();
+  for (const statement of statements) {
+    if (!statement || typeof statement !== 'object') continue;
+    const effect = String((statement as { Effect?: unknown }).Effect || '').toLowerCase();
+    if (effect !== 'allow') continue;
+    for (const action of toActionList((statement as { Action?: unknown }).Action)) {
+      allowedActions.add(action);
+    }
+  }
+
+  return [...new Set(requiredActions)].filter((action) => !allowedActions.has(action)).sort();
 }
 
 function createRamClient(adminAuth: AuthConfig) {
@@ -405,6 +446,69 @@ async function findUserNameByAccessKeyId(client: RAM, accessKeyId: string) {
     marker = listedUsers.body.marker;
   }
   return undefined;
+}
+
+export async function inspectLicellRamAccess(
+  adminAuth: AuthConfig,
+  options: {
+    userName?: string;
+    policyName?: string;
+    accessKeyId?: string;
+  } = {}
+): Promise<LicellRamAccessInspection> {
+  const userName = normalizeRamUserName(options.userName);
+  const policyName = normalizeRamPolicyName(options.policyName);
+  const client = createRamClient(adminAuth);
+
+  let userExists = true;
+  try {
+    await client.getUser(new $RAM.GetUserRequest({ userName }));
+  } catch (err: unknown) {
+    if (!isNotFoundError(err)) throw err;
+    userExists = false;
+  }
+
+  let policyExists = true;
+  let missingActions: string[] = [...LICELL_POLICY_ACTIONS];
+  try {
+    const policy = await client.getPolicy(new $RAM.GetPolicyRequest({ policyType: 'Custom', policyName }));
+    const versionId = policy.body?.defaultPolicyVersion?.versionId;
+    if (versionId) {
+      const version = await client.getPolicyVersion(new $RAM.GetPolicyVersionRequest({
+        policyType: 'Custom',
+        policyName,
+        versionId
+      }));
+      missingActions = listMissingActions(version.body?.policyVersion?.policyDocument, [...LICELL_POLICY_ACTIONS]);
+    }
+  } catch (err: unknown) {
+    if (!isNotFoundError(err)) throw err;
+    policyExists = false;
+  }
+
+  const currentAccessKeyId = options.accessKeyId?.trim() || undefined;
+  let currentAccessKeyBound = false;
+  let currentAccessKeyStatus: string | undefined;
+  if (userExists && currentAccessKeyId) {
+    const listedKeys = await client.listAccessKeys(new $RAM.ListAccessKeysRequest({ userName }));
+    const keys = listedKeys.body?.accessKeys?.accessKey || [];
+    const matched = keys.find((key) => key.accessKeyId === currentAccessKeyId);
+    if (matched) {
+      currentAccessKeyBound = true;
+      currentAccessKeyStatus = matched.status;
+    }
+  }
+
+  return {
+    userName,
+    policyName,
+    userExists,
+    policyExists,
+    currentAccessKeyId,
+    currentAccessKeyBound,
+    currentAccessKeyStatus,
+    missingActions
+  };
 }
 
 export async function bootstrapLicellRamAccess(input: BootstrapRamAccessInput): Promise<BootstrapRamAccessResult> {

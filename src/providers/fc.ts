@@ -36,7 +36,7 @@ export { pullFunctionEnvs, listFunctions, getFunctionInfo, removeFunction, invok
 
 export { ensureFunctionHttpUrl } from './fc/http';
 
-export { listFunctionVersions, publishFunctionVersion, promoteFunctionAlias, pruneFunctionVersions } from './fc/release';
+export { listFunctionAliases, listFunctionVersions, publishFunctionVersion, promoteFunctionAlias, pruneFunctionVersions } from './fc/release';
 
 export {
   createFnCustomDomain,
