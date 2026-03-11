@@ -155,6 +155,41 @@ Licell 有三类核心状态：
 - Licell 仍兼容历史上的 `~/.ali-cli/auth.json` 等旧路径
 - 当前主路径以 `~/.licell-cli/*` 为准
 
+## 团队授权分发（推荐）
+
+如果你的团队里只有少数人应该直接接触高权限 AK/SK，推荐把 `licell login` 和日常使用拆开：
+
+- SRE / 平台团队在受控机器上执行一次 `licell login`
+- 然后执行 `licell auth export <passkey>`
+- 把导出的 restore token 分发给团队成员
+- 把 `passkey` 通过另一条通道单独发送，不要和 token 放在同一条消息里
+- 其他机器直接执行 `licell auth restore <token> <passkey>`，不需要再次 `login`
+
+示例流程：
+
+```bash
+# SRE 机器
+licell login --region cn-hangzhou
+licell auth export 'Team-Shared-Passkey'
+
+# 成员机器
+licell auth restore 'licell-auth-v1....' 'Team-Shared-Passkey' --yes
+```
+
+这套流程适合：
+
+- 团队内部快速分发已授权的 `licell` 使用环境
+- 给低优先级权限成员提供受控使用能力
+- 给临时机器、CI 调试机、外包协作机快速恢复环境
+
+安全约束：
+
+- 导出的真实敏感内容仍然在加密 bundle 里，不在 restore token 明文中
+- bundle 会上传到私有 OSS Bucket，restore 依赖带时效的签名下载链接
+- `passkey` 至少 12 位，建议通过密码管理器或单独 IM 通道发送
+- 若需要失效某次分发，可删除导出对象；`auth export` 输出里会给出对应的 revoke 命令
+- 若团队凭证轮换，应重新 `login` / `auth export`，不要继续分发旧 token
+
 ---
 
 ## 面向 Agent 的接口
