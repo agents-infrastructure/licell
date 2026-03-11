@@ -91,25 +91,25 @@ That means command-surface changes can converge across help, MCP, skills, and do
 curl -fsSL https://github.com/agents-infrastructure/licell/releases/latest/download/install.sh | bash
 ```
 
-Then run:
+After installation, run:
 
 ```bash
 licell
 ```
 
-Running bare `licell` is the quickest way to enter the first-run flow.
+Running bare `licell` enters the first-run flow.
 
 ### Next step after install: finish auth first
 
-For most users, the next important step is not the install source. It is getting auth working.
+After installation, complete auth first so Licell is ready to use.
 
-If you hold your own AK/SK credentials:
+If you hold your own AK/SK credentials, run:
 
 ```bash
 licell login --bootstrap-ram
 ```
 
-If your team distributes shared auth from SRE or the platform team:
+If auth is distributed by your SRE or platform team, run:
 
 ```bash
 licell auth restore '<token>' '<passkey>' --yes
@@ -121,7 +121,7 @@ For team usage, see the [Team Auth Distribution](#team-auth-distribution) sectio
 
 - npm global install and GitHub Release binaries are also supported
 - for upgrades, run `licell upgrade`
-- only read the detailed upgrade rules below if you actually need them
+- read the detailed upgrade rules below only when needed
 
 <details>
 <summary>Detailed install and upgrade behavior</summary>
@@ -178,7 +178,7 @@ Compatibility notes:
 
 ## Team Auth Distribution
 
-If only a small set of people in your team should directly hold high-privilege AK/SK credentials, split “authorization” from “daily usage”:
+When only a small set of people in a team directly hold high-privilege AK/SK credentials, it is often cleaner to separate “authorization” from “daily usage”:
 
 - the SRE or platform team runs `licell login` on a controlled machine
 - then runs `licell auth export <passkey>`
@@ -197,7 +197,7 @@ licell auth export 'Team-Shared-Passkey'
 licell auth restore 'licell-auth-v1....' 'Team-Shared-Passkey' --yes
 ```
 
-This workflow is useful for:
+Typical use cases:
 
 - distributing a ready-to-use Licell environment across a team
 - enabling contributors who should not directly hold high-privilege credentials

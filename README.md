@@ -91,37 +91,37 @@ Licell 最新架构里，命令不再只是“能执行”，还要“能自我�
 curl -fsSL https://github.com/agents-infrastructure/licell/releases/latest/download/install.sh | bash
 ```
 
-安装后建议立即执行：
+安装完成后，可直接运行：
 
 ```bash
 licell
 ```
 
-裸执行 `licell` 会进入适合新手和 Agent 的首次引导流程。
+裸执行 `licell` 会进入首次引导流程。
 
 ### 安装后下一步：先完成授权
 
-大多数用户安装后真正要做的不是研究安装来源，而是先把授权跑通。
+安装完成后，先完成授权即可开始使用。
 
-如果你自己持有 AK/SK：
+持有 AK/SK 时，可直接执行：
 
 ```bash
 licell login --bootstrap-ram
 ```
 
-如果你是团队成员，由 SRE / 平台团队统一分发授权：
+如果由 SRE / 平台团队统一分发授权，可直接执行：
 
 ```bash
 licell auth restore '<token>' '<passkey>' --yes
 ```
 
-团队协作场景，优先看下方的[团队授权分发（推荐）](#团队授权分发推荐)。
+团队协作场景，可参考下方的[团队授权分发（推荐）](#团队授权分发推荐)。
 
 ### 其他安装方式与升级
 
 - 也支持 npm 全局安装和 GitHub Release 二进制分发
 - 升级时直接运行 `licell upgrade`
-- 如果你关心具体升级来源或升级渠道，再看下面这份说明
+- 如需了解升级来源或升级渠道，再看下面这份说明
 
 <details>
 <summary>安装与升级的详细说明</summary>
@@ -180,7 +180,7 @@ Licell 有三类核心状态：
 
 ## 团队授权分发（推荐）
 
-如果你的团队里只有少数人应该直接持有高权限 AK/SK，推荐把“授权”和“使用”拆开：
+当团队中只有少数人直接持有高权限 AK/SK 时，可以把“授权”和“使用”分开：
 
 - SRE / 平台团队在受控机器上执行一次 `licell login`
 - 然后执行 `licell auth export <passkey>`
@@ -199,7 +199,7 @@ licell auth export 'Team-Shared-Passkey'
 licell auth restore 'licell-auth-v1....' 'Team-Shared-Passkey' --yes
 ```
 
-这套流程适合：
+适用场景：
 
 - 团队内部批量分发已授权的 `licell` 使用环境
 - 让不直接持有高权限凭证的成员快速开始使用
