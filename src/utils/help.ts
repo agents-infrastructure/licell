@@ -7,13 +7,15 @@ import {
 } from './command-catalog';
 import {
   getCommandDescriptor,
+  cloneResolvedCommandResultDescriptor,
   type CommandActionHint,
   type CommandDescriptor,
   type CommandFlowStep,
   type CommandOptionInsight,
   type CommandSafetyLevel,
   type CommandSafetyMetadata,
-  type ResolvedCommandResultDescriptor
+  type ResolvedCommandResultDescriptor,
+  type ResolvedCommandResultFieldTreeNode
 } from './command-metadata';
 import {
   buildCommandTasks,
@@ -396,9 +398,6 @@ function buildStructuredResultItems(result: HelpResultDoc) {
   if (result.summary) items.push(result.summary);
   items.push('`stage` · 命令阶段标识。');
   if (result.outcomeKey) items.push(`\`${result.outcomeKey}\` · 结果布尔态字段。`);
-  for (const field of result.fields) {
-    items.push(`\`${field.name}\`${field.required ? '' : '（optional）'} · ${field.description}`);
-  }
   return items;
 }
 
@@ -734,7 +733,27 @@ function renderSubcommandGroupsBlock(groups: HelpSubcommandGroup[]) {
 }
 
 function renderStructuredResultBlock(result: HelpResultDoc) {
-  return renderPlainList('Structured Result:', buildStructuredResultItems(result));
+  const lines = ['Structured Result:'];
+  for (const item of buildStructuredResultItems(result)) {
+    lines.push(`  - ${item}`);
+  }
+
+  const renderFieldTree = (node: ResolvedCommandResultFieldTreeNode, depth: number): string[] => {
+    const optional = node.required === false ? '（optional）' : '';
+    const description = node.description ? ` · ${node.description}` : '';
+    const rendered = [`${'  '.repeat(depth + 1)}- \`${node.segment}\`${optional}${description}`];
+    for (const child of node.children) {
+      rendered.push(...renderFieldTree(child, depth + 1));
+    }
+    return rendered;
+  };
+
+  for (const node of result.fieldTree) {
+    lines.push(...renderFieldTree(node, 1));
+  }
+
+  lines.push('');
+  return lines;
 }
 
 function renderRecommendedFlowBlock(steps: HelpFlowStep[]) {
@@ -873,10 +892,7 @@ export function serializeHelpDocument(doc: HelpDocument): SerializedHelpDocument
         }
       : undefined,
     result: doc.result
-      ? {
-          ...doc.result,
-          fields: doc.result.fields.map((field) => ({ ...field }))
-        }
+      ? cloneResolvedCommandResultDescriptor(doc.result)
       : undefined,
     optionInsights: doc.optionInsights.map((insight) => ({
       ...insight,

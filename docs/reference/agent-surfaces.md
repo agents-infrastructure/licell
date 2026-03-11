@@ -9,6 +9,7 @@
 - `licell_command_catalog`：读取 `kind` 与 `schemaVersion`；当前为 `licell-agent-command-catalog@1.0`。
 - `licell_command_catalog` 同时显式声明依赖的 help schema：`licell-help@1.0`。
 - 所有 MCP tools 的 `metadata.licell` 都会暴露 `schemas.help` 与 `schemas.commandCatalog`；当前分别为 `licell-help@1.0` / `licell-agent-command-catalog@1.0`。
+- 命令 help / command catalog / generated MCP metadata 里的 `result` 同时提供扁平 `fields[]` 与层次化 `fieldTree[]`；Agent 优先读 `fieldTree[]`，需要兼容旧逻辑时再回退到 `fields[]`。
 - Agent 侧做强约束解析时，先匹配 `kind`，再检查 `schemaVersion`；未知更高版本应走兼容分支或降级为文本解析。
 
 ## CLI 命令目录

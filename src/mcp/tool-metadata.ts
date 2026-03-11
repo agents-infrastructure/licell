@@ -5,7 +5,7 @@ import {
   type AgentCommandCatalogEntry,
   type AgentCommandResult
 } from '../utils/command-reference';
-import type { CommandSafetyMetadata, CommandTaskHint } from '../utils/command-metadata';
+import { cloneResolvedCommandResultDescriptor, type CommandSafetyMetadata, type CommandTaskHint } from '../utils/command-metadata';
 import { LICELL_HELP_KIND, LICELL_HELP_SCHEMA_VERSION } from '../utils/help';
 import {
   groupCommandTasks,
@@ -119,12 +119,7 @@ function cloneWorkflows(workflows: LicellMcpToolWorkflowAttachment[]) {
 }
 
 function cloneResult(result?: AgentCommandResult) {
-  return result
-    ? {
-        ...result,
-        fields: result.fields.map((field) => ({ ...field }))
-      }
-    : undefined;
+  return cloneResolvedCommandResultDescriptor(result);
 }
 
 function buildSafetyHint(safety?: CommandSafetyMetadata) {

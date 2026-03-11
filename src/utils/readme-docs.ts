@@ -78,6 +78,7 @@ export function renderReadmeQuickReference() {
     sampleToolMetadata
       ? `- MCP tools 的 \`metadata.licell\` 会显式声明 \`schemas.help\` / \`schemas.commandCatalog\`；当前为 \`${sampleToolMetadata.schemas.help.kind}@${sampleToolMetadata.schemas.help.schemaVersion}\` / \`${sampleToolMetadata.schemas.commandCatalog.kind}@${sampleToolMetadata.schemas.commandCatalog.schemaVersion}\`。`
       : '- MCP tools 的 `metadata.licell` 会显式声明 `schemas.help` / `schemas.commandCatalog`。',
+    '- `help.result` / command catalog / generated MCP metadata 的结果 schema 同时提供扁平 `fields[]` 与层次化 `fieldTree[]`；优先消费 `fieldTree[]`，兼容旧逻辑时再读取 `fields[]`。',
     '',
     '### 命令总览'
   ];

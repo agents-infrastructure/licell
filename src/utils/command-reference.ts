@@ -10,11 +10,13 @@ import {
 } from './command-reference-sections';
 import {
   getCommandDescriptor,
+  cloneResolvedCommandResultDescriptor,
   type CommandActionHint,
   type CommandFlowStep,
   type CommandOptionInsight,
   type CommandSafetyMetadata,
-  type ResolvedCommandResultDescriptor
+  type ResolvedCommandResultDescriptor,
+  type ResolvedCommandResultFieldTreeNode
 } from './command-metadata';
 import { type CommandTaskEntry, type CommandTaskGroup } from './command-tasks';
 import { canExposeCommandAsGeneratedMcpTool, toGeneratedMcpToolName } from './command-surface-ids';
@@ -140,6 +142,36 @@ function renderOptionTable(command: CatalogCommand) {
   ].join('\n');
 }
 
+function renderStructuredResultMarkdown(result: AgentCommandResult) {
+  const lines: string[] = [];
+
+  if (result.summary) {
+    lines.push(`- ${result.summary}`);
+  }
+
+  lines.push('- `stage`：命令阶段标识。');
+
+  if (result.outcomeKey) {
+    lines.push(`- \`${result.outcomeKey}\`：结果布尔态字段。`);
+  }
+
+  const renderFieldTree = (node: ResolvedCommandResultFieldTreeNode, depth: number): string[] => {
+    const optional = node.required === false ? '（可选）' : '';
+    const description = node.description ? `：${node.description}` : '';
+    const rendered = [`${'  '.repeat(depth)}- \`${node.segment}\`${optional}${description}`];
+    for (const child of node.children) {
+      rendered.push(...renderFieldTree(child, depth + 1));
+    }
+    return rendered;
+  };
+
+  for (const node of result.fieldTree) {
+    lines.push(...renderFieldTree(node, 1));
+  }
+
+  return lines;
+}
+
 function renderDecisionGuideMarkdown(command: AgentCommandCatalogEntry) {
   if (command.tasks.length === 0) return [] as string[];
 
@@ -256,12 +288,7 @@ export function buildAgentCommandCatalog(catalog: CommandCatalog = getCommandCat
           : undefined,
         optionInsights: help.optionInsights.map((insight) => ({ ...insight, cautions: [...insight.cautions] })),
         recommendedFlow: help.recommendedFlow.map((step) => ({ ...step })),
-        result: help.result
-          ? {
-              ...help.result,
-              fields: help.result.fields.map((field) => ({ ...field }))
-            }
-          : undefined,
+        result: cloneResolvedCommandResultDescriptor(help.result),
         sectionId: sectionByRoot.get(command.rootCommand)?.id || section.id,
         sectionTitle: sectionByRoot.get(command.rootCommand)?.title || section.title,
         generatedMcpToolName: canExposeCommandAsGeneratedMcpTool(command.rootCommand)
@@ -319,12 +346,7 @@ export function filterAgentCommandCatalog(
       : undefined,
     optionInsights: command.optionInsights.map((insight) => ({ ...insight, cautions: [...insight.cautions] })),
     recommendedFlow: command.recommendedFlow.map((step) => ({ ...step })),
-    result: command.result
-      ? {
-          ...command.result,
-          fields: command.result.fields.map((field) => ({ ...field }))
-        }
-      : undefined
+    result: cloneResolvedCommandResultDescriptor(command.result)
   }));
 
   const allowedKeys = new Set(commands.map((command) => command.key));
@@ -444,17 +466,7 @@ export function renderSkillCommandReference(catalog: CommandCatalog = getCommand
       }
       if (agentCommand?.result) {
         parts.push('', '结构化结果：');
-        if (agentCommand.result.summary) {
-          parts.push(`- ${agentCommand.result.summary}`);
-        }
-        parts.push('- `stage`：命令阶段标识。');
-        if (agentCommand.result.outcomeKey) {
-          parts.push(`- \`${agentCommand.result.outcomeKey}\`：结果布尔态字段。`);
-        }
-        for (const field of agentCommand.result.fields) {
-          const optional = field.required ? '' : '（可选）';
-          parts.push(`- \`${field.name}\`${optional}：${field.description}`);
-        }
+        parts.push(...renderStructuredResultMarkdown(agentCommand.result));
       }
       if (agentCommand?.recommendedFlow.length) {
         parts.push('', '推荐流程：');

@@ -40,10 +40,19 @@ export interface ResolvedCommandResultFieldDescriptor {
   required: boolean;
 }
 
+export interface ResolvedCommandResultFieldTreeNode {
+  name: string;
+  segment: string;
+  description?: string;
+  required?: boolean;
+  children: ResolvedCommandResultFieldTreeNode[];
+}
+
 export interface ResolvedCommandResultDescriptor {
   summary?: string;
   outcomeKey?: string;
   fields: ResolvedCommandResultFieldDescriptor[];
+  fieldTree: ResolvedCommandResultFieldTreeNode[];
 }
 
 function unique<T>(values: T[]) {
@@ -95,16 +104,89 @@ export function getCommandDescriptor(key: string): CommandDescriptor {
   return RESOLVED_COMMAND_DESCRIPTORS[key] || EMPTY_COMMAND_DESCRIPTOR;
 }
 
+function splitResultFieldPath(name: string) {
+  return name.trim().split('.').map((segment) => segment.trim()).filter(Boolean);
+}
+
+function normalizeResultFieldSegment(segment: string) {
+  return segment.replace(/\[\]$/, '');
+}
+
+export function buildCommandResultFieldTree(fields: ResolvedCommandResultFieldDescriptor[]) {
+  const roots: ResolvedCommandResultFieldTreeNode[] = [];
+  const nodes = new Map<string, ResolvedCommandResultFieldTreeNode>();
+
+  for (const field of fields) {
+    const segments = splitResultFieldPath(field.name);
+    let children = roots;
+    let canonicalPath = '';
+
+    for (const [index, segment] of segments.entries()) {
+      const normalizedSegment = normalizeResultFieldSegment(segment);
+      canonicalPath = canonicalPath ? `${canonicalPath}.${normalizedSegment}` : normalizedSegment;
+      let node = nodes.get(canonicalPath);
+      if (!node) {
+        node = {
+          name: canonicalPath,
+          segment,
+          children: []
+        };
+        nodes.set(canonicalPath, node);
+        children.push(node);
+      } else if (segment.endsWith('[]') && !node.segment.endsWith('[]')) {
+        node.segment = segment;
+      }
+
+      if (index === segments.length - 1) {
+        node.description = field.description;
+        node.required = field.required;
+      }
+
+      children = node.children;
+    }
+  }
+
+  const finalizeTree = (items: ResolvedCommandResultFieldTreeNode[], parentPath = ''): ResolvedCommandResultFieldTreeNode[] => (
+    items.map((item) => {
+      const name = parentPath ? `${parentPath}.${item.segment}` : item.segment;
+      return {
+        ...item,
+        name,
+        children: finalizeTree(item.children, name)
+      };
+    })
+  );
+
+  return finalizeTree(roots);
+}
+
+export function cloneResolvedCommandResultDescriptor(result?: ResolvedCommandResultDescriptor) {
+  if (!result) return undefined;
+
+  const cloneFieldTreeNode = (node: ResolvedCommandResultFieldTreeNode): ResolvedCommandResultFieldTreeNode => ({
+    ...node,
+    children: node.children.map(cloneFieldTreeNode)
+  });
+
+  return {
+    ...result,
+    fields: result.fields.map((field) => ({ ...field })),
+    fieldTree: result.fieldTree.map(cloneFieldTreeNode)
+  } satisfies ResolvedCommandResultDescriptor;
+}
+
 export function buildCommandResultDescriptor(descriptor: CommandDescriptor): ResolvedCommandResultDescriptor | undefined {
   if (!descriptor.result) return undefined;
+  const fields = (descriptor.result.fields || []).map((field) => ({
+    name: field.name,
+    description: field.description,
+    required: field.required !== false
+  }));
   return {
     summary: descriptor.result.summary,
     outcomeKey: descriptor.result.outcomeKey,
-    fields: (descriptor.result.fields || []).map((field) => ({
-      name: field.name,
-      description: field.description,
-      required: field.required !== false
-    }))
+    fields,
+    fieldTree: buildCommandResultFieldTree(fields)
   };
 }
 

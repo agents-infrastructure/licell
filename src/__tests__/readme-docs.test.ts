@@ -51,6 +51,7 @@ describe('syncReadmeQuickReferenceSection', () => {
     expect(output).toContain('@@LICELL_JSON@@');
     expect(output).toContain('licell-cli-record');
     expect(output).toContain('licell-help@1.0');
+    expect(output).toContain('`fieldTree[]`');
     expect(output).toContain('### 命令总览');
     expect(output).not.toContain('old content');
     expect(output).toContain('workflow content');

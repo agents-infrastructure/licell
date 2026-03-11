@@ -100,6 +100,7 @@ describe('cli help e2e', () => {
     expect(records[0]?.help?.title).toBe('licell domain app bind <domain>');
     expect(records[0]?.help?.result?.outcomeKey).toBe('bound');
     expect(records[0]?.help?.result?.fields.some((field: { name?: string }) => field.name === 'finalUrl')).toBe(true);
+    expect(records[0]?.help?.result?.fieldTree.some((field: { name?: string }) => field.name === 'finalUrl')).toBe(true);
     expect(records[0]?.help?.renderedText).toContain('Structured Result:');
     expect(records[0]?.help?.renderedText).toContain('`finalUrl` · 最终访问 URL。');
     expect(records[0]?.help?.blocks).toBeUndefined();
@@ -118,5 +119,6 @@ describe('cli help e2e', () => {
     expect(records[0]?.help?.title).toBe('licell doctor');
     expect(records[0]?.help?.result?.outcomeKey).toBe('healthy');
     expect(records[0]?.help?.result?.fields.some((field: { name?: string }) => field.name === 'checks')).toBe(true);
+    expect(records[0]?.help?.result?.fieldTree.some((field: { name?: string }) => field.name === 'checks[]')).toBe(true);
   }, 10000);
 });

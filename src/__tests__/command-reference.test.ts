@@ -71,11 +71,13 @@ describe('buildAgentCommandCatalog', () => {
     expect(doctor?.result?.outcomeKey).toBe('healthy');
     expect(doctor?.result?.fields.some((field) => field.name === 'checks[].remediation[].type')).toBe(true);
     expect(doctor?.result?.fields.some((field) => field.name === 'checks[].nextCommands[].priority')).toBe(true);
+    expect(doctor?.result?.fieldTree.some((field) => field.name === 'checks[]')).toBe(true);
     expect(doctor?.generatedMcpToolName).toBe('licell_cmd_doctor');
 
     const domainAppBind = catalog.commands.find((command) => command.key === 'domain app bind');
     expect(domainAppBind?.result?.outcomeKey).toBe('bound');
     expect(domainAppBind?.result?.fields.some((field) => field.name === 'finalUrl')).toBe(true);
+    expect(domainAppBind?.result?.fieldTree.some((field) => field.name === 'finalUrl')).toBe(true);
 
     const authRestore = catalog.commands.find((command) => command.key === 'auth restore');
     expect(authRestore?.interaction?.ttyOnly).toBe(true);
@@ -120,6 +122,7 @@ describe('renderSkillCommandReference', () => {
     expect(markdown).toContain('结构化结果：');
     expect(markdown).toContain('`stage`：命令阶段标识。');
     expect(markdown).toContain('`finalUrl`：最终访问 URL。');
+    expect(markdown).toContain('`checks[]`：逐项诊断结果数组。');
     expect(markdown).toContain('推荐流程：');
     expect(markdown).toContain('licell deploy spec');
   });

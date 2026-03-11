@@ -89,5 +89,6 @@ describe('domain generated MCP tools', () => {
     expect(tools.licell_cmd_domain_app_bind.description).toContain('stage, bound, workflow, domain');
     expect(tools.licell_cmd_domain_app_bind.description).toContain('finalUrl');
     expect(tools.licell_cmd_domain_app_bind.metadata?.licell.result?.fields.some((field) => field.name === 'finalUrl')).toBe(true);
+    expect(tools.licell_cmd_domain_app_bind.metadata?.licell.result?.fieldTree.some((field) => field.name === 'finalUrl')).toBe(true);
   });
 });

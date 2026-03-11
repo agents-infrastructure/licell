@@ -554,6 +554,7 @@ licell e2e cleanup <runId>
 - `licell <command> --help --output json`：先读取 `help.kind` / `help.schemaVersion`；当前为 `licell-help@1.0`。
 - `licell_command_catalog`：先读取 `kind` / `schemaVersion`；当前为 `licell-agent-command-catalog@1.0`。
 - MCP tools 的 `metadata.licell` 会显式声明 `schemas.help` / `schemas.commandCatalog`；当前为 `licell-help@1.0` / `licell-agent-command-catalog@1.0`。
+- `help.result` / command catalog / generated MCP metadata 的结果 schema 同时提供扁平 `fields[]` 与层次化 `fieldTree[]`；优先消费 `fieldTree[]`，兼容旧逻辑时再读取 `fields[]`。
 
 ### 命令总览
 

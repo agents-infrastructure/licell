@@ -227,6 +227,9 @@ describe('help utils', () => {
     expect(doc?.scope).toBe('command');
     expect(doc?.key).toBe('doctor');
     expect(doc?.result?.outcomeKey).toBe('healthy');
+    expect(doc?.result?.fieldTree.some((field) => field.name === 'checks[]')).toBe(true);
+    const checksNode = doc?.result?.fieldTree.find((field) => field.name === 'checks[]');
+    expect(checksNode?.children.some((field) => field.name === 'checks[].remediation[]')).toBe(true);
     expect(doc?.optionInsights.some((insight) => insight.flag.includes('--runtime'))).toBe(true);
     expect(doc?.recommendedFlow.map((step) => step.command)).toEqual(expect.arrayContaining([
       'licell doctor --output json',
@@ -235,8 +238,9 @@ describe('help utils', () => {
     ]));
     expect(doc?.text).toContain('Structured Result:');
     expect(doc?.text).toContain('`healthy` · 是否不存在 error 级阻塞项。');
-    expect(doc?.text).toContain('`checks[].remediation[].type`');
-    expect(doc?.text).toContain('`checks[].nextCommands[].priority`');
+    expect(doc?.text).toContain('`checks[]` · 逐项诊断结果数组。');
+    expect(doc?.text).toContain('`remediation[]` · 结构化修复建议数组；既可给人看，也可给 Agent 解释修复意图。');
+    expect(doc?.text).toContain('`priority` · `primary` 为首选下一步，`secondary` 为补充路径。');
     expect(doc?.text).toContain('Decision Guide:');
     expect(doc?.text).toContain('Inspect:');
   });
@@ -304,6 +308,7 @@ describe('help utils', () => {
     expect(payload.key).toBe('domain app bind');
     expect(payload.result?.outcomeKey).toBe('bound');
     expect(payload.result?.fields.some((field) => field.name === 'finalUrl')).toBe(true);
+    expect(payload.result?.fieldTree.some((field) => field.name === 'finalUrl')).toBe(true);
     expect(payload.renderedText).toContain('Structured Result:');
     expect('blocks' in payload).toBe(false);
     expect('text' in payload).toBe(false);
@@ -336,6 +341,7 @@ describe('domain help', () => {
     expect(doc?.aliases).toEqual([]);
     expect(doc?.result?.outcomeKey).toBe('bound');
     expect(doc?.result?.fields.some((field) => field.name === 'finalUrl')).toBe(true);
+    expect(doc?.result?.fieldTree.some((field) => field.name === 'finalUrl')).toBe(true);
     expect(doc?.blocks.some((block) => block.kind === 'structured-result')).toBe(true);
     expect(doc?.text).toContain('licell domain app bind <domain>');
     expect(doc?.text).toContain('Structured Result:');
