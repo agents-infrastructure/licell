@@ -101,6 +101,22 @@ describe('runLicellDoctor', () => {
           priority: 'secondary'
         })
       ]);
+      expect(authCheck.nextActions).toEqual([
+        expect.objectContaining({
+          commandTemplate: 'licell login',
+          commandKey: 'login',
+          phase: 'mutate',
+          priority: 'primary',
+          source: 'doctor-next-command'
+        }),
+        expect.objectContaining({
+          commandTemplate: 'licell auth restore <token> [passkey]',
+          commandKey: 'auth restore',
+          phase: 'mutate',
+          priority: 'secondary',
+          source: 'doctor-next-command'
+        })
+      ]);
       expect(getCheck(report, 'domain.consistency').status).toBe('skip');
       expect(getCheck(report, 'deploy.target').status).toBe('skip');
       expect(report.errorCount).toBeGreaterThan(0);
@@ -177,6 +193,22 @@ describe('runLicellDoctor', () => {
           commandKey: 'deploy check',
           intent: 'verify',
           priority: 'secondary'
+        })
+      ]);
+      expect(precheck.nextActions).toEqual([
+        expect.objectContaining({
+          commandTemplate: 'licell deploy spec nodejs22',
+          commandKey: 'deploy spec',
+          phase: 'inspect',
+          priority: 'primary',
+          source: 'doctor-next-command'
+        }),
+        expect.objectContaining({
+          commandTemplate: 'licell deploy check --runtime nodejs22 --entry src/index.ts',
+          commandKey: 'deploy check',
+          phase: 'verify',
+          priority: 'secondary',
+          source: 'doctor-next-command'
         })
       ]);
     } finally {

@@ -1,3 +1,5 @@
+import { buildResolvedNextActionsFromSeeds, type ResolvedCommandNextAction } from './command-next-actions';
+import type { CommandTaskEntryPhase } from './command-tasks';
 import { resolveCatalogCommandFromTemplate } from './command-resolution';
 
 export type LicellDoctorCommandIntent = 'inspect' | 'verify' | 'login' | 'restore' | 'repair' | 'configure' | 'deploy' | 'bind' | 'release';
@@ -136,4 +138,26 @@ export function normalizeDoctorNextCommands(items: LicellDoctorNextCommand[]) {
     seen.add(item.commandTemplate);
     return true;
   });
+}
+
+function mapDoctorIntentToPhase(intent: LicellDoctorCommandIntent): CommandTaskEntryPhase {
+  if (intent === 'inspect') return 'inspect';
+  if (intent === 'verify') return 'verify';
+  return 'mutate';
+}
+
+export function buildDoctorNextActions(items: LicellDoctorNextCommand[]) {
+  return buildResolvedNextActionsFromSeeds({
+    actions: items.map((item) => ({
+      title: item.description || item.commandTemplate,
+      description: item.description || item.commandTemplate,
+      commandTemplate: item.commandTemplate,
+      phase: mapDoctorIntentToPhase(item.intent),
+      source: 'doctor-next-command'
+    })),
+    limit: items.length || 4
+  }).map((action, index) => ({
+    ...action,
+    priority: items[index]?.priority || action.priority
+  })) satisfies ResolvedCommandNextAction[];
 }

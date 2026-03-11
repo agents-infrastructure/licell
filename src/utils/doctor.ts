@@ -7,6 +7,7 @@ import { runDoctorCloudDiagnostics } from '../providers/doctor-cloud';
 import { normalizeAuth, normalizeProject, type AuthConfig, type ProjectConfig } from './config';
 import { parseDeployRuntimeOption } from './deploy-runtime';
 import {
+  buildDoctorNextActions,
   doctorNextCommands,
   doctorRemediationNote,
   type LicellDoctorNextCommand,
@@ -14,6 +15,7 @@ import {
   normalizeDoctorNextCommands,
   normalizeDoctorRemediationItems
 } from './doctor-guidance';
+import { cloneResolvedCommandNextActions, type ResolvedCommandNextAction } from './command-next-actions';
 
 export type LicellDoctorCheckStatus = 'ok' | 'warn' | 'error' | 'skip';
 export type LicellDoctorCheckCategory = 'auth' | 'global' | 'project' | 'deploy' | 'cloud' | 'domain';
@@ -26,6 +28,7 @@ export interface LicellDoctorCheck {
   details: string[];
   remediation: LicellDoctorRemediation[];
   nextCommands: LicellDoctorNextCommand[];
+  nextActions: ResolvedCommandNextAction[];
   data?: Record<string, unknown>;
 }
 
@@ -95,7 +98,9 @@ interface DoctorCheckDefinition {
   run(context: LicellDoctorContext): LicellDoctorCheck;
 }
 
-interface LicellDoctorCheckInput extends LicellDoctorCheck {}
+interface LicellDoctorCheckInput extends Omit<LicellDoctorCheck, 'nextActions'> {
+  nextActions?: ResolvedCommandNextAction[];
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -195,11 +200,15 @@ function createDoctorContext(options: LicellDoctorRunOptions = {}): LicellDoctor
 }
 
 function createCheck(input: LicellDoctorCheckInput): LicellDoctorCheck {
+  const nextCommands = normalizeDoctorNextCommands(input.nextCommands);
   return {
     ...input,
     details: [...input.details],
     remediation: normalizeDoctorRemediationItems(input.remediation),
-    nextCommands: normalizeDoctorNextCommands(input.nextCommands),
+    nextCommands,
+    nextActions: input.nextActions
+      ? cloneResolvedCommandNextActions(input.nextActions)
+      : buildDoctorNextActions(nextCommands),
     ...(input.data ? { data: { ...input.data } } : {})
   };
 }

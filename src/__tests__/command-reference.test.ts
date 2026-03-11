@@ -72,6 +72,7 @@ describe('buildAgentCommandCatalog', () => {
     expect(doctor?.nextActions[0]?.commandTemplate).toBe('licell doctor --output json');
     expect(doctor?.result?.outcomeKey).toBe('healthy');
     expect(doctor?.result?.fields.some((field) => field.name === 'checks[].remediation[].type')).toBe(true);
+    expect(doctor?.result?.fields.some((field) => field.name === 'checks[].nextActions[].priority')).toBe(true);
     expect(doctor?.result?.fields.some((field) => field.name === 'checks[].nextCommands[].priority')).toBe(true);
     expect(doctor?.result?.fieldTree.some((field) => field.name === 'checks[]')).toBe(true);
     expect(doctor?.generatedMcpToolName).toBe('licell_cmd_doctor');

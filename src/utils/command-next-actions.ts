@@ -11,7 +11,7 @@ export interface ResolvedCommandNextAction {
   phase: CommandTaskEntryPhase;
   priority: 'primary' | 'secondary';
   order: number;
-  source: 'recommended-flow' | 'task' | 'error-remediation';
+  source: 'recommended-flow' | 'task' | 'error-remediation' | 'doctor-next-command';
 }
 
 export interface CommandNextActionSeed {

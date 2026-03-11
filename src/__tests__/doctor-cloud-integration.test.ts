@@ -123,6 +123,22 @@ describe('runLicellDoctor cloud integration', () => {
           priority: 'secondary'
         })
       ]);
+      expect(report.checks.find((check) => check.id === 'cloud.capabilities')?.nextActions).toEqual([
+        expect.objectContaining({
+          commandTemplate: 'licell auth repair',
+          commandKey: 'auth repair',
+          phase: 'mutate',
+          priority: 'primary',
+          source: 'doctor-next-command'
+        }),
+        expect.objectContaining({
+          commandTemplate: 'licell switch --region <region>',
+          commandKey: 'switch',
+          phase: 'mutate',
+          priority: 'secondary',
+          source: 'doctor-next-command'
+        })
+      ]);
     } finally {
       rmSync(home, { recursive: true, force: true });
       rmSync(root, { recursive: true, force: true });

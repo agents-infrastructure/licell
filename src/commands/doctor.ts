@@ -22,7 +22,7 @@ const doctorCommand = defineCliCommand({
       '默认包含云端只读探测，会检查身份、权限、deploy target 与域名入口一致性，但不会创建或修改任何云端资源。',
       '当前目录不是 licell 项目时，项目相关检查会以 warn/skip 呈现。',
       '如果只想排查本地文件与入口契约，可追加 `--offline`。',
-      '`checks[].remediation[]` 与 `checks[].nextCommands[]` 都是稳定的结构化 guidance，可直接供 Agent / 自动化消费。'
+      '`checks[].remediation[]`、`checks[].nextCommands[]` 与 `checks[].nextActions[]` 都是稳定的结构化 guidance；Agent 优先读取 `checks[].nextActions[]`。'
     ],
     examples: [
       'licell doctor',
@@ -66,11 +66,11 @@ const doctorCommand = defineCliCommand({
       explicitInputs: ['--runtime', '--entry', '--docker-daemon', '--offline'],
       notes: [
         'Agent / 脚本应优先使用 `--output json`，读取 `healthy`、统计字段与 `checks[]`。',
-        '阻塞项优先读取 `checks[].nextCommands[]` 的 `priority=primary` 项；`remediation[]` 用于解释原因和修复语义。'
+        '阻塞项优先读取 `checks[].nextActions[]` 的 `priority=primary` 项；`remediation[]` 用于解释原因和修复语义。'
       ]
     },
     result: {
-      summary: '返回本机诊断汇总、计数和逐项检查结果；每个检查项都附带结构化修复建议与后续命令。',
+      summary: '返回本机诊断汇总、计数和逐项检查结果；每个检查项都附带结构化修复建议、兼容的 nextCommands，以及统一的 nextActions。',
       outcomeKey: 'healthy',
       fields: [
         { name: 'stage', description: '固定为 `doctor`。', required: true },
@@ -92,6 +92,13 @@ const doctorCommand = defineCliCommand({
         { name: 'checks[].remediation[].commandTemplate', description: '若该建议关联命令，则提供可直接展示/填参的命令模板。', required: false },
         { name: 'checks[].remediation[].commandKey', description: '若能匹配到 CLI 注册表，则给出稳定 command key。', required: false },
         { name: 'checks[].remediation[].intent', description: '建议命令的语义意图，如 `repair` / `verify` / `deploy` / `bind`。', required: false },
+        { name: 'checks[].nextActions[]', description: '统一的结构化下一步数组；把 per-check 后续动作收敛成 Agent 更容易消费的主/备路径。', required: true },
+        { name: 'checks[].nextActions[].title', description: '下一步动作的简短标题。', required: true },
+        { name: 'checks[].nextActions[].description', description: '为什么要执行这一步。', required: true },
+        { name: 'checks[].nextActions[].commandTemplate', description: '建议执行的命令模板。', required: true },
+        { name: 'checks[].nextActions[].commandKey', description: '若能匹配到 CLI 注册表，则给出稳定 command key。', required: false },
+        { name: 'checks[].nextActions[].phase', description: '动作阶段，如 `inspect` / `verify` / `mutate`。', required: true },
+        { name: 'checks[].nextActions[].priority', description: '`primary` 为首选下一步，`secondary` 为补充路径。', required: true },
         { name: 'checks[].nextCommands[]', description: '结构化后续命令提示数组；通常按优先级给出下一步。', required: true },
         { name: 'checks[].nextCommands[].commandTemplate', description: '建议执行的命令模板。', required: true },
         { name: 'checks[].nextCommands[].commandKey', description: '若能匹配到 CLI 注册表，则给出稳定 command key。', required: false },

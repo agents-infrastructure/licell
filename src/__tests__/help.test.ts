@@ -237,6 +237,7 @@ describe('help utils', () => {
     expect(doc?.result?.fieldTree.some((field) => field.name === 'checks[]')).toBe(true);
     const checksNode = doc?.result?.fieldTree.find((field) => field.name === 'checks[]');
     expect(checksNode?.children.some((field) => field.name === 'checks[].remediation[]')).toBe(true);
+    expect(checksNode?.children.some((field) => field.name === 'checks[].nextActions[]')).toBe(true);
     expect(doc?.optionInsights.some((insight) => insight.flag.includes('--runtime'))).toBe(true);
     expect(doc?.recommendedFlow.map((step) => step.command)).toEqual(expect.arrayContaining([
       'licell doctor --output json',
@@ -249,6 +250,7 @@ describe('help utils', () => {
     expect(doc?.text).toContain('command: licell doctor --output json');
     expect(doc?.text).toContain('`checks[]` · 逐项诊断结果数组。');
     expect(doc?.text).toContain('`remediation[]` · 结构化修复建议数组；既可给人看，也可给 Agent 解释修复意图。');
+    expect(doc?.text).toContain('`nextActions[]` · 统一的结构化下一步数组；把 per-check 后续动作收敛成 Agent 更容易消费的主/备路径。');
     expect(doc?.text).toContain('`priority` · `primary` 为首选下一步，`secondary` 为补充路径。');
     expect(doc?.text).toContain('Decision Guide:');
     expect(doc?.text).toContain('Inspect:');
