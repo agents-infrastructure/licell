@@ -21,7 +21,7 @@ import {
   type AuthCapability
 } from '../utils/auth-recovery';
 import { createSpinner, isInteractiveTTY, showIntro, showOutro, tryNormalizeFcRuntime } from '../utils/cli-shared';
-import { emitCliError, emitCliEvent, emitCliResult, isJsonOutput } from '../utils/output';
+import { emitCliError, emitCliEvent, emitCommandResult, isJsonOutput } from '../utils/output';
 import { resolveDeployContext, type DeployCliOptions } from './deploy-context';
 import { executeApiDeploy } from './deploy-api';
 import { executeStaticDeploy } from './deploy-static';
@@ -182,10 +182,7 @@ function printDeploySpec(runtimeInput: string | undefined, includeAll: boolean |
     const payload = includeAll || !runtimeInput
       ? getFcApiDeploySpecDocument()
       : { runtime: getFcApiRuntimeDeploySpec(resolveApiRuntimeForSpec(runtimeInput)) };
-    emitCliResult({
-      stage: 'deploy.spec',
-      ...payload
-    });
+    emitCommandResult(payload);
     return;
   }
 
@@ -251,10 +248,7 @@ function runDeployCheck(options: DeployCheckOptions) {
   });
 
   if (isJsonOutput()) {
-    emitCliResult({
-      stage: 'deploy.check',
-      ...result
-    });
+    emitCommandResult(result);
   } else {
     console.log(`${pc.bold('FC API Deploy Precheck')}`);
     console.log(`runtime: ${pc.cyan(result.runtime)}`);
@@ -425,8 +419,7 @@ export function registerDeployCommand(cli: CAC) {
               }
             }
             if (isJsonOutput()) {
-              emitCliResult({
-                stage: 'deploy',
+              emitCommandResult({
                 type: ctx.type,
                 runtime: ctx.cliRuntime || ctx.projectRuntime || ctx.envRuntime || null,
                 url,

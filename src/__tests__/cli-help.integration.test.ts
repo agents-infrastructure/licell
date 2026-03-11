@@ -81,6 +81,17 @@ describe('cli help e2e', () => {
     expect(result.stdout).toContain('Recommended Flow:');
   }, 10000);
 
+  it('prints doctor help with next actions before decision guide', () => {
+    const result = runCliHelp(['doctor', '--help']);
+
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(result.stdout).toContain('Next Actions:');
+    expect(result.stdout).toContain('Decision Guide:');
+    expect(result.stdout.indexOf('Next Actions:')).toBeLessThan(result.stdout.indexOf('Decision Guide:'));
+  }, 10000);
+
   it('emits structured JSON help records through the real CLI entry', () => {
     const result = runCliHelp(['domain', 'app', 'bind', '--help', '--output', 'json']);
     const records = extractJsonRecordsFromOutput(result.stdout) as Array<Record<string, any>>;

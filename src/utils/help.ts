@@ -606,12 +606,12 @@ function buildAutomationItems(automation: ResolvedCommandAutomationDescriptor) {
 
 function buildCommandLikeHelpBlocks(doc: HelpSemanticDocument): HelpBlock[] {
   return [
-    ...buildDecisionGuideBlock(doc.decisionGuide, doc.tasks),
     ...(doc.nextActions.length > 0 ? [{
       kind: 'next-actions',
       title: 'Next Actions',
       actions: doc.nextActions
     } satisfies HelpBlock] : []),
+    ...buildDecisionGuideBlock(doc.decisionGuide, doc.tasks),
     ...(doc.interaction ? [{
       kind: 'items',
       title: 'TTY Interaction',

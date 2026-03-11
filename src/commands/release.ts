@@ -25,7 +25,7 @@ import {
   withSpinner
 } from '../utils/cli-shared';
 import { Config } from '../utils/config';
-import { emitCliResult, isJsonOutput } from '../utils/output.js';
+import { emitCommandResult, isJsonOutput } from '../utils/output.js';
 import { prunePreviewDomainsWorkflow } from '../workflows/preview';
 import { DELIVERY_SECTION } from './sections';
 
@@ -129,8 +129,7 @@ export function registerReleaseCommands(cli: CAC) {
             s.stop(pc.green(`✅ 共获取 ${versions.length} 个版本`));
           }
           if (isJsonOutput()) {
-            emitCliResult({
-              stage: 'release.list',
+            emitCommandResult({
               appName: project.appName,
               count: versions.length,
               versions
@@ -201,8 +200,7 @@ export function registerReleaseCommands(cli: CAC) {
             s.stop(pc.green('✅ 别名切流完成'));
           }
           if (isJsonOutput()) {
-            emitCliResult({
-              stage: 'release.promote',
+            emitCommandResult({
               appName: project.appName,
               target,
               versionId
@@ -251,8 +249,7 @@ export function registerReleaseCommands(cli: CAC) {
             s.stop(pc.green('✅ 回滚完成'));
           }
           if (isJsonOutput()) {
-            emitCliResult({
-              stage: 'release.rollback',
+            emitCommandResult({
               appName: project.appName,
               target,
               versionId: rollbackVersion
@@ -298,13 +295,12 @@ export function registerReleaseCommands(cli: CAC) {
               s.stop(pc.green(apply ? '✅ 清理任务完成' : '✅ 预览完成'));
             }
             if (isJsonOutput()) {
-              emitCliResult({
-                stage: 'release.prune.preview',
+              emitCommandResult({
                 appName: project.appName,
                 keepRequested: keep,
                 applyRequested: apply,
                 ...result
-              });
+              }, { stage: 'release.prune.preview' });
               return;
             }
             console.log(`\n保留数量: ${pc.cyan(String(result.keep))}`);
@@ -345,8 +341,7 @@ export function registerReleaseCommands(cli: CAC) {
             s.stop(pc.green(apply ? '✅ 清理任务完成' : '✅ 预览完成'));
           }
           if (isJsonOutput()) {
-            emitCliResult({
-              stage: 'release.prune',
+            emitCommandResult({
               appName: project.appName,
               keepRequested: keep,
               applyRequested: apply,

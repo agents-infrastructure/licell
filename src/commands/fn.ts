@@ -21,7 +21,7 @@ import {
   withSpinner
 } from '../utils/cli-shared';
 import { executeWithAuthRecovery } from '../utils/auth-recovery';
-import { emitCliResult, isJsonOutput } from '../utils/output';
+import { emitCommandResult, isJsonOutput } from '../utils/output';
 import { fnDomainCommandBundle } from './fn-domain';
 import { DELIVERY_SECTION } from './sections';
 
@@ -89,8 +89,7 @@ export function registerFnCommands(cli: CAC) {
             s.stop(pc.green(`✅ 共获取 ${functions.length} 个函数`));
           }
           if (isJsonOutput()) {
-            emitCliResult({
-              stage: 'fn.list',
+            emitCommandResult({
               count: functions.length,
               functions
             });
@@ -139,8 +138,7 @@ export function registerFnCommands(cli: CAC) {
           if (!isJsonOutput()) {
             s.stop(pc.green('✅ 获取成功'));
           } else {
-            emitCliResult({
-              stage: 'fn.info',
+            emitCommandResult({
               functionName: fn.functionName || functionName,
               qualifier: qualifier || null,
               runtime: fn.runtime || null,
@@ -228,8 +226,7 @@ export function registerFnCommands(cli: CAC) {
           }
           const responseBody = result.body && result.body.trim().length > 0 ? result.body : '';
           if (isJsonOutput()) {
-            emitCliResult({
-              stage: 'fn.invoke',
+            emitCommandResult({
               functionName,
               qualifier: qualifier || null,
               statusCode: result.statusCode,
@@ -283,8 +280,7 @@ export function registerFnCommands(cli: CAC) {
             s.stop(pc.green('✅ 函数已删除'));
           }
           if (isJsonOutput()) {
-            emitCliResult({
-              stage: 'fn.rm',
+            emitCommandResult({
               functionName,
               force: Boolean(options.force),
               forced: deleted.forced,

@@ -289,6 +289,7 @@ describe('help utils', () => {
     expect(doc?.text).toContain('licell deploy check');
     expect(doc?.text).toContain('Option Guidance:');
     expect(doc?.text).toContain('Recommended Flow:');
+    expect(doc!.text.indexOf('Next Actions:')).toBeLessThan(doc!.text.indexOf('Decision Guide:'));
   });
 
   it('adds option guidance and recommended flow for upgrade', () => {

@@ -26,7 +26,7 @@ import {
   parseOptionalPositiveInt,
   withSpinner
 } from '../utils/cli-shared';
-import { emitCliResult, isJsonOutput } from '../utils/output';
+import { emitCommandResult, isJsonOutput } from '../utils/output';
 import { DATA_SECTION } from './sections';
 
 const cacheAddOptions = [
@@ -181,8 +181,7 @@ export function registerCacheCommands(cli: CAC) {
             s.stop(pc.green('✅ Redis 缓存已就绪并绑定到本工程内网！'));
           }
           if (isJsonOutput()) {
-            emitCliResult({
-              stage: 'cache.add',
+            emitCommandResult({
               type,
               connectionStringMasked: maskConnectionString(redisUrl)
             });
@@ -217,8 +216,7 @@ export function registerCacheCommands(cli: CAC) {
             s.stop(pc.green(`✅ 共获取 ${instances.length} 个实例`));
           }
           if (isJsonOutput()) {
-            emitCliResult({
-              stage: 'cache.list',
+            emitCommandResult({
               count: instances.length,
               instances
             });
@@ -262,8 +260,7 @@ export function registerCacheCommands(cli: CAC) {
           if (!isJsonOutput()) {
             s.stop(pc.green('✅ 获取成功'));
           } else {
-            emitCliResult({
-              stage: 'cache.info',
+            emitCommandResult({
               instanceId: normalizedId,
               detail
             });
@@ -305,8 +302,7 @@ export function registerCacheCommands(cli: CAC) {
           if (!isJsonOutput()) {
             s.stop(pc.green('✅ 连接信息已生成'));
           } else {
-            emitCliResult({
-              stage: 'cache.connect',
+            emitCommandResult({
               instanceId: info.instanceId,
               connection: info
             });
@@ -357,8 +353,7 @@ export function registerCacheCommands(cli: CAC) {
             s.stop(pc.green('✅ Redis 密钥轮换完成'));
           }
           if (isJsonOutput()) {
-            emitCliResult({
-              stage: 'cache.rotate-password',
+            emitCommandResult({
               instanceId: instanceId || null,
               connectionStringMasked: maskConnectionString(redisUrl)
             });
@@ -414,8 +409,7 @@ export function registerCacheCommands(cli: CAC) {
           if (!isJsonOutput()) {
             s.stop(pc.green('✅ 公网访问已开通'));
           } else {
-            emitCliResult({
-              stage: 'cache.public-access',
+            emitCommandResult({
               instanceId: info.instanceId,
               publicIp,
               publicHost: pub?.host || null,
@@ -477,7 +471,7 @@ export function registerCacheCommands(cli: CAC) {
           );
 
           if (isJsonOutput()) {
-            emitCliResult({ stage: 'cache.rm', instanceId: id });
+            emitCommandResult({ instanceId: id });
             return;
           }
           showOutro(`实例 ${id} 已删除`);

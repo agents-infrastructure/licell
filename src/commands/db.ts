@@ -29,7 +29,7 @@ import {
   withSpinner,
   type DbTypeInput
 } from '../utils/cli-shared';
-import { emitCliResult, isJsonOutput } from '../utils/output';
+import { emitCommandResult, isJsonOutput } from '../utils/output';
 import { DATA_SECTION } from './sections';
 
 const dbAddOptions = [
@@ -196,8 +196,7 @@ export function registerDbCommands(cli: CAC) {
             s.stop(pc.green('✅ 数据库实例已就绪并绑定到本工程内网！'));
           }
           if (isJsonOutput()) {
-            emitCliResult({
-              stage: 'db.add',
+            emitCommandResult({
               type,
               connectionStringMasked: maskConnectionString(dbUrl)
             });
@@ -233,8 +232,7 @@ export function registerDbCommands(cli: CAC) {
             s.stop(pc.green(`✅ 共获取 ${instances.length} 个实例`));
           }
           if (isJsonOutput()) {
-            emitCliResult({
-              stage: 'db.list',
+            emitCommandResult({
               count: instances.length,
               instances
             });
@@ -278,8 +276,7 @@ export function registerDbCommands(cli: CAC) {
           if (!isJsonOutput()) {
             s.stop(pc.green('✅ 获取成功'));
           } else {
-            emitCliResult({
-              stage: 'db.info',
+            emitCommandResult({
               instanceId: normalizedId,
               detail
             });
@@ -325,8 +322,7 @@ export function registerDbCommands(cli: CAC) {
           if (!isJsonOutput()) {
             s.stop(pc.green('✅ 连接信息已生成'));
           } else {
-            emitCliResult({
-              stage: 'db.connect',
+            emitCommandResult({
               instanceId: info.instanceId,
               connection: info
             });
@@ -397,8 +393,7 @@ export function registerDbCommands(cli: CAC) {
           if (!isJsonOutput()) {
             s.stop(pc.green('✅ 公网访问已开通'));
           } else {
-            emitCliResult({
-              stage: 'db.public-access',
+            emitCommandResult({
               instanceId: info.instanceId,
               publicIp,
               publicHost: pub?.host || null,
@@ -461,7 +456,7 @@ export function registerDbCommands(cli: CAC) {
           );
 
           if (isJsonOutput()) {
-            emitCliResult({ stage: 'db.rm', instanceId: id });
+            emitCommandResult({ instanceId: id });
             return;
           }
           showOutro(`实例 ${id} 已删除`);

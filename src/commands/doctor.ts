@@ -3,7 +3,7 @@ import pc from 'picocolors';
 import { defineCliCommand, defineCommandModule, registerCliCommand } from './module';
 import { AUTOMATION_SECTION } from './sections';
 import { showIntro, showOutro } from '../utils/cli-shared';
-import { emitCliResult, isJsonOutput } from '../utils/output';
+import { emitCommandResult, isJsonOutput } from '../utils/output';
 import { renderLicellDoctorReport, runLicellDoctor } from '../utils/doctor';
 
 const doctorCommand = defineCliCommand({
@@ -128,7 +128,7 @@ export function registerDoctorCommands(cli: CAC) {
       });
 
       if (isJsonOutput()) {
-        emitCliResult({ ...report });
+        emitCommandResult(report, { inferOutcome: false });
       } else {
         showIntro(pc.bgBlue(pc.white(' 🩺 Licell Doctor ')));
         process.stdout.write(`${renderLicellDoctorReport(report)}\n`);

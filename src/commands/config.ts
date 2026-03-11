@@ -4,7 +4,7 @@ import pc from 'picocolors';
 import { Config } from '../utils/config';
 import { showIntro, showOutro, toOptionalString } from '../utils/cli-shared';
 import { normalizeDomainSuffix } from '../utils/cli-shared';
-import { emitCliResult, isJsonOutput } from '../utils/output';
+import { emitCommandResult, isJsonOutput } from '../utils/output';
 import { SETUP_SECTION } from './sections';
 
 const configDomainCommand = defineCliCommand({
@@ -55,7 +55,7 @@ export function registerConfigCommands(cli: CAC) {
       if (options.unset) {
         Config.setGlobalConfig({ domainSuffix: undefined });
         if (isJsonOutput()) {
-          emitCliResult({ stage: 'config.domain', domainSuffix: null, action: 'unset' });
+          emitCommandResult({ domainSuffix: null, action: 'unset' });
         } else {
           showIntro(pc.bgMagenta(pc.white(' ⚙ Config ')));
           showOutro(pc.green('已清除全局域名后缀'));
@@ -67,7 +67,7 @@ export function registerConfigCommands(cli: CAC) {
       if (!value) {
         const current = globalConfig.domainSuffix || null;
         if (isJsonOutput()) {
-          emitCliResult({ stage: 'config.domain', domainSuffix: current });
+          emitCommandResult({ domainSuffix: current });
         } else {
           if (current) {
             console.log(`全局域名后缀: ${pc.cyan(current)}`);
@@ -81,7 +81,7 @@ export function registerConfigCommands(cli: CAC) {
       const normalized = normalizeDomainSuffix(value);
       Config.setGlobalConfig({ domainSuffix: normalized });
       if (isJsonOutput()) {
-        emitCliResult({ stage: 'config.domain', domainSuffix: normalized, action: 'set' });
+        emitCommandResult({ domainSuffix: normalized, action: 'set' });
       } else {
         showIntro(pc.bgMagenta(pc.white(' ⚙ Config ')));
         console.log(`全局域名后缀已设置为: ${pc.cyan(normalized)}`);

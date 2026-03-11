@@ -1,6 +1,6 @@
 import type { CAC } from 'cac';
 import { defineCommandModule, defineCliCommand, registerCliCommand } from './module';
-import { emitCliResult, isJsonOutput } from '../utils/output';
+import { emitCommandResult, isJsonOutput } from '../utils/output';
 import { AUTOMATION_SECTION } from './sections';
 
 interface CompletionOptions {
@@ -50,11 +50,10 @@ export function registerShellCommands(cli: CAC) {
           compCur: process.env.COMP_CUR
         });
         if (isJsonOutput()) {
-          emitCliResult({
-            stage: 'completion.engine',
+          emitCommandResult({
             count: candidates.length,
             candidates
-          });
+          }, { stage: 'completion.engine' });
           return;
         }
         if (candidates.length > 0) {
@@ -67,11 +66,10 @@ export function registerShellCommands(cli: CAC) {
       const resolvedShell = completion.normalizeCompletionShell(shell || detected || 'bash');
       const script = completion.renderCompletionScript(resolvedShell);
       if (isJsonOutput()) {
-        emitCliResult({
-          stage: 'completion.script',
+        emitCommandResult({
           shell: resolvedShell,
           script
-        });
+        }, { stage: 'completion.script' });
       } else {
         process.stdout.write(script);
       }

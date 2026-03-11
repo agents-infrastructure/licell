@@ -32,7 +32,7 @@ import {
   parseListLimit,
   withSpinner
 } from '../utils/cli-shared';
-import { emitCliResult, isJsonOutput } from '../utils/output';
+import { emitCommandResult, isJsonOutput } from '../utils/output';
 import { DATA_SECTION } from './sections';
 
 const supaAddCommand = defineCliCommand({
@@ -170,7 +170,7 @@ export function registerSupaCommands(cli: CAC) {
           );
           if (!result) return;
           if (isJsonOutput()) {
-            emitCliResult({ stage: 'supa.add', ...result });
+            emitCommandResult(result);
             return;
           }
           s.stop(pc.green('✅ Supabase 实例已就绪！'));
@@ -198,7 +198,7 @@ export function registerSupaCommands(cli: CAC) {
           const instances = await withSpinner(s, '正在拉取 Supabase 实例列表...', '❌ 获取失败', () => listSupabaseInstances(limit));
           if (!instances) return;
           if (isJsonOutput()) {
-            emitCliResult({ stage: 'supa.list', count: instances.length, instances });
+            emitCommandResult({ count: instances.length, instances });
             return;
           }
           s.stop(pc.green(`✅ 共获取 ${instances.length} 个实例`));
@@ -224,7 +224,7 @@ export function registerSupaCommands(cli: CAC) {
           const s = createSpinner();
           const detail = await withSpinner(s, `正在拉取实例 ${name} 详情...`, '❌ 获取失败', () => getSupabaseInstanceDetail(name));
           if (!detail) return;
-          if (isJsonOutput()) { emitCliResult({ stage: 'supa.info', detail }); return; }
+          if (isJsonOutput()) { emitCommandResult({ detail }); return; }
           s.stop(pc.green('✅ 获取成功'));
           console.log(`\ninstanceName:  ${pc.cyan(detail.instanceName)}`);
           console.log(`appName:       ${pc.cyan(detail.appName || '-')}`);
@@ -254,7 +254,7 @@ export function registerSupaCommands(cli: CAC) {
             () => Promise.all([getSupabaseEndpoints(name), getSupabaseAuthInfo(name)])
           ) || [null, null];
           if (!endpoints || !authInfo) return;
-          if (isJsonOutput()) { emitCliResult({ stage: 'supa.connect', instanceName: name, endpoints, authInfo }); return; }
+          if (isJsonOutput()) { emitCommandResult({ instanceName: name, endpoints, authInfo }); return; }
           s.stop(pc.green('✅ 连接信息'));
           console.log(pc.yellow('\n── Supabase Endpoints ──'));
           for (const ep of endpoints.instanceEndpoints) {
@@ -303,7 +303,7 @@ export function registerSupaCommands(cli: CAC) {
             await withSpinner(s, `正在修改 Auth 配置 ${key}...`, '❌ 修改失败',
               () => modifySupabaseAuthConfig(name, [{ name: key, value }]));
             if (!isJsonOutput()) s.stop(pc.green(`✅ Auth 配置 ${key} 已更新`));
-            else { emitCliResult({ stage: 'supa.config', action: 'set-auth', key, value }); return; }
+            else { emitCommandResult({ action: 'set-auth', key, value }); return; }
           }
           if (options.setStorage) {
             const [key, ...rest] = options.setStorage.split('=');
@@ -312,7 +312,7 @@ export function registerSupaCommands(cli: CAC) {
             await withSpinner(s, `正在修改 Storage 配置 ${key}...`, '❌ 修改失败',
               () => modifySupabaseStorageConfig(name, [{ name: key, value }]));
             if (!isJsonOutput()) s.stop(pc.green(`✅ Storage 配置 ${key} 已更新`));
-            else { emitCliResult({ stage: 'supa.config', action: 'set-storage', key, value }); return; }
+            else { emitCommandResult({ action: 'set-storage', key, value }); return; }
           }
           if (options.rag || options.setRag) {
             const ragStatus = options.rag === 'on' ? true : options.rag === 'off' ? false : undefined;
@@ -326,7 +326,7 @@ export function registerSupaCommands(cli: CAC) {
             await withSpinner(s, '正在修改 RAG 配置...', '❌ 修改失败',
               () => modifySupabaseRAGConfig(name, ragStatus, ragConfig));
             if (!isJsonOutput()) s.stop(pc.green('✅ RAG 配置已更新'));
-            else { emitCliResult({ stage: 'supa.config', action: 'set-rag', ragStatus, ragConfig }); return; }
+            else { emitCommandResult({ action: 'set-rag', ragStatus, ragConfig }); return; }
           }
 
           if (!options.setAuth && !options.setStorage && !options.rag && !options.setRag) {
@@ -340,7 +340,7 @@ export function registerSupaCommands(cli: CAC) {
             ) || [null, null, null];
             if (!authInfo || !storageConfig || !ragConfig) return;
             if (isJsonOutput()) {
-              emitCliResult({ stage: 'supa.config', instanceName: name, authInfo, storageConfig, ragConfig });
+              emitCommandResult({ instanceName: name, authInfo, storageConfig, ragConfig });
               return;
             }
             s.stop(pc.green('✅ 配置信息'));
@@ -382,22 +382,22 @@ export function registerSupaCommands(cli: CAC) {
           if (options.set) {
             await withSpinner(s, '正在设置白名单...', '❌ 设置失败',
               () => modifySupabaseIpWhitelist(name, options.set!, 'Cover', group));
-            if (isJsonOutput()) { emitCliResult({ stage: 'supa.whitelist', action: 'set', ips: options.set }); return; }
+            if (isJsonOutput()) { emitCommandResult({ action: 'set', ips: options.set }); return; }
             s.stop(pc.green('✅ 白名单已更新'));
           } else if (options.add) {
             await withSpinner(s, '正在追加白名单...', '❌ 追加失败',
               () => modifySupabaseIpWhitelist(name, options.add!, 'Append', group));
-            if (isJsonOutput()) { emitCliResult({ stage: 'supa.whitelist', action: 'add', ips: options.add }); return; }
+            if (isJsonOutput()) { emitCommandResult({ action: 'add', ips: options.add }); return; }
             s.stop(pc.green('✅ 白名单已追加'));
           } else if (options.remove) {
             await withSpinner(s, '正在删除白名单...', '❌ 删除失败',
               () => modifySupabaseIpWhitelist(name, options.remove!, 'Delete', group));
-            if (isJsonOutput()) { emitCliResult({ stage: 'supa.whitelist', action: 'remove', ips: options.remove }); return; }
+            if (isJsonOutput()) { emitCommandResult({ action: 'remove', ips: options.remove }); return; }
             s.stop(pc.green('✅ 白名单已删除'));
           } else {
             const groups = await withSpinner(s, '正在获取白名单...', '❌ 获取失败', () => getSupabaseIpWhitelist(name));
             if (!groups) return;
-            if (isJsonOutput()) { emitCliResult({ stage: 'supa.whitelist', instanceName: name, groups }); return; }
+            if (isJsonOutput()) { emitCommandResult({ instanceName: name, groups }); return; }
             s.stop(pc.green('✅ IP 白名单'));
             for (const g of groups) {
               console.log(`\n${pc.yellow(`── ${g.groupName} ──`)}`);
@@ -423,7 +423,7 @@ export function registerSupaCommands(cli: CAC) {
           const s = createSpinner();
           await withSpinner(s, '正在重置密码...', '❌ 重置失败',
             () => resetSupabasePassword(name, options.dashboardPassword, options.dbPassword));
-          if (isJsonOutput()) { emitCliResult({ stage: 'supa.reset-password', instanceName: name }); return; }
+          if (isJsonOutput()) { emitCommandResult({ instanceName: name }); return; }
           s.stop(pc.green('✅ 密码已重置'));
           showOutro('Done.');
         }
@@ -445,7 +445,7 @@ export function registerSupaCommands(cli: CAC) {
             const name = instanceName.trim();
             const s = createSpinner();
             await withSpinner(s, `正在${label}实例 ${name}...`, `❌ ${label}失败`, () => fn(name));
-            if (isJsonOutput()) { emitCliResult({ stage, instanceName: name }); return; }
+            if (isJsonOutput()) { emitCommandResult({ instanceName: name }, { stage }); return; }
             s.stop(pc.green(`✅ 实例 ${name} 已${label}`));
             showOutro('Done.');
           }
@@ -474,7 +474,7 @@ export function registerSupaCommands(cli: CAC) {
 
           const s = createSpinner();
           await withSpinner(s, `正在删除实例 ${name}...`, '❌ 删除失败', () => deleteSupabaseInstance(name));
-          if (isJsonOutput()) { emitCliResult({ stage: 'supa.rm', instanceName: name }); return; }
+          if (isJsonOutput()) { emitCommandResult({ instanceName: name }); return; }
           showOutro(`实例 ${name} 已删除。⚠️ 关联的 PG 实例和 NAT 网关需手动清理。`);
         }
       );

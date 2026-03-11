@@ -42,7 +42,7 @@ import { probeHttpHealth, type ProbeHttpHealthOptions } from '../utils/health-ch
 import {
   emitCliError,
   emitCliEvent,
-  emitCliResult,
+  emitCommandResult,
   extractJsonRecordsFromOutput,
   isJsonOutput,
   sanitizeCapturedCliOutput
@@ -1180,8 +1180,7 @@ async function executeE2eRun(options: E2eRunOptions) {
       ...(manifest.resources.staticBucket ? [`oss bucket: ${manifest.resources.staticBucket}`] : []),
       ...(manifest.resources.vpcId ? [`vpc: ${manifest.resources.vpcId}/${manifest.resources.vswId || '-'}`] : [])
     ]);
-    emitCliResult({
-      stage: 'e2e',
+    emitCommandResult({
       runId,
       suite,
       status: manifest.status,
@@ -1189,7 +1188,7 @@ async function executeE2eRun(options: E2eRunOptions) {
       domain: manifest.resources.domain || null,
       staticBucket: manifest.resources.staticBucket || null,
       workspaceDir
-    });
+    }, { stage: 'e2e' });
   } catch (err: unknown) {
     runError = err;
     manifest.status = 'failed';
@@ -1449,13 +1448,12 @@ async function cleanupByManifest(
     printSection('清理结果', details.map((item) => item.replace(/^([^:]+): /, '$1 => ')));
     console.log(pc.green(`✅ 清理完成: ${manifest.runId}`));
   }
-  emitCliResult({
-    stage: 'e2e.cleanup',
+  emitCommandResult({
     runId: manifest.runId,
     status: manifest.cleanup.status || 'unknown',
     details,
     errors
-  });
+  }, { stage: 'e2e.cleanup' });
 }
 
 export function registerE2eCommands(cli: CAC) {

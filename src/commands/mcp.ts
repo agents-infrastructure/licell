@@ -7,7 +7,7 @@ import { homedir } from 'os';
 import { ensureAuthReadyForCommand, ensureAuthCapabilityPreflight, type AuthCapability } from '../utils/auth-recovery';
 import { isInteractiveTTY } from '../utils/cli-shared';
 import { resolveCliVersion } from '../utils/version';
-import { emitCliResult, isJsonOutput } from '../utils/output';
+import { emitCommandResult, isJsonOutput } from '../utils/output';
 import { AUTOMATION_SECTION } from './sections';
 
 const MCP_OPERATION_CAPABILITIES: AuthCapability[] = [
@@ -253,12 +253,11 @@ async function runMcpInit(options: { projectRoot?: unknown; serverName?: unknown
   const { projectRoot, serverName } = resolveMcpOptions(options);
   const { configPath, updated } = ensureMcpJsonConfig({ projectRoot, serverName });
   if (isJsonOutput()) {
-    emitCliResult({
-      stage: 'mcp',
+    emitCommandResult({
       action: 'init',
       configPath,
       updated
-    });
+    }, { stage: 'mcp' });
   } else {
     console.log(pc.green(`✅ 已写入 MCP 配置: ${configPath}${updated ? '' : ' (no changes)'}`));
     console.log(pc.gray('下一步：在支持 MCP 的客户端中启用该项目的 .mcp.json（例如 Claude Code）。'));
@@ -298,13 +297,12 @@ async function runMcpBootstrap(options: { projectRoot?: unknown; serverName?: un
   });
   const { configPath, updated } = ensureMcpJsonConfig({ projectRoot, serverName });
   if (isJsonOutput()) {
-    emitCliResult({
-      stage: 'mcp',
+    emitCommandResult({
       action: 'init',
       configPath,
       updated,
       next: 'run `licell mcp serve` without --output json to start stdio server'
-    });
+    }, { stage: 'mcp' });
     return;
   }
   console.log(pc.green(`✅ MCP 配置已就绪: ${configPath}${updated ? ' (updated)' : ''}`));

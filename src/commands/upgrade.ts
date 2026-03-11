@@ -7,7 +7,7 @@ import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileS
 import { dirname, join, resolve } from 'path';
 import { tmpdir } from 'os';
 import { createSpinner, showIntro, showOutro, toOptionalString } from '../utils/cli-shared';
-import { emitCliEvent, emitCliResult, isJsonOutput } from '../utils/output';
+import { emitCliEvent, emitCommandResult, isJsonOutput } from '../utils/output';
 import { AUTOMATION_SECTION } from './sections';
 
 const DEFAULT_UPGRADE_REPO = 'agents-infrastructure/licell';
@@ -417,21 +417,20 @@ export function registerUpgradeCommand(cli: CAC) {
         installSource
       });
 
-      if (Boolean(options.dryRun)) {
-        if (isJsonOutput()) {
-          emitCliResult({
-            stage: 'upgrade',
-            dryRun: true,
-            channel,
-            installSource: installSource.kind,
-            mode: plan.mode,
-            ...(plan.mode === 'release'
-              ? { scriptUrl: plan.scriptUrl }
-              : {
-                packageManager: plan.packageManager,
-                command: plan.displayCommand
-              })
-          });
+        if (Boolean(options.dryRun)) {
+          if (isJsonOutput()) {
+            emitCommandResult({
+              dryRun: true,
+              channel,
+              installSource: installSource.kind,
+              mode: plan.mode,
+              ...(plan.mode === 'release'
+                ? { scriptUrl: plan.scriptUrl }
+                : {
+                  packageManager: plan.packageManager,
+                  command: plan.displayCommand
+                })
+            });
         } else {
           console.log(formatUpgradeDryRunText({
             installSource,
@@ -485,8 +484,7 @@ export function registerUpgradeCommand(cli: CAC) {
         }
 
         if (isJsonOutput()) {
-          emitCliResult({
-            stage: 'upgrade',
+          emitCommandResult({
             dryRun: false,
             channel,
             mode: plan.mode,
@@ -585,8 +583,7 @@ export function registerUpgradeCommand(cli: CAC) {
         }
 
         if (isJsonOutput()) {
-          emitCliResult({
-            stage: 'upgrade',
+          emitCommandResult({
             dryRun: false,
             channel,
             mode: plan.mode,

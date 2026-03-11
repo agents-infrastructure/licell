@@ -11,7 +11,7 @@ import {
   showIntro
 } from '../utils/cli-shared';
 import { Config } from '../utils/config';
-import { emitCliResult, isJsonOutput } from '../utils/output';
+import { emitCommandResult, isJsonOutput } from '../utils/output';
 import { DELIVERY_SECTION } from './sections';
 
 interface LogsCommandOptions {
@@ -78,8 +78,7 @@ export function registerLogsCommand(cli: CAC) {
             silent: isJsonOutput()
           });
           if (isJsonOutput()) {
-            emitCliResult({
-              stage: 'logs',
+            emitCommandResult({
               appName: project.appName,
               once,
               lines: result && 'lines' in result ? result.lines : [],

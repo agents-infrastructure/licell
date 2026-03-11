@@ -39,7 +39,7 @@ import {
   withSpinner
 } from '../utils/cli-shared';
 import { parseRootAndSubdomain } from '../utils/domain';
-import { emitCliResult, emitCommandResult, isJsonOutput } from '../utils/output';
+import { emitCommandResult, isJsonOutput } from '../utils/output';
 import { DELIVERY_SECTION } from './sections';
 
 function parsePublicAccessBlockOption(value: unknown) {
@@ -402,8 +402,7 @@ export function registerOssCommands(cli: CAC) {
             s.stop(pc.green(`✅ 共获取 ${buckets.length} 个 Bucket`));
           }
           if (isJsonOutput()) {
-            emitCliResult({
-              stage: 'oss.list',
+            emitCommandResult({
               count: buckets.length,
               buckets
             });
@@ -444,8 +443,7 @@ export function registerOssCommands(cli: CAC) {
           if (!isJsonOutput()) {
             s.stop(pc.green('✅ 获取成功'));
           } else {
-            emitCliResult({
-              stage: 'oss.info',
+            emitCommandResult({
               bucket: bucketName,
               info
             });
@@ -490,8 +488,7 @@ export function registerOssCommands(cli: CAC) {
           if (!isJsonOutput()) {
             s.stop(pc.green(result.created ? '✅ Bucket 已创建' : '✅ Bucket 已存在，已校验可访问'));
           } else {
-            emitCliResult({
-              stage: 'oss.create',
+            emitCommandResult({
               bucket: bucketName,
               created: result.created,
               info: result.info
@@ -536,8 +533,7 @@ export function registerOssCommands(cli: CAC) {
           if (!isJsonOutput()) {
             s.stop(pc.green('✅ Bucket 配置已更新'));
           } else {
-            emitCliResult({
-              stage: 'oss.update',
+            emitCommandResult({
               bucket: bucketName,
               info
             });
@@ -580,8 +576,7 @@ export function registerOssCommands(cli: CAC) {
           if (!isJsonOutput()) {
             s.stop(pc.green(result.deletedBucket ? '✅ Bucket 已删除' : '✅ Bucket 不存在，无需删除'));
           } else {
-            emitCliResult({
-              stage: 'oss.rm',
+            emitCommandResult({
               bucket: bucketName,
               recursive: Boolean(options.recursive),
               result
@@ -623,8 +618,7 @@ export function registerOssCommands(cli: CAC) {
             s.stop(pc.green(`✅ 共获取 ${objects.length} 个对象`));
           }
           if (isJsonOutput()) {
-            emitCliResult({
-              stage: 'oss.ls',
+            emitCommandResult({
               bucket: bucketName,
               prefix: normalizedPrefix || null,
               count: objects.length,
@@ -669,8 +663,7 @@ export function registerOssCommands(cli: CAC) {
           if (!isJsonOutput()) {
             s.stop(pc.green('✅ 获取成功'));
           } else {
-            emitCliResult({
-              stage: 'oss.object.info',
+            emitCommandResult({
               bucket: bucketName,
               key: objectKey,
               info
@@ -716,8 +709,7 @@ export function registerOssCommands(cli: CAC) {
           if (!isJsonOutput()) {
             s.stop(pc.green('✅ 下载完成'));
           } else {
-            emitCliResult({
-              stage: 'oss.object.get',
+            emitCommandResult({
               bucket: result.bucket,
               key: result.key,
               filePath: result.filePath,
@@ -766,8 +758,7 @@ export function registerOssCommands(cli: CAC) {
           if (!isJsonOutput()) {
             s.stop(pc.green(result.deleted ? '✅ 对象已删除' : '✅ 对象不存在，无需删除'));
           } else {
-            emitCliResult({
-              stage: 'oss.object.rm',
+            emitCommandResult({
               bucket: result.bucket,
               key: result.key,
               deleted: result.deleted
@@ -996,15 +987,14 @@ export function registerOssCommands(cli: CAC) {
             if (!isJsonOutput()) {
               s.stop(pc.green(`✅ 上传完成，共 ${result.uploadedCount} 个文件`));
             } else {
-              emitCliResult({
-                stage: options.stage,
+              emitCommandResult({
                 bucket: result.bucket,
                 sourceDir,
                 targetDir: result.targetDir || null,
                 uploadedCount: result.uploadedCount,
                 skippedSymlinkCount: result.skippedSymlinkCount,
                 baseUrl: result.baseUrl
-              });
+              }, { stage: options.stage });
               return;
             }
             const objectPrefix = result.targetDir ? `${result.targetDir}/` : '';
@@ -1054,8 +1044,7 @@ bucket: ${pc.cyan(result.bucket)}`);
           if (!isJsonOutput()) {
             s.stop(pc.green(`✅ 下载完成，共 ${result.downloadedCount} 个对象`));
           } else {
-            emitCliResult({
-              stage: 'oss.sync.down',
+            emitCommandResult({
               bucket: result.bucket,
               prefix: result.prefix || null,
               destinationDir: result.destinationDir,

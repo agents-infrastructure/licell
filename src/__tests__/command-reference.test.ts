@@ -130,6 +130,7 @@ describe('renderSkillCommandReference', () => {
     expect(markdown).toContain('`checks[]`：逐项诊断结果数组。');
     expect(markdown).toContain('推荐流程：');
     expect(markdown).toContain('licell deploy spec');
+    expect(markdown.indexOf('下一步：')).toBeLessThan(markdown.indexOf('决策指南：'));
   });
 });
 

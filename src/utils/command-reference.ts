@@ -458,14 +458,14 @@ export function renderSkillCommandReference(catalog: CommandCatalog = getCommand
         parts.push('', '示例命令：');
         for (const example of agentCommand.examples) parts.push(`- \`${example}\``);
       }
-      if (agentCommand) {
-        parts.push(...renderDecisionGuideMarkdown(agentCommand));
-      }
       if (agentCommand?.nextActions.length) {
         parts.push('', '下一步：');
         for (const action of agentCommand.nextActions) {
           parts.push(`- ${action.priority} · \`${action.commandTemplate}\`：${action.description}`);
         }
+      }
+      if (agentCommand) {
+        parts.push(...renderDecisionGuideMarkdown(agentCommand));
       }
       if (agentCommand?.optionInsights.length) {
         parts.push('', '关键选项建议：');

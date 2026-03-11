@@ -18,7 +18,7 @@ import {
   withSpinner
 } from '../utils/cli-shared';
 import { Config } from '../utils/config';
-import { emitCliResult, isJsonOutput } from '../utils/output';
+import { emitCommandResult, isJsonOutput } from '../utils/output';
 import { DELIVERY_SECTION } from './sections';
 
 const envListCommand = defineCliCommand({
@@ -110,8 +110,7 @@ export function registerEnvCommands(cli: CAC) {
             const renderedEnvs = showValues
               ? Object.fromEntries(entries)
               : Object.fromEntries(entries.map(([key, value]) => [key, `<hidden:${String(value).length} chars>`]));
-            emitCliResult({
-              stage: 'env.list',
+            emitCommandResult({
               qualifier: qualifier || null,
               count: entries.length,
               showValues,
@@ -161,8 +160,7 @@ export function registerEnvCommands(cli: CAC) {
             s.stop(pc.green('✅ 环境变量已写入云端并同步到本地配置'));
             showOutro('Done.');
           } else {
-            emitCliResult({
-              stage: 'env.set',
+            emitCommandResult({
               key: envKey,
               updatedCount: Object.keys(envs).length
             });
@@ -199,8 +197,7 @@ export function registerEnvCommands(cli: CAC) {
             s.stop(pc.green('✅ 环境变量已从云端移除（若存在）并同步本地配置'));
             showOutro('Done.');
           } else {
-            emitCliResult({
-              stage: 'env.rm',
+            emitCommandResult({
               key: envKey,
               updatedCount: Object.keys(envs).length
             });
@@ -242,8 +239,7 @@ export function registerEnvCommands(cli: CAC) {
             if (!isJsonOutput()) {
               s.stop(pc.yellow('云端无环境变量，已清空本地 .env'));
             }
-            emitCliResult({
-              stage: 'env.pull',
+            emitCommandResult({
               qualifier: qualifier || null,
               count: 0,
               envFile: '.env',
@@ -261,8 +257,7 @@ export function registerEnvCommands(cli: CAC) {
           if (!isJsonOutput()) {
             s.stop(pc.green(`✅ 已拉取 ${entries.length} 个环境变量并写入 .env`));
           }
-          emitCliResult({
-            stage: 'env.pull',
+          emitCommandResult({
             qualifier: qualifier || null,
             count: entries.length,
             envFile: '.env',

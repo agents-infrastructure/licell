@@ -17,7 +17,7 @@ import {
   showOutro
 } from '../utils/cli-shared';
 import { createOssBucket, createSignedOssGetUrl, isOssBucketNameUnavailableError, uploadOssObjectContent } from '../providers/oss';
-import { emitCliError, emitCliEvent, emitCliResult, isJsonOutput } from '../utils/output';
+import { emitCliError, emitCliEvent, emitCommandResult, isJsonOutput } from '../utils/output';
 import {
   buildAuthTransferBucketName,
   buildAuthTransferBucketCandidates,
@@ -426,13 +426,12 @@ export async function runInteractiveLogin(options: { accountId?: unknown; ak?: u
   if (!bootstrapRam) {
     Config.setAuth({ accountId, ak, sk, region, authSource: 'manual' });
     if (isJsonOutput()) {
-      emitCliResult({
-        stage: 'auth',
+      emitCommandResult({
         action: 'login',
         mode: 'manual',
         accountId,
         region
-      });
+      }, { stage: 'auth' });
     } else {
       showOutro(pc.green('✅ 凭证已安全保存至 ~/.licell-cli/auth.json'));
     }
@@ -458,8 +457,7 @@ export async function runInteractiveLogin(options: { accountId?: unknown; ak?: u
   });
   const actionSummary = `${bootstrap.createdUser ? 'created-user' : 'reuse-user'}, ${bootstrap.createdPolicy ? 'created-policy' : 'reuse-policy'}`;
   if (isJsonOutput()) {
-    emitCliResult({
-      stage: 'auth',
+    emitCommandResult({
       action: 'login',
       mode: 'bootstrap',
       accountId,
@@ -467,7 +465,7 @@ export async function runInteractiveLogin(options: { accountId?: unknown; ak?: u
       ramUser: bootstrap.userName,
       ramPolicy: bootstrap.policyName,
       summary: actionSummary
-    });
+    }, { stage: 'auth' });
   } else {
     showOutro(pc.green(`✅ bootstrap 完成，已保存 licell 专用凭证到 ~/.licell-cli/auth.json (${actionSummary})`));
   }
@@ -531,15 +529,14 @@ export function registerAuthCommands(cli: CAC) {
 
       const mode = result.rotatedKey ? 'rotated-key' : 'reuse-current-key';
       if (isJsonOutput()) {
-        emitCliResult({
-          stage: 'auth',
+        emitCommandResult({
           action: 'auth repair',
           mode,
           accountId: result.accountId,
           region: result.region,
           userName: result.userName,
           policyName: result.policyName
-        });
+        }, { stage: 'auth' });
       } else {
         showOutro(pc.green(`✅ 授权修复完成，已更新 ~/.licell-cli/auth.json (${mode}, user=${result.userName}, policy=${result.policyName})`));
       }
@@ -584,8 +581,7 @@ export function registerAuthCommands(cli: CAC) {
         const revokeCommand = `licell oss object rm ${bucket} ${objectKey} --yes`;
 
         if (isJsonOutput()) {
-          emitCliResult({
-            stage: 'auth.export',
+          emitCommandResult({
             action: 'export',
             bucket,
             key: objectKey,
@@ -601,7 +597,7 @@ export function registerAuthCommands(cli: CAC) {
             token,
             restoreCommand,
             revokeCommand
-          });
+          }, { stage: 'auth.export' });
         } else {
           console.log(buildAuthExportHumanOutput({
             token,
@@ -668,8 +664,7 @@ export function registerAuthCommands(cli: CAC) {
 
       const result = restoreAuthTransferArchive(archive);
       if (isJsonOutput()) {
-        emitCliResult({
-          stage: 'auth.restore',
+        emitCommandResult({
           action: 'restore',
           bucket: payload.bucket,
           key: payload.key,
@@ -677,7 +672,7 @@ export function registerAuthCommands(cli: CAC) {
           restoredFiles: result.restoredFiles,
           overwrittenFiles: existingTargets.length,
           targetDir: result.targetDir
-        });
+        }, { stage: 'auth.restore' });
       } else {
         console.log(`\nbucket:          ${pc.cyan(payload.bucket)}`);
         console.log(`object:          ${pc.cyan(payload.key)}`);
@@ -693,7 +688,7 @@ export function registerAuthCommands(cli: CAC) {
       const existing = Config.getAuth();
       if (!existing) {
         if (isJsonOutput()) {
-          emitCliResult({ stage: 'auth', action: 'logout', cleared: false });
+          emitCommandResult({ action: 'logout', cleared: false }, { stage: 'auth' });
         } else {
           showOutro(pc.yellow('当前没有可清理的登录凭证'));
         }
@@ -701,7 +696,7 @@ export function registerAuthCommands(cli: CAC) {
       }
       Config.clearAuth();
       if (isJsonOutput()) {
-        emitCliResult({ stage: 'auth', action: 'logout', cleared: true });
+        emitCommandResult({ action: 'logout', cleared: true }, { stage: 'auth' });
       } else {
         showOutro(pc.green('✅ 已清除 ~/.licell-cli/auth.json'));
       }
@@ -722,13 +717,12 @@ export function registerAuthCommands(cli: CAC) {
       }
       const maskedAk = maskAccessKeyId(auth.ak);
       if (isJsonOutput()) {
-        emitCliResult({
-          stage: 'auth',
+        emitCommandResult({
           action: 'whoami',
           accountId: auth.accountId,
           region: auth.region,
           ak: maskedAk
-        });
+        }, { stage: 'auth' });
       } else {
         console.log(`\naccountId: ${pc.cyan(auth.accountId)}`);
         console.log(`region:    ${pc.cyan(auth.region)}`);
@@ -760,12 +754,11 @@ export function registerAuthCommands(cli: CAC) {
         : normalizeRegion(toPromptValue(await text({ message: '输入新 region:', initialValue: auth.region }), 'region'));
       if (region === auth.region) {
         if (isJsonOutput()) {
-          emitCliResult({
-            stage: 'auth',
+          emitCommandResult({
             action: 'switch',
             changed: false,
             region
-          });
+          }, { stage: 'auth' });
         } else {
           showOutro(pc.yellow(`region 未变化，仍为 ${region}`));
         }
@@ -773,12 +766,11 @@ export function registerAuthCommands(cli: CAC) {
       }
       Config.setAuth({ ...auth, region });
       if (isJsonOutput()) {
-        emitCliResult({
-          stage: 'auth',
+        emitCommandResult({
           action: 'switch',
           changed: true,
           region
-        });
+        }, { stage: 'auth' });
       } else {
         showOutro(pc.green(`✅ 默认 region 已切换为 ${region}`));
       }

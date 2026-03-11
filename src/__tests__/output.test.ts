@@ -152,4 +152,39 @@ describe('output utils', () => {
 
     writeSpy.mockRestore();
   });
+
+  it('supports command/stage overrides for command result emission', () => {
+    initOutputContext('json', ['node', 'src/cli.ts', 'help']);
+    const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+
+    emitCommandResult(
+      { accountId: '1494910986361453', region: 'cn-hangzhou' },
+      { command: 'switch', stage: 'auth', inferOutcome: false }
+    );
+
+    const raw = writeSpy.mock.calls.map((args) => String(args[0])).join('');
+    const records = extractJsonRecordsFromOutput(raw) as any[];
+    expect(records).toHaveLength(1);
+    expect(records[0].stage).toBe('auth');
+    expect(records[0].updated).toBeUndefined();
+    expect(records[0].accountId).toBe('1494910986361453');
+
+    writeSpy.mockRestore();
+  });
+
+  it('auto-infers created outcome for db add style commands', () => {
+    initOutputContext('json', ['node', 'src/cli.ts', 'db', 'add']);
+    const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+
+    emitCommandResult({ type: 'postgresql', connectionStringMasked: 'postgres://***' });
+
+    const raw = writeSpy.mock.calls.map((args) => String(args[0])).join('');
+    const records = extractJsonRecordsFromOutput(raw) as any[];
+    expect(records).toHaveLength(1);
+    expect(records[0].stage).toBe('db.add');
+    expect(records[0].created).toBe(true);
+    expect(records[0].connectionStringMasked).toBe('postgres://***');
+
+    writeSpy.mockRestore();
+  });
 });

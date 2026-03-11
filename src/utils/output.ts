@@ -6,9 +6,8 @@ import {
   isNotFoundError,
   isTransientError
 } from './alicloud-error';
-import { buildResolvedNextActionsFromSeeds } from './command-next-actions';
 import { formatErrorMessage } from './errors';
-import type { CommandTaskEntryPhase } from './command-tasks';
+import { inferCommandTaskPhaseFromText, type CommandTaskEntryPhase } from './command-tasks';
 
 export type CliOutputMode = 'text' | 'json';
 export type CliErrorCategory =
@@ -308,6 +307,48 @@ interface CliErrorGuidanceSeed {
   phase?: CommandTaskEntryPhase;
 }
 
+function inferErrorCommandKey(commandTemplate: string) {
+  const trimmed = commandTemplate.trim();
+  if (!trimmed.startsWith('licell ')) return null;
+
+  const tokens = trimmed.split(/\s+/).slice(1);
+  const commandTokens: string[] = [];
+  for (const token of tokens) {
+    if (token === '--' || token.startsWith('-')) break;
+    if ((token.startsWith('<') && token.endsWith('>')) || (token.startsWith('[') && token.endsWith(']'))) break;
+    if (!/^[a-z][a-z0-9-]*$/i.test(token)) break;
+    if (token.includes('.')) break;
+    commandTokens.push(token);
+  }
+
+  return commandTokens.length > 0 ? commandTokens.join(' ') : null;
+}
+
+function buildCliErrorNextActions(tips: CliErrorGuidanceSeed[]) {
+  return tips
+    .map((tip) => {
+      const commandTemplate = tip.commandTemplate.trim();
+      if (!commandTemplate) return null;
+      const commandKey = inferErrorCommandKey(commandTemplate);
+      return {
+        title: tip.title,
+        description: tip.reason,
+        commandTemplate,
+        commandKey,
+        commandDescription: null,
+        phase: tip.phase || inferCommandTaskPhaseFromText([commandKey, commandTemplate, tip.title, tip.reason].filter(Boolean).join(' ')) || 'general',
+        priority: 'secondary' as const,
+        order: 0
+      };
+    })
+    .filter((action): action is NonNullable<typeof action> => Boolean(action))
+    .map((action, index) => ({
+      ...action,
+      priority: index === 0 ? 'primary' as const : 'secondary' as const,
+      order: index + 1
+    }));
+}
+
 function buildCliErrorGuidance(message: string, category: CliErrorCategory, err: unknown) {
   const tips: CliErrorGuidanceSeed[] = [];
   const usage = parseMissingArgsUsage(message);
@@ -379,16 +420,7 @@ function buildCliErrorGuidance(message: string, category: CliErrorCategory, err:
     });
   }
 
-  const nextActions = buildResolvedNextActionsFromSeeds({
-    actions: tips.map((tip) => ({
-      title: tip.title,
-      description: tip.reason,
-      commandTemplate: tip.commandTemplate,
-      phase: tip.phase,
-      source: 'error-remediation'
-    })),
-    limit: tips.length || 4
-  });
+  const nextActions = buildCliErrorNextActions(tips);
 
   const actionByCommandTemplate = new Map(nextActions.map((action) => [action.commandTemplate, action] as const));
   const remediation: CliErrorRemediationItem[] = tips.map((tip, index) => {
@@ -473,11 +505,11 @@ export function installJsonConsoleBridge() {
   void original;
 }
 
-export function emitCliResult(result: Record<string, unknown>) {
+export function emitCliResult<T extends object>(result: T) {
   if (!isJsonOutput()) return;
   outputContext.resultEmitted = true;
   writeJsonRecord(buildCliRecordEnvelope('result', {
-    ...result,
+    ...(result as Record<string, unknown>),
     ok: true
   }));
 }
@@ -527,15 +559,43 @@ function inferCommandOutcomeKey(command = outputContext.command) {
   return COMMAND_OUTCOME_BY_VERB[tokens[tokens.length - 1]!] || undefined;
 }
 
-export function emitCommandResult(result: Record<string, unknown>, command = outputContext.command) {
-  const { stage, ...payload } = result;
-  const inferredOutcomeKey = inferCommandOutcomeKey(command);
+export interface EmitCommandResultOptions {
+  command?: string;
+  stage?: string;
+  inferOutcome?: boolean;
+}
+
+function normalizeEmitCommandResultOptions(
+  options?: string | EmitCommandResultOptions
+): Required<Pick<EmitCommandResultOptions, 'inferOutcome'>> & Omit<EmitCommandResultOptions, 'inferOutcome'> {
+  if (typeof options === 'string') {
+    return {
+      command: options,
+      stage: undefined,
+      inferOutcome: true
+    };
+  }
+
+  return {
+    command: options?.command,
+    stage: options?.stage,
+    inferOutcome: options?.inferOutcome !== false
+  };
+}
+
+export function emitCommandResult<T extends object>(result: T, options?: string | EmitCommandResultOptions) {
+  const normalized = normalizeEmitCommandResultOptions(options);
+  const command = normalized.command || outputContext.command;
+  const { stage, ...payload } = result as Record<string, unknown>;
+  const inferredOutcomeKey = normalized.inferOutcome ? inferCommandOutcomeKey(command) : undefined;
   const finalPayload = inferredOutcomeKey && !hasExplicitOutcome(payload)
     ? { ...payload, [inferredOutcomeKey]: true }
     : payload;
 
   emitCliResult({
-    stage: typeof stage === 'string' && stage.trim().length > 0 ? stage : commandStage(command),
+    stage: typeof stage === 'string' && stage.trim().length > 0
+      ? stage
+      : (normalized.stage && normalized.stage.trim().length > 0 ? normalized.stage : commandStage(command)),
     ...finalPayload
   });
 }

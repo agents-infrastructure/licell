@@ -4,7 +4,7 @@ import { select, confirm, isCancel } from '@clack/prompts';
 import pc from 'picocolors';
 import { createSpinner, isInteractiveTTY, showIntro, showOutro } from '../utils/cli-shared';
 import { formatErrorMessage } from '../utils/errors';
-import { emitCliError, emitCliEvent, emitCliResult, isJsonOutput } from '../utils/output';
+import { emitCliError, emitCliEvent, emitCommandResult, isJsonOutput } from '../utils/output';
 import { ensureMcpJsonConfig, ensureGlobalClaudeMcpConfig, ensureGlobalCodexMcpConfig } from './mcp';
 
 type Scope = 'global' | 'project';
@@ -97,7 +97,7 @@ export async function runInteractiveSetup(options: SetupOptions = {}) {
   try {
     const cancelFlow = () => {
       if (jsonMode) {
-        emitCliResult({ stage: 'setup', cancelled: true });
+        emitCommandResult({ cancelled: true });
       } else {
         showOutro('已取消');
       }
@@ -207,8 +207,7 @@ export async function runInteractiveSetup(options: SetupOptions = {}) {
     }
 
     if (jsonMode) {
-      emitCliResult({
-        stage: 'setup',
+      emitCommandResult({
         agent,
         scope,
         projectRoot,

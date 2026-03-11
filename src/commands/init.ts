@@ -5,7 +5,7 @@ import pc from 'picocolors';
 import { Config } from '../utils/config';
 import { formatErrorMessage } from '../utils/errors';
 import { createSpinner, isInteractiveTTY, showIntro, showOutro, toPromptValue } from '../utils/cli-shared';
-import { emitCliError, emitCliEvent, emitCliResult, isJsonOutput } from '../utils/output';
+import { emitCliError, emitCliEvent, emitCommandResult, isJsonOutput } from '../utils/output';
 import {
   detectWorkspaceTemplateAndRuntime,
   deriveDefaultAppName,
@@ -153,8 +153,7 @@ export function registerInitCommand(cli: CAC) {
         console.log(`- licell deploy --type api --runtime ${runtime} --target preview`);
 
         if (isJsonOutput()) {
-          emitCliResult({
-            stage: 'init',
+          emitCommandResult({
             runtime,
             appName,
             mode: shouldWriteScaffold ? 'scaffold+config' : 'config-only',
