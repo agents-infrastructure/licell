@@ -349,4 +349,62 @@ describe('cdn read helpers', () => {
       }
     ]);
   });
+
+  it('passes source filter to DescribeUserDomains and keeps exact-origin matches', async () => {
+    mockCallApi.mockImplementation(async (params: { action?: string }, request?: { query?: Record<string, string> }) => {
+      if (params.action !== 'DescribeUserDomains') throw new Error(`unexpected action: ${params.action}`);
+      expect(request?.query?.Source).toBe('bucket.oss-cn-hangzhou.aliyuncs.com');
+      return {
+        body: {
+          Domains: {
+            PageData: [
+              {
+                DomainName: 'static.example.com',
+                Cname: 'static.example.com.w.kunluncan.com',
+                DomainStatus: 'online',
+                Sources: {
+                  Source: [
+                    {
+                      Content: 'bucket.oss-cn-hangzhou.aliyuncs.com',
+                      Type: 'oss'
+                    }
+                  ]
+                }
+              },
+              {
+                DomainName: 'other.example.com',
+                Cname: 'other.example.com.w.kunluncan.com',
+                DomainStatus: 'online',
+                Sources: {
+                  Source: [
+                    {
+                      Content: 'other-origin.oss-cn-hangzhou.aliyuncs.com',
+                      Type: 'oss'
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          TotalCount: 2
+        }
+      };
+    });
+
+    const { listCdnDomains } = await import('../providers/cdn');
+    await expect(listCdnDomains(20, { source: 'bucket.oss-cn-hangzhou.aliyuncs.com' })).resolves.toEqual([
+      {
+        domainName: 'static.example.com',
+        cname: 'static.example.com.w.kunluncan.com',
+        status: 'online',
+        serverCertificateStatus: undefined,
+        origins: [
+          {
+            content: 'bucket.oss-cn-hangzhou.aliyuncs.com',
+            type: 'oss'
+          }
+        ]
+      }
+    ]);
+  });
 });

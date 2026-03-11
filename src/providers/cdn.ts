@@ -290,22 +290,31 @@ export async function getCdnDomainDetail(domainName: string): Promise<CdnDomainD
   }
 }
 
-export async function listCdnDomains(limit = 100, filters: { prefix?: string } = {}): Promise<CdnDomainDetail[]> {
+export async function listCdnDomains(
+  limit = 100,
+  filters: {
+    prefix?: string;
+    source?: string;
+  } = {}
+): Promise<CdnDomainDetail[]> {
   const results: CdnDomainDetail[] = [];
   const safeLimit = Math.max(1, Math.min(Math.floor(limit), 2000));
   const pageSize = Math.min(100, safeLimit);
   const prefix = filters.prefix?.trim().toLowerCase();
+  const source = filters.source ? normalizeOriginDomain(filters.source) : undefined;
 
   for (let pageNumber = 1; pageNumber <= 50 && results.length < safeLimit; pageNumber += 1) {
     const response = await withRetry(() => callCdnRpc('DescribeUserDomains', {
       PageNumber: pageNumber,
-      PageSize: pageSize
+      PageSize: pageSize,
+      ...(source ? { Source: source } : {})
     }));
     const rows = extractPageData(response.body);
     for (const row of rows) {
       const item = toCdnDomainRow(row);
       if (!item) continue;
       if (prefix && !item.domainName.startsWith(prefix)) continue;
+      if (source && !item.origins?.some((origin) => normalizeDnsValue(origin.content) === source)) continue;
       results.push(item);
       if (results.length >= safeLimit) break;
     }

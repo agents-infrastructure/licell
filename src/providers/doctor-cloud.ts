@@ -820,8 +820,11 @@ async function probeStaticDomainConsistency(input: DoctorCloudDiagnosticsInput &
   let cdnListWarning: string | undefined;
 
   try {
-    const allCdnDomains = await withTimeout(listCdnDomains(2000), 'Static CDN domain list');
-    cdnDomains = allCdnDomains.filter((domain) =>
+    const discoveredCdnDomains = await withTimeout(
+      listCdnDomains(2000, { source: originDomain }),
+      'Static CDN domain list'
+    );
+    cdnDomains = discoveredCdnDomains.filter((domain) =>
       domain.origins?.some((origin) => normalizeDnsValue(origin.content) === normalizeDnsValue(originDomain))
     );
   } catch (err: unknown) {

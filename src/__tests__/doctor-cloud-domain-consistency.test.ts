@@ -213,5 +213,8 @@ describe('probeDoctorDomainConsistency', () => {
 
     expect(result.status).toBe('ok');
     expect(result.summary).toContain('一致性通过');
+    expect(listCdnDomainsMock).toHaveBeenCalledWith(2000, {
+      source: 'licell-demo-1494.oss-cn-hangzhou.aliyuncs.com'
+    });
   });
 });
