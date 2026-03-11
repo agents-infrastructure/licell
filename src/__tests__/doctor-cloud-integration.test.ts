@@ -80,6 +80,29 @@ describe('runLicellDoctor cloud integration', () => {
       expect(report.checks.find((check) => check.id === 'domain.consistency')?.status).toBe('warn');
       expect(report.checks.find((check) => check.id === 'deploy.target')?.status).toBe('warn');
       expect(report.checks.find((check) => check.id === 'cloud.capabilities')?.status).toBe('error');
+      expect(report.checks.find((check) => check.id === 'domain.consistency')?.remediation).toEqual([
+        expect.objectContaining({
+          type: 'command',
+          text: 'licell domain app bind api.example.com',
+          commandTemplate: 'licell domain app bind api.example.com',
+          commandKey: 'domain app bind',
+          intent: 'bind'
+        })
+      ]);
+      expect(report.checks.find((check) => check.id === 'cloud.capabilities')?.nextCommands).toEqual([
+        expect.objectContaining({
+          commandTemplate: 'licell auth repair',
+          commandKey: 'auth repair',
+          intent: 'repair',
+          priority: 'primary'
+        }),
+        expect.objectContaining({
+          commandTemplate: 'licell switch --region <region>',
+          commandKey: 'switch',
+          intent: 'configure',
+          priority: 'secondary'
+        })
+      ]);
     } finally {
       rmSync(home, { recursive: true, force: true });
       rmSync(root, { recursive: true, force: true });

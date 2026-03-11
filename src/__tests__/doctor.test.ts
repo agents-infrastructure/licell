@@ -81,7 +81,26 @@ describe('runLicellDoctor', () => {
       const report = await runLicellDoctor({ cwd: root, offline: true });
 
       expect(report.healthy).toBe(false);
-      expect(getCheck(report, 'auth.credentials').status).toBe('error');
+      const authCheck = getCheck(report, 'auth.credentials');
+      expect(authCheck.status).toBe('error');
+      expect(authCheck.remediation[0]).toMatchObject({
+        type: 'note',
+        text: '先执行 `licell login`，或通过团队分发的 restore token 执行 `licell auth restore`。'
+      });
+      expect(authCheck.nextCommands).toEqual([
+        expect.objectContaining({
+          commandTemplate: 'licell login',
+          commandKey: 'login',
+          intent: 'login',
+          priority: 'primary'
+        }),
+        expect.objectContaining({
+          commandTemplate: 'licell auth restore <token> [passkey]',
+          commandKey: 'auth restore',
+          intent: 'restore',
+          priority: 'secondary'
+        })
+      ]);
       expect(getCheck(report, 'domain.consistency').status).toBe('skip');
       expect(getCheck(report, 'deploy.target').status).toBe('skip');
       expect(report.errorCount).toBeGreaterThan(0);
@@ -117,6 +136,49 @@ describe('runLicellDoctor', () => {
       expect(getCheck(report, 'domain.consistency').status).toBe('skip');
       expect(getCheck(report, 'deploy.target').status).toBe('skip');
       expect(getCheck(report, 'cloud.offline').status).toBe('skip');
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('normalizes deploy precheck guidance into structured remediation and next commands', async () => {
+    const home = createTempDir('licell-doctor-home-');
+    const root = createTempDir('licell-doctor-project-');
+    vi.stubEnv('HOME', home);
+
+    try {
+      writeJson(join(home, '.licell-cli', 'auth.json'), {
+        accountId: '1494910986361453',
+        ak: 'demo-ak',
+        sk: 'demo-sk',
+        region: 'cn-hangzhou'
+      });
+      writeJson(join(root, '.licell', 'project.json'), {
+        appName: 'doctor-demo',
+        runtime: 'nodejs22',
+        envs: {}
+      });
+
+      const report = await runLicellDoctor({ cwd: root, offline: true });
+      const precheck = getCheck(report, 'deploy.precheck');
+
+      expect(precheck.status).toBe('error');
+      expect(precheck.remediation.some((item) => item.type === 'note')).toBe(true);
+      expect(precheck.nextCommands).toEqual([
+        expect.objectContaining({
+          commandTemplate: 'licell deploy spec nodejs22',
+          commandKey: 'deploy spec',
+          intent: 'inspect',
+          priority: 'primary'
+        }),
+        expect.objectContaining({
+          commandTemplate: 'licell deploy check --runtime nodejs22 --entry src/index.ts',
+          commandKey: 'deploy check',
+          intent: 'verify',
+          priority: 'secondary'
+        })
+      ]);
     } finally {
       rmSync(home, { recursive: true, force: true });
       rmSync(root, { recursive: true, force: true });

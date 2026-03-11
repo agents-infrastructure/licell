@@ -77,7 +77,7 @@ const doctorCommand = defineCliCommand({
         { name: 'errorCount', description: 'error 检查项数量。', required: true },
         { name: 'skipCount', description: 'skip 检查项数量。', required: true },
         { name: 'context', description: '当前 cwd、命中的配置文件路径，以及本次解析出的 runtime/entry/offline。', required: true },
-        { name: 'checks', description: '逐项诊断结果，含 status / summary / remediation / nextCommands。', required: true }
+        { name: 'checks', description: '逐项诊断结果；`remediation[]` 为结构化修复建议，`nextCommands[]` 为结构化后续命令提示。', required: true }
       ]
     },
     related: ['login', 'init', 'deploy check', 'deploy spec']
