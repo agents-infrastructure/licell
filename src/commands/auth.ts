@@ -197,6 +197,22 @@ async function downloadSignedAuthBundle(url: string, expectedSha256: string) {
   }
 }
 
+export function persistAuthTransferBucketPreference(accountId: string, region: string, bucket: string) {
+  const globalConfig = Config.getGlobalConfig();
+  const nextRegistry = setConfiguredAuthTransferBucket(
+    globalConfig.authTransferBuckets,
+    accountId,
+    region,
+    bucket
+  );
+  try {
+    Config.setGlobalConfig({ authTransferBuckets: nextRegistry });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function ensureAuthTransferBucket(options: { accountId: string; region: string; requestedBucket?: string }) {
   const requestedBucket = toOptionalString(options.requestedBucket)?.toLowerCase();
   const globalConfig = Config.getGlobalConfig();
@@ -218,18 +234,13 @@ async function ensureAuthTransferBucket(options: { accountId: string; region: st
         allowExisting: true,
         publicAccessBlock: true
       });
-      if (!requestedBucket) {
-        const nextRegistry = setConfiguredAuthTransferBucket(
-          globalConfig.authTransferBuckets,
-          options.accountId,
-          options.region,
-          candidate
-        );
-        Config.setGlobalConfig({ authTransferBuckets: nextRegistry });
-      }
+      const bucketPreferenceSaved = !requestedBucket
+        ? persistAuthTransferBucketPreference(options.accountId, options.region, candidate)
+        : undefined;
       return {
         bucket: candidate,
-        bucketResult
+        bucketResult,
+        bucketPreferenceSaved
       };
     } catch (err: unknown) {
       if (requestedBucket || !isOssBucketNameUnavailableError(err)) {
@@ -421,7 +432,7 @@ export function registerAuthCommands(cli: CAC) {
         const expiresHours = parsePositiveHours(options.expiresHours, 168);
         const objectKey = buildAuthTransferObjectKey();
 
-        const { bucket, bucketResult } = await ensureAuthTransferBucket({
+        const { bucket, bucketResult, bucketPreferenceSaved } = await ensureAuthTransferBucket({
           accountId: auth.accountId,
           region: auth.region,
           requestedBucket: toOptionalString(options.bucket) || undefined
@@ -451,6 +462,7 @@ export function registerAuthCommands(cli: CAC) {
             bucket,
             key: objectKey,
             bucketCreated: bucketResult.created,
+            ...(bucketPreferenceSaved !== undefined ? { bucketPreferenceSaved } : {}),
             expiresAt: signedGet.expiresAt,
             fileCount: bundle.fileCount,
             includes: {
@@ -466,6 +478,9 @@ export function registerAuthCommands(cli: CAC) {
           console.log(`\nbucket:          ${pc.cyan(bucket)}`);
           console.log(`object:          ${pc.cyan(objectKey)}`);
           console.log(`bucket created:  ${pc.cyan(bucketResult.created ? 'yes' : 'no')}`);
+          if (bucketPreferenceSaved === false) {
+            console.log(pc.gray('note: 无法写入 ~/.licell-cli/config.json，已跳过保存默认 auth bucket。'));
+          }
           console.log(`expiresAt:       ${pc.cyan(signedGet.expiresAt)}`);
           console.log(`files:           ${pc.cyan(String(bundle.fileCount))}`);
           console.log(`\nrestore token:\n${pc.cyan(token)}\n`);
