@@ -150,3 +150,26 @@ describe('persistAuthTransferBucketPreference', () => {
     expect(setGlobalConfigMock).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('buildAuthExportHumanOutput', () => {
+  it('focuses on restore action instead of internal storage details', async () => {
+    const { buildAuthExportHumanOutput } = await import('../commands/auth');
+
+    const output = buildAuthExportHumanOutput({
+      token: 'licell-auth-v1.demo-token',
+      expiresAt: '2026-03-18T04:48:58.000Z',
+      fileCount: 4,
+      revokeCommand: 'licell oss object rm demo-bucket demo-key --yes',
+      bucketPreferenceSaved: false
+    });
+
+    expect(output).toContain('目标机器执行：');
+    expect(output).toContain("licell auth restore '<restore-token>' '<passkey>' --yes");
+    expect(output).toContain('restore token（复制下面整行）：');
+    expect(output).toContain('licell-auth-v1.demo-token');
+    expect(output).toContain('安全提醒：');
+    expect(output).toContain('如需撤销：');
+    expect(output).not.toContain('bucket:');
+    expect(output).not.toContain('object:');
+  });
+});

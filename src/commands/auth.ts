@@ -197,6 +197,57 @@ async function downloadSignedAuthBundle(url: string, expectedSha256: string) {
   }
 }
 
+function formatHumanDateTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  const pad = (input: number) => String(input).padStart(2, '0');
+  const offsetMinutes = -date.getTimezoneOffset();
+  const sign = offsetMinutes >= 0 ? '+' : '-';
+  const offsetAbs = Math.abs(offsetMinutes);
+  const offsetHours = Math.floor(offsetAbs / 60);
+  const offsetRemainderMinutes = offsetAbs % 60;
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())} UTC${sign}${pad(offsetHours)}:${pad(offsetRemainderMinutes)}`;
+}
+
+export function buildAuthExportHumanOutput(input: {
+  token: string;
+  expiresAt: string;
+  fileCount: number;
+  revokeCommand: string;
+  bucketPreferenceSaved?: boolean;
+}) {
+  const lines = [
+    '',
+    pc.green('已生成可在另一台机器恢复的授权包。'),
+    '',
+    pc.bold('目标机器执行：'),
+    pc.cyan(`licell auth restore '<restore-token>' '<passkey>' --yes`),
+    pc.gray('把 <restore-token> 替换为下面那一整行；passkey 使用本次 export 时输入的同一个值。'),
+    '',
+    pc.bold('restore token（复制下面整行）：'),
+    pc.cyan(input.token),
+    '',
+    `${pc.bold('有效期至：')} ${pc.cyan(formatHumanDateTime(input.expiresAt))}`,
+    `${pc.bold('包含文件：')} ${pc.cyan(String(input.fileCount))}`
+  ];
+
+  if (input.bucketPreferenceSaved === false) {
+    lines.push(pc.gray('提示：本地配置目录不可写，已跳过保存默认 auth bucket。'));
+  }
+
+  lines.push(
+    '',
+    pc.bold('安全提醒：'),
+    pc.gray('请把 restore token 和 passkey 分开发送。'),
+    '',
+    pc.bold('如需撤销：'),
+    pc.cyan(input.revokeCommand),
+    ''
+  );
+
+  return lines.join('\n');
+}
+
 export function persistAuthTransferBucketPreference(accountId: string, region: string, bucket: string) {
   const globalConfig = Config.getGlobalConfig();
   const nextRegistry = setConfiguredAuthTransferBucket(
@@ -475,18 +526,14 @@ export function registerAuthCommands(cli: CAC) {
             revokeCommand
           });
         } else {
-          console.log(`\nbucket:          ${pc.cyan(bucket)}`);
-          console.log(`object:          ${pc.cyan(objectKey)}`);
-          console.log(`bucket created:  ${pc.cyan(bucketResult.created ? 'yes' : 'no')}`);
-          if (bucketPreferenceSaved === false) {
-            console.log(pc.gray('note: 无法写入 ~/.licell-cli/config.json，已跳过保存默认 auth bucket。'));
-          }
-          console.log(`expiresAt:       ${pc.cyan(signedGet.expiresAt)}`);
-          console.log(`files:           ${pc.cyan(String(bundle.fileCount))}`);
-          console.log(`\nrestore token:\n${pc.cyan(token)}\n`);
-          console.log(`restore:         ${pc.cyan(restoreCommand)}`);
-          console.log(`revoke:          ${pc.cyan(revokeCommand)}\n`);
-          showOutro('Done.');
+          console.log(buildAuthExportHumanOutput({
+            token,
+            expiresAt: signedGet.expiresAt,
+            fileCount: bundle.fileCount,
+            revokeCommand,
+            bucketPreferenceSaved
+          }));
+          showOutro('已完成 auth export。');
         }
       };
 
