@@ -30,6 +30,7 @@ import {
   formatInvocationWithSelection,
   stripArgsFromUsage,
   toLicellInvocation,
+  type ResolvedCommandNextAction,
   type ResolvedCommandAutomationDescriptor,
   type ResolvedCommandInteractionDescriptor
 } from './command-surface-metadata';
@@ -123,6 +124,11 @@ export type HelpBlock =
       result: HelpResultDoc;
     }
   | {
+      kind: 'next-actions';
+      title: 'Next Actions';
+      actions: ResolvedCommandNextAction[];
+    }
+  | {
       kind: 'recommended-flow';
       title: 'Recommended Flow';
       steps: HelpFlowStep[];
@@ -154,6 +160,7 @@ export interface HelpSemanticDocument {
   result?: HelpResultDoc;
   optionInsights: HelpOptionInsight[];
   recommendedFlow: HelpFlowStep[];
+  nextActions: ResolvedCommandNextAction[];
 }
 
 export interface HelpDocument extends HelpSemanticDocument {
@@ -600,6 +607,11 @@ function buildAutomationItems(automation: ResolvedCommandAutomationDescriptor) {
 function buildCommandLikeHelpBlocks(doc: HelpSemanticDocument): HelpBlock[] {
   return [
     ...buildDecisionGuideBlock(doc.decisionGuide, doc.tasks),
+    ...(doc.nextActions.length > 0 ? [{
+      kind: 'next-actions',
+      title: 'Next Actions',
+      actions: doc.nextActions
+    } satisfies HelpBlock] : []),
     ...(doc.interaction ? [{
       kind: 'items',
       title: 'TTY Interaction',
@@ -756,6 +768,17 @@ function renderStructuredResultBlock(result: HelpResultDoc) {
   return lines;
 }
 
+function renderNextActionsBlock(actions: ResolvedCommandNextAction[]) {
+  const lines = ['Next Actions:'];
+  for (const action of actions) {
+    lines.push(`  - ${action.priority} · ${action.phase} · ${action.title}`);
+    lines.push(`    command: ${action.commandTemplate}`);
+    lines.push(`    reason: ${action.description}`);
+  }
+  lines.push('');
+  return lines;
+}
+
 function renderRecommendedFlowBlock(steps: HelpFlowStep[]) {
   return renderPlainList('Recommended Flow:', steps.map((step, index) => {
     const prefix = `${index + 1}. ${step.title}`;
@@ -780,6 +803,8 @@ function renderHelpBlock(block: HelpBlock) {
       return renderSubcommandGroupsBlock(block.groups);
     case 'structured-result':
       return renderStructuredResultBlock(block.result);
+    case 'next-actions':
+      return renderNextActionsBlock(block.actions);
     case 'recommended-flow':
       return renderRecommendedFlowBlock(block.steps);
   }
@@ -855,6 +880,7 @@ export function serializeHelpDocument(doc: HelpDocument): SerializedHelpDocument
     subcommands: doc.subcommands.map((command) => ({ ...command, aliases: [...command.aliases] })),
     actionHints: doc.actionHints.map((hint) => ({ ...hint })),
     tasks: doc.tasks.map((task) => ({ ...task, commands: [...task.commands] })),
+    nextActions: doc.nextActions.map((action) => ({ ...action })),
     decisionGuide: doc.decisionGuide.map((group) => ({
       ...group,
       tasks: group.tasks.map((task) => ({ ...task, commands: [...task.commands] }))
@@ -925,6 +951,7 @@ export function buildHelpSemanticDocument(input: {
       key: 'help',
       descriptor: enhancement,
       subcommands: [],
+      tasks,
       extraTokens: []
     });
     return {
@@ -944,6 +971,7 @@ export function buildHelpSemanticDocument(input: {
       subcommands: [],
       actionHints: [],
       tasks,
+      nextActions: surface.nextActions.map((action) => ({ ...action })),
       decisionGuide: groupCommandTasks(tasks),
       notes: [...(enhancement.notes || [])],
       examples: surface.examples,
@@ -971,6 +999,7 @@ export function buildHelpSemanticDocument(input: {
       key: resolution.key,
       descriptor: enhancement,
       subcommands,
+      tasks,
       extraTokens: resolution.extraTokens
     });
     return {
@@ -989,6 +1018,7 @@ export function buildHelpSemanticDocument(input: {
       subcommands,
       actionHints: [...(enhancement.actionHints || [])],
       tasks,
+      nextActions: surface.nextActions.map((action) => ({ ...action })),
       decisionGuide: groupCommandTasks(tasks),
       notes: [...(enhancement.notes || [])],
       examples: surface.examples,
@@ -1017,6 +1047,7 @@ export function buildHelpSemanticDocument(input: {
     command,
     descriptor: enhancement,
     subcommands,
+    tasks,
     extraTokens: resolution.extraTokens
   });
 
@@ -1037,6 +1068,7 @@ export function buildHelpSemanticDocument(input: {
     subcommands,
     actionHints: [...(enhancement.actionHints || [])],
     tasks,
+    nextActions: surface.nextActions.map((action) => ({ ...action })),
     decisionGuide: groupCommandTasks(tasks),
     notes: [...(enhancement.notes || [])],
     examples: surface.examples,

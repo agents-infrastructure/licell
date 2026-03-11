@@ -98,6 +98,7 @@ describe('cli help e2e', () => {
     expect(records[0]?.help?.schemaVersion).toBe('1.0');
     expect(records[0]?.help?.kind).toBe('licell-help');
     expect(records[0]?.help?.title).toBe('licell domain app bind <domain>');
+    expect(records[0]?.help?.nextActions).toEqual([]);
     expect(records[0]?.help?.result?.outcomeKey).toBe('bound');
     expect(records[0]?.help?.result?.fields.some((field: { name?: string }) => field.name === 'finalUrl')).toBe(true);
     expect(records[0]?.help?.result?.fieldTree.some((field: { name?: string }) => field.name === 'finalUrl')).toBe(true);
@@ -117,6 +118,7 @@ describe('cli help e2e', () => {
     expect(records[0]?.stage).toBe('help');
     expect(records[0]?.key).toBe('doctor');
     expect(records[0]?.help?.title).toBe('licell doctor');
+    expect(records[0]?.help?.nextActions[0]?.commandTemplate).toBe('licell doctor --output json');
     expect(records[0]?.help?.result?.outcomeKey).toBe('healthy');
     expect(records[0]?.help?.result?.fields.some((field: { name?: string }) => field.name === 'checks')).toBe(true);
     expect(records[0]?.help?.result?.fieldTree.some((field: { name?: string }) => field.name === 'checks[]')).toBe(true);

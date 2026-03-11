@@ -11,10 +11,12 @@ describe('renderSkillMcpToolReference', () => {
     expect(output).toContain('## MCP Tool Reference');
     expect(output).toContain('### Schema Contracts');
     expect(output).toContain('@@LICELL_JSON@@');
+    expect(output).toContain('对 `type=error` 的 record');
     expect(output).toContain('licell-cli-record@1.0');
     expect(output).toContain('licell-help@1.0');
     expect(output).toContain('licell-agent-command-catalog@1.0');
     expect(output).toContain('`fieldTree[]`');
+    expect(output).toContain('`nextActions[]`');
     expect(output).toContain('### Builtin Tools');
     expect(output).toContain('`licell_cli`');
     expect(output).toContain('### Curated Workflow Tools');
@@ -29,8 +31,10 @@ describe('renderAgentSurfaceReferenceDoc', () => {
     expect(output).toContain('# Agent Surface Reference');
     expect(output).toContain('## Schema Contracts');
     expect(output).toContain('@@LICELL_JSON@@');
+    expect(output).toContain('对 `type=error` 的 record');
     expect(output).toContain('先匹配 `kind`，再检查 `schemaVersion`');
     expect(output).toContain('`fieldTree[]`');
+    expect(output).toContain('`nextActions[]`');
     expect(output).toContain('## CLI 命令目录');
     expect(output).toContain('`licell_cli`');
     expect(output).toContain('`licell_fc_deploy_spec`');

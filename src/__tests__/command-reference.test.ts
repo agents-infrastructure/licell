@@ -49,6 +49,7 @@ describe('buildAgentCommandCatalog', () => {
     expect(deploy?.summary).toContain('一键部署 API / Static');
     expect(deploy?.summary).toBe(deployHelp?.summary);
     expect(deploy?.decisionGuide).toEqual(deployHelp?.decisionGuide);
+    expect(deploy?.nextActions).toEqual(deployHelp?.nextActions);
     expect(deploy?.optionInsights.some((insight) => insight.flag.includes('--runtime'))).toBe(true);
     expect(deploy?.tasks.some((task) => task.phase === 'inspect')).toBe(true);
     expect(deploy?.decisionGuide.some((group) => group.phase === 'mutate')).toBe(true);
@@ -68,6 +69,7 @@ describe('buildAgentCommandCatalog', () => {
     expect(doctor?.title).toBe('Diagnose local licell readiness');
     expect(doctor?.summary).toContain('诊断本机登录态');
     expect(doctor?.options.some((option) => option.primaryFlag === '--runtime')).toBe(true);
+    expect(doctor?.nextActions[0]?.commandTemplate).toBe('licell doctor --output json');
     expect(doctor?.result?.outcomeKey).toBe('healthy');
     expect(doctor?.result?.fields.some((field) => field.name === 'checks[].remediation[].type')).toBe(true);
     expect(doctor?.result?.fields.some((field) => field.name === 'checks[].nextCommands[].priority')).toBe(true);
@@ -117,6 +119,8 @@ describe('renderSkillCommandReference', () => {
     expect(markdown).toContain('示例命令：');
     expect(markdown).toContain('`licell deploy --output json`');
     expect(markdown).toContain('决策指南：');
+    expect(markdown).toContain('下一步：');
+    expect(markdown).toContain('`licell doctor --output json`');
     expect(markdown).toContain('Inspect：');
     expect(markdown).toContain('关键选项建议：');
     expect(markdown).toContain('结构化结果：');

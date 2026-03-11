@@ -58,6 +58,11 @@ describe('output utils', () => {
     expect(record.error.category).toBe('input');
     expect(record.error.code).toBe('CLI_MISSING_REQUIRED_ARGS');
     expect(record.remediation[0].commandTemplate).toBe('licell dns records list <domain>');
+    expect(record.remediation[0].commandKey).toBe('dns records list');
+    expect(record.remediation[0].priority).toBe('primary');
+    expect(record.nextActions[0].commandTemplate).toBe('licell dns records list <domain>');
+    expect(record.nextActions[0].commandKey).toBe('dns records list');
+    expect(record.nextActions[0].priority).toBe('primary');
   });
 
   it('builds structured deploy precheck error with details', () => {
@@ -77,6 +82,10 @@ describe('output utils', () => {
     expect(record.details.entry).toBe('src/main.py');
     expect(record.remediation.some((tip: any) => tip.type === 'read_spec')).toBe(true);
     expect(record.remediation.some((tip: any) => tip.type === 'run_precheck')).toBe(true);
+    expect(record.nextActions.map((action: any) => action.commandKey)).toEqual([
+      'deploy spec',
+      'deploy check'
+    ]);
   });
 
   it('extracts json records from mixed output', () => {

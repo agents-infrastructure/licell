@@ -145,6 +145,11 @@ describe('help utils', () => {
     expect(doc?.subcommands.map((command) => command.key)).toEqual(expect.arrayContaining(['mcp init', 'mcp serve']));
     expect(doc?.examples).toContain('licell mcp init');
     expect(doc?.text).toContain('Decision Guide:');
+    expect(doc?.text).toContain('Next Actions:');
+    expect(doc?.nextActions.map((action) => action.commandTemplate)).toEqual([
+      'licell mcp init',
+      'licell mcp serve'
+    ]);
     expect(doc?.decisionGuide.map((group) => group.phase)).toEqual(expect.arrayContaining(['mutate', 'verify']));
     expect(doc?.text).toContain('Mutate:');
     expect(doc?.text).toContain('Verify:');
@@ -227,6 +232,8 @@ describe('help utils', () => {
     expect(doc?.scope).toBe('command');
     expect(doc?.key).toBe('doctor');
     expect(doc?.result?.outcomeKey).toBe('healthy');
+    expect(doc?.nextActions[0]?.commandTemplate).toBe('licell doctor --output json');
+    expect(doc?.nextActions[0]?.priority).toBe('primary');
     expect(doc?.result?.fieldTree.some((field) => field.name === 'checks[]')).toBe(true);
     const checksNode = doc?.result?.fieldTree.find((field) => field.name === 'checks[]');
     expect(checksNode?.children.some((field) => field.name === 'checks[].remediation[]')).toBe(true);
@@ -238,6 +245,8 @@ describe('help utils', () => {
     ]));
     expect(doc?.text).toContain('Structured Result:');
     expect(doc?.text).toContain('`healthy` · 是否不存在 error 级阻塞项。');
+    expect(doc?.text).toContain('Next Actions:');
+    expect(doc?.text).toContain('command: licell doctor --output json');
     expect(doc?.text).toContain('`checks[]` · 逐项诊断结果数组。');
     expect(doc?.text).toContain('`remediation[]` · 结构化修复建议数组；既可给人看，也可给 Agent 解释修复意图。');
     expect(doc?.text).toContain('`priority` · `primary` 为首选下一步，`secondary` 为补充路径。');
@@ -307,6 +316,7 @@ describe('help utils', () => {
     expect(payload.scope).toBe('command');
     expect(payload.key).toBe('domain app bind');
     expect(payload.result?.outcomeKey).toBe('bound');
+    expect(payload.nextActions).toEqual([]);
     expect(payload.result?.fields.some((field) => field.name === 'finalUrl')).toBe(true);
     expect(payload.result?.fieldTree.some((field) => field.name === 'finalUrl')).toBe(true);
     expect(payload.renderedText).toContain('Structured Result:');
@@ -340,6 +350,7 @@ describe('domain help', () => {
     expect(doc?.key).toBe('domain app bind');
     expect(doc?.aliases).toEqual([]);
     expect(doc?.result?.outcomeKey).toBe('bound');
+    expect(doc?.nextActions).toEqual([]);
     expect(doc?.result?.fields.some((field) => field.name === 'finalUrl')).toBe(true);
     expect(doc?.result?.fieldTree.some((field) => field.name === 'finalUrl')).toBe(true);
     expect(doc?.blocks.some((block) => block.kind === 'structured-result')).toBe(true);

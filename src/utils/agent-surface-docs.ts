@@ -35,6 +35,7 @@ function renderAgentContractBlock(options?: { headingLevel?: 2 | 3 }) {
     heading,
     '',
     `- 原始 CLI JSON 流会使用前缀 \`${LICELL_JSON_PREFIX}\` 输出逐行 JSON record；每条 record 当前都满足 \`${LICELL_CLI_RECORD_KIND}@${LICELL_CLI_RECORD_SCHEMA_VERSION}\`，再通过 \`type=event|result|error\` 区分记录类型。`,
+    '- 对 `type=error` 的 record，优先读取 `nextActions[]` 获取首选补救步骤；`remediation[]` 作为兼容层继续保留。',
     '- `licell <command> --help --output json`：读取 `help.kind` 与 `help.schemaVersion`；当前为 `licell-help@1.0`。',
     `- \`licell_command_catalog\`：读取 \`kind\` 与 \`schemaVersion\`；当前为 \`${commandCatalog.kind}@${commandCatalog.schemaVersion}\`。`,
     `- \`licell_command_catalog\` 同时显式声明依赖的 help schema：\`${commandCatalog.schemas.help.kind}@${commandCatalog.schemas.help.schemaVersion}\`。`,
@@ -42,6 +43,7 @@ function renderAgentContractBlock(options?: { headingLevel?: 2 | 3 }) {
       ? `- 所有 MCP tools 的 \`metadata.licell\` 都会暴露 \`schemas.help\` 与 \`schemas.commandCatalog\`；当前分别为 \`${sampleToolMetadata.schemas.help.kind}@${sampleToolMetadata.schemas.help.schemaVersion}\` / \`${sampleToolMetadata.schemas.commandCatalog.kind}@${sampleToolMetadata.schemas.commandCatalog.schemaVersion}\`。`
       : '- 所有 MCP tools 的 `metadata.licell` 都会暴露 `schemas.help` 与 `schemas.commandCatalog`。',
     '- 命令 help / command catalog / generated MCP metadata 里的 `result` 同时提供扁平 `fields[]` 与层次化 `fieldTree[]`；Agent 优先读 `fieldTree[]`，需要兼容旧逻辑时再回退到 `fields[]`。',
+    '- 命令 help / command catalog / MCP metadata 还会暴露 `nextActions[]`；它把 `recommendedFlow` / `decisionGuide` 收敛成稳定的“首选下一步 + 备选路径”结构，Agent 优先消费这一层。',
     '- Agent 侧做强约束解析时，先匹配 `kind`，再检查 `schemaVersion`；未知更高版本应走兼容分支或降级为文本解析。'
   ].join('\n');
 }

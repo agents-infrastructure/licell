@@ -5,8 +5,14 @@ import {
   type AgentCommandCatalogEntry,
   type AgentCommandResult
 } from '../utils/command-reference';
-import { cloneResolvedCommandResultDescriptor, type CommandSafetyMetadata, type CommandTaskHint } from '../utils/command-metadata';
+import {
+  cloneResolvedCommandResultDescriptor,
+  type CommandFlowStep,
+  type CommandSafetyMetadata,
+  type CommandTaskHint
+} from '../utils/command-metadata';
 import { LICELL_HELP_KIND, LICELL_HELP_SCHEMA_VERSION } from '../utils/help';
+import { buildResolvedNextActions, cloneResolvedCommandNextActions, type ResolvedCommandNextAction } from '../utils/command-next-actions';
 import {
   groupCommandTasks,
   normalizeCommandTasks,
@@ -54,6 +60,7 @@ export interface LicellMcpToolMetadata {
   workflows: LicellMcpToolWorkflowAttachment[];
   tasks: CommandTaskEntry[];
   decisionGuide: CommandTaskGroup[];
+  nextActions: ResolvedCommandNextAction[];
   safety?: CommandSafetyMetadata;
   result?: AgentCommandResult;
 }
@@ -103,6 +110,10 @@ function cloneDecisionGuide(decisionGuide: CommandTaskGroup[]) {
     ...group,
     tasks: cloneTasks(group.tasks)
   }));
+}
+
+function cloneNextActions(nextActions: ResolvedCommandNextAction[]) {
+  return cloneResolvedCommandNextActions(nextActions);
 }
 
 function cloneSafety(safety?: CommandSafetyMetadata) {
@@ -155,6 +166,11 @@ function buildDecisionGuideHint(decisionGuide: CommandTaskGroup[]) {
   });
 
   return `Decision guide: ${segments.join(' | ')}.`;
+}
+
+function buildNextActionsHint(nextActions: ResolvedCommandNextAction[]) {
+  if (nextActions.length === 0) return '';
+  return `Next actions: ${nextActions.slice(0, 2).map((action) => `${action.priority} → ${action.commandTemplate}`).join(' | ')}.`;
 }
 
 function buildInvocation(metadata?: LicellMcpToolMetadataEnvelope) {
@@ -287,6 +303,7 @@ export function renderLicellMcpToolDescription(
     primaryText,
     buildSafetyHint(metadata?.licell.safety),
     buildStructuredResultHint(metadata?.licell.result),
+    buildNextActionsHint(metadata?.licell.nextActions || []),
     buildDecisionGuideHint(metadata?.licell.decisionGuide || []),
     ...(options?.extraHints || []),
     options?.suffix || ''
@@ -312,6 +329,7 @@ export function cloneLicellMcpToolMetadataEnvelope(metadata?: LicellMcpToolMetad
       workflows: cloneWorkflows(metadata.licell.workflows),
       tasks: cloneTasks(metadata.licell.tasks),
       decisionGuide: cloneDecisionGuide(metadata.licell.decisionGuide),
+      nextActions: cloneNextActions(metadata.licell.nextActions),
       safety: cloneSafety(metadata.licell.safety),
       result: cloneResult(metadata.licell.result)
     }
@@ -332,6 +350,8 @@ export function buildLicellMcpToolMetadata(input: {
   workflowRoleByTag?: Record<string, LicellWorkflowRole>;
   tasks?: CommandTaskEntry[];
   taskHints?: CommandTaskHint[];
+  nextActions?: ResolvedCommandNextAction[];
+  recommendedFlow?: CommandFlowStep[];
   safety?: CommandSafetyMetadata;
   result?: AgentCommandResult;
 }) {
@@ -339,6 +359,9 @@ export function buildLicellMcpToolMetadata(input: {
   const workflows = buildLicellToolWorkflowAttachments(tags, input.workflowRoleByTag);
   const tasks = input.tasks ? cloneTasks(input.tasks) : normalizeCommandTasks(input.taskHints || []);
   const decisionGuide = groupCommandTasks(tasks);
+  const nextActions = input.nextActions
+    ? cloneNextActions(input.nextActions)
+    : buildResolvedNextActions({ recommendedFlow: input.recommendedFlow, tasks });
   return {
     licell: {
       source: 'licell-mcp-tool-registry',
@@ -365,6 +388,7 @@ export function buildLicellMcpToolMetadata(input: {
       workflows,
       tasks,
       decisionGuide,
+      nextActions,
       safety: cloneSafety(input.safety),
       result: cloneResult(input.result)
     }
@@ -428,6 +452,8 @@ export function buildLicellMcpToolMetadataFromAgentCommand(
     tags: [...(options.tags || []), command.rootCommand],
     workflowRoleByTag: options.workflowRoleByTag,
     tasks: command.tasks,
+    nextActions: command.nextActions,
+    recommendedFlow: command.recommendedFlow,
     safety: command.safety,
     result: command.result
   });

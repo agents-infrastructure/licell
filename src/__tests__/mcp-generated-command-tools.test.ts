@@ -35,9 +35,12 @@ describe('buildGeneratedMcpCommandTools', () => {
     expect(tools.licell_cmd_deploy.metadata?.licell.schemas.help.kind).toBe('licell-help');
     expect(tools.licell_cmd_deploy.metadata?.licell.schemas.commandCatalog.kind).toBe('licell-agent-command-catalog');
     expect(doctor.metadata?.licell.result?.outcomeKey).toBe('healthy');
+    expect(doctor.metadata?.licell.nextActions[0]?.commandTemplate).toBe('licell doctor --output json');
     expect(tools.licell_cmd_deploy.metadata?.licell.decisionGuide.some((group) => group.phase === 'inspect')).toBe(true);
     expect(tools.licell_cmd_deploy.description).toContain('Decision guide:');
+    expect(tools.licell_cmd_deploy.description).toContain('Next actions:');
     expect(doctor.description).toContain('Decision guide:');
+    expect(doctor.description).toContain('Next actions: primary → licell doctor --output json');
     expect(doctor.description).toContain('Key fields: stage, healthy, checkCount, okCount, warnCount, errorCount, skipCount, context, checks[]');
     expect(doctor.description).not.toContain('checks[].remediation[].type');
     expect(tools.licell_cmd_deploy.description).toContain('Inspect → licell deploy spec');

@@ -1,4 +1,4 @@
-import { getCommandCatalog, type CatalogCommand } from './command-catalog';
+import { resolveCatalogCommandFromTemplate } from './command-resolution';
 
 export type LicellDoctorCommandIntent = 'inspect' | 'verify' | 'login' | 'restore' | 'repair' | 'configure' | 'deploy' | 'bind' | 'release';
 
@@ -17,19 +17,6 @@ export interface LicellDoctorNextCommand {
   description: string | null;
   intent: LicellDoctorCommandIntent;
   priority: 'primary' | 'secondary';
-}
-
-function resolveDoctorCatalogCommand(commandTemplate: string): CatalogCommand | null {
-  const trimmed = commandTemplate.trim();
-  if (!trimmed.startsWith('licell ')) return null;
-  const tokens = trimmed.split(/\s+/).slice(1);
-  const catalog = getCommandCatalog();
-  const candidates = [...catalog.commands].sort((left, right) => right.commandTokens.length - left.commandTokens.length);
-  for (const command of candidates) {
-    if (tokens.length < command.commandTokens.length) continue;
-    if (command.commandTokens.every((token, index) => tokens[index] === token)) return command;
-  }
-  return null;
 }
 
 function inferDoctorCommandIntent(commandTemplate: string, commandKey: string | null): LicellDoctorCommandIntent {
@@ -73,7 +60,7 @@ export function doctorRemediationNote(
 ): LicellDoctorRemediation {
   const normalizedText = text.trim();
   const commandTemplate = input.commandTemplate?.trim();
-  const command = commandTemplate ? resolveDoctorCatalogCommand(commandTemplate) : null;
+  const command = commandTemplate ? resolveCatalogCommandFromTemplate(commandTemplate) : null;
   return {
     type: 'note',
     text: normalizedText,
@@ -92,7 +79,7 @@ export function doctorRemediationCommand(
   } = {}
 ): LicellDoctorRemediation {
   const normalizedCommandTemplate = commandTemplate.trim();
-  const command = resolveDoctorCatalogCommand(normalizedCommandTemplate);
+  const command = resolveCatalogCommandFromTemplate(normalizedCommandTemplate);
   return {
     type: 'command',
     text: (input.text || normalizedCommandTemplate).trim(),
@@ -111,7 +98,7 @@ export function doctorNextCommand(
   } = {}
 ): LicellDoctorNextCommand {
   const normalizedCommandTemplate = commandTemplate.trim();
-  const command = resolveDoctorCatalogCommand(normalizedCommandTemplate);
+  const command = resolveCatalogCommandFromTemplate(normalizedCommandTemplate);
   return {
     commandTemplate: normalizedCommandTemplate,
     commandKey: command?.key || null,

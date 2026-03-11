@@ -551,10 +551,12 @@ licell e2e cleanup <runId>
 ### Agent Contract
 
 - 原始 CLI JSON 流：过滤前缀 `@@LICELL_JSON@@`，再按 `kind=licell-cli-record` / `schemaVersion=1.0` / `type=event|result|error` 解析。
+- 对 `type=error` 的 record，优先读取 `nextActions[]` 获取首选补救步骤；`remediation[]` 作为兼容层继续保留。
 - `licell <command> --help --output json`：先读取 `help.kind` / `help.schemaVersion`；当前为 `licell-help@1.0`。
 - `licell_command_catalog`：先读取 `kind` / `schemaVersion`；当前为 `licell-agent-command-catalog@1.0`。
 - MCP tools 的 `metadata.licell` 会显式声明 `schemas.help` / `schemas.commandCatalog`；当前为 `licell-help@1.0` / `licell-agent-command-catalog@1.0`。
 - `help.result` / command catalog / generated MCP metadata 的结果 schema 同时提供扁平 `fields[]` 与层次化 `fieldTree[]`；优先消费 `fieldTree[]`，兼容旧逻辑时再读取 `fields[]`。
+- `help` / command catalog / MCP metadata 还会暴露 `nextActions[]`；它把 `recommendedFlow` / `decisionGuide` 收敛成稳定的“首选下一步 + 备选路径”结构，Agent 优先消费这一层。
 
 ### 命令总览
 

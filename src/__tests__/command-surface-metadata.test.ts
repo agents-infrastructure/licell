@@ -61,6 +61,12 @@ describe('command surface metadata', () => {
       'licell db add',
       'licell db info <instanceId>'
     ]);
+    expect(surface.nextActions.map((action) => action.commandTemplate)).toEqual([
+      'licell db list',
+      'licell db add',
+      'licell db info <instanceId>'
+    ]);
+    expect(surface.nextActions[0]?.priority).toBe('primary');
     expect(surface.automation?.preferredOutput).toBe('json');
     expect(surface.automation?.notes).toEqual([]);
   });
@@ -86,6 +92,10 @@ describe('command surface metadata', () => {
     });
 
     expect(surface.recommendedFlow[0]?.command).toBe('licell mcp init');
+    expect(surface.nextActions.map((action) => action.commandTemplate)).toEqual([
+      'licell mcp init',
+      'licell mcp serve'
+    ]);
     expect(surface.agentTips.some((tip) => tip.includes('mcp serve'))).toBe(true);
   });
 });

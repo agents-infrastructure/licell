@@ -6,7 +6,9 @@ import {
   isNotFoundError,
   isTransientError
 } from './alicloud-error';
+import { buildResolvedNextActionsFromSeeds } from './command-next-actions';
 import { formatErrorMessage } from './errors';
+import type { CommandTaskEntryPhase } from './command-tasks';
 
 export type CliOutputMode = 'text' | 'json';
 export type CliErrorCategory =
@@ -22,6 +24,18 @@ export type CliErrorCategory =
 export const LICELL_JSON_PREFIX = '@@LICELL_JSON@@';
 export const LICELL_CLI_RECORD_KIND = 'licell-cli-record' as const;
 export const LICELL_CLI_RECORD_SCHEMA_VERSION = '1.0' as const;
+
+export interface CliErrorRemediationItem {
+  type: string;
+  title: string;
+  reason: string;
+  commandTemplate: string;
+  commandKey: string | null;
+  commandDescription: string | null;
+  phase: CommandTaskEntryPhase;
+  priority: 'primary' | 'secondary';
+  order: number;
+}
 
 interface OutputContext {
   mode: CliOutputMode;
@@ -286,15 +300,25 @@ function extractProviderContext(err: unknown) {
   return Object.keys(provider).length > 0 ? provider : undefined;
 }
 
-function buildRemediation(message: string, category: CliErrorCategory, err: unknown) {
-  const tips: Array<Record<string, string>> = [];
+interface CliErrorGuidanceSeed {
+  type: string;
+  title: string;
+  reason: string;
+  commandTemplate: string;
+  phase?: CommandTaskEntryPhase;
+}
+
+function buildCliErrorGuidance(message: string, category: CliErrorCategory, err: unknown) {
+  const tips: CliErrorGuidanceSeed[] = [];
   const usage = parseMissingArgsUsage(message);
   const rawCode = extractErrorCode(err);
   if (usage) {
     tips.push({
       type: 'fix_input',
+      title: '补齐必填参数',
       reason: 'missing required args',
-      commandTemplate: `licell ${usage}`
+      commandTemplate: `licell ${usage}`,
+      phase: 'mutate'
     });
   }
   if (rawCode === 'DEPLOY_PRECHECK_FAILED') {
@@ -303,46 +327,89 @@ function buildRemediation(message: string, category: CliErrorCategory, err: unkn
     const entry = toOptionalString(details?.entry);
     tips.push({
       type: 'read_spec',
+      title: '先看 runtime 规格',
       reason: 'runtime contract must be satisfied before deploy',
-      commandTemplate: `licell deploy spec ${runtime}`
+      commandTemplate: `licell deploy spec ${runtime}`,
+      phase: 'inspect'
     });
     tips.push({
       type: 'run_precheck',
+      title: '复跑本地预检',
       reason: 'validate entry and handler contract locally',
       commandTemplate: entry
         ? `licell deploy check --runtime ${runtime} --entry ${entry}`
-        : `licell deploy check --runtime ${runtime}`
+        : `licell deploy check --runtime ${runtime}`,
+      phase: 'verify'
     });
   }
-  if (category === 'input' && !usage) {
+  if (category === 'input' && !usage && rawCode !== 'DEPLOY_PRECHECK_FAILED') {
     tips.push({
       type: 'fix_input',
+      title: '先看命令帮助',
       reason: 'invalid or missing CLI arguments',
-      commandTemplate: `licell ${outputContext.command} --help`.trim()
+      commandTemplate: `licell ${outputContext.command} --help`.trim(),
+      phase: 'inspect'
     });
   }
   if (category === 'auth' || category === 'permission') {
     tips.push({
       type: 'repair_auth',
+      title: '修复授权状态',
       reason: 'credentials missing/invalid or insufficient permissions',
-      commandTemplate: 'licell auth repair --account-id <id> --ak <super-ak> --sk <super-sk>'
+      commandTemplate: 'licell auth repair --account-id <id> --ak <super-ak> --sk <super-sk>',
+      phase: 'mutate'
     });
     if (category === 'auth') {
       tips.push({
         type: 'login',
+        title: '重新登录',
         reason: 'no active credential',
-        commandTemplate: 'licell login'
+        commandTemplate: 'licell login',
+        phase: 'mutate'
       });
     }
   }
   if (category === 'network') {
     tips.push({
       type: 'retry',
+      title: '重试当前命令',
       reason: 'transient network/provider issue',
-      commandTemplate: `licell ${outputContext.command}`.trim()
+      commandTemplate: `licell ${outputContext.command}`.trim(),
+      phase: 'verify'
     });
   }
-  return tips;
+
+  const nextActions = buildResolvedNextActionsFromSeeds({
+    actions: tips.map((tip) => ({
+      title: tip.title,
+      description: tip.reason,
+      commandTemplate: tip.commandTemplate,
+      phase: tip.phase,
+      source: 'error-remediation'
+    })),
+    limit: tips.length || 4
+  });
+
+  const actionByCommandTemplate = new Map(nextActions.map((action) => [action.commandTemplate, action] as const));
+  const remediation: CliErrorRemediationItem[] = tips.map((tip, index) => {
+    const action = actionByCommandTemplate.get(tip.commandTemplate);
+    return {
+      type: tip.type,
+      title: tip.title,
+      reason: tip.reason,
+      commandTemplate: tip.commandTemplate,
+      commandKey: action?.commandKey || null,
+      commandDescription: action?.commandDescription || null,
+      phase: action?.phase || tip.phase || 'general',
+      priority: action?.priority || (index === 0 ? 'primary' : 'secondary'),
+      order: action?.order || (index + 1)
+    };
+  });
+
+  return {
+    remediation,
+    nextActions
+  };
 }
 
 export function emitCliEvent(event: {
@@ -482,6 +549,7 @@ export function buildCliErrorRecord(
   const code = detectErrorCode(message, err, category);
   const provider = extractProviderContext(err);
   const retryable = category === 'network';
+  const guidance = buildCliErrorGuidance(message, category, err);
   const record: Record<string, unknown> = {
     kind: LICELL_CLI_RECORD_KIND,
     schemaVersion: LICELL_CLI_RECORD_SCHEMA_VERSION,
@@ -495,7 +563,8 @@ export function buildCliErrorRecord(
       message,
       retryable
     },
-    remediation: buildRemediation(message, category, err)
+    remediation: guidance.remediation,
+    nextActions: guidance.nextActions
   };
   if (provider) record.provider = provider;
   const mergedDetails: Record<string, unknown> = {};

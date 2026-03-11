@@ -23,6 +23,7 @@ import { canExposeCommandAsGeneratedMcpTool, toGeneratedMcpToolName } from './co
 import {
   type ResolvedCommandAutomationDescriptor,
   type ResolvedCommandInteractionDescriptor,
+  type ResolvedCommandNextAction,
   toLicellInvocation
 } from './command-surface-metadata';
 import {
@@ -66,6 +67,7 @@ export interface AgentCommandCatalogEntry {
   argumentHints: Record<string, string>;
   tasks: CommandTaskEntry[];
   decisionGuide: CommandTaskGroup[];
+  nextActions: ResolvedCommandNextAction[];
   relatedCommands: string[];
   interaction?: ResolvedCommandInteractionDescriptor;
   automation?: ResolvedCommandAutomationDescriptor;
@@ -268,6 +270,7 @@ export function buildAgentCommandCatalog(catalog: CommandCatalog = getCommandCat
           ...group,
           tasks: group.tasks.map((task) => ({ ...task, commands: [...task.commands] }))
         })),
+        nextActions: help.nextActions.map((action) => ({ ...action })),
         relatedCommands: help.relatedCommands.map((entry) => entry.key),
         interaction: help.interaction
           ? {
@@ -326,6 +329,7 @@ export function filterAgentCommandCatalog(
       ...group,
       tasks: group.tasks.map((task) => ({ ...task, commands: [...task.commands] }))
     })),
+    nextActions: command.nextActions.map((action) => ({ ...action })),
     relatedCommands: [...command.relatedCommands],
     interaction: command.interaction
       ? {
@@ -456,6 +460,12 @@ export function renderSkillCommandReference(catalog: CommandCatalog = getCommand
       }
       if (agentCommand) {
         parts.push(...renderDecisionGuideMarkdown(agentCommand));
+      }
+      if (agentCommand?.nextActions.length) {
+        parts.push('', '下一步：');
+        for (const action of agentCommand.nextActions) {
+          parts.push(`- ${action.priority} · \`${action.commandTemplate}\`：${action.description}`);
+        }
       }
       if (agentCommand?.optionInsights.length) {
         parts.push('', '关键选项建议：');

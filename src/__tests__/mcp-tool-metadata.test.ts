@@ -32,7 +32,8 @@ describe('mcp tool metadata helpers', () => {
         tags: [],
         workflows: [],
         tasks: [],
-        decisionGuide: []
+        decisionGuide: [],
+        nextActions: []
       }
     };
 
@@ -66,7 +67,8 @@ describe('mcp tool metadata helpers', () => {
         tags: [],
         workflows: [],
         tasks: [],
-        decisionGuide: []
+        decisionGuide: [],
+        nextActions: []
       }
     };
 

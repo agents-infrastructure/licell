@@ -1,4 +1,5 @@
 import type { CatalogCommand, CatalogOption } from './command-catalog';
+import { buildResolvedNextActions, type ResolvedCommandNextAction } from './command-next-actions';
 import {
   type CommandAutomationDescriptor,
   buildCommandOptionInsights,
@@ -16,6 +17,7 @@ import {
   deriveCommandSafety,
   deriveNamespaceSafety
 } from './command-semantics';
+import type { CommandTaskEntry } from './command-tasks';
 
 export type CommandSurfaceScope = 'root' | 'namespace' | 'command';
 
@@ -31,6 +33,7 @@ export interface CommandSurfaceMetadata {
   agentTips: string[];
   optionInsights: CommandOptionInsight[];
   recommendedFlow: CommandFlowStep[];
+  nextActions: ResolvedCommandNextAction[];
   interaction?: ResolvedCommandInteractionDescriptor;
   automation?: ResolvedCommandAutomationDescriptor;
   result?: ResolvedCommandResultDescriptor;
@@ -48,6 +51,8 @@ export interface ResolvedCommandAutomationDescriptor {
   explicitInputs: string[];
   notes: string[];
 }
+
+export type { ResolvedCommandNextAction } from './command-next-actions';
 
 function unique<T>(values: T[]) {
   return [...new Set(values)];
@@ -229,9 +234,15 @@ export function buildResolvedCommandSurfaceMetadata(input: {
   command?: CatalogCommand;
   subcommands: CommandSurfaceEntryLike[];
   descriptor: CommandDescriptor;
+  tasks?: CommandTaskEntry[];
   extraTokens?: string[];
 }) {
   const extraTokens = input.extraTokens || [];
+  const recommendedFlow = buildResolvedRecommendedFlow({
+    scope: input.scope,
+    descriptor: input.descriptor,
+    subcommands: input.subcommands
+  });
   const safety = buildResolvedSafety({
     scope: input.scope,
     command: input.command,
@@ -254,10 +265,10 @@ export function buildResolvedCommandSurfaceMetadata(input: {
       subcommands: input.subcommands
     }),
     optionInsights: buildCommandOptionInsights(input.command?.options || [], input.descriptor),
-    recommendedFlow: buildResolvedRecommendedFlow({
-      scope: input.scope,
-      descriptor: input.descriptor,
-      subcommands: input.subcommands
+    recommendedFlow,
+    nextActions: buildResolvedNextActions({
+      recommendedFlow,
+      tasks: input.tasks || []
     }),
     interaction: buildResolvedInteraction({
       descriptor: input.descriptor
