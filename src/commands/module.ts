@@ -83,6 +83,7 @@ export interface CommandSectionConfig {
 
 export interface LicellCommandSurface {
   roots: string[];
+  declaredCommands?: readonly DeclaredCliCommand[];
   register(cli: CAC): void;
   descriptors: CommandDescriptorMap;
 }
@@ -128,6 +129,12 @@ export interface DeclaredCliOption {
 
 export interface DeclaredCliCommand {
   rawName: string;
+  /**
+   * Parser-only command signature. Use sparingly when the interactive CLI may
+   * prompt for omitted opaque inputs, but machine-facing surfaces (help/docs/MCP)
+   * must continue to expose the canonical required arguments via `rawName`.
+   */
+  cliRawName?: string;
   description: string;
   aliases?: string[];
   options?: readonly DeclaredCliOption[];
@@ -280,7 +287,8 @@ export function commandInvocation(command: Pick<DeclaredCliCommand, 'rawName'>) 
 }
 
 export function registerCliCommand(cli: CAC, command: DeclaredCliCommand) {
-  const instance = cli.command(command.rawName, command.description);
+  const instance = cli.command(command.cliRawName || command.rawName, command.description);
+  (instance as typeof instance & { licellDeclaredCommand?: DeclaredCliCommand }).licellDeclaredCommand = command;
   for (const alias of command.aliases || []) {
     instance.alias(alias);
   }
@@ -367,6 +375,10 @@ function defineCommandSurface(config: DeclaredCommandSurfaceConfig): LicellComma
 
   return {
     roots,
+    declaredCommands: [
+      ...(config.mergeBundles || []).flatMap((bundle) => bundle.declaredCommands || []),
+      ...(config.commands || [])
+    ],
     register: config.register,
     descriptors
   };

@@ -1,4 +1,5 @@
 import { createLicellCliApp } from '../cli/app';
+import type { DeclaredCliCommand } from '../commands/module';
 
 export interface CatalogArg {
   raw: string;
@@ -86,7 +87,9 @@ function parseOption(rawName: string, description: string): CatalogOption | null
 function buildCommandCatalog(): CommandCatalog {
   const cli = createLicellCliApp({ name: 'licell' });
   const commands = cli.commands.map((command) => {
-    const { commandTokens, args } = parseCommandRawName(command.rawName);
+    const declared = (command as typeof command & { licellDeclaredCommand?: DeclaredCliCommand }).licellDeclaredCommand;
+    const rawName = declared?.rawName || command.rawName;
+    const { commandTokens, args } = parseCommandRawName(rawName);
     const key = commandTokens.join(' ');
     const options = (command.options || [])
       .map((option) => parseOption(option.rawName, option.description || ''))
@@ -94,7 +97,7 @@ function buildCommandCatalog(): CommandCatalog {
 
     return {
       key,
-      rawName: command.rawName,
+      rawName,
       description: command.description || '',
       commandTokens,
       args,

@@ -99,6 +99,7 @@ const authExportCommand = defineCliCommand({
 
 const authRestoreCommand = defineCliCommand({
   rawName: 'auth restore <token> [passkey]',
+  cliRawName: 'auth restore [token] [passkey]',
   description: '使用 restore token + passkey 一键恢复 licell 全局凭证状态',
   options: [
     { rawName: '--yes', description: '检测到本地已有 ~/.licell-cli 文件时，跳过二次确认并直接覆盖' }
@@ -115,9 +116,14 @@ const authRestoreCommand = defineCliCommand({
       'licell auth restore licell-auth-v1.<token> my-passphrase-123',
       'licell auth restore licell-auth-v1.<token> --yes'
     ],
+    argumentHints: {
+      token: 'restore token。TTY 交互环境下可省略并提示输入；自动化 / Agent 调用请显式传入。',
+      passkey: '解密 passkey。TTY 交互环境下可省略并隐藏输入；自动化 / Agent 调用请显式传入。'
+    },
     notes: [
       'restore 不依赖当前机器已登录；它通过 token 内的时效性签名 URL 从 OSS 拉取 bundle。',
-      '如果本地已存在 ~/.licell-cli/auth.json / config.json / acme 文件，默认会先确认再覆盖。'
+      '如果本地已存在 ~/.licell-cli/auth.json / config.json / acme 文件，默认会先确认再覆盖。',
+      '仅在 TTY 交互环境下允许省略 token / passkey 并逐步提示；非交互模式保持显式参数约束。'
     ]
   }
 });
@@ -172,6 +178,28 @@ async function resolvePasskey(
   const second = toPromptValue(await password({ message: options.confirmPrompt }), 'passkey 确认').trim();
   if (first !== second) throw new Error('两次输入的 passkey 不一致');
   return first;
+}
+
+/**
+ * 仅对少数高摩擦但语义单一的输入（如 restore token）开放 TTY 补录。
+ * 资源 CRUD / 危险操作 / 机器调用场景仍保持显式参数，避免破坏 Agent 与脚本的确定性。
+ */
+async function resolveRestoreToken(rawToken: unknown, interactiveTTY: boolean) {
+  const provided = toOptionalString(rawToken);
+  if (provided) {
+    if (!provided.startsWith('licell-auth-v1.')) {
+      throw new Error('restore token 格式非法，应以 licell-auth-v1. 开头');
+    }
+    return provided;
+  }
+  if (!interactiveTTY) {
+    throw new Error('非交互模式下需要显式传入 restore token');
+  }
+  const prompted = toPromptValue(await text({ message: '输入 restore token:' }), 'restore token');
+  if (!prompted.startsWith('licell-auth-v1.')) {
+    throw new Error('restore token 格式非法，应以 licell-auth-v1. 开头');
+  }
+  return prompted;
 }
 
 async function downloadSignedAuthBundle(url: string, expectedSha256: string) {
@@ -553,7 +581,7 @@ export function registerAuthCommands(cli: CAC) {
     });
 
   registerCliCommand(cli, authRestoreCommand)
-    .action(async (token: string, passkey: unknown, options: { yes?: unknown }) => {
+    .action(async (token: unknown, passkey: unknown, options: { yes?: unknown }) => {
       const interactiveTTY = isInteractiveTTY();
       if (!isJsonOutput()) {
         showIntro(pc.bgBlue(pc.white(' ▲ Licell Auth Restore ')));
@@ -561,7 +589,8 @@ export function registerAuthCommands(cli: CAC) {
         emitCliEvent({ stage: 'auth.restore', action: 'restore', status: 'start' });
       }
 
-      const payload = decodeAuthTransferToken(token);
+      const resolvedToken = await resolveRestoreToken(token, interactiveTTY);
+      const payload = decodeAuthTransferToken(resolvedToken);
       if (new Date(payload.expiresAt).getTime() <= Date.now()) {
         throw new Error(`restore token 已过期: ${payload.expiresAt}`);
       }

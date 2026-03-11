@@ -182,6 +182,21 @@ describe('help utils', () => {
     expect(doc?.text).toContain('Global Options:');
   });
 
+  it('builds command help for auth restore with explicit TTY prompting hints', () => {
+    const doc = buildHelpDocument({
+      argv: ['node', 'src/cli.ts', 'auth', 'restore', '--help'],
+      version: VERSION
+    });
+
+    expect(doc?.scope).toBe('command');
+    expect(doc?.key).toBe('auth restore');
+    expect(doc?.args[0]?.raw).toBe('<token>');
+    expect(doc?.args[0]?.hint).toContain('TTY 交互环境下可省略并提示输入');
+    expect(doc?.args[1]?.raw).toBe('[passkey]');
+    expect(doc?.args[1]?.hint).toContain('自动化 / Agent 调用请显式传入');
+    expect(doc?.text).toContain('仅在 TTY 交互环境下允许省略 token / passkey');
+  });
+
   it('builds command help for setup with explicit task hints', () => {
     const doc = buildHelpDocument({
       argv: ['node', 'src/cli.ts', 'setup', '--help'],
