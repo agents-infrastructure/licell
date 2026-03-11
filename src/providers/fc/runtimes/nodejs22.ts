@@ -3,11 +3,14 @@ import { mkdirSync, writeFileSync } from 'fs';
 import { dirname, join, relative } from 'path';
 import { buildEntrypointWithBun } from '../../../utils/runtime';
 import { prepareNode22RuntimeInCode } from '../../../utils/node22-runtime';
+import { createManagedPreferredLauncher, shouldIncludeManagedRuntimeFallback } from '../custom-runtime-launcher';
 import { findFirstJsOutput } from '../runtime-utils';
 import type { RuntimeHandler, ResolvedRuntimeConfig } from '../runtime-handler';
 
 const CUSTOM_FC_RUNTIME = 'custom.debian12';
 const BOOTSTRAP_PATH = '.licell/node22-bootstrap.cjs';
+const LAUNCHER_PATH = '.licell/node22-launcher.sh';
+const MANAGED_NODE_BINARY = '/var/fc/lang/nodejs22/bin/node';
 const PORT = 9000;
 
 function createBootstrap(outdir: string, bootFile: string) {
@@ -47,8 +50,42 @@ function readBody(req) {
   });
 }
 
-async function toEvent(req) {
-  const bodyBuffer = await readBody(req);
+function pickHeaderValue(value) {
+  if (Array.isArray(value)) return typeof value[0] === 'string' ? value[0] : '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number') return String(value);
+  return '';
+}
+
+function isFcInvokeRequest(req) {
+  const controlPath = pickHeaderValue(req.headers['x-fc-control-path']).trim().toLowerCase();
+  if (controlPath === '/invoke') return true;
+  const requestId = pickHeaderValue(req.headers['x-fc-request-id']).trim();
+  const url = new URL(req.url || '/', 'http://localhost');
+  return Boolean(requestId && url.pathname === '/invoke');
+}
+
+function decodeInvokePayload(bodyBuffer, headers) {
+  if (bodyBuffer.length === 0) return {};
+  const contentType = pickHeaderValue(headers['content-type']).trim().toLowerCase();
+  const text = bodyBuffer.toString('utf8');
+  const trimmed = text.trim();
+  const shouldTryJson = contentType === ''
+    || contentType.includes('json')
+    || contentType.includes('text')
+    || contentType.includes('octet-stream');
+  if (shouldTryJson && trimmed) {
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      return text;
+    }
+  }
+  if (text.length > 0) return text;
+  return bodyBuffer.toString('base64');
+}
+
+function toHttpEvent(req, bodyBuffer) {
   const url = new URL(req.url || '/', 'http://localhost');
   const queryParameters = {};
   for (const [key, value] of url.searchParams.entries()) queryParameters[key] = value;
@@ -70,6 +107,14 @@ async function toEvent(req) {
       }
     }
   };
+}
+
+async function toHandlerEvent(req) {
+  const bodyBuffer = await readBody(req);
+  if (isFcInvokeRequest(req)) {
+    return decodeInvokePayload(bodyBuffer, req.headers);
+  }
+  return toHttpEvent(req, bodyBuffer);
 }
 
 function writeResult(res, result) {
@@ -98,7 +143,7 @@ function writeResult(res, result) {
 const port = Number(process.env.FC_SERVER_PORT || process.env.PORT || ${PORT});
 const server = http.createServer(async (req, res) => {
   try {
-    const event = await toEvent(req);
+    const event = await toHandlerEvent(req);
     const result = await handler(event, {});
     writeResult(res, result);
   } catch (error) {
@@ -134,14 +179,23 @@ export const nodejs22Handler: RuntimeHandler = {
 
   async resolveConfig(outdir: string, bootFile: string): Promise<ResolvedRuntimeConfig> {
     const handler = `${bootFile.replace(/\.[^.]+$/, '').replace(/\//g, '.')}.handler`;
-    const runtimeArtifact = await prepareNode22RuntimeInCode(outdir);
     const bootstrapPath = createBootstrap(outdir, bootFile).replace(/\\/g, '/');
+    const runtimeArtifact = shouldIncludeManagedRuntimeFallback()
+      ? await prepareNode22RuntimeInCode(outdir)
+      : undefined;
+    const launcherPath = createManagedPreferredLauncher({
+      outdir,
+      launcherPath: LAUNCHER_PATH,
+      managedExecutablePath: MANAGED_NODE_BINARY,
+      fallbackExecutablePath: runtimeArtifact?.nodeBinaryInCode,
+      args: [`/code/${bootstrapPath}`]
+    });
     return {
       runtime: CUSTOM_FC_RUNTIME,
       handler,
       customRuntimeConfig: new $FC.CustomRuntimeConfig({
-        command: [runtimeArtifact.nodeBinaryInCode],
-        args: [`/code/${bootstrapPath}`],
+        command: ['/bin/sh'],
+        args: [`/code/${launcherPath}`],
         port: PORT
       })
     };

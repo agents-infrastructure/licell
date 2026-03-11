@@ -195,6 +195,7 @@ export async function vendorPythonDependencies(options: VendorPythonDependencies
         '--no-cache-dir',
         '--no-input',
         '--no-compile',
+        '--ignore-requires-python',
         '--no-index',
         '--find-links',
         wheelhouse,

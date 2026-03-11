@@ -140,7 +140,7 @@ export function registerDomainAppCommands(cli: CAC) {
         {
           commandLabel: commandInvocation(domainAppUnbindCommand),
           interactiveTTY: isInteractiveTTY(),
-          requiredCapabilities: ['fc', 'dns']
+          requiredCapabilities: ['fc', 'dns', 'cdn']
         },
         async () => {
           showIntro(pc.bgCyan(pc.black(' 🌐 App Domain Removal ')));
@@ -156,13 +156,14 @@ export function registerDomainAppCommands(cli: CAC) {
           );
           if (!result) return;
           if (!isJsonOutput()) {
-            s.stop(pc.green('✅ 应用域名已解绑并完成 DNS 清理'));
+            s.stop(pc.green('✅ 应用域名已解绑并完成 CDN / DNS 清理'));
             showOutro('Done.');
             return;
           }
           emitCommandResult({
             workflow: 'app',
             domain: result.domainName,
+            removedCdnDomain: result.removedCdnDomain,
             removedCustomDomain: result.removedCustomDomain,
             removedDnsRecordIds: result.removedDnsRecordIds
           });
@@ -189,7 +190,7 @@ export const domainAppCommandBundle = defineCommandBundle({
         {
           phase: 'cleanup',
           title: '下线应用域名',
-          description: '解绑应用入口，并清理对应 FC custom domain 与 DNS CNAME。',
+          description: '解绑应用入口，并清理对应 CDN、FC custom domain 与 DNS CNAME。',
           commands: ['licell domain app unbind api.example.com --yes']
         }
       ]
@@ -197,4 +198,3 @@ export const domainAppCommandBundle = defineCommandBundle({
   },
   commands: [domainAppBindCommand, domainAppUnbindCommand]
 });
-

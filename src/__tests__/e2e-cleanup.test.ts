@@ -21,7 +21,21 @@ describe('e2e cleanup helpers', () => {
 
     expect(classifyE2eCleanupCommandResult(result, ['fn', 'rm', 'demo'], ['functionnotfound', 'does not exist'])).toEqual({
       outcome: 'skipped',
-      message: expect.stringContaining('FunctionNotFound: code: 404')
+      message: "FunctionNotFound: code: 404, function 'demo' does not exist request id: 1-xxx"
+    });
+  });
+
+  it('sanitizes stdout-only cleanup errors before storing them', () => {
+    const result: CapturedCliCommandResult = {
+      status: 1,
+      signal: null,
+      stdout: '\u001b[?25l│\n\u001b[999D\u001b[J◒  正在级联清理并删除函数 demo\u001b[999D\u001b[J◇  ❌ 删除函数失败\n\u001b[?25h',
+      stderr: ''
+    };
+
+    expect(classifyE2eCleanupCommandResult(result, ['fn', 'rm', 'demo'])).toEqual({
+      outcome: 'failed',
+      message: '❌ 删除函数失败'
     });
   });
 

@@ -39,7 +39,14 @@ import { parseRootAndSubdomain } from '../utils/domain';
 import { formatErrorMessage } from '../utils/errors';
 import { resolveAuthoritativeDnsSnapshot } from '../providers/dns';
 import { probeHttpHealth, type ProbeHttpHealthOptions } from '../utils/health-check';
-import { emitCliError, emitCliEvent, emitCliResult, extractJsonRecordsFromOutput, isJsonOutput } from '../utils/output';
+import {
+  emitCliError,
+  emitCliEvent,
+  emitCliResult,
+  extractJsonRecordsFromOutput,
+  isJsonOutput,
+  sanitizeCapturedCliOutput
+} from '../utils/output';
 import { sleep } from '../utils/runtime';
 import { readLicellEnv } from '../utils/env';
 import { AUTOMATION_SECTION } from './sections';
@@ -252,10 +259,9 @@ export function classifyE2eCleanupCommandResult(
   }
 
   const signal = result.signal ? ` signal=${result.signal}` : '';
-  const outputMessage = [result.stderr, result.stdout]
-    .map((chunk) => chunk.trim())
-    .filter((chunk) => chunk.length > 0)
-    .join('\n');
+  const stderrMessage = sanitizeCapturedCliOutput(result.stderr);
+  const stdoutMessage = sanitizeCapturedCliOutput(result.stdout);
+  const outputMessage = stderrMessage || stdoutMessage;
   const message = outputMessage
     || `命令失败: licell ${args.join(' ')} (exit=${String(result.status)}${signal})`;
   const lowerMessage = message.toLowerCase();
@@ -521,7 +527,12 @@ function runStep(ctx: E2eStepContext, name: string, args: string[]) {
   }
 }
 
-function runJsonStep<T extends Record<string, unknown>>(ctx: E2eStepContext, name: string, args: string[]): T {
+function runJsonStep<T extends Record<string, unknown>>(
+  ctx: E2eStepContext,
+  name: string,
+  args: string[],
+  validate?: (payload: T) => void
+): T {
   const jsonArgs = appendJsonOutputArgs(args);
   const startedAt = nowIso();
   const command = `licell ${jsonArgs.join(' ')}`;
@@ -546,6 +557,8 @@ function runJsonStep<T extends Record<string, unknown>>(ctx: E2eStepContext, nam
     if (!payload) {
       throw new Error(`命令未返回 JSON 结果: licell ${jsonArgs.join(' ')}`);
     }
+    const typedPayload = payload as T;
+    validate?.(typedPayload);
     applyStepRecord(ctx.manifest, {
       name,
       command,
@@ -555,7 +568,7 @@ function runJsonStep<T extends Record<string, unknown>>(ctx: E2eStepContext, nam
     });
     saveE2eManifest(ctx.manifest, ctx.manifest.projectRoot);
     emitCliEvent({ stage: `e2e.${name}`, action: name, status: 'ok' });
-    return payload as T;
+    return typedPayload;
   } catch (err: unknown) {
     applyStepRecord(ctx.manifest, {
       name,
@@ -574,6 +587,55 @@ function runJsonStep<T extends Record<string, unknown>>(ctx: E2eStepContext, nam
     });
     throw err;
   }
+}
+
+export function buildE2eInvokePayload(runId: string) {
+  return JSON.stringify({
+    path: '/healthz',
+    rawPath: '/healthz',
+    rawQueryString: `runId=${encodeURIComponent(runId)}&ping=pong`,
+    httpMethod: 'GET',
+    headers: {
+      accept: 'application/json'
+    },
+    queryParameters: {
+      runId,
+      ping: 'pong'
+    },
+    body: '',
+    isBase64Encoded: false,
+    requestContext: {
+      http: {
+        method: 'GET',
+        path: '/healthz',
+        sourceIp: '127.0.0.1'
+      }
+    }
+  });
+}
+
+export function assertE2eInvokeResult(payload: Record<string, unknown>) {
+  const statusCode = Number(payload.statusCode || 0);
+  if (statusCode !== 200) {
+    throw new Error(`fn invoke 返回非 200 状态码: ${statusCode}`);
+  }
+
+  const body = typeof payload.body === 'string' ? payload.body : '';
+  if (!body.trim()) {
+    throw new Error('fn invoke 返回空响应');
+  }
+  if (body.includes('Cannot POST /invoke')) {
+    throw new Error('fn invoke 命中了 runtime HTTP 控制面，而不是 handler(event, context)');
+  }
+
+  try {
+    const parsed = JSON.parse(body) as { ok?: unknown };
+    if (parsed.ok === true) return;
+  } catch {
+    // handled below
+  }
+
+  throw new Error(`fn invoke 返回非预期响应: ${body}`);
 }
 
 function runStepIf(ctx: E2eStepContext, condition: boolean, name: string, args: string[]) {
@@ -689,11 +751,6 @@ async function runProbeStep(
   });
 }
 
-function isFcWildcardOrGatewayValue(value: string) {
-  const normalized = value.trim().toLowerCase();
-  return normalized.includes('.fc.aliyuncs.com') || normalized.includes('.fcapp.run');
-}
-
 async function runStaticDomainProbeStep(
   ctx: E2eStepContext,
   name: string,
@@ -705,24 +762,10 @@ async function runStaticDomainProbeStep(
     const result = await probeHttpHealth(baseUrl, options);
     if (result.ok) return;
     const snapshot = await resolveAuthoritativeDnsSnapshot(domain);
-    const settledCname = snapshot.cname.find((value) => !isFcWildcardOrGatewayValue(value));
-    if (result.error.includes('请求失败') && settledCname) {
-      emitCliEvent({
-        stage: `e2e.${name}`,
-        action: name,
-        status: 'info',
-        message: `静态域名权威 CNAME 已切到 CDN，但边缘 HTTPS 仍在传播: ${result.error}`,
-        data: {
-          domain,
-          authoritativeCname: snapshot.cname,
-          authoritativeAddresses: snapshot.addresses,
-          nameServerHosts: snapshot.nameServerHosts,
-          nameServerIps: snapshot.nameServerIps
-        }
-      });
-      return;
-    }
-    throw new Error(result.error);
+    throw new Error(
+      `${result.error}; authoritativeCname=${snapshot.cname.join(',') || '∅'}; ` +
+      `authoritativeAddresses=${snapshot.addresses.join(',') || '∅'}`
+    );
   });
 }
 
@@ -911,7 +954,12 @@ async function executeE2eRun(options: E2eRunOptions) {
 
         runStep(ctx, 'fn-list', ['fn', 'list', '--prefix', appNameFromConfig, '--limit', '20']);
         runStep(ctx, 'fn-info', ['fn', 'info', appNameFromConfig, '--target', target]);
-        runStep(ctx, 'fn-invoke', ['fn', 'invoke', appNameFromConfig, '--target', target, '--payload', JSON.stringify({ runId, ping: 'pong' })]);
+        runJsonStep<Record<string, unknown>>(
+          ctx,
+          'fn-invoke',
+          ['fn', 'invoke', appNameFromConfig, '--target', target, '--payload', buildE2eInvokePayload(runId)],
+          assertE2eInvokeResult
+        );
 
         runStep(ctx, 'env-set', ['env', 'set', 'LICELL_E2E_RUN_ID', runId]);
         runStep(ctx, 'env-list', ['env', 'list']);

@@ -360,7 +360,7 @@ const RUNTIME_SPECS: FcApiRuntimeDeploySpec[] = [
         'requestContext.http.sourceIp'
       ],
       optionalFields: [],
-      notes: ['通过内置 node22 bootstrap 适配为 HTTP handler。']
+      notes: ['通过 licell bootstrap 适配为 HTTP handler；默认直接使用 FC 托管 /var/fc/lang/nodejs22/bin/node。']
     },
     responseSchema: {
       acceptedForms: [
@@ -385,7 +385,8 @@ const RUNTIME_SPECS: FcApiRuntimeDeploySpec[] = [
     ],
     notes: [
       '部署前会校验导出函数。',
-      '运行在 custom.debian12 + 内置 node22。'
+      '运行在 custom.debian12；默认使用 FC 托管 nodejs22。',
+      '如需额外打包随包 fallback runtime，可设置 LICELL_FC_INCLUDE_RUNTIME_FALLBACK=1。'
     ]
   },
   {
@@ -473,7 +474,7 @@ const RUNTIME_SPECS: FcApiRuntimeDeploySpec[] = [
         'requestContext.http.sourceIp'
       ],
       optionalFields: [],
-      notes: ['通过内置 python3.13 bootstrap 适配 HTTP 请求事件。']
+      notes: ['通过 licell bootstrap 适配 HTTP 请求事件；默认直接使用 FC 托管 /var/fc/lang/python3.13/bin/python3.13。']
     },
     responseSchema: {
       acceptedForms: [
@@ -499,7 +500,8 @@ const RUNTIME_SPECS: FcApiRuntimeDeploySpec[] = [
     ],
     notes: [
       '部署前会校验 handler 函数签名。',
-      '运行在 custom.debian12 + 内置 python3.13。'
+      '运行在 custom.debian12；默认使用 FC 托管 python3.13。',
+      '如需额外打包随包 fallback runtime，可设置 LICELL_FC_INCLUDE_RUNTIME_FALLBACK=1。'
     ]
   },
   {

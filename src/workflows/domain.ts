@@ -1,6 +1,6 @@
 import { Config } from '../utils/config';
 import type { Spinner } from '../utils/errors';
-import { ensureDomainCname, normalizeDnsValue, removeDomainCname } from '../providers/dns';
+import { ensureDomainCname, normalizeDnsValue, removeDomainCname, waitForAuthoritativeCnameTarget } from '../providers/dns';
 import { enableCdnForDomain, removeCdnDomain } from '../providers/cdn';
 import { issueAndBindSSLWithArtifacts } from '../providers/ssl';
 import { getOssBucketInfo, resolveOssBucketName } from '../providers/oss';
@@ -47,6 +47,7 @@ export interface BindAppDomainWorkflowResult {
 
 export interface UnbindAppDomainWorkflowResult {
   domainName: string;
+  removedCdnDomain: boolean;
   removedCustomDomain: boolean;
   removedDnsRecordIds: string[];
 }
@@ -109,7 +110,12 @@ export async function bindCustomDomain(
   if (!functionName) throw new Error('未找到应用名，请先执行 licell deploy');
 
   if (!options.skipDnsBind) {
-    await ensureDomainCname(normalizedDomain, normalizeDnsValue(targetFcDomain));
+    const normalizedTarget = normalizeDnsValue(targetFcDomain);
+    await ensureDomainCname(normalizedDomain, normalizedTarget);
+    await waitForAuthoritativeCnameTarget(normalizedDomain, normalizedTarget, {
+      maxAttempts: 36,
+      intervalMs: 5_000
+    });
   }
 
   await upsertFnCustomDomain(normalizedDomain, {
@@ -200,10 +206,12 @@ export async function bindAppDomainWorkflow(
 export async function unbindAppDomainWorkflow(domainName: string): Promise<UnbindAppDomainWorkflowResult> {
   const normalizedDomain = domainName.trim().toLowerCase();
   if (!normalizedDomain) throw new Error('域名不能为空');
+  const removedCdnDomain = await removeCdnDomain(normalizedDomain);
   const removedCustomDomain = await removeFnCustomDomain(normalizedDomain);
   const removedDnsRecordIds = await removeDomainCname(normalizedDomain);
   return {
     domainName: normalizedDomain,
+    removedCdnDomain,
     removedCustomDomain,
     removedDnsRecordIds
   };

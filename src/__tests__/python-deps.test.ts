@@ -109,6 +109,7 @@ describe('vendorPythonDependencies', () => {
       expect(calls[0].args).toContain('3.13');
       expect(calls[0].args).not.toContain('--abi');
       expect(calls[1].args).toContain('install');
+      expect(calls[1].args).toContain('--ignore-requires-python');
       expect(calls[1].args).toContain('--no-index');
       expect(calls[1].args).toContain('--platform');
       expect(calls[1].args).toContain('manylinux2014_x86_64');
@@ -147,6 +148,7 @@ describe('vendorPythonDependencies', () => {
       expect(calls).toHaveLength(2);
       expect(calls[0].args).toContain('download');
       expect(calls[1].args).toContain('install');
+      expect(calls[1].args).not.toContain('--ignore-requires-python');
       expect(calls[1].args).not.toContain('--no-index');
     } finally {
       rmSync(root, { recursive: true, force: true });

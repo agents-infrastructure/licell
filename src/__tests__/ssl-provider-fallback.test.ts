@@ -1,6 +1,7 @@
 import { mkdtempSync, readFileSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import * as acme from 'acme-client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   isAcmeRateLimitedError,
@@ -8,6 +9,14 @@ import {
   resolveAcmeProviderPlan,
   resolveZeroSslExternalAccountBinding
 } from '../providers/ssl';
+
+const acmeTransport = acme.axios as typeof acme.axios & {
+  defaults: typeof acme.axios.defaults & {
+    acmeSettings?: Record<string, unknown> & {
+      retryMaxAttempts?: number;
+    };
+  };
+};
 
 function createSpinner() {
   const message = vi.fn();
@@ -175,6 +184,114 @@ describe('issueAcmeCertificateWithFallback', () => {
     expect(result.cert).toBe('CERTIFICATE');
     expect(result.certKey.toString()).toBe('KEY');
     expect(message).toHaveBeenCalledWith(expect.stringContaining('正在切换到 ZeroSSL'));
+  });
+
+  it('applies ACME HTTP transport config during the flow and restores it afterward', async () => {
+    const { spinner } = createSpinner();
+    const providers = resolveAcmeProviderPlan({});
+    const originalTimeout = acmeTransport.defaults.timeout;
+    const originalAcmeSettings = { ...acmeTransport.defaults.acmeSettings };
+    const observed: Array<{ timeout: unknown; retryMaxAttempts: unknown }> = [];
+
+    const result = await issueAcmeCertificateWithFallback({
+      domain: 'app.example.com',
+      email: 'admin@example.com',
+      spinner,
+      providers: [providers[0]!],
+      skipChallengeVerification: true,
+      totalTimeoutMs: 1000,
+      acmeHttpTimeoutMs: 12345,
+      acmeHttpRetryMaxAttempts: 7,
+      createCsr: async () => [Buffer.from('KEY'), Buffer.from('CSR')],
+      resolveProvider: async (provider) => provider,
+      getAccountKey: async () => Buffer.from('ACCOUNT'),
+      createClient: (provider) => ({ providerName: provider.name } as never),
+      runFlow: async () => {
+        observed.push({
+          timeout: acmeTransport.defaults.timeout,
+          retryMaxAttempts: acmeTransport.defaults.acmeSettings?.retryMaxAttempts
+        });
+        return 'CERTIFICATE';
+      },
+      onChallengeCreate: async () => {},
+      onChallengeRemove: async () => {}
+    });
+
+    expect(result.cert).toBe('CERTIFICATE');
+    expect(observed).toEqual([{ timeout: 12345, retryMaxAttempts: 7 }]);
+    expect(acmeTransport.defaults.timeout).toBe(originalTimeout);
+    expect(acmeTransport.defaults.acmeSettings).toEqual(originalAcmeSettings);
+  });
+
+  it('falls back from Let\'s Encrypt to ZeroSSL on provider timeout', async () => {
+    const { spinner, message } = createSpinner();
+    const providers = resolveAcmeProviderPlan({});
+
+    const result = await issueAcmeCertificateWithFallback({
+      domain: 'app.example.com',
+      email: 'admin@example.com',
+      spinner,
+      providers,
+      skipChallengeVerification: true,
+      totalTimeoutMs: 1000,
+      acmeHttpTimeoutMs: 30000,
+      acmeHttpRetryMaxAttempts: 0,
+      createCsr: async () => [Buffer.from('KEY'), Buffer.from('CSR')],
+      resolveProvider: async (provider) => provider.name === 'zerossl'
+        ? { ...provider, externalAccountBinding: { kid: 'kid', hmacKey: 'hmac' } }
+        : provider,
+      getAccountKey: async (provider) => Buffer.from(`ACCOUNT:${provider.name}`),
+      createClient: (provider) => ({ providerName: provider.name } as never),
+      runFlow: async ({ client }) => {
+        const providerName = (client as { providerName?: string }).providerName;
+        if (providerName === 'letsencrypt') {
+          throw new Error('ACME 证书签发(Let\'s Encrypt/app.example.com)/createOrder 超时（>30000ms）');
+        }
+        return 'CERTIFICATE';
+      },
+      onChallengeCreate: async () => {},
+      onChallengeRemove: async () => {}
+    });
+
+    expect(result.provider.name).toBe('zerossl');
+    expect(result.cert).toBe('CERTIFICATE');
+    expect(message).toHaveBeenCalledWith(expect.stringContaining('请求超时或暂时不可用'));
+    expect(message).toHaveBeenCalledWith(expect.stringContaining('ZeroSSL'));
+  });
+
+  it('falls back from Let\'s Encrypt when acme-client drops the timeout error details', async () => {
+    const { spinner, message } = createSpinner();
+    const providers = resolveAcmeProviderPlan({});
+
+    const result = await issueAcmeCertificateWithFallback({
+      domain: 'app.example.com',
+      email: 'admin@example.com',
+      spinner,
+      providers,
+      skipChallengeVerification: true,
+      totalTimeoutMs: 1000,
+      acmeHttpTimeoutMs: 30000,
+      acmeHttpRetryMaxAttempts: 0,
+      createCsr: async () => [Buffer.from('KEY'), Buffer.from('CSR')],
+      resolveProvider: async (provider) => provider.name === 'zerossl'
+        ? { ...provider, externalAccountBinding: { kid: 'kid', hmacKey: 'hmac' } }
+        : provider,
+      getAccountKey: async (provider) => Buffer.from(`ACCOUNT:${provider.name}`),
+      createClient: (provider) => ({ providerName: provider.name } as never),
+      runFlow: async ({ client }) => {
+        const providerName = (client as { providerName?: string }).providerName;
+        if (providerName === 'letsencrypt') {
+          throw new Error('ACME 证书签发(Let\'s Encrypt/app.example.com)/createAccount: ACME transport 未返回有效响应（可能是 HTTP timeout / 网络抖动; acme-client returned undefined response）');
+        }
+        return 'CERTIFICATE';
+      },
+      onChallengeCreate: async () => {},
+      onChallengeRemove: async () => {}
+    });
+
+    expect(result.provider.name).toBe('zerossl');
+    expect(result.cert).toBe('CERTIFICATE');
+    expect(message).toHaveBeenCalledWith(expect.stringContaining('请求超时或暂时不可用'));
   });
 
   it('does not fallback for non-rate-limit failures', async () => {

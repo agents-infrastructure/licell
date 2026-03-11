@@ -285,6 +285,13 @@ licell deploy --type api --runtime nodejs22 --entry src/index.ts --domain api.yo
 3. `deploy`
 4. 必要时再 `release promote` / `rollback`
 
+运行时说明：
+
+- `nodejs22` / `python3.13` 当前都部署为 `custom.debian12`
+- 启动时优先使用 FC 托管运行时：`/var/fc/lang/nodejs22/bin/node`、`/var/fc/lang/python3.13/bin/python3.13`
+- 默认不再把大体积 fallback runtime 打进代码包，避免放大 FC 上传体积
+- 如需额外打包 fallback runtime，可显式设置 `LICELL_FC_INCLUDE_RUNTIME_FALLBACK=1`
+
 <!-- BEGIN GENERATED:README_MCP_FC_API_WORKFLOW -->
 `licell mcp` 已提供这组 FC API 部署工作流工具（由共享 MCP 注册表自动生成）：
 

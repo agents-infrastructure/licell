@@ -2,17 +2,23 @@ import * as $OpenApi from '@alicloud/openapi-client';
 import * as $Util from '@alicloud/tea-util';
 import { Config } from '../utils/config';
 import { isConflictError, isNotFoundError, isTransientError } from '../utils/alicloud-error';
+import { readLicellEnv } from '../utils/env';
 import { formatErrorMessage } from '../utils/errors';
 import { withRetry } from '../utils/retry';
 import { ensureDomainCname, normalizeDnsValue, waitForAuthoritativeCnameTarget } from './dns';
-import { resolveSdkCtor } from '../utils/sdk';
+import { parsePositiveIntEnv, resolveSdkCtor } from '../utils/sdk';
 
 const RpcClientCtor = resolveSdkCtor<$OpenApi.default>($OpenApi.default, '@alicloud/openapi-client');
+const DEFAULT_CDN_DOMAIN_READY_TIMEOUT_MS = 15 * 60_000;
+const DEFAULT_CDN_DOMAIN_READY_INTERVAL_MS = 5_000;
+const DEFAULT_CDN_HTTPS_READY_TIMEOUT_MS = 10 * 60_000;
+const DEFAULT_CDN_HTTPS_READY_INTERVAL_MS = 3_000;
 
 interface CdnDomainDetail {
   domainName: string;
   cname?: string;
   status?: string;
+  serverCertificateStatus?: string;
 }
 
 interface CdnEnableResult {
@@ -31,6 +37,12 @@ interface CdnEnableOptions {
   scope?: CdnScope;
   enablePrivateOssAuth?: boolean;
   waitForOnline?: boolean;
+}
+
+interface CdnWaitConfig {
+  timeoutMs: number;
+  intervalMs: number;
+  maxAttempts: number;
 }
 
 function createCdnRpcClient() {
@@ -115,6 +127,44 @@ function normalizeDomainStatus(value: unknown) {
   return normalized || undefined;
 }
 
+function normalizeServerCertificateStatus(value: unknown) {
+  const normalized = String(value || '').trim().toLowerCase();
+  return normalized || undefined;
+}
+
+function resolveCdnWaitConfig(
+  kind: 'domain' | 'https',
+  env: NodeJS.ProcessEnv = process.env
+): CdnWaitConfig {
+  const timeoutMs = kind === 'domain'
+    ? parsePositiveIntEnv(
+      readLicellEnv(env, 'CDN_DOMAIN_READY_TIMEOUT_MS'),
+      DEFAULT_CDN_DOMAIN_READY_TIMEOUT_MS
+    )
+    : parsePositiveIntEnv(
+      readLicellEnv(env, 'CDN_HTTPS_READY_TIMEOUT_MS'),
+      DEFAULT_CDN_HTTPS_READY_TIMEOUT_MS
+    );
+  const intervalMs = kind === 'domain'
+    ? parsePositiveIntEnv(
+      readLicellEnv(env, 'CDN_DOMAIN_READY_INTERVAL_MS'),
+      DEFAULT_CDN_DOMAIN_READY_INTERVAL_MS
+    )
+    : parsePositiveIntEnv(
+      readLicellEnv(env, 'CDN_HTTPS_READY_INTERVAL_MS'),
+      DEFAULT_CDN_HTTPS_READY_INTERVAL_MS
+    );
+  return {
+    timeoutMs,
+    intervalMs,
+    maxAttempts: Math.max(1, Math.ceil(timeoutMs / intervalMs))
+  };
+}
+
+function formatWaitSeconds(ms: number) {
+  return `${Math.ceil(ms / 1000)}s`;
+}
+
 function toCdnDomainRow(row: unknown): CdnDomainDetail | undefined {
   if (!row || typeof row !== 'object') return undefined;
   const item = row as Record<string, unknown>;
@@ -124,8 +174,18 @@ function toCdnDomainRow(row: unknown): CdnDomainDetail | undefined {
   return {
     domainName,
     cname: cnameRaw ? normalizeDnsValue(cnameRaw) : undefined,
-    status: normalizeDomainStatus(item.DomainStatus || item.domainStatus)
+    status: normalizeDomainStatus(item.DomainStatus || item.domainStatus),
+    serverCertificateStatus: normalizeServerCertificateStatus(
+      item.ServerCertificateStatus || item.serverCertificateStatus || item.SslProtocol || item.sslProtocol
+    )
   };
+}
+
+function toCdnDomainDetail(body: unknown): CdnDomainDetail | undefined {
+  if (!body || typeof body !== 'object') return undefined;
+  const root = body as Record<string, unknown>;
+  const detail = root.GetDomainDetailModel || root.getDomainDetailModel;
+  return toCdnDomainRow(detail);
 }
 
 function extractPageData(body: unknown) {
@@ -167,6 +227,19 @@ async function getCdnDomain(domainName: string): Promise<CdnDomainDetail | undef
   return undefined;
 }
 
+async function getCdnDomainDetail(domainName: string): Promise<CdnDomainDetail | undefined> {
+  const normalizedDomain = normalizeDomain(domainName);
+  try {
+    const response = await withRetry(() => callCdnRpc('DescribeCdnDomainDetail', {
+      DomainName: normalizedDomain
+    }));
+    return toCdnDomainDetail(response.body);
+  } catch (err: unknown) {
+    if (isNotFoundError(err)) return undefined;
+    throw err;
+  }
+}
+
 async function addCdnDomain(
   domainName: string,
   originDomain: string,
@@ -196,7 +269,7 @@ async function addCdnDomain(
 async function waitCdnCnameReady(domainName: string, maxAttempts = 60, intervalMs = 3_000) {
   const normalizedDomain = normalizeDomain(domainName);
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    const detail = await getCdnDomain(normalizedDomain);
+    const detail = await getCdnDomainDetail(normalizedDomain) || await getCdnDomain(normalizedDomain);
     if (detail?.cname) return detail.cname;
     await new Promise((resolve) => setTimeout(resolve, intervalMs));
   }
@@ -224,6 +297,7 @@ async function configureCdnHttps(domainName: string, certificate: string, privat
       shouldRetry: (err: unknown) => isTransientError(err) || isNotFoundError(err) || isCdnDomainNotReadyError(err)
     }
   );
+  await waitCdnHttpsConfigured(normalizedDomain);
 }
 
 function isPrivateOssAuthBootstrapError(err: unknown) {
@@ -301,17 +375,52 @@ function isCdnFailedStatus(status: string | undefined) {
   return status === 'configure_failed' || status === 'check_failed';
 }
 
-async function waitCdnDomainOnline(domainName: string, maxAttempts = 40, intervalMs = 3_000) {
+async function waitCdnDomainOnline(domainName: string, maxAttempts?: number, intervalMs?: number) {
   const normalizedDomain = normalizeDomain(domainName);
-  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    const detail = await getCdnDomain(normalizedDomain);
+  const waitConfig = resolveCdnWaitConfig('domain');
+  const resolvedMaxAttempts = maxAttempts ?? waitConfig.maxAttempts;
+  const resolvedIntervalMs = intervalMs ?? waitConfig.intervalMs;
+  const timeoutMs = resolvedMaxAttempts * resolvedIntervalMs;
+  let lastStatus: string | undefined;
+  for (let attempt = 1; attempt <= resolvedMaxAttempts; attempt += 1) {
+    const detail = await getCdnDomainDetail(normalizedDomain) || await getCdnDomain(normalizedDomain);
+    lastStatus = detail?.status;
     if (isCdnOnlineStatus(detail?.status)) return;
     if (isCdnFailedStatus(detail?.status)) {
       throw new Error(`CDN 域名状态异常: ${normalizedDomain} (${detail?.status})`);
     }
-    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    await new Promise((resolve) => setTimeout(resolve, resolvedIntervalMs));
   }
-  throw new Error(`CDN 域名长时间未就绪: ${normalizedDomain}`);
+  throw new Error(
+    `CDN 域名长时间未就绪: ${normalizedDomain}${lastStatus ? ` (${lastStatus})` : ''}` +
+    `；已等待 ${formatWaitSeconds(timeoutMs)}，可通过 LICELL_CDN_DOMAIN_READY_TIMEOUT_MS / LICELL_CDN_DOMAIN_READY_INTERVAL_MS 调整`
+  );
+}
+
+function isCdnServerCertificateEnabled(status: string | undefined) {
+  return status === 'on' || status === 'enabled';
+}
+
+async function waitCdnHttpsConfigured(domainName: string, maxAttempts?: number, intervalMs?: number) {
+  const normalizedDomain = normalizeDomain(domainName);
+  const waitConfig = resolveCdnWaitConfig('https');
+  const resolvedMaxAttempts = maxAttempts ?? waitConfig.maxAttempts;
+  const resolvedIntervalMs = intervalMs ?? waitConfig.intervalMs;
+  const timeoutMs = resolvedMaxAttempts * resolvedIntervalMs;
+  let lastStatus: string | undefined;
+  for (let attempt = 1; attempt <= resolvedMaxAttempts; attempt += 1) {
+    const detail = await getCdnDomainDetail(normalizedDomain) || await getCdnDomain(normalizedDomain);
+    lastStatus = detail?.serverCertificateStatus;
+    if (isCdnServerCertificateEnabled(detail?.serverCertificateStatus)) return;
+    if (isCdnFailedStatus(detail?.status)) {
+      throw new Error(`CDN 边缘 HTTPS 配置失败: ${normalizedDomain} (${detail?.status})`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, resolvedIntervalMs));
+  }
+  throw new Error(
+    `CDN 边缘 HTTPS 长时间未就绪: ${normalizedDomain}${lastStatus ? ` (serverCertificateStatus=${lastStatus})` : ''}` +
+    `；已等待 ${formatWaitSeconds(timeoutMs)}，可通过 LICELL_CDN_HTTPS_READY_TIMEOUT_MS / LICELL_CDN_HTTPS_READY_INTERVAL_MS 调整`
+  );
 }
 
 export async function ensureCdnDomain(
@@ -354,8 +463,9 @@ export async function removeCdnDomain(domainName: string) {
         shouldRetry: (err: unknown) => isTransientError(err) || isCdnDomainNotReadyError(err)
       }
     );
+    return true;
   } catch (err: unknown) {
-    if (isNotFoundError(err)) return;
+    if (isNotFoundError(err)) return false;
     throw err;
   }
 }
@@ -376,23 +486,18 @@ export async function enableCdnForDomain(
     await configurePrivateOssOriginAuth(normalizedDomain);
     await configureStaticRootRewrite(normalizedDomain);
   }
-  let httpsConfigured = false;
-  if (options.certificate && options.privateKey) {
-    await configureCdnHttps(normalizedDomain, options.certificate, options.privateKey);
-    httpsConfigured = true;
-  }
   await ensureDomainCname(normalizedDomain, result.cdnCname);
   if (options.waitForOnline) {
     await waitForAuthoritativeCnameTarget(normalizedDomain, result.cdnCname, {
       maxAttempts: 36,
       intervalMs: 5_000
     });
-    try {
-      await waitCdnDomainOnline(normalizedDomain);
-    } catch (err: unknown) {
-      const detail = await getCdnDomain(normalizedDomain);
-      if (isCdnFailedStatus(detail?.status)) throw err;
-    }
+    await waitCdnDomainOnline(normalizedDomain);
+  }
+  let httpsConfigured = false;
+  if (options.certificate && options.privateKey) {
+    await configureCdnHttps(normalizedDomain, options.certificate, options.privateKey);
+    httpsConfigured = true;
   }
   return { ...result, httpsConfigured };
 }

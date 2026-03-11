@@ -3,10 +3,13 @@ import { mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { preparePythonEntrypoint } from '../runtime-utils';
 import { preparePython313RuntimeInCode } from '../../../utils/python313-runtime';
+import { createManagedPreferredLauncher, shouldIncludeManagedRuntimeFallback } from '../custom-runtime-launcher';
 import type { RuntimeHandler, ResolvedRuntimeConfig } from '../runtime-handler';
 
 const CUSTOM_FC_RUNTIME = 'custom.debian12';
 const BOOTSTRAP_PATH = '.licell/python313-bootstrap.py';
+const LAUNCHER_PATH = '.licell/python313-launcher.sh';
+const MANAGED_PYTHON_BINARY = '/var/fc/lang/python3.13/bin/python3.13';
 const PORT = 9000;
 
 function createBootstrap(outdir: string, entryFileInCode: string) {
@@ -43,6 +46,15 @@ if not callable(handler):
 def _json_bytes(payload):
   return json.dumps(payload, ensure_ascii=False).encode("utf-8")
 
+def _first_header_value(headers: dict[str, str], key: str) -> str:
+  if key in headers and headers[key] is not None:
+    return str(headers[key])
+  lower_key = key.lower()
+  for header_key, value in headers.items():
+    if str(header_key).lower() == lower_key and value is not None:
+      return str(value)
+  return ""
+
 def _normalize_event(method, path, headers, body_bytes, source_ip):
   parsed = urlparse(path)
   query_params = {k: (v[-1] if v else "") for k, v in parse_qs(parsed.query, keep_blank_values=True).items()}
@@ -63,6 +75,36 @@ def _normalize_event(method, path, headers, body_bytes, source_ip):
       }
     }
   }
+
+def _is_fc_invoke_request(path: str, headers: dict[str, str]) -> bool:
+  control_path = _first_header_value(headers, "x-fc-control-path").strip().lower()
+  if control_path == "/invoke":
+    return True
+  request_id = _first_header_value(headers, "x-fc-request-id").strip()
+  parsed = urlparse(path)
+  return bool(request_id and parsed.path == "/invoke")
+
+def _decode_invoke_payload(body_bytes: bytes, headers: dict[str, str]):
+  if not body_bytes:
+    return {}
+
+  content_type = _first_header_value(headers, "content-type").strip().lower()
+  text = body_bytes.decode("utf-8", errors="replace")
+  stripped = text.strip()
+  should_try_json = (
+    not content_type
+    or "json" in content_type
+    or "text" in content_type
+    or "octet-stream" in content_type
+  )
+  if should_try_json and stripped:
+    try:
+      return json.loads(stripped)
+    except Exception:
+      return text
+  if text:
+    return text
+  return body_bytes.hex()
 
 def _normalize_response(result):
   if isinstance(result, dict) and "statusCode" in result:
@@ -92,7 +134,11 @@ class RequestHandler(BaseHTTPRequestHandler):
     body = self.rfile.read(content_length) if content_length > 0 else b""
     headers = {k: v for k, v in self.headers.items()}
     source_ip = self.client_address[0] if self.client_address else ""
-    event = _normalize_event(self.command, self.path, headers, body, source_ip)
+    event = (
+      _decode_invoke_payload(body, headers)
+      if _is_fc_invoke_request(self.path, headers)
+      else _normalize_event(self.command, self.path, headers, body, source_ip)
+    )
     try:
       result = handler(event, {})
       if asyncio.iscoroutine(result):
@@ -145,14 +191,23 @@ export const python313Handler: RuntimeHandler = {
 
   async resolveConfig(outdir: string, bootFile: string): Promise<ResolvedRuntimeConfig> {
     const handler = `${bootFile.replace(/\.[^.]+$/, '').replace(/\//g, '.')}.handler`;
-    const runtimeArtifact = await preparePython313RuntimeInCode(outdir);
     const bootstrapPath = createBootstrap(outdir, bootFile).replace(/\\/g, '/');
+    const runtimeArtifact = shouldIncludeManagedRuntimeFallback()
+      ? await preparePython313RuntimeInCode(outdir)
+      : undefined;
+    const launcherPath = createManagedPreferredLauncher({
+      outdir,
+      launcherPath: LAUNCHER_PATH,
+      managedExecutablePath: MANAGED_PYTHON_BINARY,
+      fallbackExecutablePath: runtimeArtifact?.pythonBinaryInCode,
+      args: [`/code/${bootstrapPath}`]
+    });
     return {
       runtime: CUSTOM_FC_RUNTIME,
       handler,
       customRuntimeConfig: new $FC.CustomRuntimeConfig({
-        command: [runtimeArtifact.pythonBinaryInCode],
-        args: [`/code/${bootstrapPath}`],
+        command: ['/bin/sh'],
+        args: [`/code/${launcherPath}`],
         port: PORT
       })
     };

@@ -136,4 +136,100 @@ describe('deployFC', () => {
     expect(mockCallFcWithGuard.mock.calls.map((call) => call[1])).toEqual(['getFunction', 'createFunction']);
     expect(mockWaitForFcFunctionReadable).toHaveBeenCalledTimes(1);
   });
+
+  it('recovers createFunction EPIPE by reading converged function state', async () => {
+    let readableCalls = 0;
+    mockCallFcWithGuard.mockImplementation(async (_client: unknown, methodName: string) => {
+      if (methodName === 'getFunction') {
+        const err = new Error('function missing');
+        (err as Error & { code?: string }).code = 'FunctionNotFound';
+        throw err;
+      }
+      if (methodName === 'createFunction') {
+        const err = new Error('write EPIPE');
+        (err as Error & { code?: string }).code = 'EPIPE';
+        throw err;
+      }
+      throw new Error(`unexpected method: ${methodName}`);
+    });
+    mockWaitForFcFunctionReadable.mockImplementation(async () => {
+      readableCalls += 1;
+      if (readableCalls === 1) {
+        return {
+          functionName: 'demo-app',
+          runtime: 'nodejs22',
+          handler: 'index.handler',
+          memorySize: 512,
+          diskSize: 512,
+          timeout: 30,
+          cpu: 0.5,
+          instanceConcurrency: 10,
+          environmentVariables: { NODE_ENV: 'production' }
+        };
+      }
+      return {
+        functionName: 'demo-app',
+        lastModifiedTime: '2'
+      };
+    });
+
+    const url = await deployFC('demo-app', 'src/index.ts', 'nodejs22');
+
+    expect(url).toBe('https://demo-app.fcapp.run');
+    expect(mockCallFcWithGuard.mock.calls.map((call) => call[1])).toEqual(['getFunction', 'createFunction']);
+  });
+
+  it('recovers updateFunction EPIPE by reading converged function state', async () => {
+    let readableCalls = 0;
+    mockCallFcWithGuard.mockImplementation(async (_client: unknown, methodName: string) => {
+      if (methodName === 'getFunction') {
+        return {
+          body: {
+            functionName: 'demo-app',
+            lastModifiedTime: '1'
+          }
+        };
+      }
+      if (methodName === 'updateFunction') {
+        const err = new Error('write EPIPE');
+        (err as Error & { code?: string }).code = 'EPIPE';
+        throw err;
+      }
+      throw new Error(`unexpected method: ${methodName}`);
+    });
+    mockWaitForFcFunctionReadable.mockImplementation(async () => {
+      readableCalls += 1;
+      if (readableCalls === 1) {
+        return {
+          functionName: 'demo-app',
+          lastModifiedTime: '1',
+          runtime: 'nodejs22',
+          handler: 'index.handler',
+          memorySize: 512,
+          diskSize: 512,
+          timeout: 30,
+          cpu: 0.5,
+          instanceConcurrency: 10,
+          environmentVariables: { NODE_ENV: 'production' }
+        };
+      }
+      return {
+        functionName: 'demo-app',
+        lastModifiedTime: '2',
+        runtime: 'nodejs22',
+        handler: 'index.handler',
+        memorySize: 512,
+        diskSize: 512,
+        timeout: 30,
+        cpu: 0.5,
+        instanceConcurrency: 10,
+        environmentVariables: { NODE_ENV: 'production' }
+      };
+    });
+
+    const url = await deployFC('demo-app', 'src/index.ts', 'nodejs22');
+
+    expect(url).toBe('https://demo-app.fcapp.run');
+    expect(mockCallFcWithGuard.mock.calls.map((call) => call[1])).toEqual(['getFunction', 'updateFunction']);
+  });
 });

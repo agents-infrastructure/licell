@@ -31,6 +31,7 @@ describe('fc deploy spec', () => {
     expect(node22?.handlerContract.oneOfExports).toEqual([['handler'], ['default']]);
     expect(node22?.examples.minimalPassExample).toContain('export default');
     expect(node22?.validationRules.some((rule) => rule.id === 'entry.runtime_contract')).toBe(true);
+    expect(node22?.notes.some((note) => note.includes('默认使用 FC 托管 nodejs22'))).toBe(true);
   });
 
   it('returns single runtime spec', () => {
@@ -40,6 +41,7 @@ describe('fc deploy spec', () => {
     expect(spec.handlerContract.requiredExports).toEqual(['handler']);
     expect(spec.examples.commonFailExample).toContain('def app');
     expect(spec.eventSchema.requiredFields).toContain('requestContext.http.method');
+    expect(spec.notes.some((note) => note.includes('默认使用 FC 托管 python3.13'))).toBe(true);
   });
 });
 

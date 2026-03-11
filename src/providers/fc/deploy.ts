@@ -226,6 +226,10 @@ function isFcReadableTimeoutError(err: unknown) {
   return formatErrorMessage(err).includes('等待函数就绪超时:');
 }
 
+function isRecoverableFunctionMutationError(err: unknown) {
+  return isTransientError(err) || isFcOperationTimeoutError(err) || isFcReadableTimeoutError(err);
+}
+
 async function callCreateFunction(
   appName: string,
   client: ReturnType<typeof createFcClient>['client'],
@@ -252,11 +256,9 @@ async function callCreateFunction(
     return 'created';
   } catch (err: unknown) {
     if (isConflictError(err)) return 'existing';
-    if (isFcOperationTimeoutError(err) || isFcReadableTimeoutError(err)) {
+    if (isRecoverableFunctionMutationError(err)) {
       const recovered = await recoverCreateOutcome();
       if (recovered) return recovered;
-    }
-    if (isFcReadableTimeoutError(err)) {
       try {
         await callFcWithGuard(
           client as unknown as Record<string, unknown>,
@@ -267,12 +269,15 @@ async function callCreateFunction(
             profile: 'mutation'
           }
         );
+        await waitForFcFunctionReadable(appName, client, { profile: 'mutation' });
+        return 'created';
       } catch (retryErr: unknown) {
         if (isConflictError(retryErr)) return 'existing';
-        if (!isFcOperationTimeoutError(retryErr)) throw retryErr;
+        if (!isRecoverableFunctionMutationError(retryErr)) throw retryErr;
       }
       const recoveredAfterRetry = await recoverCreateOutcome();
       if (recoveredAfterRetry) return recoveredAfterRetry;
+      throw new Error(`创建函数失败，且云端状态未收敛到期望配置: ${formatErrorMessage(err)}`);
     }
     throw err;
   }
@@ -285,6 +290,13 @@ async function callUpdateFunction(
   expectedBody: Record<string, unknown>
 ) {
   const before = await waitForFcFunctionReadable(appName, client);
+  const recoverUpdateOutcome = async () => {
+    const after = await waitForFcFunctionReadable(appName, client, { profile: 'mutation' });
+    const changed = after.lastModifiedTime && before.lastModifiedTime
+      ? after.lastModifiedTime !== before.lastModifiedTime
+      : true;
+    return changed && functionStateMatches(after, expectedBody);
+  };
   try {
     await callFcWithGuard(
       client as unknown as Record<string, unknown>,
@@ -298,15 +310,31 @@ async function callUpdateFunction(
     await waitForFcFunctionReadable(appName, client, { profile: 'mutation' });
     return;
   } catch (err: unknown) {
-    if (isFcOperationTimeoutError(err)) {
-      const after = await waitForFcFunctionReadable(appName, client, { profile: 'mutation' });
-      const changed = after.lastModifiedTime && before.lastModifiedTime
-        ? after.lastModifiedTime !== before.lastModifiedTime
-        : true;
-      if (changed && functionStateMatches(after, expectedBody)) {
+    if (isRecoverableFunctionMutationError(err)) {
+      if (await recoverUpdateOutcome()) {
         return;
       }
-      throw new Error(`更新函数超时，且云端状态未收敛到期望配置: ${formatErrorMessage(err)}`);
+      try {
+        await callFcWithGuard(
+          client as unknown as Record<string, unknown>,
+          'updateFunction',
+          [appName, request],
+          {
+            operation: `updateFunction(${appName})#retry`,
+            profile: 'mutation'
+          }
+        );
+        if (await recoverUpdateOutcome()) {
+          return;
+        }
+      } catch (retryErr: unknown) {
+        if (!isRecoverableFunctionMutationError(retryErr)) throw retryErr;
+        if (await recoverUpdateOutcome()) {
+          return;
+        }
+        throw new Error(`更新函数失败，且云端状态未收敛到期望配置: ${formatErrorMessage(retryErr)}`);
+      }
+      throw new Error(`更新函数失败，且云端状态未收敛到期望配置: ${formatErrorMessage(err)}`);
     }
     throw err;
   }

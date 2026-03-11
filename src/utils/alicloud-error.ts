@@ -32,7 +32,9 @@ export function isTransientError(err: unknown): boolean {
   return matchesAny(extractErrorText(err), [
     'throttling', 'too many requests', 'connecttimeout', 'readtimeout',
     'requesttimeouterror', 'socket disconnected', 'econnreset',
-    'econnrefused', 'service unavailable', 'servicebusy', 'please retry later', 'internal error'
+    'econnrefused', 'epipe', 'enetdown', 'enetunreach', 'ehostdown', 'ehostunreach', 'etimedout',
+    'network is down', 'network is unreachable', 'socket hang up', 'broken pipe',
+    'service unavailable', 'servicebusy', 'please retry later', 'internal error'
   ]);
 }
 

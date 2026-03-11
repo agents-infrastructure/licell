@@ -107,6 +107,68 @@ describe('fc request guard', () => {
     expect(seenConnectTimeout).toBeGreaterThanOrEqual(30_000);
   });
 
+  it('retries transient EPIPE errors for mutation calls', async () => {
+    let attempts = 0;
+    const client = {
+      async createFunctionWithOptions() {
+        attempts += 1;
+        if (attempts < 2) {
+          const err = new Error('write EPIPE');
+          (err as Error & { code?: string }).code = 'EPIPE';
+          throw err;
+        }
+        return { body: {} };
+      }
+    } as unknown as Record<string, unknown>;
+
+    await callFcWithGuard(
+      client,
+      'createFunction',
+      [new $FC.CreateFunctionRequest({
+        body: new $FC.CreateFunctionInput({ functionName: 'demo-fn' })
+      })],
+      {
+        operation: 'createFunction(demo-fn)',
+        profile: 'mutation',
+        maxAttempts: 2,
+        baseDelayMs: 1
+      }
+    );
+
+    expect(attempts).toBe(2);
+  });
+
+  it('retries transient ENETDOWN errors for mutation calls', async () => {
+    let attempts = 0;
+    const client = {
+      async createFunctionWithOptions() {
+        attempts += 1;
+        if (attempts < 2) {
+          const err = new Error('read ENETDOWN POST https://example.com failed');
+          (err as Error & { code?: string }).code = 'ENETDOWN';
+          throw err;
+        }
+        return { body: {} };
+      }
+    } as unknown as Record<string, unknown>;
+
+    await callFcWithGuard(
+      client,
+      'createFunction',
+      [new $FC.CreateFunctionRequest({
+        body: new $FC.CreateFunctionInput({ functionName: 'demo-fn' })
+      })],
+      {
+        operation: 'createFunction(demo-fn)',
+        profile: 'mutation',
+        maxAttempts: 2,
+        baseDelayMs: 1
+      }
+    );
+
+    expect(attempts).toBe(2);
+  });
+
 
   it('uses a longer default convergence timeout for post-mutation reads', () => {
     const config = getFcGuardConfig({

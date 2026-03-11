@@ -68,6 +68,18 @@ describe('alicloud-error unified error classification', () => {
     it('detects ECONNRESET', () => {
       expect(isTransientError(makeError('', 'ECONNRESET'))).toBe(true);
     });
+    it('detects EPIPE', () => {
+      expect(isTransientError(makeError('', 'write EPIPE'))).toBe(true);
+    });
+    it('detects ENETDOWN', () => {
+      expect(isTransientError(makeError('ENETDOWN', 'read ENETDOWN'))).toBe(true);
+    });
+    it('detects ENETUNREACH', () => {
+      expect(isTransientError(makeError('ENETUNREACH', 'network is unreachable'))).toBe(true);
+    });
+    it('detects socket hang up', () => {
+      expect(isTransientError(makeError('', 'socket hang up'))).toBe(true);
+    });
     it('detects ServiceBusy retry-later responses', () => {
       expect(isTransientError(makeError('ServiceBusy', 'please retry later'))).toBe(true);
     });

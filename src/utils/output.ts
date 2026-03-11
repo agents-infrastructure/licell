@@ -39,6 +39,7 @@ const outputContext: OutputContext = {
 let consoleBridgeInstalled = false;
 let consoleBridgeActive = false;
 const ANSI_ESCAPE_RE = /\u001B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g;
+const UI_CHROME_PREFIX_RE = /^(?:[┌└│◇◆◼◻▲▼◉◎◐◓◑◒]\s*)+/;
 
 function safeStringifyValue(value: unknown) {
   if (typeof value === 'string') return value;
@@ -538,4 +539,17 @@ export function extractJsonRecordsFromOutput(text: string) {
     }
   }
   return records;
+}
+
+export function sanitizeCapturedCliOutput(text: string) {
+  const lines = text
+    .replace(ANSI_ESCAPE_RE, '\n')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .map((line) => line.replace(UI_CHROME_PREFIX_RE, '').trim())
+    .filter((line) => line.length > 0)
+    .filter((line) => !line.startsWith(LICELL_JSON_PREFIX))
+    .filter((line) => !line.startsWith('正在'));
+
+  return [...new Set(lines)].join('\n');
 }

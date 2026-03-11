@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const {
   mockGetProject,
   mockEnsureDomainCname,
+  mockWaitForAuthoritativeCnameTarget,
   mockRemoveDomainCname,
   mockEnableCdnForDomain,
   mockRemoveCdnDomain,
@@ -18,6 +19,7 @@ const {
 } = vi.hoisted(() => ({
   mockGetProject: vi.fn(),
   mockEnsureDomainCname: vi.fn(),
+  mockWaitForAuthoritativeCnameTarget: vi.fn(),
   mockRemoveDomainCname: vi.fn(),
   mockEnableCdnForDomain: vi.fn(),
   mockRemoveCdnDomain: vi.fn(),
@@ -41,6 +43,7 @@ vi.mock('../utils/config', () => ({
 
 vi.mock('../providers/dns', () => ({
   ensureDomainCname: mockEnsureDomainCname,
+  waitForAuthoritativeCnameTarget: mockWaitForAuthoritativeCnameTarget,
   normalizeDnsValue: (value: string) => value.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\.$/, ''),
   removeDomainCname: mockRemoveDomainCname
 }));
@@ -72,12 +75,13 @@ vi.mock('../utils/cli-shared', () => ({
   isNoChangesPublishError: (err: unknown) => Boolean(err && typeof err === 'object' && (err as { code?: string }).code === 'NoChanges')
 }));
 
-import { bindAppDomainWorkflow, bindStaticDomainWorkflow } from '../workflows/domain';
+import { bindAppDomainWorkflow, bindStaticDomainWorkflow, unbindAppDomainWorkflow } from '../workflows/domain';
 
 describe('bindAppDomainWorkflow', () => {
   beforeEach(() => {
     mockGetProject.mockReset();
     mockEnsureDomainCname.mockReset();
+    mockWaitForAuthoritativeCnameTarget.mockReset();
     mockRemoveDomainCname.mockReset();
     mockEnableCdnForDomain.mockReset();
     mockRemoveCdnDomain.mockReset();
@@ -93,6 +97,13 @@ describe('bindAppDomainWorkflow', () => {
 
     mockGetProject.mockReturnValue({ appName: 'demo-app' });
     mockResolveDefaultFcGatewayDomain.mockReturnValue('123456.cn-hangzhou.fc.aliyuncs.com');
+    mockWaitForAuthoritativeCnameTarget.mockResolvedValue({
+      domainName: 'api.example.com',
+      nameServerHosts: [],
+      nameServerIps: [],
+      cname: ['123456.cn-hangzhou.fc.aliyuncs.com'],
+      addresses: []
+    });
     mockPublishFunctionVersion.mockResolvedValue('12');
     mockPromoteFunctionAlias.mockResolvedValue(undefined);
     mockUpsertFnCustomDomain.mockResolvedValue(undefined);
@@ -113,6 +124,11 @@ describe('bindAppDomainWorkflow', () => {
     const result = await bindAppDomainWorkflow(' Api.Example.com ', { releaseTarget: 'Prod' });
 
     expect(mockEnsureDomainCname).toHaveBeenCalledWith('api.example.com', '123456.cn-hangzhou.fc.aliyuncs.com');
+    expect(mockWaitForAuthoritativeCnameTarget).toHaveBeenCalledWith(
+      'api.example.com',
+      '123456.cn-hangzhou.fc.aliyuncs.com',
+      { maxAttempts: 36, intervalMs: 5000 }
+    );
     expect(mockUpsertFnCustomDomain).toHaveBeenCalledWith('api.example.com', {
       functionName: 'demo-app',
       qualifier: 'prod',
@@ -236,6 +252,24 @@ describe('bindAppDomainWorkflow', () => {
       cdnCname: 'static.example.com.w.cdngslb.com',
       httpsConfigured: true,
       finalUrl: 'https://static.example.com'
+    });
+  });
+
+  it('removes CDN, FC custom domain, and DNS during app unbind', async () => {
+    mockRemoveCdnDomain.mockResolvedValue(true);
+    mockRemoveFnCustomDomain.mockResolvedValue(true);
+    mockRemoveDomainCname.mockResolvedValue(['record-1']);
+
+    const result = await unbindAppDomainWorkflow(' Api.Example.com ');
+
+    expect(mockRemoveCdnDomain).toHaveBeenCalledWith('api.example.com');
+    expect(mockRemoveFnCustomDomain).toHaveBeenCalledWith('api.example.com');
+    expect(mockRemoveDomainCname).toHaveBeenCalledWith('api.example.com');
+    expect(result).toEqual({
+      domainName: 'api.example.com',
+      removedCdnDomain: true,
+      removedCustomDomain: true,
+      removedDnsRecordIds: ['record-1']
     });
   });
 });

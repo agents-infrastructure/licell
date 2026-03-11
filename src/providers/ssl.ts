@@ -42,6 +42,7 @@ const DEFAULT_SSL_ACME_AUTO_TIMEOUT_MS = 300_000;
 const DEFAULT_SSL_CLEANUP_TIMEOUT_MS = 30_000;
 const SSL_DNS_PROPAGATION_INTERVAL_MS = 5_000;
 const DEFAULT_ACME_TXT_TTL_SECONDS = 600;
+let acmeHttpConfigQueue: Promise<void> = Promise.resolve();
 
 export type AcmeProviderName = 'letsencrypt' | 'letsencrypt-staging' | 'zerossl' | 'custom';
 
@@ -57,6 +58,19 @@ interface AcmeProviderConfig extends AcmeProviderSpec {
   externalAccountBinding?: {
     kid: string;
     hmacKey: string;
+  };
+}
+
+interface AcmeHttpConfig {
+  timeoutMs: number;
+  retryMaxAttempts: number;
+}
+
+interface AcmeAxiosTransport {
+  defaults: typeof acme.axios.defaults & {
+    acmeSettings?: Record<string, unknown> & {
+      retryMaxAttempts?: number;
+    };
   };
 }
 
@@ -276,19 +290,43 @@ function configureAcmeHttpTimeout() {
     readLicellEnv(process.env, 'SSL_ACME_HTTP_RETRY_MAX_ATTEMPTS'),
     DEFAULT_SSL_ACME_HTTP_RETRY_MAX_ATTEMPTS
   );
-  try {
-    const acmeAxios = runtimeRequire?.('acme-client/src/axios');
-    if (acmeAxios?.defaults) {
-      acmeAxios.defaults.timeout = timeoutMs;
-      acmeAxios.defaults.acmeSettings = {
-        ...(acmeAxios.defaults.acmeSettings || {}),
-        retryMaxAttempts
-      };
-    }
-  } catch {
-    // best-effort: internal acme-client transport may not be accessible in all bundling modes
-  }
   return { timeoutMs, retryMaxAttempts };
+}
+
+async function withScopedAcmeHttpConfig<T>(
+  config: AcmeHttpConfig,
+  action: () => Promise<T>,
+  transport: AcmeAxiosTransport = acme.axios as AcmeAxiosTransport
+): Promise<T> {
+  const previous = acmeHttpConfigQueue;
+  let release: (() => void) | undefined;
+  acmeHttpConfigQueue = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await previous.catch(() => {});
+
+  const previousTimeout = transport.defaults.timeout;
+  const previousAcmeSettings = transport.defaults.acmeSettings
+    ? { ...transport.defaults.acmeSettings }
+    : undefined;
+
+  transport.defaults.timeout = config.timeoutMs;
+  transport.defaults.acmeSettings = {
+    ...(transport.defaults.acmeSettings || {}),
+    retryMaxAttempts: config.retryMaxAttempts
+  };
+
+  try {
+    return await action();
+  } finally {
+    transport.defaults.timeout = previousTimeout;
+    if (previousAcmeSettings) {
+      transport.defaults.acmeSettings = previousAcmeSettings;
+    } else {
+      delete transport.defaults.acmeSettings;
+    }
+    release?.();
+  }
 }
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
@@ -347,12 +385,29 @@ export function isAcmeRateLimitedError(error: unknown) {
 function isTransientNetworkError(error: unknown) {
   const message = collectErrorDetails(error).join(' | ').toLowerCase();
   return message.includes('timeout')
+    || message.includes('超时')
     || message.includes('timed out')
+    || message.includes('econnaborted')
     || message.includes('econnreset')
     || message.includes('enotfound')
     || message.includes('eai_again')
     || message.includes('socket hang up')
     || message.includes('network');
+}
+
+function isAcmeProviderAvailabilityError(error: unknown) {
+  const details = collectErrorDetails(error).join(' | ').toLowerCase();
+  if (!isTransientNetworkError(error)) return false;
+  return details.includes('/createorder')
+    || details.includes('/createaccount')
+    || details.includes('/finalizeorder')
+    || details.includes('/getcertificate')
+    || details.includes('acme-v02.api.letsencrypt.org')
+    || details.includes('acme.zerossl.com');
+}
+
+function isAcmeFallbackEligibleError(error: unknown) {
+  return isAcmeRateLimitedError(error) || isAcmeProviderAvailabilityError(error);
 }
 
 function readBooleanEnv(value: string | undefined) {
@@ -369,6 +424,31 @@ function traceSsl(message: string, env: Record<string, string | undefined> = pro
   console.error(`[licell][ssl] ${new Date().toISOString()} ${message}`);
 }
 
+function isAcmeHttpStageLabel(stageLabel: string) {
+  const normalized = stageLabel.toLowerCase();
+  return normalized.endsWith('/createaccount')
+    || normalized.endsWith('/createorder')
+    || normalized.endsWith('/finalizeorder')
+    || normalized.endsWith('/getcertificate');
+}
+
+function normalizeAcmeStageError(stageLabel: string, error: unknown) {
+  if (error instanceof Error && error.message.startsWith(stageLabel)) {
+    return error;
+  }
+  const message = formatUnknownError(error);
+  const normalized = message.toLowerCase();
+  if (
+    isAcmeHttpStageLabel(stageLabel)
+    && normalized.includes("cannot read properties of undefined (reading 'config')")
+  ) {
+    return new Error(
+      `${stageLabel}: ACME transport 未返回有效响应（可能是 HTTP timeout / 网络抖动; acme-client returned undefined response）`
+    );
+  }
+  return new Error(`${stageLabel}: ${message}`);
+}
+
 function createAcmeStageRunner(totalTimeoutMs: number, labelPrefix: string) {
   const startedAt = Date.now();
   return async function runStage<T>(stage: string, task: () => Promise<T>): Promise<T> {
@@ -383,9 +463,7 @@ function createAcmeStageRunner(totalTimeoutMs: number, labelPrefix: string) {
       traceSsl(`${stageLabel}: ok`);
       return result;
     } catch (error) {
-      const normalizedError = error instanceof Error && error.message.startsWith(stageLabel)
-        ? error
-        : new Error(`${stageLabel}: ${formatUnknownError(error)}`);
+      const normalizedError = normalizeAcmeStageError(stageLabel, error);
       traceSsl(`${stageLabel}: failed: ${formatUnknownError(normalizedError)}`);
       throw normalizedError;
     }
@@ -919,48 +997,59 @@ export async function issueAcmeCertificateWithFallback({
   acme.setLogger(() => {});
   const [certKey, csr] = await createCsrImpl({ commonName: domain });
   let lastError: unknown;
+  return withScopedAcmeHttpConfig(
+    {
+      timeoutMs: acmeHttpTimeoutMs,
+      retryMaxAttempts: acmeHttpRetryMaxAttempts
+    },
+    async () => {
+      for (let index = 0; index < providers.length; index += 1) {
+        const providerSpec = providers[index];
+        const provider = await resolveProviderCached(providerSpec);
+        traceSsl(`ACME provider attempt: ${provider.label} (${provider.directoryUrl})`);
+        spinner.message(`🔒 正在向 ${provider.label} 注册 ACME 账户并发起证书申请...`);
+        const accountKey = await getAccountKeyImpl(provider);
+        const client = createClientImpl(provider, accountKey);
+        spinner.message(`🔒 正在向 ${provider.label} 注册 ACME 账户并发起证书申请（HTTP timeout=${acmeHttpTimeoutMs}ms, retry=${acmeHttpRetryMaxAttempts}）...`);
 
-  for (let index = 0; index < providers.length; index += 1) {
-    const providerSpec = providers[index];
-    const provider = await resolveProviderCached(providerSpec);
-    traceSsl(`ACME provider attempt: ${provider.label} (${provider.directoryUrl})`);
-    spinner.message(`🔒 正在向 ${provider.label} 注册 ACME 账户并发起证书申请...`);
-    const accountKey = await getAccountKeyImpl(provider);
-    const client = createClientImpl(provider, accountKey);
-    spinner.message(`🔒 正在向 ${provider.label} 注册 ACME 账户并发起证书申请（HTTP timeout=${acmeHttpTimeoutMs}ms, retry=${acmeHttpRetryMaxAttempts}）...`);
+        try {
+          const cert = await runFlowImpl({
+            client,
+            domains: [domain],
+            csr,
+            email,
+            spinner,
+            skipChallengeVerification,
+            totalTimeoutMs,
+            labelPrefix: `ACME 证书签发(${provider.label}/${domain})`,
+            authorityLabel: provider.label,
+            onChallengeCreate: (identifier, txtValue) => onChallengeCreate(provider, identifier, txtValue),
+            onChallengeRemove: (identifier, txtValue) => onChallengeRemove(provider, identifier, txtValue)
+          });
+          return { provider, cert: cert.toString(), certKey };
+        } catch (error) {
+          lastError = error;
+          const nextProviderSpec = providers[index + 1];
+          if (!nextProviderSpec || !isAcmeFallbackEligibleError(error)) {
+            throw error;
+          }
+          try {
+            await resolveProviderCached(nextProviderSpec);
+          } catch (fallbackError) {
+            const reason = isAcmeRateLimitedError(error) ? '触发证书签发限额' : '请求超时或暂时不可用';
+            throw new Error(`${provider.label} ${reason}，且无法切换到 ${nextProviderSpec.label}: ${formatUnknownError(fallbackError)}；原始错误: ${formatUnknownError(error)}`);
+          }
+          const fallbackReason = isAcmeRateLimitedError(error)
+            ? `${provider.label} 触发签发限额`
+            : `${provider.label} 请求超时或暂时不可用`;
+          spinner.message(`⚠️ ${fallbackReason}，正在切换到 ${nextProviderSpec.label} 继续申请...`);
+          traceSsl(`ACME fallback: ${provider.label} -> ${nextProviderSpec.label}; reason=${formatUnknownError(error)}`);
+        }
+      }
 
-    try {
-      const cert = await runFlowImpl({
-        client,
-        domains: [domain],
-        csr,
-        email,
-        spinner,
-        skipChallengeVerification,
-        totalTimeoutMs,
-        labelPrefix: `ACME 证书签发(${provider.label}/${domain})`,
-        authorityLabel: provider.label,
-        onChallengeCreate: (identifier, txtValue) => onChallengeCreate(provider, identifier, txtValue),
-        onChallengeRemove: (identifier, txtValue) => onChallengeRemove(provider, identifier, txtValue)
-      });
-      return { provider, cert: cert.toString(), certKey };
-    } catch (error) {
-      lastError = error;
-      const nextProviderSpec = providers[index + 1];
-      if (!nextProviderSpec || !isAcmeRateLimitedError(error)) {
-        throw error;
-      }
-      try {
-        await resolveProviderCached(nextProviderSpec);
-      } catch (fallbackError) {
-        throw new Error(`${provider.label} 触发证书签发限额，且无法切换到 ${nextProviderSpec.label}: ${formatUnknownError(fallbackError)}；原始错误: ${formatUnknownError(error)}`);
-      }
-      spinner.message(`⚠️ ${provider.label} 触发签发限额，正在切换到 ${nextProviderSpec.label} 继续申请...`);
-      traceSsl(`ACME fallback: ${provider.label} -> ${nextProviderSpec.label}; reason=${formatUnknownError(error)}`);
+      throw (lastError instanceof Error ? lastError : new Error('ACME 证书签发失败'));
     }
-  }
-
-  throw (lastError instanceof Error ? lastError : new Error('ACME 证书签发失败'));
+  );
 }
 
 export function shouldIssueNewCertificate(

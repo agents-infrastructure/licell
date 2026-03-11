@@ -10,6 +10,7 @@ SEA_NODE_MIN_MAJOR="${LICELL_STANDALONE_NODE_MIN_MAJOR:-20}"
 SEA_SENTINEL_FUSE="NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2"
 ESBUILD_NPM_PACKAGE="${LICELL_ESBUILD_NPM_PACKAGE:-esbuild@0.27.3}"
 POSTJECT_NPM_PACKAGE="${LICELL_POSTJECT_NPM_PACKAGE:-postject@1.0.0-alpha.6}"
+NODE_NPM_PACKAGE_PREFIX="${LICELL_NODE_NPM_PACKAGE_PREFIX:-node@}"
 DEFINE_VERSION_ARGS=()
 
 if [[ -n "${LICELL_VERSION:-}" ]]; then
@@ -88,7 +89,52 @@ ensure_node_support() {
 }
 
 supports_build_sea() {
-  node --help 2>/dev/null | grep -q -- "--build-sea"
+  local node_bin="${1:-node}"
+  "$node_bin" --help 2>/dev/null | grep -q -- "--build-sea"
+}
+
+node_binary_has_sea_fuse() {
+  local node_bin="$1"
+  [[ -x "$node_bin" ]] || return 1
+  "$node_bin" -e '
+const fs = require("fs");
+const [binPath, sentinel] = process.argv.slice(1);
+const contents = fs.readFileSync(binPath);
+process.exit(contents.includes(Buffer.from(sentinel, "utf8")) ? 0 : 1);
+' "$node_bin" "$SEA_SENTINEL_FUSE"
+}
+
+resolve_build_node_path() {
+  local host_node_path="$1"
+  local tooling_dir="$2"
+  local npm_cache_dir="$3"
+
+  if node_binary_has_sea_fuse "$host_node_path"; then
+    echo "$host_node_path"
+    return 0
+  fi
+
+  local node_version node_pkg resolved_node_path
+  node_version="$(node -p "process.version.replace(/^v/, '')")"
+  node_pkg="${NODE_NPM_PACKAGE_PREFIX}${node_version}"
+
+  echo "[build-standalone] host node lacks SEA fuse; resolving official ${node_pkg} binary" >&2
+  resolved_node_path="$(
+    cd "$tooling_dir" && \
+    npm_config_cache="$npm_cache_dir" npm exec --yes --package="$node_pkg" -- \
+      node -p "process.execPath"
+  )"
+
+  if [[ -z "$resolved_node_path" || ! -x "$resolved_node_path" ]]; then
+    echo "[build-standalone] failed to resolve usable Node binary from ${node_pkg}" >&2
+    exit 1
+  fi
+  if ! node_binary_has_sea_fuse "$resolved_node_path"; then
+    echo "[build-standalone] resolved Node binary still lacks SEA fuse: ${resolved_node_path}" >&2
+    exit 1
+  fi
+
+  echo "$resolved_node_path"
 }
 
 write_sea_config_json() {
@@ -151,7 +197,7 @@ main() {
   }
   ensure_node_support
 
-  local host_os host_arch os arch bundle_path bin_path archive_path node_path sea_blob_path sea_config_path
+  local host_os host_arch os arch bundle_path bin_path archive_path node_path build_node_path sea_blob_path sea_config_path npm_cache_dir
   read -r host_os host_arch < <(detect_os_arch)
 
   if [[ -n "$TARGET_OS" || -n "$TARGET_ARCH" ]]; then
@@ -179,8 +225,11 @@ main() {
   sea_blob_path="${TMP_DIR}/sea-prep.blob"
   sea_config_path="${TMP_DIR}/sea-config.json"
   node_path="$(command -v node)"
+  npm_cache_dir="${TMP_DIR}/npm-cache"
 
   mkdir -p "${TMP_DIR}/tooling"
+  mkdir -p "${npm_cache_dir}"
+  build_node_path="$(resolve_build_node_path "$node_path" "${TMP_DIR}/tooling" "$npm_cache_dir")"
 
   echo "[build-standalone] bundling entry with esbuild: target=node${SEA_NODE_MIN_MAJOR}"
   (
@@ -201,15 +250,15 @@ main() {
       "${esbuild_args[@]}"
   )
 
-  if supports_build_sea; then
-    echo "[build-standalone] building SEA executable with node --build-sea"
-    write_sea_config_json "$sea_config_path" "$bundle_path" "$bin_path" "$node_path"
-    node --build-sea "$sea_config_path"
+  if supports_build_sea "$build_node_path"; then
+    echo "[build-standalone] building SEA executable with $(basename "$build_node_path") --build-sea"
+    write_sea_config_json "$sea_config_path" "$bundle_path" "$bin_path" "$build_node_path"
+    "$build_node_path" --build-sea "$sea_config_path"
   else
     echo "[build-standalone] building SEA executable with --experimental-sea-config + postject"
     write_sea_config_json "$sea_config_path" "$bundle_path" "$sea_blob_path"
-    node --experimental-sea-config "$sea_config_path"
-    cp "$node_path" "$bin_path"
+    "$build_node_path" --experimental-sea-config "$sea_config_path"
+    cp "$build_node_path" "$bin_path"
 
     if [[ "$os" == "darwin" ]] && command -v codesign >/dev/null 2>&1; then
       codesign --remove-signature "$bin_path" >/dev/null 2>&1 || true
