@@ -10,6 +10,8 @@ describe('renderSkillMcpToolReference', () => {
     const output = renderSkillMcpToolReference();
     expect(output).toContain('## MCP Tool Reference');
     expect(output).toContain('### Schema Contracts');
+    expect(output).toContain('@@LICELL_JSON@@');
+    expect(output).toContain('licell-cli-record@1.0');
     expect(output).toContain('licell-help@1.0');
     expect(output).toContain('licell-agent-command-catalog@1.0');
     expect(output).toContain('### Builtin Tools');
@@ -25,6 +27,7 @@ describe('renderAgentSurfaceReferenceDoc', () => {
     const output = renderAgentSurfaceReferenceDoc();
     expect(output).toContain('# Agent Surface Reference');
     expect(output).toContain('## Schema Contracts');
+    expect(output).toContain('@@LICELL_JSON@@');
     expect(output).toContain('先匹配 `kind`，再检查 `schemaVersion`');
     expect(output).toContain('## CLI 命令目录');
     expect(output).toContain('`licell_cli`');

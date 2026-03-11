@@ -48,6 +48,8 @@ describe('syncReadmeQuickReferenceSection', () => {
     expect(output).toContain(README_QUICK_REFERENCE_START);
     expect(output).toContain(README_QUICK_REFERENCE_END);
     expect(output).toContain('### Agent Contract');
+    expect(output).toContain('@@LICELL_JSON@@');
+    expect(output).toContain('licell-cli-record');
     expect(output).toContain('licell-help@1.0');
     expect(output).toContain('### 命令总览');
     expect(output).not.toContain('old content');

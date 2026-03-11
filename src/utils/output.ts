@@ -20,7 +20,8 @@ export type CliErrorCategory =
   | 'internal';
 
 export const LICELL_JSON_PREFIX = '@@LICELL_JSON@@';
-const SCHEMA_VERSION = '1.0';
+export const LICELL_CLI_RECORD_KIND = 'licell-cli-record' as const;
+export const LICELL_CLI_RECORD_SCHEMA_VERSION = '1.0' as const;
 
 interface OutputContext {
   mode: CliOutputMode;
@@ -152,6 +153,17 @@ export function isJsonOutput() {
 
 function writeJsonRecord(record: Record<string, unknown>) {
   process.stdout.write(`${LICELL_JSON_PREFIX}${JSON.stringify(record)}\n`);
+}
+
+function buildCliRecordEnvelope(type: 'event' | 'result' | 'error', record: Record<string, unknown>) {
+  return {
+    ...record,
+    kind: LICELL_CLI_RECORD_KIND,
+    schemaVersion: LICELL_CLI_RECORD_SCHEMA_VERSION,
+    type,
+    ts: new Date().toISOString(),
+    command: outputContext.command
+  };
 }
 
 function sanitizeCode(raw: string) {
@@ -341,13 +353,7 @@ export function emitCliEvent(event: {
   data?: Record<string, unknown>;
 }) {
   if (!isJsonOutput()) return;
-  writeJsonRecord({
-    schemaVersion: SCHEMA_VERSION,
-    type: 'event',
-    ts: new Date().toISOString(),
-    command: outputContext.command,
-    ...event
-  });
+  writeJsonRecord(buildCliRecordEnvelope('event', event));
 }
 
 export function installJsonConsoleBridge() {
@@ -403,14 +409,10 @@ export function installJsonConsoleBridge() {
 export function emitCliResult(result: Record<string, unknown>) {
   if (!isJsonOutput()) return;
   outputContext.resultEmitted = true;
-  writeJsonRecord({
+  writeJsonRecord(buildCliRecordEnvelope('result', {
     ...result,
-    schemaVersion: SCHEMA_VERSION,
-    type: 'result',
-    ts: new Date().toISOString(),
-    command: outputContext.command,
     ok: true
-  });
+  }));
 }
 
 export function commandStage(command = outputContext.command) {
@@ -481,7 +483,8 @@ export function buildCliErrorRecord(
   const provider = extractProviderContext(err);
   const retryable = category === 'network';
   const record: Record<string, unknown> = {
-    schemaVersion: SCHEMA_VERSION,
+    kind: LICELL_CLI_RECORD_KIND,
+    schemaVersion: LICELL_CLI_RECORD_SCHEMA_VERSION,
     type: 'error',
     ts: new Date().toISOString(),
     command: context?.command || outputContext.command,

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   LICELL_JSON_PREFIX,
+  LICELL_CLI_RECORD_KIND,
   buildCliErrorRecord,
   emitCommandResult,
   extractJsonRecordsFromOutput,
@@ -42,6 +43,8 @@ describe('output utils', () => {
       message: 'Forbidden: no permission',
       data: { RequestId: 'abc-123' }
     }) as any;
+    expect(record.kind).toBe(LICELL_CLI_RECORD_KIND);
+    expect(record.schemaVersion).toBe('1.0');
     expect(record.type).toBe('error');
     expect(record.command).toBe('deploy');
     expect(record.error.category).toBe('permission');
@@ -86,6 +89,7 @@ describe('output utils', () => {
 
     const records = extractJsonRecordsFromOutput(raw) as any[];
     expect(records).toHaveLength(2);
+    expect(records[0].kind).toBeUndefined();
     expect(records[0].type).toBe('event');
     expect(records[1].type).toBe('result');
   });
@@ -100,6 +104,7 @@ describe('output utils', () => {
     const raw = writeSpy.mock.calls.map((args) => String(args[0])).join('');
     const records = extractJsonRecordsFromOutput(raw) as any[];
     expect(records).toHaveLength(1);
+    expect(records[0].kind).toBe(LICELL_CLI_RECORD_KIND);
     expect(records[0].type).toBe('result');
     expect(records[0].recordId).toBe('123');
     expect(records[0].ok).toBe(true);
@@ -115,6 +120,7 @@ describe('output utils', () => {
     const raw = writeSpy.mock.calls.map((args) => String(args[0])).join('');
     const records = extractJsonRecordsFromOutput(raw) as any[];
     expect(records).toHaveLength(1);
+    expect(records[0].kind).toBe(LICELL_CLI_RECORD_KIND);
     expect(records[0].stage).toBe('domain.app.bind');
     expect(records[0].bound).toBe(true);
     expect(records[0].domain).toBe('api.example.com');
@@ -131,6 +137,7 @@ describe('output utils', () => {
     const raw = writeSpy.mock.calls.map((args) => String(args[0])).join('');
     const records = extractJsonRecordsFromOutput(raw) as any[];
     expect(records).toHaveLength(1);
+    expect(records[0].kind).toBe(LICELL_CLI_RECORD_KIND);
     expect(records[0].stage).toBe('oss.domain.unbind');
     expect(records[0].unbound).toBe(false);
 

@@ -3,6 +3,7 @@ import { resolve } from 'path';
 import { buildAgentCommandCatalog, buildCommandReferenceSections } from './command-reference';
 import { syncGeneratedSection, syncTextFile } from './generated-docs';
 import { LICELL_HELP_KIND, LICELL_HELP_SCHEMA_VERSION } from './help';
+import { LICELL_JSON_PREFIX, LICELL_CLI_RECORD_KIND, LICELL_CLI_RECORD_SCHEMA_VERSION } from './output';
 import {
   README_UPGRADE_GUIDANCE_END,
   README_UPGRADE_GUIDANCE_START,
@@ -71,6 +72,7 @@ export function renderReadmeQuickReference() {
     '',
     '### Agent Contract',
     '',
+    `- 原始 CLI JSON 流：过滤前缀 \`${LICELL_JSON_PREFIX}\`，再按 \`kind=${LICELL_CLI_RECORD_KIND}\` / \`schemaVersion=${LICELL_CLI_RECORD_SCHEMA_VERSION}\` / \`type=event|result|error\` 解析。`,
     `- \`licell <command> --help --output json\`：先读取 \`help.kind\` / \`help.schemaVersion\`；当前为 \`${LICELL_HELP_KIND}@${LICELL_HELP_SCHEMA_VERSION}\`。`,
     `- \`licell_command_catalog\`：先读取 \`kind\` / \`schemaVersion\`；当前为 \`${commandCatalog.kind}@${commandCatalog.schemaVersion}\`。`,
     sampleToolMetadata

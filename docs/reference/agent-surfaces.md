@@ -4,6 +4,7 @@
 
 ## Schema Contracts
 
+- 原始 CLI JSON 流会使用前缀 `@@LICELL_JSON@@` 输出逐行 JSON record；每条 record 当前都满足 `licell-cli-record@1.0`，再通过 `type=event|result|error` 区分记录类型。
 - `licell <command> --help --output json`：读取 `help.kind` 与 `help.schemaVersion`；当前为 `licell-help@1.0`。
 - `licell_command_catalog`：读取 `kind` 与 `schemaVersion`；当前为 `licell-agent-command-catalog@1.0`。
 - `licell_command_catalog` 同时显式声明依赖的 help schema：`licell-help@1.0`。

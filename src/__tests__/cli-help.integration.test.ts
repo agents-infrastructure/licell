@@ -89,6 +89,8 @@ describe('cli help e2e', () => {
     expect(result.status).toBe(0);
     expect(result.stderr).toBe('');
     expect(records).toHaveLength(1);
+    expect(records[0]?.kind).toBe('licell-cli-record');
+    expect(records[0]?.schemaVersion).toBe('1.0');
     expect(records[0]?.type).toBe('result');
     expect(records[0]?.stage).toBe('help');
     expect(records[0]?.scope).toBe('command');
