@@ -15,6 +15,7 @@ describe('buildCommandReferenceSections', () => {
     expect(sections.map((section) => section.id)).toContain('automation');
 
     const automation = sections.find((section) => section.id === 'automation');
+    expect(automation?.commands.some((command) => command.key === 'doctor')).toBe(true);
     expect(automation?.commands.some((command) => command.key === 'completion')).toBe(true);
     expect(automation?.commands.some((command) => command.key === 'upgrade')).toBe(true);
   });
@@ -31,6 +32,7 @@ describe('buildAgentCommandCatalog', () => {
       schemaVersion: '1.0'
     });
     expect(catalog.globalOptions).toContain('--output');
+    expect(catalog.rootCommands).toContain('doctor');
     expect(catalog.rootCommands).toContain('deploy');
     expect(catalog.rootCommands).toContain('completion');
 
@@ -62,6 +64,13 @@ describe('buildAgentCommandCatalog', () => {
     expect(mcp?.examples).toContain('licell mcp init');
     expect(mcp?.agentTips.some((tip) => tip.includes('mcp serve'))).toBe(true);
 
+    const doctor = catalog.commands.find((command) => command.key === 'doctor');
+    expect(doctor?.title).toBe('Diagnose local licell readiness');
+    expect(doctor?.summary).toContain('诊断本机登录态');
+    expect(doctor?.options.some((option) => option.primaryFlag === '--runtime')).toBe(true);
+    expect(doctor?.result?.outcomeKey).toBe('healthy');
+    expect(doctor?.generatedMcpToolName).toBe('licell_cmd_doctor');
+
     const domainAppBind = catalog.commands.find((command) => command.key === 'domain app bind');
     expect(domainAppBind?.result?.outcomeKey).toBe('bound');
     expect(domainAppBind?.result?.fields.some((field) => field.name === 'finalUrl')).toBe(true);
@@ -92,6 +101,7 @@ describe('renderSkillCommandReference', () => {
     const markdown = renderSkillCommandReference();
     expect(markdown).toContain('以下命令清单由 licell CLI 注册表自动生成');
     expect(markdown).toContain('### Automation & Tooling');
+    expect(markdown).toContain('licell doctor');
     expect(markdown).toContain('licell completion [shell]');
     expect(markdown).toContain('licell setup');
     expect(markdown).toContain('licell upgrade');

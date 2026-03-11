@@ -41,6 +41,16 @@ describe('getBuiltinMcpTools', () => {
     expect((result.structuredContent as { kind: string }).kind).toBe('licell-agent-command-catalog');
   });
 
+  it('filters structured command catalog snapshots for doctor', () => {
+    const tools = getBuiltinMcpTools();
+    const result = tools.licell_command_catalog.execute({ rootCommand: 'doctor' });
+    expect(result.kind).toBe('data');
+    if (result.kind !== 'data') throw new Error('expected data result');
+    const catalog = result.structuredContent as { rootCommands: string[]; commands: Array<{ key: string }> };
+    expect(catalog.rootCommands).toEqual(['doctor']);
+    expect(catalog.commands.map((command) => command.key)).toEqual(['doctor']);
+  });
+
   it('exposes mcp subcommands in the shared command catalog', () => {
     const tools = getBuiltinMcpTools();
     const result = tools.licell_command_catalog.execute({ rootCommand: 'mcp' });

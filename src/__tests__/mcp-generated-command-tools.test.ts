@@ -9,6 +9,7 @@ import {
 describe('buildGeneratedMcpCommandTools', () => {
   it('creates generated MCP tools for non-mcp CLI commands', () => {
     const tools = buildGeneratedMcpCommandTools();
+    expect(tools).toHaveProperty('licell_cmd_doctor');
     expect(tools).toHaveProperty('licell_cmd_deploy');
     expect(tools).toHaveProperty('licell_cmd_deploy_check');
     expect(tools).not.toHaveProperty('licell_cmd_mcp');
@@ -17,18 +18,26 @@ describe('buildGeneratedMcpCommandTools', () => {
   it('derives schema fields from CLI args and options', () => {
     const tools = buildGeneratedMcpCommandTools();
     const deployCheck = tools.licell_cmd_deploy_check;
+    const doctor = tools.licell_cmd_doctor;
     expect(deployCheck.title).toBe('Precheck FC API deploy readiness');
+    expect(doctor.title).toBe('Diagnose local licell readiness');
     expect(tools.licell_cmd_fn_list.title).toBe('List functions');
     expect(deployCheck.inputSchema.properties).toHaveProperty('runtime');
+    expect(doctor.inputSchema.properties).toHaveProperty('runtime');
+    expect(doctor.inputSchema.properties).toHaveProperty('entry');
+    expect(doctor.inputSchema.properties).toHaveProperty('dockerDaemon');
     expect(deployCheck.inputSchema.properties).toHaveProperty('entry');
     expect(deployCheck.inputSchema.properties).toHaveProperty('cwd');
     expect(deployCheck.inputSchema.properties).toHaveProperty('timeoutMs');
     expect(deployCheck.description).toContain('Auto-generated from the shared licell CLI registry.');
     expect(tools.licell_cmd_deploy.metadata?.licell.preferredOutput).toBe('json');
+    expect(doctor.metadata?.licell.preferredOutput).toBe('json');
     expect(tools.licell_cmd_deploy.metadata?.licell.schemas.help.kind).toBe('licell-help');
     expect(tools.licell_cmd_deploy.metadata?.licell.schemas.commandCatalog.kind).toBe('licell-agent-command-catalog');
+    expect(doctor.metadata?.licell.result?.outcomeKey).toBe('healthy');
     expect(tools.licell_cmd_deploy.metadata?.licell.decisionGuide.some((group) => group.phase === 'inspect')).toBe(true);
     expect(tools.licell_cmd_deploy.description).toContain('Decision guide:');
+    expect(doctor.description).toContain('Decision guide:');
     expect(tools.licell_cmd_deploy.description).toContain('Inspect → licell deploy spec');
     expect(tools.licell_cmd_release_prune.description).toContain('Safety: destructive');
     expect(tools.licell_cmd_release_prune.annotations?.destructiveHint).toBe(true);

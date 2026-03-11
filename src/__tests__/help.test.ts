@@ -17,6 +17,7 @@ describe('help utils', () => {
     expect(doc?.text).toContain('Automation:');
     expect(doc?.text).toContain('Common Tasks:');
     expect(doc?.text).toContain('第一次上手 licell');
+    expect(doc?.text).toContain('licell doctor');
     expect(doc?.text).toContain('licell setup');
     expect(doc?.text).toContain('licell skills init codex');
     expect(doc?.text).toContain('licell deploy --output json');
@@ -215,6 +216,27 @@ describe('help utils', () => {
     expect(doc?.text).toContain('Decision Guide:');
     expect(doc?.text).toContain('Mutate:');
     expect(doc?.text).toContain('licell setup --agent codex --global --output json');
+  });
+
+  it('builds command help for doctor with structured result guidance', () => {
+    const doc = buildHelpDocument({
+      argv: ['node', 'src/cli.ts', 'doctor', '--help'],
+      version: VERSION
+    });
+
+    expect(doc?.scope).toBe('command');
+    expect(doc?.key).toBe('doctor');
+    expect(doc?.result?.outcomeKey).toBe('healthy');
+    expect(doc?.optionInsights.some((insight) => insight.flag.includes('--runtime'))).toBe(true);
+    expect(doc?.recommendedFlow.map((step) => step.command)).toEqual(expect.arrayContaining([
+      'licell doctor --output json',
+      'licell deploy spec',
+      'licell deploy check'
+    ]));
+    expect(doc?.text).toContain('Structured Result:');
+    expect(doc?.text).toContain('`healthy` · 是否不存在 error 级阻塞项。');
+    expect(doc?.text).toContain('Decision Guide:');
+    expect(doc?.text).toContain('Inspect:');
   });
 
   it('treats bare namespace as custom help target', () => {

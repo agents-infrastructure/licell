@@ -104,4 +104,19 @@ describe('cli help e2e', () => {
     expect(records[0]?.help?.renderedText).toContain('`finalUrl` · 最终访问 URL。');
     expect(records[0]?.help?.blocks).toBeUndefined();
   }, 10000);
+
+  it('emits structured JSON help for doctor through the real CLI entry', () => {
+    const result = runCliHelp(['doctor', '--help', '--output', 'json']);
+    const records = extractJsonRecordsFromOutput(result.stdout) as Array<Record<string, any>>;
+
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(records).toHaveLength(1);
+    expect(records[0]?.stage).toBe('help');
+    expect(records[0]?.key).toBe('doctor');
+    expect(records[0]?.help?.title).toBe('licell doctor');
+    expect(records[0]?.help?.result?.outcomeKey).toBe('healthy');
+    expect(records[0]?.help?.result?.fields.some((field: { name?: string }) => field.name === 'checks')).toBe(true);
+  }, 10000);
 });

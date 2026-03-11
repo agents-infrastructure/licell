@@ -7,6 +7,7 @@ describe('buildMcpToolCatalog', () => {
     expect(catalog.source).toBe('licell-mcp-tool-registry');
     expect(catalog.tools.find((tool) => tool.name === 'licell_cli')?.kind).toBe('builtin');
     expect(catalog.tools.find((tool) => tool.name === 'licell_deploy')?.kind).toBe('curated');
+    expect(catalog.tools.find((tool) => tool.name === 'licell_cmd_doctor')?.kind).toBe('generated');
     expect(catalog.tools.find((tool) => tool.name === 'licell_cmd_deploy_check')?.kind).toBe('generated');
     expect(catalog.tools.find((tool) => tool.name === 'licell_domain_static_bind')?.kind).toBe('curated');
     expect(catalog.tools.find((tool) => tool.name === 'licell_domain_static_unbind')?.kind).toBe('curated');
@@ -20,6 +21,7 @@ describe('buildMcpToolCatalog', () => {
     const curatedDomainAppUnbind = catalog.tools.find((tool) => tool.name === 'licell_domain_app_unbind');
     const curatedDomainStaticBind = catalog.tools.find((tool) => tool.name === 'licell_domain_static_bind');
     const curatedDomainStaticUnbind = catalog.tools.find((tool) => tool.name === 'licell_domain_static_unbind');
+    const generatedDoctor = catalog.tools.find((tool) => tool.name === 'licell_cmd_doctor');
     const generatedDeployCheck = catalog.tools.find((tool) => tool.name === 'licell_cmd_deploy_check');
 
     expect(builtinCli?.metadata?.licell.toolKind).toBe('builtin');
@@ -40,6 +42,12 @@ describe('buildMcpToolCatalog', () => {
     expect(curatedDomainStaticBind?.summary).toContain('静态站点');
     expect(curatedDomainStaticUnbind?.tags).toContain('domain-static-unbind-workflow');
     expect(curatedDomainStaticUnbind?.summary).toContain('解绑静态站点域名');
+    expect(generatedDoctor?.title).toBe('Diagnose local licell readiness');
+    expect(generatedDoctor?.commandKey).toBe('doctor');
+    expect(generatedDoctor?.sectionTitle).toBe('Automation & Tooling');
+    expect(generatedDoctor?.summary).toContain('诊断');
+    expect(generatedDoctor?.metadata?.licell.result?.outcomeKey).toBe('healthy');
+    expect(generatedDoctor?.destructive).toBe(false);
     expect(generatedDeployCheck?.title).toBe('Precheck FC API deploy readiness');
     expect(generatedDeployCheck?.commandKey).toBe('deploy check');
     expect(generatedDeployCheck?.sectionTitle).toBe('Delivery Workflow');

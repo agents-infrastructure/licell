@@ -3,6 +3,7 @@ import { cacheCommandModule } from './cache';
 import { configCommandModule } from './config';
 import { dbCommandModule } from './db';
 import { deployCommandModule } from './deploy';
+import { doctorCommandModule } from './doctor';
 import { dnsCommandModule } from './dns';
 import { domainCommandModule } from './domain';
 import { e2eCommandModule } from './e2e';
@@ -30,6 +31,7 @@ export const licellRootHelpSurface = defineCommandBundle({
       examples: [
         'licell login',
         'licell init',
+        'licell doctor',
         'licell deploy',
         'licell skills init codex',
         'licell mcp init',
@@ -78,6 +80,7 @@ export const LICELL_COMMAND_MANIFEST = defineCommandManifest({
     dbCommandModule,
     cacheCommandModule,
     supaCommandModule,
+    doctorCommandModule,
     mcpCommandModule,
     skillsCommandModule,
     setupCommandModule,

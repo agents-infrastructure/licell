@@ -125,6 +125,7 @@
 
 | 命令 | 说明 | 生成 MCP Tool | 关键选项 |
 |------|------|----------------|----------|
+| `licell doctor` | 诊断本机 licell 登录态、项目配置与本地部署前置条件 | `licell_cmd_doctor` | `--runtime`, `--entry`, `--docker-daemon` |
 | `licell mcp` | MCP：让 Agent 通过 licell 执行部署/发布/运维（默认先初始化，再启动 stdio server） | — | `--project-root`, `--server-name` |
 | `licell mcp init` | 写入/更新项目内 `.mcp.json` 配置 | — | `--project-root`, `--server-name` |
 | `licell mcp serve` | 以 stdio 方式启动 licell MCP server | — | `--project-root` |
@@ -290,6 +291,7 @@
 | Tool | 对应 CLI | 说明 | 关键输入 |
 |------|----------|------|----------|
 | `licell_cmd_completion` | `licell completion` | 输出 shell 补全脚本（bash/zsh） Structured JSON result: 返回 shell 补全脚本，或内部候选项列表。 Key fields: stage, shell, script, candidates, count. Auto-generated from the shared licell CLI registry. | `shell`, `engine` |
+| `licell_cmd_doctor` | `licell doctor` | 诊断本机登录态、全局默认配置、当前目录项目配置，以及 FC API 的本地 deploy precheck。 Structured JSON result: 返回本机诊断汇总、计数和逐项检查结果。 Key fields: stage, healthy, checkCount, okCount, warnCount, errorCount, skipCount, context, checks. Decision guide: Inspect → licell doctor --output json. Auto-generated from the shared licell CLI registry. | `runtime`, `entry`, `dockerDaemon` |
 | `licell_cmd_e2e_cleanup` | `licell e2e cleanup` | 清理指定 E2E run 产生的资源 Auto-generated from the shared licell CLI registry. | `runId`, `manifest`, `keepWorkspace`, `yes` |
 | `licell_cmd_e2e_list` | `licell e2e list` | 查看本项目 e2e 运行记录 Auto-generated from the shared licell CLI registry. | `cwd`, `timeoutMs` |
 | `licell_cmd_e2e_run` | `licell e2e run` | 执行固定 E2E 套件（默认 smoke） Auto-generated from the shared licell CLI registry. | `suite`, `runId`, `runtime`, `target` |

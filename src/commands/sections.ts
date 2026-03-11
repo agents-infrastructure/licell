@@ -53,6 +53,11 @@ export const AUTOMATION_SECTION: CommandSectionMembership = {
   ],
   taskHints: [
     {
+      title: '先做本机 readiness 诊断',
+      description: '排查授权、项目配置和 deploy precheck 时，先运行 doctor 汇总阻塞项。',
+      commands: ['licell doctor', 'licell doctor --output json']
+    },
+    {
       title: '把 licell 接入 AI Agent',
       description: '先生成 skills，再写入 MCP 配置，让 Agent 既懂命令也能实际调用。',
       commands: ['licell setup', 'licell mcp init']
