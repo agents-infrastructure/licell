@@ -21,7 +21,12 @@ import {
   type CommandTaskGroup
 } from './command-tasks';
 import { canExposeCommandAsGeneratedMcpTool, toGeneratedMcpToolName } from './command-surface-ids';
-import { buildCommandSurfaceMetadata, toLicellInvocation } from './command-surface-metadata';
+import {
+  buildCommandSurfaceMetadata,
+  type ResolvedCommandAutomationDescriptor,
+  type ResolvedCommandInteractionDescriptor,
+  toLicellInvocation
+} from './command-surface-metadata';
 
 export interface CommandReferenceSection {
   id: string;
@@ -63,6 +68,8 @@ export interface AgentCommandCatalogEntry {
   tasks: CommandTaskEntry[];
   decisionGuide: CommandTaskGroup[];
   relatedCommands: string[];
+  interaction?: ResolvedCommandInteractionDescriptor;
+  automation?: ResolvedCommandAutomationDescriptor;
   safety?: CommandSafetyMetadata;
   optionInsights: CommandOptionInsight[];
   recommendedFlow: CommandFlowStep[];
@@ -279,6 +286,8 @@ export function buildAgentCommandCatalog(catalog: CommandCatalog = getCommandCat
         tasks,
         decisionGuide,
         relatedCommands: [...(descriptor.related || [])],
+        interaction: surface.interaction,
+        automation: surface.automation,
         safety: surface.safety,
         optionInsights: surface.optionInsights,
         recommendedFlow: surface.recommendedFlow,
@@ -321,6 +330,20 @@ export function filterAgentCommandCatalog(
       tasks: group.tasks.map((task) => ({ ...task, commands: [...task.commands] }))
     })),
     relatedCommands: [...command.relatedCommands],
+    interaction: command.interaction
+      ? {
+          ...command.interaction,
+          prompts: [...command.interaction.prompts],
+          notes: [...command.interaction.notes]
+        }
+      : undefined,
+    automation: command.automation
+      ? {
+          ...command.automation,
+          explicitInputs: [...command.automation.explicitInputs],
+          notes: [...command.automation.notes]
+        }
+      : undefined,
     safety: command.safety
       ? { ...command.safety, confirmFlags: [...command.safety.confirmFlags] }
       : undefined,

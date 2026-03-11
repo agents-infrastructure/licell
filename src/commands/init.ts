@@ -37,6 +37,15 @@ const initCommand = defineCliCommand({
     title: 'Initialize licell project',
     notes: ['空目录下会生成脚手架；已有项目目录默认仅写入 licell 配置。', '若要在已有目录补齐脚手架，需要显式传 `--runtime` 与 `--force`。'],
     examples: ['licell init', 'licell init --runtime docker --app my-app', 'licell init --yes --output json'],
+    interaction: {
+      ttyOnly: true,
+      prompts: ['空目录且未传 `--runtime` 时会提示选择默认 runtime。', '未显式提供 `--app` 时会提示确认应用名。']
+    },
+    automation: {
+      preferredOutput: 'json',
+      explicitInputs: ['--runtime', '--app', '--yes'],
+      notes: ['自动化初始化时建议显式传入 `--runtime`、`--app`，并用 `--yes --output json` 禁止交互。']
+    },
     optionInsights: {
       '--runtime': { whenToUse: '需要显式指定项目模板与默认 runtime 时使用。' },
       '--app': { whenToUse: '希望指定或覆盖 FC functionName 对应的应用名时使用。' },

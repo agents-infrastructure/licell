@@ -45,7 +45,23 @@ const loginCommand = defineCliCommand({
     { rawName: '--bootstrap-ram', description: '使用高权限 AK/SK 自动创建 licell 专用 RAM 用户与最小权限 AK/SK（仅保存新 key）' },
     { rawName: '--bootstrap-user <name>', description: 'bootstrap 模式下 RAM 用户名，默认 licell-operator' },
     { rawName: '--bootstrap-policy <name>', description: 'bootstrap 模式下自定义策略名，默认 LicellOperatorPolicy' }
-  ]
+  ],
+  descriptor: {
+    examples: ['licell login', 'licell login --bootstrap-ram', 'licell login --account-id <id> --ak <ak> --sk <sk> --output json'],
+    notes: ['bootstrap 模式会创建或复用 licell 专用 RAM 用户，并仅保存该专用 AccessKey。'],
+    interaction: {
+      ttyOnly: true,
+      prompts: [
+        '未显式传入时，会依次提示输入 Account ID、AccessKey ID、AccessKey Secret、Region。',
+        '首次纯交互登录时，会先询问是否启用 bootstrap RAM 模式。'
+      ]
+    },
+    automation: {
+      preferredOutput: 'json',
+      explicitInputs: ['--account-id', '--ak', '--sk'],
+      notes: ['非交互模式下必须显式提供 `--account-id`、`--ak`、`--sk`。']
+    }
+  }
 });
 
 const authRepairCommand = defineCliCommand({
@@ -58,7 +74,19 @@ const authRepairCommand = defineCliCommand({
     { rawName: '--region <region>', description: `默认地域，默认 ${DEFAULT_ALI_REGION}` },
     { rawName: '--bootstrap-user <name>', description: '修复目标 RAM 用户名（默认自动识别当前 key 所属用户）' },
     { rawName: '--bootstrap-policy <name>', description: '修复使用的自定义策略名（默认 LicellOperatorPolicy）' }
-  ]
+  ],
+  descriptor: {
+    examples: ['licell auth repair', 'licell auth repair --ak <admin-ak> --sk <admin-sk> --output json'],
+    interaction: {
+      ttyOnly: true,
+      prompts: ['交互模式下会尽量复用当前登录态与环境变量，并在缺失时提示补录管理员凭证。']
+    },
+    automation: {
+      preferredOutput: 'json',
+      explicitInputs: ['--ak', '--sk'],
+      notes: ['自动化修复时建议显式传入管理员 `--ak` / `--sk`，避免依赖当前终端状态。']
+    }
+  }
 });
 
 const authExportCommand = defineCliCommand({
@@ -93,7 +121,16 @@ const authExportCommand = defineCliCommand({
       '默认会一起打包 ~/.licell-cli/auth.json、~/.licell-cli/config.json、~/.licell-cli/acme/ 下的文件。',
       'OSS 对象默认放在 private + public-access-block=on 的 Bucket 中，restore 通过时效性签名 URL 拉取。',
       'restore token 不包含明文 AK/SK；真正敏感内容在对象内，需 passkey 才能解密。'
-    ]
+    ],
+    interaction: {
+      ttyOnly: true,
+      prompts: ['未传 `[passkey]` 时，会隐藏输入并二次确认 passkey。']
+    },
+    automation: {
+      preferredOutput: 'json',
+      explicitInputs: ['[passkey]'],
+      notes: ['自动化导出时建议显式传入 passkey，避免等待终端交互。']
+    }
   }
 });
 
@@ -124,7 +161,19 @@ const authRestoreCommand = defineCliCommand({
       'restore 不依赖当前机器已登录；它通过 token 内的时效性签名 URL 从 OSS 拉取 bundle。',
       '如果本地已存在 ~/.licell-cli/auth.json / config.json / acme 文件，默认会先确认再覆盖。',
       '仅在 TTY 交互环境下允许省略 token / passkey 并逐步提示；非交互模式保持显式参数约束。'
-    ]
+    ],
+    interaction: {
+      ttyOnly: true,
+      prompts: [
+        '可直接执行 `licell auth restore`，然后按提示输入 restore token 与 passkey。',
+        '检测到本地已有 ~/.licell-cli 文件时，会先确认是否覆盖。'
+      ]
+    },
+    automation: {
+      preferredOutput: 'json',
+      explicitInputs: ['<token>', '[passkey]', '--yes'],
+      notes: ['自动化恢复时建议显式传入 token、passkey；若允许覆盖现有文件，再追加 `--yes`。']
+    }
   }
 });
 

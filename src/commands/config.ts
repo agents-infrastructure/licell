@@ -19,6 +19,11 @@ const configDomainCommand = defineCliCommand({
     argumentHints: {
       suffix: '域名后缀，例如 `example.com`。'
     },
+    automation: {
+      preferredOutput: 'json',
+      explicitInputs: ['[suffix]', '--unset'],
+      notes: ['自动化里建议显式区分读取、设置与清除三种用法，并统一追加 `--output json`。']
+    },
     optionInsights: {
       '--unset': {
         whenToUse: '需要清除全局默认域名后缀，让后续流程重新显式传入或重新推导时使用。',

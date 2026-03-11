@@ -28,6 +28,15 @@ const setupCommand = defineCliCommand({
     summary: '安装后的一站式引导：配置 Skills 与 MCP。',
     notes: ['交互模式下会引导选择 Agent、范围，并可选写入 MCP 配置。'],
     examples: ['licell setup', 'licell setup --agent codex --global', 'licell setup --output json'],
+    interaction: {
+      ttyOnly: true,
+      prompts: ['未传 `--agent` 时会提示选择目标 Agent。', '交互模式下会继续询问配置范围，以及是否一并写入 MCP 配置。']
+    },
+    automation: {
+      preferredOutput: 'json',
+      explicitInputs: ['--agent'],
+      notes: ['自动化执行时建议显式传入 `--agent`，并搭配 `--output json` 跟踪写入结果。']
+    },
     optionInsights: {
       '--agent': { whenToUse: '非交互模式下必须显式指定目标 Agent。', cautions: ['当前仅支持 `claude` / `codex`。'] },
       '--global': { whenToUse: '希望技能与 MCP 配置对所有项目生效时使用。', cautions: ['会写入用户级全局配置目录。'] },

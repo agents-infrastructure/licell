@@ -7,12 +7,14 @@ import type {
   CommandDescriptor,
   CommandDescriptorMap,
   CommandFlowStep,
+  CommandInteractionDescriptor,
   CommandOptionInsight,
   CommandResultDescriptor,
   CommandResultFieldDescriptor,
   CommandSafetyLevel,
   CommandSafetyMetadata,
-  CommandSectionConfig
+  CommandSectionConfig,
+  CommandAutomationDescriptor
 } from '../commands/module';
 
 export type {
@@ -22,12 +24,14 @@ export type {
   CommandDescriptor,
   CommandDescriptorMap,
   CommandFlowStep,
+  CommandInteractionDescriptor,
   CommandOptionInsight,
   CommandResultDescriptor,
   CommandResultFieldDescriptor,
   CommandSafetyLevel,
   CommandSafetyMetadata,
-  CommandSectionConfig
+  CommandSectionConfig,
+  CommandAutomationDescriptor
 } from '../commands/module';
 
 export interface ResolvedCommandResultFieldDescriptor {

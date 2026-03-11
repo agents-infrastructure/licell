@@ -29,6 +29,15 @@ const skillsInitCommand = defineCliCommand({
     argumentHints: {
       agent: '支持 `claude` | `codex`。'
     },
+    interaction: {
+      ttyOnly: true,
+      prompts: ['未传 `[agent]` 时会提示选择 `claude` 或 `codex`。']
+    },
+    automation: {
+      preferredOutput: 'json',
+      explicitInputs: ['[agent]'],
+      notes: ['自动化执行时建议显式传入 `[agent]`，避免命令等待交互选择。']
+    },
     optionInsights: {
       '--project-root': {
         whenToUse: '需要把 skills 写入其它项目目录时使用。',

@@ -34,6 +34,18 @@ export interface CommandFlowStep {
   reason: string;
 }
 
+export interface CommandInteractionDescriptor {
+  ttyOnly?: boolean;
+  prompts?: string[];
+  notes?: string[];
+}
+
+export interface CommandAutomationDescriptor {
+  preferredOutput?: 'json' | 'text';
+  explicitInputs?: string[];
+  notes?: string[];
+}
+
 export interface CommandResultFieldDescriptor {
   name: string;
   description: string;
@@ -56,6 +68,8 @@ export interface CommandDescriptor {
   taskHints?: CommandTaskHint[];
   argumentHints?: Record<string, string>;
   related?: string[];
+  interaction?: CommandInteractionDescriptor;
+  automation?: CommandAutomationDescriptor;
   safety?: Partial<CommandSafetyMetadata>;
   optionInsights?: Record<string, { whenToUse: string; cautions?: string[] }>;
   recommendedFlow?: CommandFlowStep[];

@@ -1,10 +1,12 @@
 import type { CatalogCommand, CatalogOption } from './command-catalog';
 import {
+  type CommandAutomationDescriptor,
   buildCommandOptionInsights,
   buildCommandResultDescriptor,
   buildCommandSafetyMetadata,
   type CommandDescriptor,
   type CommandFlowStep,
+  type CommandInteractionDescriptor,
   type CommandOptionInsight,
   type CommandSafetyMetadata,
   type ResolvedCommandResultDescriptor
@@ -29,12 +31,30 @@ export interface CommandSurfaceMetadata {
   agentTips: string[];
   optionInsights: CommandOptionInsight[];
   recommendedFlow: CommandFlowStep[];
+  interaction?: ResolvedCommandInteractionDescriptor;
+  automation?: ResolvedCommandAutomationDescriptor;
   result?: ResolvedCommandResultDescriptor;
   safety?: CommandSafetyMetadata;
 }
 
+export interface ResolvedCommandInteractionDescriptor {
+  ttyOnly: boolean;
+  prompts: string[];
+  notes: string[];
+}
+
+export interface ResolvedCommandAutomationDescriptor {
+  preferredOutput: 'json' | 'text';
+  explicitInputs: string[];
+  notes: string[];
+}
+
 function unique<T>(values: T[]) {
   return [...new Set(values)];
+}
+
+function compact(values: Array<string | undefined>) {
+  return values.filter((value): value is string => Boolean(value && value.trim()));
 }
 
 export function toLicellInvocation(rawName: string) {
@@ -122,16 +142,55 @@ export function buildResolvedAgentTips(input: {
   subcommands: CommandSurfaceEntryLike[];
 }) {
   const defaults: string[] = [];
-  if (input.scope !== 'root') {
-    defaults.push('自动化调用时优先追加 `--output json`，获取稳定的结构化结果。');
-  }
-  if ((input.scope === 'namespace' || input.scope === 'command') && input.subcommands.length > 0) {
-    defaults.push('先执行只读子命令（如 list/info/check/spec）获取现状，再执行变更命令。');
-  }
   if (input.key === 'mcp') {
     defaults.push('真正启动 `mcp serve` 时不要传 `--output json`，否则会破坏 stdio JSON-RPC 输出。');
   }
   return unique([...(input.descriptor.agentTips || []), ...defaults]);
+}
+
+function cloneInteractionDescriptor(descriptor?: CommandInteractionDescriptor) {
+  if (!descriptor) return undefined;
+  const prompts = unique(compact(descriptor.prompts || []));
+  const notes = unique(compact(descriptor.notes || []));
+  if (prompts.length === 0 && notes.length === 0) return undefined;
+  return {
+    ttyOnly: descriptor.ttyOnly !== false,
+    prompts,
+    notes
+  } satisfies ResolvedCommandInteractionDescriptor;
+}
+
+function buildResolvedInteraction(input: {
+  descriptor: CommandDescriptor;
+}) {
+  return cloneInteractionDescriptor(input.descriptor.interaction);
+}
+
+function buildResolvedAutomation(input: {
+  scope: CommandSurfaceScope;
+  command?: CatalogCommand;
+  descriptor: CommandDescriptor;
+  safety?: CommandSafetyMetadata;
+}) {
+  const configured = input.descriptor.automation || {} as CommandAutomationDescriptor;
+  const preferredOutput = configured.preferredOutput || (input.scope === 'root' ? 'text' : 'json');
+  const explicitInputs = unique(compact([
+    ...(configured.explicitInputs || []),
+    ...((input.command?.args || []).filter((arg) => arg.required).map((arg) => arg.raw)),
+    ...((input.safety?.confirmFlags || []))
+  ]));
+
+  const notes = unique(compact(configured.notes || []));
+
+  if (input.scope === 'root' && notes.length === 0 && configured.preferredOutput === undefined) {
+    return undefined;
+  }
+
+  return {
+    preferredOutput,
+    explicitInputs,
+    notes
+  } satisfies ResolvedCommandAutomationDescriptor;
 }
 
 export function buildResolvedSafety(input: {
@@ -173,6 +232,12 @@ export function buildResolvedCommandSurfaceMetadata(input: {
   extraTokens?: string[];
 }) {
   const extraTokens = input.extraTokens || [];
+  const safety = buildResolvedSafety({
+    scope: input.scope,
+    command: input.command,
+    descriptor: input.descriptor,
+    subcommands: input.subcommands
+  });
   return {
     examples: buildResolvedExamples({
       scope: input.scope,
@@ -194,13 +259,17 @@ export function buildResolvedCommandSurfaceMetadata(input: {
       descriptor: input.descriptor,
       subcommands: input.subcommands
     }),
-    result: buildCommandResultDescriptor(input.descriptor),
-    safety: buildResolvedSafety({
+    interaction: buildResolvedInteraction({
+      descriptor: input.descriptor
+    }),
+    automation: buildResolvedAutomation({
       scope: input.scope,
       command: input.command,
       descriptor: input.descriptor,
-      subcommands: input.subcommands
-    })
+      safety
+    }),
+    result: buildCommandResultDescriptor(input.descriptor),
+    safety
   } satisfies CommandSurfaceMetadata;
 }
 

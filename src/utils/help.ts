@@ -18,6 +18,8 @@ import {
 import {
   buildCommandTasks,
   groupCommandTasks,
+  inferCommandTaskPhaseFromText,
+  type CommandTaskEntryPhase,
   type CommandTaskEntry as HelpTaskDoc,
   type CommandTaskGroup as HelpTaskGroup
 } from './command-tasks';
@@ -26,7 +28,9 @@ import {
   buildCommandSurfaceMetadata,
   formatInvocationWithSelection,
   stripArgsFromUsage,
-  toLicellInvocation
+  toLicellInvocation,
+  type ResolvedCommandAutomationDescriptor,
+  type ResolvedCommandInteractionDescriptor
 } from './command-surface-metadata';
 
 export type HelpScope = 'root' | 'namespace' | 'command';
@@ -50,6 +54,12 @@ export interface HelpSectionDoc {
   id: string;
   title: string;
   summary?: string;
+  commands: HelpCommandEntry[];
+}
+
+export interface HelpSubcommandGroup {
+  phase: CommandTaskEntryPhase;
+  title: string;
   commands: HelpCommandEntry[];
 }
 
@@ -98,6 +108,11 @@ export type HelpBlock =
       sections: HelpSectionDoc[];
     }
   | {
+      kind: 'subcommand-groups';
+      title: 'Subcommands';
+      groups: HelpSubcommandGroup[];
+    }
+  | {
       kind: 'structured-result';
       title: 'Structured Result';
       result: HelpResultDoc;
@@ -126,8 +141,11 @@ export interface HelpDocument {
   notes: string[];
   examples: string[];
   agentTips: string[];
+  interaction?: ResolvedCommandInteractionDescriptor;
+  automation?: ResolvedCommandAutomationDescriptor;
   relatedCommands: HelpCommandEntry[];
   sections: HelpSectionDoc[];
+  subcommandGroups: HelpSubcommandGroup[];
   safety?: HelpSafetyDoc;
   result?: HelpResultDoc;
   optionInsights: HelpOptionInsight[];
@@ -185,6 +203,15 @@ function compact(values: Array<string | undefined>) {
   return values.filter((value): value is string => Boolean(value && value.trim()));
 }
 
+const SUBCOMMAND_GROUP_ORDER: CommandTaskEntryPhase[] = ['inspect', 'mutate', 'verify', 'cleanup', 'general'];
+const SUBCOMMAND_GROUP_TITLES: Record<CommandTaskEntryPhase, string> = {
+  inspect: 'Inspect',
+  mutate: 'Mutate',
+  verify: 'Verify',
+  cleanup: 'Cleanup',
+  general: 'Other'
+};
+
 function sortEntries(entries: HelpCommandEntry[]) {
   return [...entries].sort((left, right) => left.key.localeCompare(right.key));
 }
@@ -209,6 +236,20 @@ function toNamespaceEntry(key: string, description: string): HelpCommandEntry {
     aliases: [],
     namespace: true
   };
+}
+
+function inferSubcommandPhase(entry: HelpCommandEntry): CommandTaskEntryPhase {
+  return inferCommandTaskPhaseFromText(`${entry.key} ${entry.description}`) || 'general';
+}
+
+function buildSubcommandGroups(entries: HelpCommandEntry[]) {
+  return SUBCOMMAND_GROUP_ORDER
+    .map((phase) => ({
+      phase,
+      title: SUBCOMMAND_GROUP_TITLES[phase],
+      commands: entries.filter((entry) => inferSubcommandPhase(entry) === phase)
+    }))
+    .filter((group) => group.commands.length > 0) satisfies HelpSubcommandGroup[];
 }
 
 function padRows(rows: HelpRow[]) {
@@ -507,6 +548,7 @@ function buildRelatedCommands(
 function buildRootHelpBlocks(doc: Omit<HelpDocument, 'blocks' | 'text'>): HelpBlock[] {
   return [
     ...(doc.examples.length > 0 ? [{ kind: 'items', title: 'Quick Start', items: doc.examples } satisfies HelpBlock] : []),
+    ...(doc.agentTips.length > 0 ? [{ kind: 'items', title: 'Automation', items: doc.agentTips } satisfies HelpBlock] : []),
     ...buildTasksBlock(doc.tasks),
     ...(doc.sections.length > 0 ? [{ kind: 'command-groups', title: 'Command Groups', sections: doc.sections } satisfies HelpBlock] : []),
     ...(doc.globalOptions.length > 0 ? [{
@@ -514,17 +556,43 @@ function buildRootHelpBlocks(doc: Omit<HelpDocument, 'blocks' | 'text'>): HelpBl
       title: 'Global Options',
       rows: doc.globalOptions.map((option) => ({ label: option.rawName, description: option.description }))
     } satisfies HelpBlock] : []),
-    ...([...[...doc.notes, ...doc.agentTips]].filter(Boolean).length > 0 ? [{
+    ...(doc.notes.length > 0 ? [{
       kind: 'items',
       title: 'Tips',
-      items: [...doc.notes, ...doc.agentTips]
+      items: doc.notes
     } satisfies HelpBlock] : [])
   ];
+}
+
+function buildInteractionItems(interaction: ResolvedCommandInteractionDescriptor) {
+  return unique(compact([
+    interaction.ttyOnly ? '仅在 TTY 交互终端下会自动提示输入。' : undefined,
+    ...interaction.prompts,
+    ...interaction.notes
+  ]));
+}
+
+function buildAutomationItems(automation: ResolvedCommandAutomationDescriptor) {
+  return unique(compact([
+    automation.preferredOutput === 'json' ? '推荐输出：`--output json`。' : undefined,
+    automation.explicitInputs.length > 0 ? `显式输入：${automation.explicitInputs.join(', ')}。` : undefined,
+    ...automation.notes
+  ]));
 }
 
 function buildCommandLikeHelpBlocks(doc: Omit<HelpDocument, 'blocks' | 'text'>): HelpBlock[] {
   return [
     ...buildDecisionGuideBlock(doc.decisionGuide, doc.tasks),
+    ...(doc.interaction ? [{
+      kind: 'items',
+      title: 'TTY Interaction',
+      items: buildInteractionItems(doc.interaction)
+    } satisfies HelpBlock] : []),
+    ...(doc.automation ? [{
+      kind: 'items',
+      title: 'Automation',
+      items: buildAutomationItems(doc.automation)
+    } satisfies HelpBlock] : []),
     ...(doc.args.length > 0 ? [{
       kind: 'rows',
       title: 'Arguments',
@@ -538,13 +606,10 @@ function buildCommandLikeHelpBlocks(doc: Omit<HelpDocument, 'blocks' | 'text'>):
       title: 'Actions',
       rows: doc.actionHints.map((hint) => ({ label: hint.name, description: hint.description }))
     } satisfies HelpBlock] : []),
-    ...(doc.subcommands.length > 0 ? [{
-      kind: 'rows',
+    ...(doc.subcommandGroups.length > 0 ? [{
+      kind: 'subcommand-groups',
       title: 'Subcommands',
-      rows: doc.subcommands.map((command) => ({
-        label: command.rawName.startsWith(doc.key) ? command.rawName.slice(doc.key.length).trim() || command.rawName : command.rawName,
-        description: command.description
-      }))
+      groups: doc.subcommandGroups
     } satisfies HelpBlock] : []),
     ...(doc.options.length > 0 ? [{
       kind: 'rows',
@@ -635,6 +700,21 @@ function renderCommandGroupsBlock(sections: HelpSectionDoc[]) {
   return lines;
 }
 
+function renderSubcommandGroupsBlock(groups: HelpSubcommandGroup[]) {
+  const lines = ['Subcommands:'];
+  for (const group of groups) {
+    lines.push(`  ${group.title}:`);
+    lines.push(
+      ...padRows(group.commands.map((command) => ({
+        label: command.rawName,
+        description: command.description
+      }))).map((line) => `    ${line.trimStart()}`)
+    );
+  }
+  lines.push('');
+  return lines;
+}
+
 function renderStructuredResultBlock(result: HelpResultDoc) {
   return renderPlainList('Structured Result:', buildStructuredResultItems(result));
 }
@@ -659,6 +739,8 @@ function renderHelpBlock(block: HelpBlock) {
       return renderDecisionGuideBlock(block.groups, block.fallbackTasks);
     case 'command-groups':
       return renderCommandGroupsBlock(block.sections);
+    case 'subcommand-groups':
+      return renderSubcommandGroupsBlock(block.groups);
     case 'structured-result':
       return renderStructuredResultBlock(block.result);
     case 'recommended-flow':
@@ -762,8 +844,11 @@ export function buildHelpDocument(input: {
       notes: [...(enhancement.notes || [])],
       examples: surface.examples,
       agentTips: surface.agentTips,
+      interaction: surface.interaction,
+      automation: surface.automation,
       relatedCommands: [],
       sections: buildRootSectionDocs(catalog, sections),
+      subcommandGroups: [],
       safety: surface.safety,
       result: surface.result,
       optionInsights: surface.optionInsights,
@@ -805,8 +890,11 @@ export function buildHelpDocument(input: {
       notes: [...(enhancement.notes || [])],
       examples: surface.examples,
       agentTips: surface.agentTips,
+      interaction: surface.interaction,
+      automation: surface.automation,
       relatedCommands: buildRelatedCommands(resolution.key, rootCommand, catalog, enhancement, subcommands),
       sections: [],
+      subcommandGroups: buildSubcommandGroups(subcommands),
       safety: surface.safety,
       result: surface.result,
       optionInsights: surface.optionInsights,
@@ -851,8 +939,11 @@ export function buildHelpDocument(input: {
     notes: [...(enhancement.notes || [])],
     examples: surface.examples,
     agentTips: surface.agentTips,
+    interaction: surface.interaction,
+    automation: surface.automation,
     relatedCommands: buildRelatedCommands(command.key, command.rootCommand, catalog, enhancement, subcommands),
     sections: [],
+    subcommandGroups: buildSubcommandGroups(subcommands),
     safety: surface.safety,
     result: surface.result,
     optionInsights: surface.optionInsights,

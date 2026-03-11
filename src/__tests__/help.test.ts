@@ -14,6 +14,7 @@ describe('help utils', () => {
     expect(doc?.sections.some((section) => section.title === 'Automation & Tooling')).toBe(true);
     expect(doc?.blocks.some((block) => block.kind === 'command-groups')).toBe(true);
     expect(doc?.text).toContain('Command Groups:');
+    expect(doc?.text).toContain('Automation:');
     expect(doc?.text).toContain('Common Tasks:');
     expect(doc?.text).toContain('第一次上手 licell');
     expect(doc?.text).toContain('licell setup');
@@ -79,6 +80,9 @@ describe('help utils', () => {
       'oss sync'
     ]));
     expect(doc?.text).toContain('OSS Bucket 的创建、属性配置、原生域名绑定与对象上传/下载/删除/同步');
+    expect(doc?.text).toContain('Subcommands:');
+    expect(doc?.text).toContain('Inspect:');
+    expect(doc?.text).toContain('Mutate:');
   });
 
   it('builds nested namespace help for oss object', () => {
@@ -194,6 +198,9 @@ describe('help utils', () => {
     expect(doc?.args[0]?.hint).toContain('TTY 交互环境下可省略并提示输入');
     expect(doc?.args[1]?.raw).toBe('[passkey]');
     expect(doc?.args[1]?.hint).toContain('自动化 / Agent 调用请显式传入');
+    expect(doc?.text).toContain('TTY Interaction:');
+    expect(doc?.text).toContain('Automation:');
+    expect(doc?.text).toContain('显式输入：<token>, [passkey], --yes。');
     expect(doc?.text).toContain('仅在 TTY 交互环境下允许省略 token / passkey');
   });
 

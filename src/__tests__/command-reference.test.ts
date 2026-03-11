@@ -51,6 +51,12 @@ describe('buildAgentCommandCatalog', () => {
     const domainAppBind = catalog.commands.find((command) => command.key === 'domain app bind');
     expect(domainAppBind?.result?.outcomeKey).toBe('bound');
     expect(domainAppBind?.result?.fields.some((field) => field.name === 'finalUrl')).toBe(true);
+
+    const authRestore = catalog.commands.find((command) => command.key === 'auth restore');
+    expect(authRestore?.interaction?.ttyOnly).toBe(true);
+    expect(authRestore?.interaction?.prompts.some((item) => item.includes('restore token'))).toBe(true);
+    expect(authRestore?.automation?.preferredOutput).toBe('json');
+    expect(authRestore?.automation?.explicitInputs).toEqual(expect.arrayContaining(['<token>', '--yes']));
   });
 
   it('filters by root command without hardcoded command lists', () => {

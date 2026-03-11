@@ -61,7 +61,8 @@ describe('command surface metadata', () => {
       'licell db add',
       'licell db info <instanceId>'
     ]);
-    expect(surface.agentTips).toContain('自动化调用时优先追加 `--output json`，获取稳定的结构化结果。');
+    expect(surface.automation?.preferredOutput).toBe('json');
+    expect(surface.automation?.notes).toEqual([]);
   });
 
   it('derives recommended flow for command scopes with child commands', () => {
