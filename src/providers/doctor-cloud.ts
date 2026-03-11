@@ -17,6 +17,12 @@ import { isAccessDeniedError, isAuthCredentialInvalidError, isNotFoundError, isT
 import { AUTH_CAPABILITY_LABELS, type AuthCapability } from '../utils/auth-recovery';
 import type { AuthConfig, ProjectConfig } from '../utils/config';
 import { parseRootAndSubdomain } from '../utils/domain';
+import {
+  doctorRemediationCommand,
+  doctorRemediationNote,
+  type LicellDoctorRemediation,
+  normalizeDoctorRemediationItems
+} from '../utils/doctor-guidance';
 import { formatErrorMessage } from '../utils/errors';
 import { resolveSdkCtor } from '../utils/sdk';
 
@@ -32,7 +38,7 @@ export interface DoctorCloudCheckResult {
   status: 'ok' | 'warn' | 'error' | 'skip';
   summary: string;
   details: string[];
-  remediation: string[];
+  remediation: LicellDoctorRemediation[];
   data?: Record<string, unknown>;
 }
 
@@ -82,7 +88,7 @@ interface DoctorDomainInspection {
   status: 'ok' | 'warn' | 'error';
   summary: string;
   details: string[];
-  remediation: string[];
+  remediation: LicellDoctorRemediation[];
   data?: Record<string, unknown>;
 }
 
@@ -240,7 +246,10 @@ function classifyCloudError(
       status: 'error',
       summary: input.invalidCredentialSummary || `${input.label} 校验失败：AK/SK 无效或已失效。`,
       details: [formatErrorMessage(err)],
-      remediation: ['执行 `licell login` 重新登录，或执行 `licell auth restore` 恢复有效凭证。']
+      remediation: [doctorRemediationNote('执行 login 重新登录，或执行 auth restore 恢复有效凭证。', {
+        commandTemplate: 'licell login',
+        intent: 'login'
+      })]
     };
   }
   if (isAccessDeniedError(err)) {
@@ -248,7 +257,9 @@ function classifyCloudError(
       status: input.required ? 'error' : 'warn',
       summary: input.accessDeniedSummary || `${input.label} 读权限不足。`,
       details: [formatErrorMessage(err)],
-      remediation: ['执行 `licell auth repair` 为当前凭证补齐 licell 所需权限。']
+      remediation: [doctorRemediationCommand('licell auth repair', {
+        text: '执行 auth repair，为当前凭证补齐 licell 所需权限。'
+      })]
     };
   }
   if (isUnsupportedRegionError(err)) {
@@ -256,7 +267,10 @@ function classifyCloudError(
       status: input.required ? 'error' : 'warn',
       summary: input.unsupportedSummary || `${input.label} 在当前 region 可能不可用或未开通。`,
       details: [formatErrorMessage(err)],
-      remediation: ['切换到支持该服务的 region，或避免在当前工作流使用该服务。']
+      remediation: [doctorRemediationNote('切换到支持该服务的 region，或避免在当前工作流使用该服务。', {
+        commandTemplate: 'licell switch --region <region>',
+        intent: 'configure'
+      })]
     };
   }
   if (isTransientError(err)) {
@@ -264,14 +278,20 @@ function classifyCloudError(
       status: 'warn',
       summary: `${input.label} 探测失败：网络或服务暂时不可用。`,
       details: [formatErrorMessage(err)],
-      remediation: ['稍后重试 `licell doctor`，确认网络和阿里云控制面状态。']
+      remediation: [doctorRemediationNote('稍后重试 doctor，确认网络和阿里云控制面状态。', {
+        commandTemplate: 'licell doctor',
+        intent: 'verify'
+      })]
     };
   }
   return {
     status: input.required ? 'error' : 'warn',
     summary: `${input.label} 探测失败。`,
     details: [formatErrorMessage(err)],
-    remediation: ['检查错误详情，必要时用 `licell auth repair` 修复权限，或切换 region 后重试。']
+    remediation: [doctorRemediationNote('检查错误详情，必要时修复权限，或切换 region 后重试。', {
+      commandTemplate: 'licell auth repair',
+      intent: 'repair'
+    })]
   };
 }
 
@@ -291,7 +311,10 @@ async function probeCallerIdentity(auth: AuthConfig): Promise<DoctorCloudCheckRe
         status: 'error',
         summary: '云端身份与本地 auth.json 的 accountId 不一致。',
         details: [`local accountId: ${auth.accountId}`, `remote accountId: ${accountId}`, ...(arn ? [`arn: ${arn}`] : []), ...(userId ? [`userId: ${userId}`] : [])],
-        remediation: ['确认当前 AK/SK 属于预期账号，必要时重新执行 `licell login`。'],
+        remediation: [doctorRemediationNote('确认当前 AK/SK 属于预期账号，必要时重新执行 login。', {
+          commandTemplate: 'licell login',
+          intent: 'login'
+        })],
         data: { accountId, arn, userId }
       };
     }
@@ -321,7 +344,9 @@ async function probeRamProfile(auth: AuthConfig): Promise<DoctorCloudCheckResult
       status: 'warn',
       summary: '当前凭证为手动登录态，无法确认是否符合 licell 推荐的最小权限模型。',
       details: ['authSource: manual/unknown'],
-      remediation: ['建议执行 `licell auth repair`，为当前账号补齐 licell 推荐的 bootstrap RAM 配置。']
+      remediation: [doctorRemediationCommand('licell auth repair', {
+        text: '建议执行 auth repair，为当前账号补齐 licell 推荐的 bootstrap RAM 配置。'
+      })]
     };
   }
 
@@ -330,7 +355,9 @@ async function probeRamProfile(auth: AuthConfig): Promise<DoctorCloudCheckResult
       status: 'warn',
       summary: '当前凭证带有 bootstrap 痕迹，但本地缺少完整的 RAM 用户 / 策略元数据。',
       details: [`ramUser: ${auth.ramUser || '(missing)'}`, `ramPolicy: ${auth.ramPolicy || '(missing)'}`],
-      remediation: ['执行 `licell auth repair` 回填或修复 bootstrap 元数据。']
+      remediation: [doctorRemediationCommand('licell auth repair', {
+        text: '执行 auth repair，回填或修复 bootstrap 元数据。'
+      })]
     };
   }
 
@@ -362,7 +389,9 @@ async function probeRamProfile(auth: AuthConfig): Promise<DoctorCloudCheckResult
         status: 'error',
         summary: 'bootstrap RAM 配置不完整，当前凭证不是完全健康的 licell 最小权限状态。',
         details,
-        remediation: ['执行 `licell auth repair`，自动补齐 RAM 用户、策略和当前 key 的绑定关系。'],
+        remediation: [doctorRemediationCommand('licell auth repair', {
+          text: '执行 auth repair，自动补齐 RAM 用户、策略和当前 key 的绑定关系。'
+        })],
         data: {
           userExists: inspection.userExists,
           policyExists: inspection.policyExists,
@@ -460,7 +489,7 @@ function summarizeDoctorDomainInspections(
     `[${item.status}] ${item.domainName}: ${item.summary}`,
     ...item.details.map((detail) => `  ${detail}`)
   ]);
-  const remediation = unique(inspections.flatMap((item) => item.remediation));
+  const remediation = normalizeDoctorRemediationItems(inspections.flatMap((item) => item.remediation));
 
   if (errorCount > 0) {
     return {
@@ -514,7 +543,7 @@ async function inspectDomainDnsConsistency(domainName: string, expectedTarget: s
   const normalizedDomain = domainName.trim().toLowerCase();
   const normalizedTarget = normalizeDnsValue(expectedTarget);
   const details: string[] = [`expectedTarget: ${normalizedTarget}`];
-  const remediation: string[] = [];
+  const remediation: LicellDoctorRemediation[] = [];
   let controlPlaneValue: string | undefined;
   let controlPlaneError: string | undefined;
 
@@ -543,7 +572,7 @@ async function inspectDomainDnsConsistency(domainName: string, expectedTarget: s
         : 'DNS 指向符合预期。',
       details,
       remediation: controlPlaneError
-        ? ['如需让 licell 统一校验/修复 DNS，请确保该域名由当前账号的阿里云 DNS 托管。']
+        ? [doctorRemediationNote('如需让 licell 统一校验/修复 DNS，请确保该域名由当前账号的阿里云 DNS 托管。')]
         : [],
       data: {
         expectedTarget: normalizedTarget,
@@ -554,7 +583,10 @@ async function inspectDomainDnsConsistency(domainName: string, expectedTarget: s
   }
 
   if (controlPlaneValue === normalizedTarget) {
-    remediation.push(`等待 DNS 生效后重试；必要时检查权威 NS 是否已切到阿里云：\`licell dns records list ${parseRootAndSubdomain(normalizedDomain).rootDomain}\``);
+    remediation.push(doctorRemediationNote(
+      '等待 DNS 生效后重试；必要时检查权威 NS 是否已切到阿里云。',
+      { commandTemplate: `licell dns records list ${parseRootAndSubdomain(normalizedDomain).rootDomain}` }
+    ));
     return {
       domainName: normalizedDomain,
       status: 'warn',
@@ -569,7 +601,10 @@ async function inspectDomainDnsConsistency(domainName: string, expectedTarget: s
     };
   }
 
-  remediation.push(`把域名 CNAME 收敛到 ${normalizedTarget}，然后再执行 \`licell doctor\`。`);
+  remediation.push(doctorRemediationNote(
+    `把域名 CNAME 收敛到 ${normalizedTarget}，然后再执行 doctor 复查。`,
+    { commandTemplate: 'licell doctor', intent: 'verify' }
+  ));
   return {
     domainName: normalizedDomain,
     status: 'error',
@@ -596,7 +631,7 @@ async function inspectApiDomainConsistency(
     `protocol: ${domain.protocol || 'HTTP'}`,
     `routes: ${domain.routes.length}`
   ];
-  const remediation: string[] = [];
+  const remediation: LicellDoctorRemediation[] = [];
   const blockingIssues: string[] = [];
   const warnings: string[] = [];
   const primaryRoute = domain.routes[0];
@@ -657,13 +692,16 @@ async function inspectApiDomainConsistency(
   }
 
   if (blockingIssues.length > 0) {
-    remediation.push('必要时重新执行 `licell domain app bind <domain>` 重新编排 DNS、FC custom domain、alias 与 SSL。');
+    remediation.push(doctorRemediationCommand(
+      'licell domain app bind <domain>',
+      { text: '必要时重新执行 domain app bind，重新编排 DNS、FC custom domain、alias 与 SSL。' }
+    ));
     return {
       domainName: domain.domainName,
       status: 'error',
       summary: blockingIssues.join('；'),
       details,
-      remediation: unique(remediation),
+      remediation: normalizeDoctorRemediationItems(remediation),
       data: {
         expectedTarget
       }
@@ -676,7 +714,7 @@ async function inspectApiDomainConsistency(
       status: 'warn',
       summary: warnings.join('；'),
       details,
-      remediation: unique(remediation),
+      remediation: normalizeDoctorRemediationItems(remediation),
       data: {
         expectedTarget
       }
@@ -744,7 +782,7 @@ async function inspectStaticCdnDomainConsistency(domain: CdnDomainDetail, expect
   if (domain.origins && domain.origins.length > 0) {
     details.push(...domain.origins.map((origin) => `cdnOrigin: ${origin.content}${origin.type ? ` (${origin.type})` : ''}`));
   }
-  const remediation: string[] = [];
+  const remediation: LicellDoctorRemediation[] = [];
   const blockingIssues: string[] = [];
   const warnings: string[] = [];
 
@@ -769,13 +807,16 @@ async function inspectStaticCdnDomainConsistency(domain: CdnDomainDetail, expect
   }
 
   if (blockingIssues.length > 0) {
-    remediation.push('必要时重新执行 `licell domain static bind <domain>` 重新编排 CDN / DNS / HTTPS。');
+    remediation.push(doctorRemediationCommand(
+      'licell domain static bind <domain>',
+      { text: '必要时重新执行 domain static bind，重新编排 CDN / DNS / HTTPS。' }
+    ));
     return {
       domainName: domain.domainName,
       status: 'error',
       summary: blockingIssues.join('；'),
       details,
-      remediation: unique(remediation),
+      remediation: normalizeDoctorRemediationItems(remediation),
       data: {
         expectedTarget,
         expectedOriginDomain
@@ -789,7 +830,7 @@ async function inspectStaticCdnDomainConsistency(domain: CdnDomainDetail, expect
       status: 'warn',
       summary: warnings.join('；'),
       details,
-      remediation: unique(remediation),
+      remediation: normalizeDoctorRemediationItems(remediation),
       data: {
         expectedTarget,
         expectedOriginDomain
@@ -845,7 +886,7 @@ async function probeStaticDomainConsistency(input: DoctorCloudDiagnosticsInput &
       status: 'warn',
       summary: '未发现可关联的静态域名，且无法枚举 CDN domain。',
       details: [`cdnList: ${cdnListWarning}`, `expectedOriginDomain: ${originDomain}`],
-      remediation: ['确认当前凭证具备 CDN 读权限，或确保静态域名由 licell 当前账号统一管理。'],
+      remediation: [doctorRemediationNote('确认当前凭证具备 CDN 读权限，或确保静态域名由 licell 当前账号统一管理。')],
       data: {
         mode: 'static',
         bucketName,
@@ -858,7 +899,10 @@ async function probeStaticDomainConsistency(input: DoctorCloudDiagnosticsInput &
       ...summary,
       status: summary.status === 'error' ? 'error' : 'warn',
       details: [...summary.details, `[warn] cdn-list: ${cdnListWarning}`],
-      remediation: unique([...summary.remediation, '确认当前凭证具备 CDN 读权限，避免 doctor 漏掉静态 CDN 域名。'])
+      remediation: normalizeDoctorRemediationItems([
+        ...summary.remediation,
+        doctorRemediationNote('确认当前凭证具备 CDN 读权限，避免 doctor 漏掉静态 CDN 域名。')
+      ])
     };
   }
   return summary;
@@ -881,7 +925,10 @@ export async function probeDoctorDomainConsistency(input: DoctorCloudDiagnostics
         status: 'skip',
         summary: '项目未配置 appName，跳过域名一致性检查。',
         details: [],
-        remediation: ['为项目补齐 appName 后再执行 `licell doctor`。']
+        remediation: [doctorRemediationNote('为项目补齐 appName 后再执行 doctor。', {
+          commandTemplate: 'licell doctor',
+          intent: 'verify'
+        })]
       };
     }
 
@@ -889,7 +936,10 @@ export async function probeDoctorDomainConsistency(input: DoctorCloudDiagnostics
       status: 'skip',
       summary: '当前项目未显式声明 deploy type/runtime，跳过域名一致性检查。',
       details: [],
-      remediation: ['为项目写入 runtime，或执行 `licell doctor --runtime <runtime>`。']
+      remediation: [doctorRemediationNote('为项目写入 runtime，或显式传入 runtime 后再执行 doctor。', {
+        commandTemplate: 'licell doctor --runtime <runtime>',
+        intent: 'verify'
+      })]
     };
   }
 
@@ -1163,7 +1213,7 @@ async function probeApiDeployTarget(input: DoctorCloudDiagnosticsInput & { proje
       `publishedVersions: ${versions.length}`,
       `aliases: ${aliases.length}`
     ];
-    const remediation: string[] = [];
+    const remediation: LicellDoctorRemediation[] = [];
     const blockingIssues: string[] = [];
     const warnings: string[] = [];
     const publishedVersionIds = new Set(
@@ -1176,19 +1226,26 @@ async function probeApiDeployTarget(input: DoctorCloudDiagnosticsInput & { proje
       details.push(`expectedCloudRuntime: ${expectedRuntime}`);
       if ((fn.runtime || '').trim().toLowerCase() !== expectedRuntime) {
         blockingIssues.push(`runtime drift: expected ${expectedRuntime}, got ${fn.runtime || '(missing)'}`);
-        remediation.push(`按当前项目 runtime 重新部署：\`licell deploy --type api --runtime ${input.runtime}\``);
+        remediation.push(doctorRemediationCommand(`licell deploy --type api --runtime ${input.runtime}`, {
+          text: '按当前项目 runtime 重新部署。'
+        }));
       }
     }
 
     const observedCustomRuntime = (fn as { customRuntimeConfig?: { command?: unknown; args?: unknown } }).customRuntimeConfig;
     if (!matchesCustomRuntimeSignature(observedCustomRuntime, expectedCustomRuntime)) {
       warnings.push('custom runtime launcher drift: cloud command/args 与当前 licell runtime contract 不一致');
-      remediation.push(`建议重新部署，收敛到当前 runtime contract：\`licell deploy --type api --runtime ${input.runtime}\``);
+      remediation.push(doctorRemediationCommand(`licell deploy --type api --runtime ${input.runtime}`, {
+        text: '建议重新部署，收敛到当前 runtime contract。'
+      }));
     }
 
     if (!isHealthyFcFunctionState(fn.state)) {
       warnings.push(`function state is ${fn.state}`);
-      remediation.push('先通过 `licell fn info` / `licell logs --once` 确认函数状态，再继续发布或绑定域名。');
+      remediation.push(doctorRemediationNote('先确认函数状态，再继续发布或绑定域名。', {
+        commandTemplate: 'licell fn info',
+        intent: 'inspect'
+      }));
     }
 
     const aliasRows = aliases
@@ -1203,7 +1260,9 @@ async function probeApiDeployTarget(input: DoctorCloudDiagnosticsInput & { proje
 
     if (aliasRows.length === 0) {
       warnings.push('未发现任何 FC alias；后续 release/domain workflow 只能依赖裸函数名。');
-      remediation.push('如果要走稳定发布流，执行 `licell release promote --target prod` 或 `--target preview`。');
+      remediation.push(doctorRemediationCommand('licell release promote --target prod', {
+        text: '如果要走稳定发布流，先执行 release promote 到稳定 alias。'
+      }));
     } else {
       details.push(...aliasRows.map((item) => `alias ${item.aliasName} -> ${item.versionId || '(missing)'}`));
     }
@@ -1211,12 +1270,16 @@ async function probeApiDeployTarget(input: DoctorCloudDiagnosticsInput & { proje
     const brokenAliases = aliasRows.filter((item) => item.broken);
     if (brokenAliases.length > 0) {
       blockingIssues.push(`broken aliases: ${brokenAliases.map((item) => item.aliasName).join(', ')}`);
-      remediation.push('重新执行 `licell release promote --target <alias>`，让 alias 指向实际存在的 published version。');
+      remediation.push(doctorRemediationCommand('licell release promote --target <alias>', {
+        text: '重新执行 release promote，让 alias 指向实际存在的 published version。'
+      }));
     }
 
     if (versions.length === 0) {
       warnings.push('未发现 published version；说明还没经过 release promote/publish 链路。');
-      remediation.push('如需稳定别名/域名切流，先执行 `licell release promote --target prod`。');
+      remediation.push(doctorRemediationCommand('licell release promote --target prod', {
+        text: '如需稳定别名/域名切流，先执行 release promote。'
+      }));
     }
 
     if (blockingIssues.length > 0) {
@@ -1225,7 +1288,7 @@ async function probeApiDeployTarget(input: DoctorCloudDiagnosticsInput & { proje
         status: 'error',
         summary: `API deploy target 存在 ${blockingIssues.length} 个阻塞项。`,
         details,
-        remediation: unique(remediation),
+        remediation: normalizeDoctorRemediationItems(remediation),
         data: {
           mode: 'api',
           functionName,
@@ -1245,7 +1308,7 @@ async function probeApiDeployTarget(input: DoctorCloudDiagnosticsInput & { proje
         status: 'warn',
         summary: `API deploy target 已找到，但还有 ${warnings.length} 个待收敛项。`,
         details,
-        remediation: unique(remediation),
+        remediation: normalizeDoctorRemediationItems(remediation),
         data: {
           mode: 'api',
           functionName,
@@ -1279,7 +1342,10 @@ async function probeApiDeployTarget(input: DoctorCloudDiagnosticsInput & { proje
         status: 'error',
         summary: `当前 region 未找到项目函数：${functionName}`,
         details: [`region: ${input.auth.region}`],
-        remediation: ['先执行 `licell deploy --type api` 创建或更新函数；若函数部署在别的 region，请先 `licell switch --region <region>`。'],
+        remediation: [doctorRemediationNote('先创建或更新函数；若函数部署在别的 region，请先切换 region。', {
+          commandTemplate: 'licell deploy --type api',
+          intent: 'deploy'
+        })],
         data: {
           mode: 'api',
           functionName,
@@ -1317,18 +1383,23 @@ async function probeStaticDeployTarget(input: DoctorCloudDiagnosticsInput & { pr
       details.push(...bucketInfo.domains.map((item) => `bucketDomain: ${item.domain}`));
     }
 
-    const remediation: string[] = [];
+    const remediation: LicellDoctorRemediation[] = [];
     const blockingIssues: string[] = [];
     const warnings: string[] = [];
 
     if (bucketRegion && expectedRegion && bucketRegion !== expectedRegion) {
       blockingIssues.push(`bucket region drift: expected ${expectedRegion}, got ${bucketRegion}`);
-      remediation.push('切换到 bucket 所在 region，或在当前 region 重新执行 `licell deploy --type static`。');
+      remediation.push(doctorRemediationNote('切换到 bucket 所在 region，或在当前 region 重新执行静态部署。', {
+        commandTemplate: 'licell deploy --type static',
+        intent: 'deploy'
+      }));
     }
 
     if (objects.length === 0) {
       warnings.push('bucket 存在，但尚未发现任何对象；看起来还未完成静态资源上传。');
-      remediation.push(`执行 \`licell deploy --type static\` 或 \`licell oss upload ${bucketName}\` 上传构建产物。`);
+      remediation.push(doctorRemediationCommand('licell deploy --type static', {
+        text: `执行静态部署，或上传构建产物到 ${bucketName}。`
+      }));
     }
 
     if (blockingIssues.length > 0) {
@@ -1337,7 +1408,7 @@ async function probeStaticDeployTarget(input: DoctorCloudDiagnosticsInput & { pr
         status: 'error',
         summary: `Static deploy target 存在 ${blockingIssues.length} 个阻塞项。`,
         details,
-        remediation: unique(remediation),
+        remediation: normalizeDoctorRemediationItems(remediation),
         data: {
           mode: 'static',
           appName,
@@ -1355,7 +1426,7 @@ async function probeStaticDeployTarget(input: DoctorCloudDiagnosticsInput & { pr
         status: 'warn',
         summary: `Static deploy target 已找到，但还有 ${warnings.length} 个待收敛项。`,
         details,
-        remediation: unique(remediation),
+        remediation: normalizeDoctorRemediationItems(remediation),
         data: {
           mode: 'static',
           appName,
@@ -1387,7 +1458,10 @@ async function probeStaticDeployTarget(input: DoctorCloudDiagnosticsInput & { pr
         status: 'error',
         summary: `当前 region 未找到项目静态 Bucket：${bucketName}`,
         details: [`appName: ${appName}`, `region: ${input.auth.region}`],
-        remediation: ['先执行 `licell deploy --type static` 创建 bucket 并上传构建产物；若 bucket 在别的 region，请先切换 region。'],
+        remediation: [doctorRemediationNote('先创建 bucket 并上传构建产物；若 bucket 在别的 region，请先切换 region。', {
+          commandTemplate: 'licell deploy --type static',
+          intent: 'deploy'
+        })],
         data: {
           mode: 'static',
           appName,
@@ -1424,7 +1498,10 @@ export async function probeDoctorDeployTarget(input: DoctorCloudDiagnosticsInput
         status: 'skip',
         summary: '项目未配置 appName，跳过云端 deploy target 一致性检查。',
         details: [],
-        remediation: ['为项目补齐 appName 后再执行 `licell doctor`。'],
+        remediation: [doctorRemediationNote('为项目补齐 appName 后再执行 doctor。', {
+          commandTemplate: 'licell doctor',
+          intent: 'verify'
+        })],
         data: {
           mode: 'skip',
           reason: plan.reason
@@ -1436,7 +1513,10 @@ export async function probeDoctorDeployTarget(input: DoctorCloudDiagnosticsInput
       status: 'skip',
       summary: '当前项目未显式声明 deploy type/runtime，跳过云端 deploy target 一致性检查。',
       details: [],
-      remediation: ['如需让 doctor 判断云端目标资源，请为项目写入 runtime，或执行 `licell doctor --runtime <runtime>`。'],
+      remediation: [doctorRemediationNote('如需让 doctor 判断云端目标资源，请为项目写入 runtime，或显式传入 runtime。', {
+        commandTemplate: 'licell doctor --runtime <runtime>',
+        intent: 'verify'
+      })],
       data: {
         mode: 'skip',
         reason: plan.reason
@@ -1473,27 +1553,29 @@ export function summarizeDoctorCapabilityProbes(
 
   let status: 'ok' | 'warn' | 'error' = 'ok';
   let summary = '云端 capability probe 全部通过。';
-  const remediation: string[] = [];
+  const remediation: LicellDoctorRemediation[] = [];
 
   if (requiredFailures.length > 0) {
     status = 'error';
     summary = `发现 ${requiredFailures.length} 个与当前项目直接相关的云端阻塞能力。`;
-    remediation.push('优先修复 required capability 对应的权限或 region 问题，再继续 deploy / domain / data 工作流。');
+    remediation.push(doctorRemediationNote('优先修复 required capability 对应的权限或 region 问题，再继续 deploy / domain / data 工作流。'));
   } else if (optionalIssues.length > 0 || warnings.length > 0) {
     status = 'warn';
     summary = `required capability 已通过，但还有 ${optionalIssues.length} 个 optional issue。`;
-    remediation.push('这些 optional issue 不一定阻塞当前项目，但会影响对应服务面。');
+    remediation.push(doctorRemediationNote('这些 optional issue 不一定阻塞当前项目，但会影响对应服务面。'));
   }
 
   if (probes.some((probe) => probe.status !== 'ok')) {
-    remediation.push('如需自动补齐权限，执行 `licell auth repair`。');
+    remediation.push(doctorRemediationCommand('licell auth repair', {
+      text: '如需自动补齐权限，执行 auth repair。'
+    }));
   }
 
   return {
     status,
     summary,
     details,
-    remediation: unique(remediation),
+    remediation: normalizeDoctorRemediationItems(remediation),
     data: {
       required: plan.required,
       optional: plan.optional,

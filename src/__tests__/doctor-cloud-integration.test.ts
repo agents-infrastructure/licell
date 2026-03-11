@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { tmpdir } from 'os';
+import { doctorRemediationCommand } from '../utils/doctor-guidance';
 
 const { runDoctorCloudDiagnosticsMock } = vi.hoisted(() => ({
   runDoctorCloudDiagnosticsMock: vi.fn()
@@ -41,14 +42,14 @@ describe('runLicellDoctor cloud integration', () => {
     vi.stubEnv('HOME', home);
     runDoctorCloudDiagnosticsMock.mockResolvedValue({
       identity: { status: 'ok', summary: 'identity ok', details: [], remediation: [] },
-      ramProfile: { status: 'warn', summary: 'ram warn', details: [], remediation: ['licell auth repair'] },
-      domainConsistency: { status: 'warn', summary: 'domain warn', details: ['dns pending'], remediation: ['licell domain app bind api.example.com'] },
-      deployTarget: { status: 'warn', summary: 'target warn', details: ['alias missing'], remediation: ['licell release promote --target prod'] },
+      ramProfile: { status: 'warn', summary: 'ram warn', details: [], remediation: [doctorRemediationCommand('licell auth repair')] },
+      domainConsistency: { status: 'warn', summary: 'domain warn', details: ['dns pending'], remediation: [doctorRemediationCommand('licell domain app bind api.example.com')] },
+      deployTarget: { status: 'warn', summary: 'target warn', details: ['alias missing'], remediation: [doctorRemediationCommand('licell release promote --target prod')] },
       capabilities: {
         status: 'error',
         summary: 'capabilities blocked',
         details: ['fc blocked'],
-        remediation: ['licell auth repair'],
+        remediation: [doctorRemediationCommand('licell auth repair')],
         data: {
           required: ['fc'],
           optional: ['dns'],

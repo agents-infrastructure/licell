@@ -4,31 +4,17 @@ import { join, resolve } from 'path';
 import pc from 'picocolors';
 import { runFcApiDeployPrecheck } from '../providers/fc';
 import { runDoctorCloudDiagnostics } from '../providers/doctor-cloud';
-import { getCommandCatalog, type CatalogCommand } from './command-catalog';
 import { normalizeAuth, normalizeProject, type AuthConfig, type ProjectConfig } from './config';
 import { parseDeployRuntimeOption } from './deploy-runtime';
+import {
+  type LicellDoctorNextCommand,
+  type LicellDoctorRemediation,
+  normalizeDoctorNextCommands,
+  normalizeDoctorRemediationItems
+} from './doctor-guidance';
 
 export type LicellDoctorCheckStatus = 'ok' | 'warn' | 'error' | 'skip';
 export type LicellDoctorCheckCategory = 'auth' | 'global' | 'project' | 'deploy' | 'cloud' | 'domain';
-export type LicellDoctorCommandIntent = 'inspect' | 'verify' | 'login' | 'restore' | 'repair' | 'configure' | 'deploy' | 'bind' | 'release';
-
-export interface LicellDoctorRemediation {
-  type: 'note' | 'command';
-  text: string;
-  commandTemplate?: string;
-  commandKey?: string | null;
-  description?: string | null;
-  intent?: LicellDoctorCommandIntent;
-}
-
-export interface LicellDoctorNextCommand {
-  commandTemplate: string;
-  commandKey: string | null;
-  description: string | null;
-  intent: LicellDoctorCommandIntent;
-  priority: 'primary' | 'secondary';
-}
-
 export interface LicellDoctorCheck {
   id: string;
   title: string;
@@ -126,126 +112,8 @@ function unique(values: string[]) {
   return [...new Set(values.filter(Boolean))];
 }
 
-function uniqueBy<T>(values: T[], keyFn: (value: T) => string) {
-  const seen = new Set<string>();
-  const results: T[] = [];
-  for (const value of values) {
-    const key = keyFn(value);
-    if (!key || seen.has(key)) continue;
-    seen.add(key);
-    results.push(value);
-  }
-  return results;
-}
-
 function formatErrorMessage(err: unknown) {
   return err instanceof Error ? err.message : String(err);
-}
-
-function extractLicellCommandTemplate(text: string) {
-  const trimmed = text.trim();
-  if (trimmed.startsWith('licell ')) return trimmed;
-  const inline = trimmed.match(/`(licell [^`]+)`/);
-  return inline?.[1]?.trim();
-}
-
-function resolveDoctorCatalogCommand(commandTemplate: string): CatalogCommand | null {
-  const trimmed = commandTemplate.trim();
-  if (!trimmed.startsWith('licell ')) return null;
-  const tokens = trimmed.split(/\s+/).slice(1);
-  const catalog = getCommandCatalog();
-  const candidates = [...catalog.commands].sort((left, right) => right.commandTokens.length - left.commandTokens.length);
-  for (const command of candidates) {
-    if (tokens.length < command.commandTokens.length) continue;
-    if (command.commandTokens.every((token, index) => tokens[index] === token)) return command;
-  }
-  return null;
-}
-
-function inferDoctorCommandIntent(commandTemplate: string, commandKey: string | null): LicellDoctorCommandIntent {
-  const key = (commandKey || '').trim();
-  if (key === 'login') return 'login';
-  if (key === 'auth restore') return 'restore';
-  if (key === 'auth repair') return 'repair';
-  if (key === 'doctor' || key === 'deploy check') return 'verify';
-  if (
-    key === 'whoami'
-    || key === 'deploy spec'
-    || key.endsWith(' list')
-    || key.endsWith(' info')
-    || key === 'logs'
-    || key.startsWith('dns records list')
-  ) {
-    return 'inspect';
-  }
-  if (
-    key === 'init'
-    || key === 'switch'
-    || key.startsWith('config ')
-    || key.startsWith('env set')
-  ) {
-    return 'configure';
-  }
-  if (key.startsWith('domain ') || key.startsWith('fn domain ') || key.startsWith('oss domain ')) {
-    return 'bind';
-  }
-  if (key.startsWith('release ')) return 'release';
-  if (key === 'deploy' || key.startsWith('oss upload') || key.startsWith('oss sync up')) return 'deploy';
-  return commandTemplate.includes('doctor') ? 'verify' : 'inspect';
-}
-
-function normalizeDoctorRemediationItem(item: string | LicellDoctorRemediation): LicellDoctorRemediation {
-  if (typeof item !== 'string') {
-    const commandTemplate = item.commandTemplate?.trim();
-    const command = commandTemplate ? resolveDoctorCatalogCommand(commandTemplate) : null;
-    return {
-      type: item.type,
-      text: item.text.trim(),
-      ...(commandTemplate ? { commandTemplate } : {}),
-      ...(item.commandKey !== undefined ? { commandKey: item.commandKey } : command ? { commandKey: command.key } : {}),
-      ...(item.description !== undefined ? { description: item.description } : command ? { description: command.description || null } : {}),
-      ...(item.intent !== undefined ? { intent: item.intent } : commandTemplate ? { intent: inferDoctorCommandIntent(commandTemplate, command?.key || null) } : {})
-    };
-  }
-
-  const text = item.trim();
-  const commandTemplate = extractLicellCommandTemplate(text);
-  const command = commandTemplate ? resolveDoctorCatalogCommand(commandTemplate) : null;
-  return {
-    type: commandTemplate && commandTemplate === text ? 'command' : 'note',
-    text,
-    ...(commandTemplate ? { commandTemplate } : {}),
-    ...(commandTemplate ? { commandKey: command?.key || null } : {}),
-    ...(commandTemplate ? { description: command?.description || null } : {}),
-    ...(commandTemplate ? { intent: inferDoctorCommandIntent(commandTemplate, command?.key || null) } : {})
-  };
-}
-
-function normalizeDoctorNextCommand(
-  item: string | LicellDoctorNextCommand,
-  index: number
-): LicellDoctorNextCommand {
-  if (typeof item !== 'string') {
-    const commandTemplate = item.commandTemplate.trim();
-    const command = resolveDoctorCatalogCommand(commandTemplate);
-    return {
-      commandTemplate,
-      commandKey: item.commandKey ?? command?.key ?? null,
-      description: item.description ?? command?.description ?? null,
-      intent: item.intent ?? inferDoctorCommandIntent(commandTemplate, command?.key || null),
-      priority: item.priority ?? (index === 0 ? 'primary' : 'secondary')
-    };
-  }
-
-  const commandTemplate = item.trim();
-  const command = resolveDoctorCatalogCommand(commandTemplate);
-  return {
-    commandTemplate,
-    commandKey: command?.key || null,
-    description: command?.description || null,
-    intent: inferDoctorCommandIntent(commandTemplate, command?.key || null),
-    priority: index === 0 ? 'primary' : 'secondary'
-  };
 }
 
 function readJsonProbe(path: string, source: Exclude<ProbeSource, 'missing'>): JsonFileProbe {
@@ -331,11 +199,8 @@ function createCheck(input: LicellDoctorCheckInput): LicellDoctorCheck {
   return {
     ...input,
     details: [...input.details],
-    remediation: uniqueBy(input.remediation.map((item) => normalizeDoctorRemediationItem(item)), (item) => `${item.type}:${item.text}`),
-    nextCommands: uniqueBy(
-      input.nextCommands.map((item, index) => normalizeDoctorNextCommand(item, index)),
-      (item) => item.commandTemplate
-    ),
+    remediation: normalizeDoctorRemediationItems(input.remediation),
+    nextCommands: normalizeDoctorNextCommands(input.nextCommands),
     ...(input.data ? { data: { ...input.data } } : {})
   };
 }
