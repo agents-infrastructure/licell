@@ -7,6 +7,8 @@ import { runDoctorCloudDiagnostics } from '../providers/doctor-cloud';
 import { normalizeAuth, normalizeProject, type AuthConfig, type ProjectConfig } from './config';
 import { parseDeployRuntimeOption } from './deploy-runtime';
 import {
+  doctorNextCommands,
+  doctorRemediationNote,
   type LicellDoctorNextCommand,
   type LicellDoctorRemediation,
   normalizeDoctorNextCommands,
@@ -93,10 +95,7 @@ interface DoctorCheckDefinition {
   run(context: LicellDoctorContext): LicellDoctorCheck;
 }
 
-interface LicellDoctorCheckInput extends Omit<LicellDoctorCheck, 'remediation' | 'nextCommands'> {
-  remediation: Array<string | LicellDoctorRemediation>;
-  nextCommands: Array<string | LicellDoctorNextCommand>;
-}
+interface LicellDoctorCheckInput extends LicellDoctorCheck {}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -224,8 +223,8 @@ const DOCTOR_CHECKS: readonly DoctorCheckDefinition[] = [
           status: 'error',
           summary: '未检测到 licell 登录态。',
           details: [`expected: ${probe.path}`],
-          remediation: ['先执行 `licell login`，或通过团队分发的 restore token 执行 `licell auth restore`。'],
-          nextCommands: ['licell login', 'licell auth restore <token> [passkey]']
+          remediation: [doctorRemediationNote('先执行 login，或通过团队分发的 restore token 执行 auth restore。')],
+          nextCommands: doctorNextCommands('licell login', 'licell auth restore <token> [passkey]')
         });
       }
       if (!probe.parseOk) {
@@ -236,8 +235,8 @@ const DOCTOR_CHECKS: readonly DoctorCheckDefinition[] = [
           status: 'error',
           summary: '登录凭证文件存在，但 JSON 解析失败。',
           details: [`path: ${probe.path}`, `error: ${probe.parseError || 'unknown parse error'}`],
-          remediation: ['修复或删除损坏的 auth 文件，然后重新执行 `licell login` 或 `licell auth restore`。'],
-          nextCommands: ['licell login', 'licell auth restore <token> [passkey]']
+          remediation: [doctorRemediationNote('修复或删除损坏的 auth 文件，然后重新执行 login 或 auth restore。')],
+          nextCommands: doctorNextCommands('licell login', 'licell auth restore <token> [passkey]')
         });
       }
 
@@ -250,8 +249,8 @@ const DOCTOR_CHECKS: readonly DoctorCheckDefinition[] = [
           status: 'error',
           summary: '登录凭证文件存在，但内容不符合 licell 期望结构。',
           details: [`path: ${probe.path}`],
-          remediation: ['重新执行 `licell login` 写入正确的 accountId/ak/sk/region。'],
-          nextCommands: ['licell login', 'licell whoami']
+          remediation: [doctorRemediationNote('重新执行 login，写入正确的 accountId/ak/sk/region。')],
+          nextCommands: doctorNextCommands('licell login', 'licell whoami')
         });
       }
 
@@ -271,8 +270,8 @@ const DOCTOR_CHECKS: readonly DoctorCheckDefinition[] = [
           status: 'warn',
           summary: '检测到 legacy 登录态（`.ali-cli`）；建议迁移到 `~/.licell-cli`。',
           details,
-          remediation: ['后续执行读凭证命令时会自动迁移，也可重新执行 `licell login` 主动写入新位置。'],
-          nextCommands: ['licell whoami', 'licell login'],
+          remediation: [doctorRemediationNote('后续执行读凭证命令时会自动迁移，也可重新执行 login 主动写入新位置。')],
+          nextCommands: doctorNextCommands('licell whoami', 'licell login'),
           data: {
             accountId: auth.accountId,
             region: auth.region,
@@ -289,7 +288,7 @@ const DOCTOR_CHECKS: readonly DoctorCheckDefinition[] = [
         summary: '已检测到 licell 登录态。',
         details,
         remediation: [],
-        nextCommands: ['licell whoami'],
+        nextCommands: doctorNextCommands('licell whoami'),
         data: {
           accountId: auth.accountId,
           region: auth.region,
@@ -310,8 +309,8 @@ const DOCTOR_CHECKS: readonly DoctorCheckDefinition[] = [
           status: 'skip',
           summary: '未检测到全局配置文件；这是可选状态。',
           details: [`expected: ${probe.path}`],
-          remediation: ['如需自动复用域名后缀，可配置全局 domain suffix。'],
-          nextCommands: ['licell config domain example.com']
+          remediation: [doctorRemediationNote('如需自动复用域名后缀，可配置全局 domain suffix。')],
+          nextCommands: doctorNextCommands('licell config domain example.com')
         });
       }
       if (!probe.parseOk) {
@@ -322,8 +321,8 @@ const DOCTOR_CHECKS: readonly DoctorCheckDefinition[] = [
           status: 'error',
           summary: '全局配置文件存在，但 JSON 解析失败。',
           details: [`path: ${probe.path}`, `error: ${probe.parseError || 'unknown parse error'}`],
-          remediation: ['修复或删除损坏的 config 文件，再重新设置所需默认项。'],
-          nextCommands: ['licell config domain example.com']
+          remediation: [doctorRemediationNote('修复或删除损坏的 config 文件，再重新设置所需默认项。')],
+          nextCommands: doctorNextCommands('licell config domain example.com')
         });
       }
       if (!isRecord(probe.raw)) {
@@ -334,8 +333,8 @@ const DOCTOR_CHECKS: readonly DoctorCheckDefinition[] = [
           status: 'error',
           summary: '全局配置文件必须是 JSON 对象。',
           details: [`path: ${probe.path}`],
-          remediation: ['把 `~/.licell-cli/config.json` 修复为对象结构。'],
-          nextCommands: ['licell config domain example.com']
+          remediation: [doctorRemediationNote('把 `~/.licell-cli/config.json` 修复为对象结构。')],
+          nextCommands: doctorNextCommands('licell config domain example.com')
         });
       }
 
@@ -348,8 +347,8 @@ const DOCTOR_CHECKS: readonly DoctorCheckDefinition[] = [
           status: 'skip',
           summary: '未设置默认域名后缀；仅影响自动域名推导。',
           details: [`path: ${probe.path}`],
-          remediation: ['如果团队有统一域名后缀，建议配置全局默认值。'],
-          nextCommands: ['licell config domain example.com'],
+          remediation: [doctorRemediationNote('如果团队有统一域名后缀，建议配置全局默认值。')],
+          nextCommands: doctorNextCommands('licell config domain example.com'),
           data: {
             source: probe.source
           }
@@ -364,7 +363,7 @@ const DOCTOR_CHECKS: readonly DoctorCheckDefinition[] = [
         summary: `已配置默认域名后缀：${domainSuffix}`,
         details: [`path: ${probe.path}`],
         remediation: [],
-        nextCommands: ['licell config domain'],
+        nextCommands: doctorNextCommands('licell config domain'),
         data: {
           domainSuffix,
           source: probe.source
@@ -384,8 +383,8 @@ const DOCTOR_CHECKS: readonly DoctorCheckDefinition[] = [
           status: 'warn',
           summary: '当前目录未检测到 licell 项目配置。',
           details: [`cwd: ${context.cwd}`, `expected: ${probe.path}`],
-          remediation: ['如果这里本应是 licell 项目，请执行 `licell init` 或切到正确目录。'],
-          nextCommands: ['licell init', 'licell init --runtime nodejs22']
+          remediation: [doctorRemediationNote('如果这里本应是 licell 项目，请执行 init 或切到正确目录。')],
+          nextCommands: doctorNextCommands('licell init', 'licell init --runtime nodejs22')
         });
       }
       if (!probe.parseOk) {
@@ -396,8 +395,8 @@ const DOCTOR_CHECKS: readonly DoctorCheckDefinition[] = [
           status: 'error',
           summary: '项目配置文件存在，但 JSON 解析失败。',
           details: [`path: ${probe.path}`, `error: ${probe.parseError || 'unknown parse error'}`],
-          remediation: ['修复 `.licell/project.json`（或 legacy `.ali/project.json`）后再执行部署相关命令。'],
-          nextCommands: ['licell init']
+          remediation: [doctorRemediationNote('修复 `.licell/project.json`（或 legacy `.ali/project.json`）后再执行部署相关命令。')],
+          nextCommands: doctorNextCommands('licell init')
         });
       }
       if (!isRecord(probe.raw)) {
@@ -408,8 +407,8 @@ const DOCTOR_CHECKS: readonly DoctorCheckDefinition[] = [
           status: 'error',
           summary: '项目配置文件必须是 JSON 对象。',
           details: [`path: ${probe.path}`],
-          remediation: ['把项目配置修复为对象结构，或重新执行 `licell init`。'],
-          nextCommands: ['licell init']
+          remediation: [doctorRemediationNote('把项目配置修复为对象结构，或重新执行 init。')],
+          nextCommands: doctorNextCommands('licell init')
         });
       }
 
@@ -425,8 +424,8 @@ const DOCTOR_CHECKS: readonly DoctorCheckDefinition[] = [
           status: 'warn',
           summary: '检测到 legacy 项目配置（`.ali/project.json`）；建议迁移到 `.licell/project.json`。',
           details,
-          remediation: ['重新执行 `licell init`，或把 legacy 配置迁移到 `.licell/project.json`。'],
-          nextCommands: ['licell init'],
+          remediation: [doctorRemediationNote('重新执行 init，或把 legacy 配置迁移到 `.licell/project.json`。')],
+          nextCommands: doctorNextCommands('licell init'),
           data: {
             source: probe.source,
             appName: context.project?.appName || null,
@@ -443,7 +442,7 @@ const DOCTOR_CHECKS: readonly DoctorCheckDefinition[] = [
         summary: '已检测到当前目录的 licell 项目配置。',
         details,
         remediation: [],
-        nextCommands: ['licell init'],
+        nextCommands: doctorNextCommands('licell init'),
         data: {
           source: probe.source,
           appName: context.project?.appName || null,
@@ -475,8 +474,8 @@ const DOCTOR_CHECKS: readonly DoctorCheckDefinition[] = [
           status: 'warn',
           summary: '项目未配置 appName。',
           details: ['deploy / fn / logs 等命令通常依赖 appName 作为默认函数名。'],
-          remediation: ['为当前项目补齐 appName，避免后续命令依赖交互推导。'],
-          nextCommands: ['licell init --app my-app']
+          remediation: [doctorRemediationNote('为当前项目补齐 appName，避免后续命令依赖交互推导。')],
+          nextCommands: doctorNextCommands('licell init --app my-app')
         });
       }
 
@@ -507,8 +506,8 @@ const DOCTOR_CHECKS: readonly DoctorCheckDefinition[] = [
             status: 'warn',
             summary: '项目未配置 runtime，无法继续做 FC API 预检。',
             details: [],
-            remediation: ['为项目写入 runtime，或执行 doctor 时显式传 `--runtime`。'],
-            nextCommands: ['licell init --runtime nodejs22', 'licell doctor --runtime nodejs22']
+            remediation: [doctorRemediationNote('为项目写入 runtime，或执行 doctor 时显式传 `--runtime`。')],
+            nextCommands: doctorNextCommands('licell init --runtime nodejs22', 'licell doctor --runtime nodejs22')
           });
         }
 
@@ -520,7 +519,7 @@ const DOCTOR_CHECKS: readonly DoctorCheckDefinition[] = [
           summary: '当前目录不是 licell 项目，且未显式传入 runtime；跳过 deploy runtime 检查。',
           details: [],
           remediation: [],
-          nextCommands: ['licell doctor --runtime nodejs22 --entry src/index.ts']
+          nextCommands: doctorNextCommands('licell doctor --runtime nodejs22 --entry src/index.ts')
         });
       }
 
@@ -536,8 +535,8 @@ const DOCTOR_CHECKS: readonly DoctorCheckDefinition[] = [
             `raw: ${context.effectiveRuntime.raw}`,
             `error: ${context.effectiveRuntime.error}`
           ],
-          remediation: ['改为受支持的 runtime，例如 nodejs22、python3.13、docker。'],
-          nextCommands: ['licell deploy spec', 'licell doctor --runtime nodejs22']
+          remediation: [doctorRemediationNote('改为受支持的 runtime，例如 nodejs22、python3.13、docker。')],
+          nextCommands: doctorNextCommands('licell deploy spec', 'licell doctor --runtime nodejs22')
         });
       }
 
@@ -550,7 +549,7 @@ const DOCTOR_CHECKS: readonly DoctorCheckDefinition[] = [
           summary: `当前目标 runtime=${context.effectiveRuntime.raw}，属于静态站点；跳过 FC API runtime 检查。`,
           details: [`source: ${context.effectiveRuntime.source}`],
           remediation: [],
-          nextCommands: ['licell deploy --type static']
+          nextCommands: doctorNextCommands('licell deploy --type static')
         });
       }
 
@@ -562,7 +561,7 @@ const DOCTOR_CHECKS: readonly DoctorCheckDefinition[] = [
         summary: `已解析 deploy runtime：${context.effectiveRuntime.runtime}`,
         details: [`source: ${context.effectiveRuntime.source}`, `raw: ${context.effectiveRuntime.raw}`],
         remediation: [],
-        nextCommands: ['licell deploy spec'],
+        nextCommands: doctorNextCommands('licell deploy spec'),
         data: {
           runtime: context.effectiveRuntime.runtime,
           source: context.effectiveRuntime.source
@@ -612,11 +611,11 @@ const DOCTOR_CHECKS: readonly DoctorCheckDefinition[] = [
         `entry: ${result.entry || '(none)'}`,
         ...result.issues.map((issue) => `${issue.level}: ${issue.message}`)
       ];
-      const remediation = unique(result.issues.flatMap((issue) => issue.remediation || []));
-      const nextCommands = [
+      const remediation = unique(result.issues.flatMap((issue) => issue.remediation || [])).map((item) => doctorRemediationNote(item));
+      const nextCommands = doctorNextCommands(
         `licell deploy spec ${result.runtime}`,
         `licell deploy check --runtime ${result.runtime}${result.entry ? ` --entry ${result.entry}` : ''}${context.checkDockerDaemon ? ' --docker-daemon' : ''}`.trim()
-      ];
+      );
 
       if (errorCount > 0) {
         return createCheck({
@@ -710,7 +709,7 @@ export async function runLicellDoctor(options: LicellDoctorRunOptions = {}): Pro
       summary: '已显式启用 offline 模式，跳过云端域名一致性检查。',
       details: [],
       remediation: [],
-      nextCommands: ['licell doctor']
+      nextCommands: doctorNextCommands('licell doctor')
     }));
     checks.push(createCheck({
       id: 'deploy.target',
@@ -720,7 +719,7 @@ export async function runLicellDoctor(options: LicellDoctorRunOptions = {}): Pro
       summary: '已显式启用 offline 模式，跳过云端 deploy target 一致性检查。',
       details: [],
       remediation: [],
-      nextCommands: ['licell doctor']
+      nextCommands: doctorNextCommands('licell doctor')
     }));
     checks.push(createCheck({
       id: 'cloud.offline',
@@ -730,7 +729,7 @@ export async function runLicellDoctor(options: LicellDoctorRunOptions = {}): Pro
       summary: '已显式启用 offline 模式，跳过所有云端只读探测。',
       details: [],
       remediation: [],
-      nextCommands: ['licell doctor --output json']
+      nextCommands: doctorNextCommands('licell doctor --output json')
     }));
   } else if (!auth || authCheck?.status === 'error') {
     checks.push(createCheck({

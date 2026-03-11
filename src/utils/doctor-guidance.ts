@@ -127,8 +127,8 @@ export function doctorNextCommands(...commandTemplates: string[]) {
   }));
 }
 
-export function normalizeDoctorRemediationItems(items: Array<string | LicellDoctorRemediation>) {
-  const results = items.map((item) => typeof item === 'string' ? doctorRemediationNote(item) : item);
+export function normalizeDoctorRemediationItems(items: LicellDoctorRemediation[]) {
+  const results = [...items];
   const seen = new Set<string>();
   return results.filter((item) => {
     const key = `${item.type}:${item.text}:${item.commandTemplate || ''}`;
@@ -138,18 +138,11 @@ export function normalizeDoctorRemediationItems(items: Array<string | LicellDoct
   });
 }
 
-export function normalizeDoctorNextCommands(items: Array<string | LicellDoctorNextCommand>) {
-  const results = items.map((item, index) => {
-    if (typeof item !== 'string') {
-      return {
-        ...item,
-        priority: item.priority || (index === 0 ? 'primary' : 'secondary')
-      };
-    }
-    return doctorNextCommand(item, {
-      priority: index === 0 ? 'primary' : 'secondary'
-    });
-  });
+export function normalizeDoctorNextCommands(items: LicellDoctorNextCommand[]) {
+  const results = items.map((item, index) => ({
+    ...item,
+    priority: item.priority || (index === 0 ? 'primary' : 'secondary')
+  }));
   const seen = new Set<string>();
   return results.filter((item) => {
     if (seen.has(item.commandTemplate)) return false;

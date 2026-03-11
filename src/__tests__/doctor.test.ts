@@ -85,7 +85,7 @@ describe('runLicellDoctor', () => {
       expect(authCheck.status).toBe('error');
       expect(authCheck.remediation[0]).toMatchObject({
         type: 'note',
-        text: '先执行 `licell login`，或通过团队分发的 restore token 执行 `licell auth restore`。'
+        text: '先执行 login，或通过团队分发的 restore token 执行 auth restore。'
       });
       expect(authCheck.nextCommands).toEqual([
         expect.objectContaining({
