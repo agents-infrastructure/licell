@@ -45,9 +45,9 @@ licell deploy \
 这个参数都可以不用手敲！
 
 <!-- BEGIN GENERATED:SCENARIO_DOMAIN_APP_BIND_WORKFLOW -->
-> 如果你是通过 Agent / MCP 执行这一步，推荐直接调用下面这条共享 workflow 入口：
+> 如果你是通过 Agent 执行这一步，推荐直接运行下面这条 CLI：
 
-1. `licell_domain_app_bind`：为当前应用绑定自定义域名，编排 DNS、FC custom domain 与可选 HTTPS。
+1. `licell domain app bind <domain> --ssl`：为当前应用绑定自定义域名，编排 DNS、FC custom domain 与可选 HTTPS。
 <!-- END GENERATED:SCENARIO_DOMAIN_APP_BIND_WORKFLOW -->
 
 ## 3. 直接绑定完整独立域名
@@ -65,9 +65,9 @@ Licell 监测到你是 static (静态站部署) 并且传递了 `--domain` 参�
 **自动开启 CDN 部署，并将你的 OSS 挂载为 CDN 源站，同时全自动生成 HTTPS 证书** 并下发到 CDN 节点中；默认优先走 Let's Encrypt，命中限额时自动切换到 ZeroSSL ACME。
 
 <!-- BEGIN GENERATED:SCENARIO_DOMAIN_STATIC_BIND_WORKFLOW -->
-> 如果你是通过 Agent / MCP 执行这一步，推荐直接调用下面这条共享 workflow 入口：
+> 如果你是通过 Agent 执行这一步，推荐直接运行下面这条 CLI：
 
-1. `licell_domain_static_bind`：为静态站点绑定自定义域名，编排 CDN、DNS 与可选 HTTPS。
+1. `licell domain static bind <domain> --ssl`：为静态站点绑定自定义域名，编排 CDN、DNS 与可选 HTTPS。
 <!-- END GENERATED:SCENARIO_DOMAIN_STATIC_BIND_WORKFLOW -->
 
 ## 4. 强大的域名解绑与纯净模式
@@ -85,15 +85,15 @@ licell domain static unbind www.your-website.com
 脏数据**。真正把洁癖工程师关心的东西做到闭环。
 
 <!-- BEGIN GENERATED:SCENARIO_DOMAIN_APP_UNBIND_WORKFLOW -->
-> 需要下线 API 域名时，推荐走这条 cleanup workflow：
+> 需要下线 API 域名时，推荐走这条 cleanup CLI：
 
-1. `licell_domain_app_unbind`：解绑当前应用域名，并清理 FC custom domain / DNS CNAME。
+1. `licell domain app unbind <domain> --yes`：解绑当前应用域名，并清理 FC custom domain / DNS CNAME。
 <!-- END GENERATED:SCENARIO_DOMAIN_APP_UNBIND_WORKFLOW -->
 
 <!-- BEGIN GENERATED:SCENARIO_DOMAIN_STATIC_UNBIND_WORKFLOW -->
-> 需要下线静态站点域名时，推荐走这条 cleanup workflow：
+> 需要下线静态站点域名时，推荐走这条 cleanup CLI：
 
-1. `licell_domain_static_unbind`：解绑静态站点域名，并清理 CDN domain / DNS CNAME。
+1. `licell domain static unbind <domain> --yes`：解绑静态站点域名，并清理 CDN domain / DNS CNAME。
 <!-- END GENERATED:SCENARIO_DOMAIN_STATIC_UNBIND_WORKFLOW -->
 
 ---

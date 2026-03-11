@@ -9,7 +9,7 @@ Licell 是一个面向阿里云的部署与运维 CLI，同时兼顾人类用户
 - 一个主入口：`deploy`
 - 一份项目状态：`.licell/project.json`
 - 一套可组合的资源原子命令：`fn` / `oss` / `dns` / `domain`
-- 一套面向 Agent 的统一表面：`--help` / `--output json` / `mcp` / `skills`
+- 一套面向 Agent 的统一表面：`catalog` / `--help` / `--output json` / `skills`
 
 默认地域为 `cn-hangzhou`。用于 Agent 自动化时，建议使用独立测试账号或独立地域，不要直接共用生产环境。团队协作下，推荐采用后文的“团队授权分发”模式。
 
@@ -20,7 +20,7 @@ Licell 是一个面向阿里云的部署与运维 CLI，同时兼顾人类用户
 如果你把 Vercel CLI 的“单主线体验”搬到阿里云，大致就是 Licell 想做的事情：
 
 - **人类友好**：`init -> deploy -> release -> rollback`
-- **Agent 友好**：命令自描述、结构化帮助、结构化输出、MCP、skills
+- **Agent 友好**：命令自描述、结构化帮助、结构化输出、catalog、skills
 - **架构清晰**：workflow 命令负责“得到结果”，原子命令负责“精确控制资源”
 
 Licell 当前覆盖的核心能力包括：
@@ -30,7 +30,7 @@ Licell 当前覆盖的核心能力包括：
 - 自定义域名、HTTPS、CDN、DNS
 - ACR / Docker 镜像部署
 - Serverless 数据库与缓存辅助能力
-- 面向 Agent 的 MCP / Skills / JSON 输出 / 文档共源生成
+- 面向 Agent 的 Skills / catalog / JSON 输出 / 文档共源生成
 
 ---
 
@@ -71,15 +71,15 @@ Licell 最新架构里，命令不再只是“能执行”，还要“能自我�
 
 同一套命令注册表会驱动：
 
+- CLI `catalog`
 - CLI `--help`
 - 结构化 help
-- MCP tool catalog
 - skills 脚手架
 - README 生成区块
 - Agent surface 文档
 - shell completion
 
-也就是说：**命令面变了，帮助、MCP、skills、文档会跟着一起收敛**。
+也就是说：**命令面变了，catalog、帮助、skills、文档会跟着一起收敛**。
 
 ---
 
@@ -171,7 +171,6 @@ Licell 有三类核心状态：
 |------|----------|------|
 | 全局认证 | `~/.licell-cli/auth.json` | 阿里云凭证与默认 region |
 | 项目状态 | `<project>/.licell/project.json` | appName、环境变量、网络、部署状态 |
-| MCP 项目配置 | `<project>/.mcp.json` | 供 Claude / Codex / Cursor 发现 licell MCP server |
 
 兼容性说明：
 
@@ -235,7 +234,7 @@ licell domain app bind --help --output json
 
 ## 2) 结构化输出 `--output json`
 
-除 `licell mcp serve` 外，几乎所有命令都支持结构化 JSON 结果：
+几乎所有命令都支持结构化 JSON 结果：
 
 ```bash
 licell deploy --type api --output json
@@ -252,44 +251,21 @@ licell oss info my-bucket --output json
 - `retryable`
 - `provider.requestId`
 
-## 3) MCP
+## 3) 命令目录 `catalog`
 
-如果你希望 Claude Code、Codex、Cursor 等 Agent 直接把 `licell` 当作工具调用，用 MCP 是最自然的方式。
-
-### 推荐：先跑 setup
+如果你希望 Claude Code、Codex、Cursor 等 Agent 直接驱动 `licell`，推荐走这条固定链路：
 
 ```bash
-licell setup
-licell setup --agent codex --global
-licell setup --agent claude --global
+licell catalog --output json
+licell deploy --help --output json
+licell deploy --type api --output json
 ```
 
-### 项目内初始化 MCP
+含义分别是：
 
-```bash
-licell mcp init
-```
-
-默认会生成：
-
-```json
-{
-  "mcpServers": {
-    "licell": {
-      "command": "licell",
-      "args": ["mcp", "serve"]
-    }
-  }
-}
-```
-
-### 手动启动 MCP server
-
-```bash
-licell mcp serve
-```
-
-注意：`mcp serve` 走的是 stdio JSON-RPC 协议，**不要**加 `--output json`。
+- `catalog`：发现稳定 command key、选项、schema 与 CLI record contract
+- `--help --output json`：读取单命令的参数、结果、推荐流程与下一步
+- `--output json`：真正执行命令，并消费 `event / result / error` records
 
 ## 4) Skills
 
@@ -300,7 +276,7 @@ licell skills init codex
 licell skills init claude
 ```
 
-Skills 与 MCP、help、README 共享同一套命令描述体系，所以更容易保持一致。
+Skills 与 catalog、help、README 共享同一套命令描述体系，所以更容易保持一致。
 
 ---
 
@@ -349,20 +325,6 @@ licell deploy --type api --runtime nodejs22 --entry src/index.ts --domain api.yo
 - 启动时优先使用 FC 托管运行时：`/var/fc/lang/nodejs22/bin/node`、`/var/fc/lang/python3.13/bin/python3.13`
 - 默认不再把大体积 fallback runtime 打进代码包，避免放大 FC 上传体积
 - 如需额外打包 fallback runtime，可显式设置 `LICELL_FC_INCLUDE_RUNTIME_FALLBACK=1`
-
-<!-- BEGIN GENERATED:README_MCP_FC_API_WORKFLOW -->
-`licell mcp` 已提供这组 FC API 部署工作流工具（由共享 MCP 注册表自动生成）：
-
-| Tool | 对应 CLI | 用途 |
-|------|----------|------|
-| `licell_fc_deploy_spec` | `licell deploy spec` | 读取 FC API runtime 的 entry / handler / 资源约束，帮助 Agent 先理解限制与签名模板。 |
-| `licell_fc_deploy_check` | `licell deploy check` | 只读预检当前项目，提前发现 handler、入口文件或 Docker 环境问题，并给出可执行修复建议。 |
-| `licell_deploy` | `licell deploy` | 在前两步通过后执行正式部署，将当前项目发布到阿里云。 |
-
-- Workflow：标准 FC API 部署链路：先读取部署规格，再做本地预检，最后执行正式部署。
-
-- 建议顺序：`licell_fc_deploy_spec` → `licell_fc_deploy_check` → `licell_deploy`
-<!-- END GENERATED:README_MCP_FC_API_WORKFLOW -->
 
 ## 静态站部署（OSS）
 
@@ -430,58 +392,6 @@ licell rollback
 - **想要结果**：先用 `domain app/static` 或 `deploy`
 - **要精细控制**：再落到 `fn domain` / `oss domain` / `dns records`
 
-<!-- BEGIN GENERATED:README_MCP_DOMAIN_WORKFLOWS -->
-`licell mcp` 也提供共享的域名编排 workflow 工具：
-
-#### 应用域名绑定
-
-通过一个入口同时编排 DNS、FC custom domain 与可选 HTTPS。
-
-| Tool | 对应 CLI | 用途 |
-|------|----------|------|
-| `licell_domain_app_bind` | `licell domain app bind` | 为当前应用绑定自定义域名，编排 DNS、FC custom domain 与可选 HTTPS。 |
-
-- Workflow：应用域名接入链路：绑定 FC custom domain、对齐 DNS，并可选自动签发 HTTPS。
-
-- 建议顺序：`licell_domain_app_bind`
-
-#### 静态站点域名绑定
-
-通过一个入口同时编排 CDN、DNS 与可选 HTTPS。
-
-| Tool | 对应 CLI | 用途 |
-|------|----------|------|
-| `licell_domain_static_bind` | `licell domain static bind` | 为静态站点绑定自定义域名，编排 CDN、DNS 与可选 HTTPS。 |
-
-- Workflow：静态站点域名接入链路：把域名接到 CDN、对齐 DNS，并可选自动启用 HTTPS。
-
-- 建议顺序：`licell_domain_static_bind`
-
-#### 应用域名解绑
-
-通过一个入口下线应用域名，并清理 FC custom domain / DNS。
-
-| Tool | 对应 CLI | 用途 |
-|------|----------|------|
-| `licell_domain_app_unbind` | `licell domain app unbind` | 解绑当前应用域名，并清理 FC custom domain / DNS CNAME。 |
-
-- Workflow：应用域名下线链路：解绑 FC custom domain，并清理对应 DNS CNAME。
-
-- 建议顺序：`licell_domain_app_unbind`
-
-#### 静态站点域名解绑
-
-通过一个入口下线静态站点域名，并清理 CDN / DNS。
-
-| Tool | 对应 CLI | 用途 |
-|------|----------|------|
-| `licell_domain_static_unbind` | `licell domain static unbind` | 解绑静态站点域名，并清理 CDN domain / DNS CNAME。 |
-
-- Workflow：静态站点域名下线链路：移除 CDN domain，并清理对应 DNS CNAME。
-
-- 建议顺序：`licell_domain_static_unbind`
-<!-- END GENERATED:README_MCP_DOMAIN_WORKFLOWS -->
-
 ---
 
 ## 示例与教程
@@ -546,18 +456,103 @@ licell e2e cleanup <runId>
 ## 命令速查
 
 <!-- BEGIN GENERATED:README_QUICK_REFERENCE -->
-> 本节由 licell CLI 注册表自动生成；命令变更会同步到 README / docs/reference/agent-surfaces.md / Skills / MCP / Shell Completion。
+> 本节由 licell CLI 注册表自动生成；命令变更会同步到 README / docs/reference/agent-surfaces.md / Skills / Shell Completion。
 
 ### Agent Contract
 
-- 原始 CLI JSON 流：过滤前缀 `@@LICELL_JSON@@`，再按 `kind=licell-cli-record` / `schemaVersion=1.0` / `type=event|result|error` 解析。
-- 对 `type=event` 的 record，优先读取稳定字段 `stage` / `action` / `status` / `source` / `terminal`；需要额外上下文时再读取可选 `message` / `data`。
-- 对 `type=error` 的 record，优先读取 `nextActions[]` 获取首选补救步骤；`nextCommands[]` 与 `remediation[]` 作为兼容层继续保留。
-- `licell <command> --help --output json`：先读取 `help.kind` / `help.schemaVersion`；当前为 `licell-help@1.0`。
-- `licell_command_catalog`：先读取 `kind` / `schemaVersion`；当前为 `licell-agent-command-catalog@1.0`。
-- MCP tools 的 `metadata.licell` 会显式声明 `schemas.help` / `schemas.commandCatalog`；当前为 `licell-help@1.0` / `licell-agent-command-catalog@1.0`。
-- `help.result` / command catalog / generated MCP metadata 的结果 schema 同时提供扁平 `fields[]` 与层次化 `fieldTree[]`；优先消费 `fieldTree[]`，兼容旧逻辑时再读取 `fields[]`。
-- `help` / command catalog / MCP metadata 还会暴露 `nextActions[]`；它把 `recommendedFlow` / `decisionGuide` 收敛成稳定的“首选下一步 + 备选路径”结构，Agent 优先消费这一层。
+- 发现命令目录：`licell catalog --output json`。
+- 读取单命令契约：`licell <command> --help --output json`。
+- 真正执行命令：`licell <command> --output json`，并过滤 `@@LICELL_JSON@@` 前缀逐行解析。
+- 对 `type=event` 的 record，优先读取稳定字段 `stage` / `action` / `status` / `source` / `terminal`。
+- 对 `type=error` 的 record，优先读取 `nextActions[]` 获取首选补救步骤。
+
+#### Schema Contracts
+
+- 原始 CLI JSON 流会使用前缀 `@@LICELL_JSON@@` 输出逐行 JSON record；每条 record 当前都满足 `licell-cli-record@1.0`，再通过 `type=event|result|error` 区分记录类型。
+- `licell <command> --help --output json`：读取 `help.kind` / `help.schemaVersion`；当前为 `licell-help@1.0`。
+- `licell catalog --output json`：读取 `kind` / `schemaVersion`；当前为 `licell-agent-command-catalog@1.0`。
+- `licell catalog --output json` 还会显式声明 help schema 与 CLI record schema：`licell-help@1.0` / `licell-cli-record@1.0`。
+- Agent 优先读取 `nextActions[]` 作为稳定下一步入口；`recommendedFlow` / `decisionGuide` / `remediation[]` 作为补充语义层。
+- 命令自己的业务结果字段继续读取对应命令 help / catalog 里的 `result`；下面三组 contract 只描述公共 CLI record 包络。
+
+### CLI Event Record · licell-cli-record@1.0
+
+- CLI 流式事件 record；适合驱动 Agent 的进度感知、日志桥接和阶段判断。
+  - `kind`：固定为 `licell-cli-record`。
+  - `schemaVersion`：CLI record schema 版本；当前为 `1.0`。
+  - `type`：固定为 `event`。
+  - `ts`：事件发出时间（ISO 8601）。
+  - `command`：当前命令 key，例如 `deploy`、`oss upload`。
+  - `stage`：稳定阶段标识，例如 `deploy`、`deploy.api`、`auth.restore`。
+  - `action`：稳定动作标识，例如 `run`、`execute`、`stdout`。
+  - `status`：`start` / `ok` / `failed` / `skipped` / `info`。
+  - `source`：`command` / `console` / `stream`。
+  - `terminal`：该事件是否代表当前动作进入终态。
+  - `ok`（可选）：仅在终态成功/失败事件中出现；`true` 表示成功，`false` 表示失败。
+  - `message`（可选）：面向人类的补充消息。
+  - `data`（可选）：附加结构化上下文对象。
+    - `stream`（可选）：当 `action=stdout|stderr` 时给出流类型。
+
+### CLI Result Record Envelope
+
+- CLI 成功结果 record；公共包络固定，命令自定义 payload 字段请继续读取对应命令 help/catalog 中的 `result`。
+  - `kind`：固定为 `licell-cli-record`。
+  - `schemaVersion`：CLI record schema 版本；当前为 `1.0`。
+  - `type`：固定为 `result`。
+  - `ts`：结果发出时间（ISO 8601）。
+  - `command`：当前命令 key。
+  - `stage`：命令阶段标识；通常与命令 key 或子阶段一致。
+  - `ok`：固定为 `true`。
+
+### CLI Error Record
+
+- CLI 错误结果 record；同时提供兼容层 remediation/nextCommands 和首选的 nextActions。
+  - `kind`：固定为 `licell-cli-record`。
+  - `schemaVersion`：CLI record schema 版本；当前为 `1.0`。
+  - `type`：固定为 `error`。
+  - `ts`：错误发出时间（ISO 8601）。
+  - `command`：当前命令 key。
+  - `stage`：错误阶段，例如 `parse`、`runtime`、`deploy`。
+  - `ok`：固定为 `false`。
+  - `error`：稳定错误对象。
+    - `code`：稳定错误码，例如 `CLI_INVALID_INPUT`、`AUTH_MISSING_CREDENTIAL`。
+    - `category`：`auth` / `permission` / `input` / `network` / `quota` / `conflict` / `not_found` / `internal`。
+    - `message`：错误主消息。
+    - `retryable`：该错误是否适合直接重试。
+  - `provider`（可选）：阿里云 provider 侧上下文。
+    - `service`（可选）：云产品名，例如 `fc`、`oss`、`alidns`。
+    - `action`（可选）：云 API 动作名。
+    - `code`（可选）：云侧原始错误码。
+    - `requestId`（可选）：云侧 requestId。
+    - `httpStatus`（可选）：云侧 HTTP 状态码。
+    - `endpoint`（可选）：命中的云 API endpoint。
+  - `details`（可选）：额外结构化错误上下文。
+  - `remediation[]`：兼容层修复建议数组。
+    - `type`：建议类型，例如 `note` / `command`。
+    - `title`：修复建议标题。
+    - `reason`：为什么建议这样做。
+    - `commandTemplate`：建议命令模板。
+    - `commandKey`（可选）：若可匹配 CLI 注册表，则给出稳定 command key。
+    - `commandDescription`（可选）：匹配到的命令说明。
+    - `phase`：修复阶段，例如 `inspect` / `mutate` / `verify`。
+    - `priority`：`primary` / `secondary`。
+    - `order`：稳定排序值。
+  - `nextCommands[]`：兼容层命令建议数组。
+    - `commandTemplate`：建议命令模板。
+    - `commandKey`（可选）：若可匹配 CLI 注册表，则给出稳定 command key。
+    - `description`（可选）：命令建议说明。
+    - `intent`：命令意图，例如 `inspect` / `repair` / `bind`。
+    - `priority`：`primary` / `secondary`。
+  - `nextActions[]`：推荐优先消费的统一下一步数组。
+    - `title`：下一步动作标题。
+    - `description`：为什么建议执行这一步。
+    - `commandTemplate`：建议命令模板。
+    - `commandKey`（可选）：若可匹配 CLI 注册表，则给出稳定 command key。
+    - `phase`：动作阶段，例如 `inspect` / `verify` / `mutate`。
+    - `priority`：`primary` / `secondary`。
+    - `source`：动作来源，例如 `error-remediation`。
+
+- Agent 侧做强约束解析时，先匹配 `kind`，再检查 `schemaVersion`；未知更高版本应走兼容分支或降级为文本解析。
 
 ### 命令总览
 
@@ -666,17 +661,15 @@ licell e2e cleanup <runId>
 
 面向 Agent、开发体验与 CLI 生命周期的自动化命令。
 
-- `licell skills init` 与 `licell mcp` 都基于同一套 CLI 命令目录生成外部表面。
+- `licell skills init`、`licell catalog`、`licell completion` 都基于同一套 CLI 命令目录生成外部表面。
 - `licell completion` 的候选命令同样来自共享命令目录。
 
 | 命令 | 说明 | 关键选项 |
 |------|------|----------|
 | `licell doctor` | 诊断本机 licell 登录态、云端权限/目标资源/域名入口、项目配置与部署前置条件 | `--runtime`, `--entry`, `--docker-daemon` |
-| `licell mcp` | MCP：让 Agent 通过 licell 执行部署/发布/运维（默认先初始化，再启动 stdio server） | `--project-root`, `--server-name` |
-| `licell mcp init` | 写入/更新项目内 `.mcp.json` 配置 | `--project-root`, `--server-name` |
-| `licell mcp serve` | 以 stdio 方式启动 licell MCP server | `--project-root` |
+| `licell catalog` | 输出共享 CLI 命令目录，供 Agent / 自动化发现命令、选项和结构化契约 | `--root-command`, `--command-key` |
 | `licell skills init [agent]` | 为 AI Agent 生成 licell skills（claude / codex） | `--project-root`, `--force` |
-| `licell setup` | 安装后引导：配置 AI Agent Skills 和 MCP | `--agent`, `--global`, `--project-root` |
+| `licell setup` | 安装后引导：配置 AI Agent skills | `--agent`, `--global`, `--project-root` |
 | `licell completion [shell]` | 输出 shell 补全脚本（bash/zsh） | `--engine` |
 | `licell upgrade` | 按当前安装来源升级 licell | `--channel`, `--target-version`, `--repo` |
 | `licell e2e cleanup [runId]` | 清理指定 E2E run 产生的资源 | `--manifest`, `--keep-workspace`, `--yes` |
@@ -735,7 +728,7 @@ licell deploy --type api --target preview
 
 ```bash
 licell setup --agent codex --global
-licell mcp init
+licell catalog --output json
 licell deploy spec nodejs22 --output json
 licell deploy check --runtime nodejs22 --entry src/index.ts --output json
 licell deploy --type api --runtime nodejs22 --entry src/index.ts --target preview --output json
@@ -768,4 +761,4 @@ licell e2e run --suite full --cleanup
 - workflow 优先
 - 原子命令兜底
 - 命令自描述
-- MCP / skills / docs 共源收敛
+- catalog / skills / docs 共源收敛

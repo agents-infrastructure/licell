@@ -2,31 +2,12 @@ import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import { buildAgentCommandCatalog, buildCommandReferenceSections } from './command-reference';
 import { syncGeneratedSection, syncTextFile } from './generated-docs';
-import { LICELL_HELP_KIND, LICELL_HELP_SCHEMA_VERSION } from './help';
-import { LICELL_JSON_PREFIX, LICELL_CLI_RECORD_KIND, LICELL_CLI_RECORD_SCHEMA_VERSION } from './output';
+import { renderAgentContractMarkdown } from './agent-contract-docs';
 import {
   README_UPGRADE_GUIDANCE_END,
   README_UPGRADE_GUIDANCE_START,
   renderReadmeUpgradeGuidance
 } from './install-upgrade-docs';
-import {
-  README_MCP_DOMAIN_WORKFLOWS_END,
-  README_MCP_DOMAIN_WORKFLOWS_SECTION,
-  README_MCP_DOMAIN_WORKFLOWS_START,
-  README_MCP_FC_API_WORKFLOW_END,
-  README_MCP_FC_API_WORKFLOW_SECTION,
-  README_MCP_FC_API_WORKFLOW_START,
-  renderWorkflowDocGeneratedSection,
-  syncWorkflowDocGeneratedSection
-} from './workflow-doc-sections';
-import { buildMcpToolCatalog } from '../mcp/tool-catalog';
-
-export {
-  README_MCP_DOMAIN_WORKFLOWS_END,
-  README_MCP_DOMAIN_WORKFLOWS_START,
-  README_MCP_FC_API_WORKFLOW_END,
-  README_MCP_FC_API_WORKFLOW_START
-} from './workflow-doc-sections';
 
 export const README_QUICK_REFERENCE_START = '<!-- BEGIN GENERATED:README_QUICK_REFERENCE -->';
 export const README_QUICK_REFERENCE_END = '<!-- END GENERATED:README_QUICK_REFERENCE -->';
@@ -54,34 +35,20 @@ function renderCommandTable(commands: ReturnType<typeof buildCommandReferenceSec
   ].join('\n');
 }
 
-export function renderReadmeMcpFcApiWorkflow() {
-  return renderWorkflowDocGeneratedSection(README_MCP_FC_API_WORKFLOW_SECTION);
-}
-
-export function renderReadmeMcpDomainWorkflows() {
-  return renderWorkflowDocGeneratedSection(README_MCP_DOMAIN_WORKFLOWS_SECTION);
-}
-
 export function renderReadmeQuickReference() {
   const sections = buildCommandReferenceSections();
-  const commandCatalog = buildAgentCommandCatalog();
-  const mcpCatalog = buildMcpToolCatalog();
-  const sampleToolMetadata = mcpCatalog.tools.find((tool) => tool.metadata?.licell)?.metadata?.licell;
   const parts: string[] = [
-    '> 本节由 licell CLI 注册表自动生成；命令变更会同步到 README / docs/reference/agent-surfaces.md / Skills / MCP / Shell Completion。',
+    '> 本节由 licell CLI 注册表自动生成；命令变更会同步到 README / docs/reference/agent-surfaces.md / Skills / Shell Completion。',
     '',
     '### Agent Contract',
     '',
-    `- 原始 CLI JSON 流：过滤前缀 \`${LICELL_JSON_PREFIX}\`，再按 \`kind=${LICELL_CLI_RECORD_KIND}\` / \`schemaVersion=${LICELL_CLI_RECORD_SCHEMA_VERSION}\` / \`type=event|result|error\` 解析。`,
-    '- 对 `type=event` 的 record，优先读取稳定字段 `stage` / `action` / `status` / `source` / `terminal`；需要额外上下文时再读取可选 `message` / `data`。',
-    '- 对 `type=error` 的 record，优先读取 `nextActions[]` 获取首选补救步骤；`nextCommands[]` 与 `remediation[]` 作为兼容层继续保留。',
-    `- \`licell <command> --help --output json\`：先读取 \`help.kind\` / \`help.schemaVersion\`；当前为 \`${LICELL_HELP_KIND}@${LICELL_HELP_SCHEMA_VERSION}\`。`,
-    `- \`licell_command_catalog\`：先读取 \`kind\` / \`schemaVersion\`；当前为 \`${commandCatalog.kind}@${commandCatalog.schemaVersion}\`。`,
-    sampleToolMetadata
-      ? `- MCP tools 的 \`metadata.licell\` 会显式声明 \`schemas.help\` / \`schemas.commandCatalog\`；当前为 \`${sampleToolMetadata.schemas.help.kind}@${sampleToolMetadata.schemas.help.schemaVersion}\` / \`${sampleToolMetadata.schemas.commandCatalog.kind}@${sampleToolMetadata.schemas.commandCatalog.schemaVersion}\`。`
-      : '- MCP tools 的 `metadata.licell` 会显式声明 `schemas.help` / `schemas.commandCatalog`。',
-    '- `help.result` / command catalog / generated MCP metadata 的结果 schema 同时提供扁平 `fields[]` 与层次化 `fieldTree[]`；优先消费 `fieldTree[]`，兼容旧逻辑时再读取 `fields[]`。',
-    '- `help` / command catalog / MCP metadata 还会暴露 `nextActions[]`；它把 `recommendedFlow` / `decisionGuide` 收敛成稳定的“首选下一步 + 备选路径”结构，Agent 优先消费这一层。',
+    '- 发现命令目录：`licell catalog --output json`。',
+    '- 读取单命令契约：`licell <command> --help --output json`。',
+    '- 真正执行命令：`licell <command> --output json`，并过滤 `@@LICELL_JSON@@` 前缀逐行解析。',
+    '- 对 `type=event` 的 record，优先读取稳定字段 `stage` / `action` / `status` / `source` / `terminal`。',
+    '- 对 `type=error` 的 record，优先读取 `nextActions[]` 获取首选补救步骤。',
+    '',
+    renderAgentContractMarkdown({ headingLevel: 4 }),
     '',
     '### 命令总览'
   ];
@@ -155,22 +122,8 @@ export function syncReadmeQuickReferenceSection(readmeContent: string) {
   });
 }
 
-export function syncReadmeMcpFcApiWorkflowSection(readmeContent: string) {
-  return syncWorkflowDocGeneratedSection(readmeContent, README_MCP_FC_API_WORKFLOW_SECTION);
-}
-
-export function syncReadmeMcpDomainWorkflowsSection(readmeContent: string) {
-  return syncWorkflowDocGeneratedSection(readmeContent, README_MCP_DOMAIN_WORKFLOWS_SECTION);
-}
-
 export function syncReadmeGeneratedSections(readmeContent: string) {
-  return syncReadmeQuickReferenceSection(
-    syncReadmeMcpDomainWorkflowsSection(
-      syncReadmeMcpFcApiWorkflowSection(
-        syncReadmeUpgradeGuidanceSection(readmeContent)
-      )
-    )
-  );
+  return syncReadmeQuickReferenceSection(syncReadmeUpgradeGuidanceSection(readmeContent));
 }
 
 export function syncReadmeGeneratedSection(readmeContent: string) {

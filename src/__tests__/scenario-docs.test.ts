@@ -34,8 +34,8 @@ describe('syncAiDrivenDeploymentScenario', () => {
     const output = syncAiDrivenDeploymentScenario(input);
     expect(output).toContain(SCENARIO_AI_PRECHECK_WORKFLOW_START);
     expect(output).toContain(SCENARIO_AI_PRECHECK_WORKFLOW_END);
-    expect(output).toContain('`licell_fc_deploy_spec`');
-    expect(output).toContain('`licell_fc_deploy_check`');
+    expect(output).toContain('`licell deploy spec <runtime>`');
+    expect(output).toContain('`licell deploy check --runtime <runtime> --entry <entry>`');
     expect(output).not.toContain('old content');
   });
 
@@ -71,10 +71,10 @@ describe('syncDomainAndHttpsScenario', () => {
     ].join('\n');
 
     const output = syncDomainAndHttpsScenario(input);
-    expect(output).toContain('`licell_domain_app_bind`');
-    expect(output).toContain('`licell_domain_static_bind`');
-    expect(output).toContain('`licell_domain_app_unbind`');
-    expect(output).toContain('`licell_domain_static_unbind`');
+    expect(output).toContain('`licell domain app bind <domain> --ssl`');
+    expect(output).toContain('`licell domain static bind <domain> --ssl`');
+    expect(output).toContain('`licell domain app unbind <domain> --yes`');
+    expect(output).toContain('`licell domain static unbind <domain> --yes`');
     expect(output).not.toContain('old app bind');
     expect(output).not.toContain('old static bind');
     expect(output).not.toContain('old app cleanup');

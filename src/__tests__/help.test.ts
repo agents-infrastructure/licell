@@ -134,26 +134,25 @@ describe('help utils', () => {
     expect(doc?.text).toContain('OSS Bucket 原生自定义域名');
   });
 
-  it('builds command help for mcp with real subcommands', () => {
+  it('builds command help for catalog with explicit automation guidance', () => {
     const doc = buildHelpDocument({
-      argv: ['node', 'src/cli.ts', 'mcp', '--help'],
+      argv: ['node', 'src/cli.ts', 'catalog', '--help'],
       version: VERSION
     });
 
     expect(doc?.scope).toBe('command');
-    expect(doc?.key).toBe('mcp');
-    expect(doc?.subcommands.map((command) => command.key)).toEqual(expect.arrayContaining(['mcp init', 'mcp serve']));
-    expect(doc?.examples).toContain('licell mcp init');
+    expect(doc?.key).toBe('catalog');
+    expect(doc?.examples).toContain('licell catalog --output json');
     expect(doc?.text).toContain('Decision Guide:');
     expect(doc?.text).toContain('Next Actions:');
     expect(doc?.nextActions.map((action) => action.commandTemplate)).toEqual([
-      'licell mcp init',
-      'licell mcp serve'
+      'licell catalog --output json',
+      'licell deploy --help --output json',
+      'licell deploy --output json'
     ]);
-    expect(doc?.decisionGuide.map((group) => group.phase)).toEqual(expect.arrayContaining(['mutate', 'verify']));
-    expect(doc?.text).toContain('Mutate:');
-    expect(doc?.text).toContain('Verify:');
-    expect(doc?.text).toContain('Subcommands:');
+    expect(doc?.decisionGuide.map((group) => group.phase)).toEqual(expect.arrayContaining(['inspect']));
+    expect(doc?.text).toContain('Inspect:');
+    expect(doc?.text).toContain('Automation:');
   });
 
 

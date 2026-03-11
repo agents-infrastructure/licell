@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { dirname, isAbsolute, join } from 'path';
 import { homedir } from 'os';
 import { renderSkillCommandReference } from './command-reference';
-import { renderSkillMcpToolReference } from './agent-surface-docs';
+import { renderSkillAgentUsageGuide } from './agent-surface-docs';
 import { renderSkillUpgradeNotes } from './install-upgrade-docs';
 
 export type AgentType = 'claude' | 'codex';
@@ -13,14 +13,14 @@ export interface SkillFile {
 }
 
 const AGENTS_MD_LICELL_ENTRY =
-  '- licell: Deploy and manage Alibaba Cloud Serverless applications using the licell CLI. Covers deploy, release, functions, env vars, domains, DNS, logs, OSS, database, cache, Supabase, and MCP. (file: .claude/skills/licell/SKILL.md)';
+  '- licell: Deploy and manage Alibaba Cloud Serverless applications using the licell CLI. Covers deploy, release, functions, env vars, domains, DNS, logs, OSS, database, cache, and Supabase. (file: .claude/skills/licell/SKILL.md)';
 
 function getSkillContent(): string {
   return `---
 name: licell
 description: >-
   Deploy and manage Alibaba Cloud Serverless applications using the licell CLI.
-  Covers deploy, release, functions, env vars, domains, DNS, logs, OSS, database, cache, Supabase, and MCP.
+  Covers deploy, release, functions, env vars, domains, DNS, logs, OSS, database, cache, and Supabase.
 metadata:
   author: licell
   version: "1.0"
@@ -45,6 +45,7 @@ ${renderSkillUpgradeNotes().trim()}
 \`\`\`bash
 licell login                                          # 配置阿里云凭证
 licell init                                           # 初始化项目（脚手架 + 配置）
+licell catalog --output json                          # 发现命令目录与结构化契约
 licell deploy --type api --target preview             # 部署到 preview
 licell release promote --target prod                  # 发布到生产
 \`\`\`
@@ -100,9 +101,10 @@ licell deploy --type api --target preview --enable-vpc
 
 function getSkillBody() {
   return getSkillContent().replace('<!-- PLACEHOLDER_COMMAND_REFERENCE -->\n', '')
+    + renderSkillAgentUsageGuide()
+    + '\n'
     + renderSkillCommandReference()
     + '\n'
-    + renderSkillMcpToolReference()
     + getWorkflowAppendix();
 }
 

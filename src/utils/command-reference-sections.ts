@@ -4,7 +4,7 @@ import {
   type CommandCatalog
 } from './command-catalog';
 import {
-  COMMAND_SECTION_CONFIG,
+  getCommandSectionConfig,
   type CommandTaskPhase
 } from './command-metadata';
 
@@ -37,7 +37,7 @@ export function buildCommandReferenceSections(catalog: CommandCatalog = getComma
   const assignedRoots = new Set<string>();
   const sections: CommandReferenceSection[] = [];
 
-  for (const config of COMMAND_SECTION_CONFIG) {
+  for (const config of getCommandSectionConfig()) {
     const roots = config.roots.filter((root) => catalog.rootCommands.includes(root));
     if (roots.length === 0) continue;
 

@@ -15,7 +15,7 @@ describe('LICELL_COMMAND_MANIFEST', () => {
   });
 
   it('keeps root help surface in manifest-owned config', () => {
-    expect(LICELL_COMMAND_MANIFEST.root.descriptors.help?.examples).toContain('licell mcp init');
+    expect(LICELL_COMMAND_MANIFEST.root.descriptors.help?.examples).toContain('licell catalog --output json');
     expect(getCommandDescriptor('help').examples).toContain('licell deploy --output json');
   });
 
@@ -29,11 +29,8 @@ describe('LICELL_COMMAND_MANIFEST', () => {
   it('keeps manifest invariant diagnostics empty', () => {
     expect(collectCommandManifestIssues(LICELL_COMMAND_MANIFEST)).toEqual([]);
   });
-  it('registers real mcp subcommands in command catalog', () => {
+  it('registers catalog command in command catalog', () => {
     const catalog = getCommandCatalog();
-    expect(catalog.commandsByKey['mcp']).toBeDefined();
-    expect(catalog.commandsByKey['mcp init']).toBeDefined();
-    expect(catalog.commandsByKey['mcp serve']).toBeDefined();
-    expect(catalog.childCommands['mcp']).toEqual(expect.arrayContaining(['init', 'serve']));
+    expect(catalog.commandsByKey['catalog']).toBeDefined();
   });
 });

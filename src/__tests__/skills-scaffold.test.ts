@@ -38,11 +38,9 @@ describe('getSkillFiles', () => {
 
     const commands = [
       'licell login',
+      'licell catalog',
       'licell deploy spec [runtime]',
       'licell deploy check',
-      'licell mcp',
-      'licell mcp init',
-      'licell mcp serve',
       'licell completion [shell]',
       'licell upgrade',
       'licell auth repair',
@@ -56,11 +54,11 @@ describe('getSkillFiles', () => {
     expect(file.content).toContain('project-local `node_modules`');
     expect(file.content).toContain('`licell upgrade --dry-run`');
     expect(file.content).toContain('licell CLI 注册表自动生成');
-    expect(file.content).toContain('## MCP Tool Reference');
+    expect(file.content).toContain('## Agent Usage');
     expect(file.content).toContain('### Schema Contracts');
     expect(file.content).toContain('licell-help@1.0');
-    expect(file.content).toContain('`licell_cli`');
-    expect(file.content).toContain('`licell_deploy`');
+    expect(file.content).toContain('`licell catalog --output json`');
+    expect(file.content).toContain('CLI Event Record');
   });
 });
 

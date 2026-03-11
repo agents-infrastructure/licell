@@ -2,47 +2,40 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'fs';
 import {
   renderAgentSurfaceReferenceDoc,
-  renderSkillMcpToolReference
+  renderSkillAgentUsageGuide
 } from '../utils/agent-surface-docs';
 
-describe('renderSkillMcpToolReference', () => {
-  it('renders builtin and curated MCP tool sections from shared registry', () => {
-    const output = renderSkillMcpToolReference();
-    expect(output).toContain('## MCP Tool Reference');
+describe('renderSkillAgentUsageGuide', () => {
+  it('renders CLI-driven agent usage guidance', () => {
+    const output = renderSkillAgentUsageGuide();
+    expect(output).toContain('## Agent Usage');
     expect(output).toContain('### Schema Contracts');
     expect(output).toContain('@@LICELL_JSON@@');
-    expect(output).toContain('对 `type=event` 的 record');
-    expect(output).toContain('对 `type=error` 的 record');
+    expect(output).toContain('CLI Event Record');
+    expect(output).toContain('CLI Error Record');
     expect(output).toContain('licell-cli-record@1.0');
     expect(output).toContain('licell-help@1.0');
     expect(output).toContain('licell-agent-command-catalog@1.0');
-    expect(output).toContain('`fieldTree[]`');
+    expect(output).toContain('`licell catalog --output json`');
+    expect(output).toContain('`licell <command> --help --output json`');
     expect(output).toContain('`nextActions[]`');
-    expect(output).toContain('### Builtin Tools');
-    expect(output).toContain('`licell_cli`');
-    expect(output).toContain('### Curated Workflow Tools');
-    expect(output).toContain('`licell_deploy`');
-    expect(output).toContain('licell_cmd_<command_key>');
   });
 });
 
 describe('renderAgentSurfaceReferenceDoc', () => {
-  it('renders CLI, builtin MCP, curated MCP, and generated MCP sections', () => {
+  it('renders CLI-centric agent reference sections', () => {
     const output = renderAgentSurfaceReferenceDoc();
     expect(output).toContain('# Agent Surface Reference');
     expect(output).toContain('## Schema Contracts');
     expect(output).toContain('@@LICELL_JSON@@');
-    expect(output).toContain('对 `type=event` 的 record');
-    expect(output).toContain('对 `type=error` 的 record');
+    expect(output).toContain('CLI Event Record');
+    expect(output).toContain('CLI Error Record');
     expect(output).toContain('先匹配 `kind`，再检查 `schemaVersion`');
-    expect(output).toContain('`fieldTree[]`');
     expect(output).toContain('`nextActions[]`');
     expect(output).toContain('## CLI 命令目录');
-    expect(output).toContain('`licell_cli`');
-    expect(output).toContain('`licell_fc_deploy_spec`');
-    expect(output).toContain('`licell_cmd_deploy_check`');
-    expect(output).toContain('metadata.licell');
-    expect(output).toContain('builtin / curated / generated MCP tools');
+    expect(output).toContain('## Recommended Agent Flow');
+    expect(output).toContain('`licell deploy check`');
+    expect(output).not.toContain('Tool Reference');
   });
 
   it('keeps generated docs file in sync with renderer', () => {

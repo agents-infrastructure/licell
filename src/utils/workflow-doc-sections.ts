@@ -1,23 +1,17 @@
 import { syncGeneratedSection } from './generated-docs';
-import {
-  DOMAIN_APP_BIND_WORKFLOW_TAG,
-  DOMAIN_APP_UNBIND_WORKFLOW_TAG,
-  DOMAIN_STATIC_BIND_WORKFLOW_TAG,
-  DOMAIN_STATIC_UNBIND_WORKFLOW_TAG,
-  FC_API_DEPLOY_WORKFLOW_TAG,
-  FC_API_PRECHECK_WORKFLOW_TAG,
-  renderTaggedCuratedWorkflowNumberedList,
-  renderTaggedCuratedWorkflowTable
-} from './mcp-workflow-docs';
 
 export type WorkflowDocRenderMode = 'table' | 'numbered-list';
 
+export interface WorkflowDocEntry {
+  command: string;
+  description: string;
+}
+
 export interface WorkflowDocSectionItem {
-  tag: string;
   renderMode: WorkflowDocRenderMode;
   title?: string;
   intro?: string;
-  includeSuggestedOrder?: boolean;
+  entries: WorkflowDocEntry[];
 }
 
 export interface WorkflowDocGeneratedSection {
@@ -27,11 +21,6 @@ export interface WorkflowDocGeneratedSection {
   preamble?: string;
   items: WorkflowDocSectionItem[];
 }
-
-export const README_MCP_FC_API_WORKFLOW_START = '<!-- BEGIN GENERATED:README_MCP_FC_API_WORKFLOW -->';
-export const README_MCP_FC_API_WORKFLOW_END = '<!-- END GENERATED:README_MCP_FC_API_WORKFLOW -->';
-export const README_MCP_DOMAIN_WORKFLOWS_START = '<!-- BEGIN GENERATED:README_MCP_DOMAIN_WORKFLOWS -->';
-export const README_MCP_DOMAIN_WORKFLOWS_END = '<!-- END GENERATED:README_MCP_DOMAIN_WORKFLOWS -->';
 
 export const SCENARIO_AI_PRECHECK_WORKFLOW_START = '<!-- BEGIN GENERATED:SCENARIO_AI_PRECHECK_WORKFLOW -->';
 export const SCENARIO_AI_PRECHECK_WORKFLOW_END = '<!-- END GENERATED:SCENARIO_AI_PRECHECK_WORKFLOW -->';
@@ -44,57 +33,16 @@ export const SCENARIO_DOMAIN_APP_UNBIND_WORKFLOW_END = '<!-- END GENERATED:SCENA
 export const SCENARIO_DOMAIN_STATIC_UNBIND_WORKFLOW_START = '<!-- BEGIN GENERATED:SCENARIO_DOMAIN_STATIC_UNBIND_WORKFLOW -->';
 export const SCENARIO_DOMAIN_STATIC_UNBIND_WORKFLOW_END = '<!-- END GENERATED:SCENARIO_DOMAIN_STATIC_UNBIND_WORKFLOW -->';
 
-export const README_MCP_FC_API_WORKFLOW_SECTION: WorkflowDocGeneratedSection = {
-  startMarker: README_MCP_FC_API_WORKFLOW_START,
-  endMarker: README_MCP_FC_API_WORKFLOW_END,
-  missingMarkersMessage: 'README MCP FC API workflow markers not found',
-  items: [{
-    tag: FC_API_DEPLOY_WORKFLOW_TAG,
-    renderMode: 'table',
-    intro: '`licell mcp` 已提供这组 FC API 部署工作流工具（由共享 MCP 注册表自动生成）：'
-  }]
-};
-
-export const README_MCP_DOMAIN_WORKFLOWS_SECTION: WorkflowDocGeneratedSection = {
-  startMarker: README_MCP_DOMAIN_WORKFLOWS_START,
-  endMarker: README_MCP_DOMAIN_WORKFLOWS_END,
-  missingMarkersMessage: 'README MCP domain workflow markers not found',
-  preamble: '`licell mcp` 也提供共享的域名编排 workflow 工具：',
-  items: [
-    {
-      tag: DOMAIN_APP_BIND_WORKFLOW_TAG,
-      renderMode: 'table',
-      title: '应用域名绑定',
-      intro: '通过一个入口同时编排 DNS、FC custom domain 与可选 HTTPS。'
-    },
-    {
-      tag: DOMAIN_STATIC_BIND_WORKFLOW_TAG,
-      renderMode: 'table',
-      title: '静态站点域名绑定',
-      intro: '通过一个入口同时编排 CDN、DNS 与可选 HTTPS。'
-    },
-    {
-      tag: DOMAIN_APP_UNBIND_WORKFLOW_TAG,
-      renderMode: 'table',
-      title: '应用域名解绑',
-      intro: '通过一个入口下线应用域名，并清理 FC custom domain / DNS。'
-    },
-    {
-      tag: DOMAIN_STATIC_UNBIND_WORKFLOW_TAG,
-      renderMode: 'table',
-      title: '静态站点域名解绑',
-      intro: '通过一个入口下线静态站点域名，并清理 CDN / DNS。'
-    }
-  ]
-};
-
 export const SCENARIO_AI_PRECHECK_WORKFLOW_SECTION: WorkflowDocGeneratedSection = {
   startMarker: SCENARIO_AI_PRECHECK_WORKFLOW_START,
   endMarker: SCENARIO_AI_PRECHECK_WORKFLOW_END,
   missingMarkersMessage: 'Scenario AI precheck workflow markers not found',
   items: [{
-    tag: FC_API_PRECHECK_WORKFLOW_TAG,
-    renderMode: 'numbered-list'
+    renderMode: 'numbered-list',
+    entries: [
+      { command: 'licell deploy spec <runtime>', description: '先读 runtime 的 entry / handler / 资源约束。' },
+      { command: 'licell deploy check --runtime <runtime> --entry <entry>', description: '只读预检当前项目，提前发现入口与 runtime 问题。' }
+    ]
   }]
 };
 
@@ -103,9 +51,9 @@ export const SCENARIO_DOMAIN_APP_BIND_WORKFLOW_SECTION: WorkflowDocGeneratedSect
   endMarker: SCENARIO_DOMAIN_APP_BIND_WORKFLOW_END,
   missingMarkersMessage: 'Scenario domain app bind workflow markers not found',
   items: [{
-    tag: DOMAIN_APP_BIND_WORKFLOW_TAG,
     renderMode: 'numbered-list',
-    intro: '> 如果你是通过 Agent / MCP 执行这一步，推荐直接调用下面这条共享 workflow 入口：'
+    intro: '> 如果你是通过 Agent 执行这一步，推荐直接运行下面这条 CLI：',
+    entries: [{ command: 'licell domain app bind <domain> --ssl', description: '为当前应用绑定自定义域名，编排 DNS、FC custom domain 与可选 HTTPS。' }]
   }]
 };
 
@@ -114,9 +62,9 @@ export const SCENARIO_DOMAIN_STATIC_BIND_WORKFLOW_SECTION: WorkflowDocGeneratedS
   endMarker: SCENARIO_DOMAIN_STATIC_BIND_WORKFLOW_END,
   missingMarkersMessage: 'Scenario domain static bind workflow markers not found',
   items: [{
-    tag: DOMAIN_STATIC_BIND_WORKFLOW_TAG,
     renderMode: 'numbered-list',
-    intro: '> 如果你是通过 Agent / MCP 执行这一步，推荐直接调用下面这条共享 workflow 入口：'
+    intro: '> 如果你是通过 Agent 执行这一步，推荐直接运行下面这条 CLI：',
+    entries: [{ command: 'licell domain static bind <domain> --ssl', description: '为静态站点绑定自定义域名，编排 CDN、DNS 与可选 HTTPS。' }]
   }]
 };
 
@@ -125,9 +73,9 @@ export const SCENARIO_DOMAIN_APP_UNBIND_WORKFLOW_SECTION: WorkflowDocGeneratedSe
   endMarker: SCENARIO_DOMAIN_APP_UNBIND_WORKFLOW_END,
   missingMarkersMessage: 'Scenario domain app unbind workflow markers not found',
   items: [{
-    tag: DOMAIN_APP_UNBIND_WORKFLOW_TAG,
     renderMode: 'numbered-list',
-    intro: '> 需要下线 API 域名时，推荐走这条 cleanup workflow：'
+    intro: '> 需要下线 API 域名时，推荐走这条 cleanup CLI：',
+    entries: [{ command: 'licell domain app unbind <domain> --yes', description: '解绑当前应用域名，并清理 FC custom domain / DNS CNAME。' }]
   }]
 };
 
@@ -136,26 +84,29 @@ export const SCENARIO_DOMAIN_STATIC_UNBIND_WORKFLOW_SECTION: WorkflowDocGenerate
   endMarker: SCENARIO_DOMAIN_STATIC_UNBIND_WORKFLOW_END,
   missingMarkersMessage: 'Scenario domain static unbind workflow markers not found',
   items: [{
-    tag: DOMAIN_STATIC_UNBIND_WORKFLOW_TAG,
     renderMode: 'numbered-list',
-    intro: '> 需要下线静态站点域名时，推荐走这条 cleanup workflow：'
+    intro: '> 需要下线静态站点域名时，推荐走这条 cleanup CLI：',
+    entries: [{ command: 'licell domain static unbind <domain> --yes', description: '解绑静态站点域名，并清理 CDN domain / DNS CNAME。' }]
   }]
 };
+
+function renderTable(entries: WorkflowDocEntry[]) {
+  return [
+    '| 命令 | 说明 |',
+    '|------|------|',
+    ...entries.map((entry) => `| \`${entry.command}\` | ${entry.description} |`)
+  ].join('\n');
+}
+
+function renderNumberedList(entries: WorkflowDocEntry[]) {
+  return entries.map((entry, index) => `${index + 1}. \`${entry.command}\`：${entry.description}`).join('\n');
+}
 
 function renderWorkflowDocSectionItem(item: WorkflowDocSectionItem) {
   const parts: string[] = [];
   if (item.title) parts.push(`#### ${item.title}`, '');
-
-  if (item.renderMode === 'table') {
-    parts.push(renderTaggedCuratedWorkflowTable(item.tag, {
-      intro: item.intro || '',
-      includeSuggestedOrder: item.includeSuggestedOrder
-    }).trim());
-    return parts.join('\n').trim();
-  }
-
   if (item.intro) parts.push(item.intro, '');
-  parts.push(renderTaggedCuratedWorkflowNumberedList(item.tag).trim());
+  parts.push(item.renderMode === 'table' ? renderTable(item.entries) : renderNumberedList(item.entries));
   return parts.join('\n').trim();
 }
 

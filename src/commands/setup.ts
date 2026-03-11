@@ -5,7 +5,6 @@ import pc from 'picocolors';
 import { createSpinner, isInteractiveTTY, showIntro, showOutro } from '../utils/cli-shared';
 import { formatErrorMessage } from '../utils/errors';
 import { emitCliError, emitCommandEvent, emitCommandResult, isJsonOutput } from '../utils/output';
-import { ensureMcpJsonConfig, ensureGlobalClaudeMcpConfig, ensureGlobalCodexMcpConfig } from './mcp';
 
 type Scope = 'global' | 'project';
 type AgentType = 'claude' | 'codex';
@@ -17,7 +16,7 @@ const SUPPORTED_AGENTS = new Set<AgentType>(['claude', 'codex']);
 
 const setupCommand = defineCliCommand({
   rawName: 'setup',
-  description: '安装后引导：配置 AI Agent Skills 和 MCP',
+  description: '安装后引导：配置 AI Agent skills',
   options: [
     { rawName: '--agent <agent>', description: '目标 Agent（claude / codex）' },
     { rawName: '--global', description: '全局配置（所有项目生效）' },
@@ -25,12 +24,12 @@ const setupCommand = defineCliCommand({
     { rawName: '--force', description: '覆盖已有文件' }
   ],
   descriptor: {
-    summary: '安装后的一站式引导：配置 Skills 与 MCP。',
-    notes: ['交互模式下会引导选择 Agent、范围，并可选写入 MCP 配置。'],
+    summary: '安装后的一站式引导：配置 Skills，让 Agent 直接通过 licell CLI 工作。',
+    notes: ['交互模式下会引导选择目标 Agent 与配置范围。'],
     examples: ['licell setup', 'licell setup --agent codex --global', 'licell setup --output json'],
     interaction: {
       ttyOnly: true,
-      prompts: ['未传 `--agent` 时会提示选择目标 Agent。', '交互模式下会继续询问配置范围，以及是否一并写入 MCP 配置。']
+      prompts: ['未传 `--agent` 时会提示选择目标 Agent。', '交互模式下会继续询问配置范围。']
     },
     automation: {
       preferredOutput: 'json',
@@ -39,20 +38,20 @@ const setupCommand = defineCliCommand({
     },
     optionInsights: {
       '--agent': { whenToUse: '非交互模式下必须显式指定目标 Agent。', cautions: ['当前仅支持 `claude` / `codex`。'] },
-      '--global': { whenToUse: '希望技能与 MCP 配置对所有项目生效时使用。', cautions: ['会写入用户级全局配置目录。'] },
+      '--global': { whenToUse: '希望 skills 对所有项目生效时使用。', cautions: ['会写入用户级全局技能目录。'] },
       '--project-root': { whenToUse: '要为指定项目而不是当前目录生成配置时使用。' },
       '--force': { whenToUse: '目标文件已存在但需要覆盖时使用。', cautions: ['可能覆盖已有定制内容。'] }
     },
     recommendedFlow: [
-      { title: '运行引导', command: 'licell setup', reason: '以交互方式一次性完成 Skills 与 MCP 初始化。' },
-      { title: '必要时切到非交互', command: 'licell setup --agent codex --global --output json', reason: '在自动化或 CI 场景中稳定复用。' },
-      { title: '验证 MCP', command: 'licell mcp init --output json', reason: '确认 MCP 配置文件已写入预期位置。' }
+      { title: '运行引导', command: 'licell setup', reason: '以交互方式完成 skills 初始化。' },
+      { title: '必要时切到非交互', command: 'licell setup --agent codex --global --output json', reason: '在自动化或批量初始化场景中稳定复用。' },
+      { title: '让 Agent 发现命令目录', command: 'licell catalog --output json', reason: '后续统一走 catalog / help / JSON output。' }
     ],
     taskHints: [
       {
         phase: 'mutate',
         title: '给当前环境快速接入 Agent',
-        description: '一条 setup 引导完成 skills 与 MCP 的主流程配置。',
+        description: '一条 setup 引导完成 skills 的主流程配置。',
         commands: ['licell setup']
       },
       {
@@ -63,7 +62,7 @@ const setupCommand = defineCliCommand({
       }
     ],
     result: {
-      summary: '返回 setup 引导的写入结果与 MCP 配置状态。',
+      summary: '返回 setup 引导的写入结果。',
       fields: [
         { name: 'stage', description: '固定为 `setup`。', required: true },
         { name: 'agent', description: '目标 Agent。', required: true },
@@ -71,12 +70,13 @@ const setupCommand = defineCliCommand({
         { name: 'projectRoot', description: '项目根目录。', required: true },
         { name: 'writtenFiles', description: '实际写入的文件列表。', required: true },
         { name: 'skippedFiles', description: '跳过写入的文件列表。', required: true },
-        { name: 'mcpConfigured', description: '是否执行了 MCP 配置。', required: true },
-        { name: 'mcpConfigPath', description: 'MCP 配置文件路径。' },
-        { name: 'mcpConfigUpdated', description: 'MCP 配置文件是否发生更新。' }
+        { name: 'agentsMdUpdated', description: '项目模式下，是否更新了 `AGENTS.md`。', required: true }
       ]
     },
-    agentTips: ['自动化场景优先传 `--agent`，并搭配 `--output json` 获取可追踪的写入结果。']
+    agentTips: [
+      '自动化场景优先传 `--agent`，并搭配 `--output json` 获取可追踪的写入结果。',
+      'setup 完成后，Agent 继续通过 `licell catalog --output json` 和 `licell <command> --help --output json` 理解命令面。'
+    ]
   }
 });
 
@@ -154,8 +154,9 @@ export async function runInteractiveSetup(options: SetupOptions = {}) {
     const root = scope === 'global' ? '' : projectRoot;
     const { written, skipped } = writeSkillFiles(root, files, Boolean(options.force));
 
+    let agentsMdUpdated = false;
     if (scope === 'project') {
-      ensureAgentsMdEntry(projectRoot);
+      agentsMdUpdated = ensureAgentsMdEntry(projectRoot).updated;
     }
 
     if (!jsonMode) {
@@ -169,43 +170,6 @@ export async function runInteractiveSetup(options: SetupOptions = {}) {
       for (const f of skipped) console.log(`  ${pc.gray('=')} ${f}（已存在）`);
     }
 
-    let configureMcp = false;
-    let mcpConfigPath: string | null = null;
-    let mcpConfigUpdated: boolean | null = null;
-    if (interactiveTTY) {
-      const mcpConfirm = await confirm({ message: '是否配置 MCP（让 Agent 能调用 licell）？' });
-      if (isCancel(mcpConfirm)) {
-        cancelFlow();
-        return;
-      }
-      configureMcp = mcpConfirm === true;
-    }
-
-    if (configureMcp) {
-      if (scope === 'global' && agent === 'claude') {
-        const { configPath, updated } = ensureGlobalClaudeMcpConfig();
-        mcpConfigPath = configPath;
-        mcpConfigUpdated = updated;
-        if (!jsonMode) {
-          console.log(`  ${updated ? pc.green('+') : pc.gray('=')} ${configPath}${updated ? '' : '（已存在）'}`);
-        }
-      } else if (scope === 'global' && agent === 'codex') {
-        const { configPath, updated } = ensureGlobalCodexMcpConfig();
-        mcpConfigPath = configPath;
-        mcpConfigUpdated = updated;
-        if (!jsonMode) {
-          console.log(`  ${updated ? pc.green('+') : pc.gray('=')} ${configPath}${updated ? '' : '（已存在）'}`);
-        }
-      } else {
-        const { configPath, updated } = ensureMcpJsonConfig({ projectRoot, serverName: 'licell' });
-        mcpConfigPath = configPath;
-        mcpConfigUpdated = updated;
-        if (!jsonMode) {
-          console.log(`  ${updated ? pc.green('+') : pc.gray('=')} ${configPath}${updated ? '' : '（已存在）'}`);
-        }
-      }
-    }
-
     if (jsonMode) {
       emitCommandResult({
         agent,
@@ -213,9 +177,7 @@ export async function runInteractiveSetup(options: SetupOptions = {}) {
         projectRoot,
         writtenFiles: written,
         skippedFiles: skipped,
-        mcpConfigured: configureMcp,
-        mcpConfigPath,
-        mcpConfigUpdated
+        agentsMdUpdated
       });
     } else {
       showOutro('Done.');

@@ -131,7 +131,7 @@ export function buildResolvedExamples(input: {
 
   const selectedInvocation = formatInvocationWithSelection(input.command, input.extraTokens);
   const examples = [selectedInvocation];
-  if (input.command.options.length > 0 && input.key !== 'mcp') {
+  if (input.command.options.length > 0) {
     examples.push(`${selectedInvocation} --output json`);
   }
   if (input.subcommands.length > 0) {
@@ -146,11 +146,7 @@ export function buildResolvedAgentTips(input: {
   descriptor: CommandDescriptor;
   subcommands: CommandSurfaceEntryLike[];
 }) {
-  const defaults: string[] = [];
-  if (input.key === 'mcp') {
-    defaults.push('真正启动 `mcp serve` 时不要传 `--output json`，否则会破坏 stdio JSON-RPC 输出。');
-  }
-  return unique([...(input.descriptor.agentTips || []), ...defaults]);
+  return unique([...(input.descriptor.agentTips || [])]);
 }
 
 function cloneInteractionDescriptor(descriptor?: CommandInteractionDescriptor) {

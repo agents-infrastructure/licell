@@ -59,11 +59,15 @@ function unique<T>(values: T[]) {
   return [...new Set(values)];
 }
 
+function getCommandManifest() {
+  return LICELL_COMMAND_MANIFEST;
+}
+
 function buildCommandSectionConfig(): CommandSectionConfig[] {
   const sections: CommandSectionConfig[] = [];
   const indexById = new Map<string, number>();
 
-  for (const module of LICELL_COMMAND_MANIFEST.modules) {
+  for (const module of getCommandManifest().modules) {
     const existingIndex = indexById.get(module.section.id);
     if (existingIndex === undefined) {
       indexById.set(module.section.id, sections.length);
@@ -85,23 +89,48 @@ function buildCommandSectionConfig(): CommandSectionConfig[] {
   return sections;
 }
 
-export const COMMAND_SECTION_CONFIG: CommandSectionConfig[] = buildCommandSectionConfig();
+let cachedCommandSectionConfig: CommandSectionConfig[] | undefined;
 
-const REGISTRY_COMMAND_DESCRIPTORS: Record<string, CommandDescriptor> = Object.assign(
-  {},
-  ...LICELL_COMMAND_MANIFEST.modules
-    .map((module) => module.descriptors)
-);
+export function getCommandSectionConfig(): CommandSectionConfig[] {
+  if (!cachedCommandSectionConfig) {
+    cachedCommandSectionConfig = buildCommandSectionConfig();
+  }
 
-const RESOLVED_COMMAND_DESCRIPTORS: Record<string, CommandDescriptor> = {
-  ...LICELL_COMMAND_MANIFEST.root.descriptors,
-  ...REGISTRY_COMMAND_DESCRIPTORS
-};
+  return cachedCommandSectionConfig.map((section) => ({
+    ...section,
+    roots: [...section.roots],
+    notes: [...(section.notes || [])],
+    taskHints: (section.taskHints || []).map((task) => ({ ...task, commands: [...(task.commands || [])] }))
+  }));
+}
+
+function buildResolvedCommandDescriptors() {
+  const manifest = getCommandManifest();
+  const registryCommandDescriptors: Record<string, CommandDescriptor> = Object.assign(
+    {},
+    ...manifest.modules.map((module) => module.descriptors)
+  );
+
+  return {
+    ...manifest.root.descriptors,
+    ...registryCommandDescriptors
+  } satisfies Record<string, CommandDescriptor>;
+}
+
+let cachedResolvedCommandDescriptors: Record<string, CommandDescriptor> | undefined;
+
+function getResolvedCommandDescriptors() {
+  if (!cachedResolvedCommandDescriptors) {
+    cachedResolvedCommandDescriptors = buildResolvedCommandDescriptors();
+  }
+
+  return cachedResolvedCommandDescriptors;
+}
 
 const EMPTY_COMMAND_DESCRIPTOR: CommandDescriptor = {};
 
 export function getCommandDescriptor(key: string): CommandDescriptor {
-  return RESOLVED_COMMAND_DESCRIPTORS[key] || EMPTY_COMMAND_DESCRIPTOR;
+  return getResolvedCommandDescriptors()[key] || EMPTY_COMMAND_DESCRIPTOR;
 }
 
 function splitResultFieldPath(name: string) {

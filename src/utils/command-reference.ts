@@ -19,7 +19,6 @@ import {
   type ResolvedCommandResultFieldTreeNode
 } from './command-metadata';
 import { type CommandTaskEntry, type CommandTaskGroup } from './command-tasks';
-import { canExposeCommandAsGeneratedMcpTool, toGeneratedMcpToolName } from './command-surface-ids';
 import {
   type ResolvedCommandAutomationDescriptor,
   type ResolvedCommandInteractionDescriptor,
@@ -31,6 +30,7 @@ import {
   LICELL_HELP_KIND,
   LICELL_HELP_SCHEMA_VERSION
 } from './help';
+import { getCliRecordContractDocument } from './cli-record-contract';
 
 export { buildCommandReferenceSections } from './command-reference-sections';
 export type { CommandReferenceSection } from './command-reference-sections';
@@ -77,7 +77,6 @@ export interface AgentCommandCatalogEntry {
   result?: AgentCommandResult;
   sectionId: string;
   sectionTitle: string;
-  generatedMcpToolName?: string;
 }
 
 export interface AgentCommandCatalogDocument {
@@ -89,7 +88,12 @@ export interface AgentCommandCatalogDocument {
       kind: typeof LICELL_HELP_KIND;
       schemaVersion: typeof LICELL_HELP_SCHEMA_VERSION;
     };
+    cliRecord: {
+      kind: string;
+      schemaVersion: string;
+    };
   };
+  cliRecords: ReturnType<typeof getCliRecordContractDocument>;
   globalOptions: string[];
   rootCommands: string[];
   childCommands: CommandCatalog['childCommands'];
@@ -201,6 +205,7 @@ function renderDecisionGuideMarkdown(command: AgentCommandCatalogEntry) {
 
 export function buildAgentCommandCatalog(catalog: CommandCatalog = getCommandCatalog()): AgentCommandCatalogDocument {
   const sections = buildCommandReferenceSections(catalog);
+  const cliRecord = getCliRecordContractDocument();
   const sectionByRoot = new Map<string, CommandReferenceSection>();
   for (const section of sections) {
     for (const root of section.roots) {
@@ -216,8 +221,13 @@ export function buildAgentCommandCatalog(catalog: CommandCatalog = getCommandCat
       help: {
         kind: LICELL_HELP_KIND,
         schemaVersion: LICELL_HELP_SCHEMA_VERSION
+      },
+      cliRecord: {
+        kind: cliRecord.kind,
+        schemaVersion: cliRecord.schemaVersion
       }
     },
+    cliRecords: cliRecord,
     globalOptions: [...catalog.globalOptions],
     rootCommands: [...catalog.rootCommands],
     childCommands: Object.fromEntries(
@@ -293,10 +303,7 @@ export function buildAgentCommandCatalog(catalog: CommandCatalog = getCommandCat
         recommendedFlow: help.recommendedFlow.map((step) => ({ ...step })),
         result: cloneResolvedCommandResultDescriptor(help.result),
         sectionId: sectionByRoot.get(command.rootCommand)?.id || section.id,
-        sectionTitle: sectionByRoot.get(command.rootCommand)?.title || section.title,
-        generatedMcpToolName: canExposeCommandAsGeneratedMcpTool(command.rootCommand)
-          ? toGeneratedMcpToolName(command.key)
-          : undefined
+        sectionTitle: sectionByRoot.get(command.rootCommand)?.title || section.title
       };
     }))
   };
@@ -361,8 +368,12 @@ export function filterAgentCommandCatalog(
     schemas: {
       help: {
         ...catalog.schemas.help
+      },
+      cliRecord: {
+        ...catalog.schemas.cliRecord
       }
     },
+    cliRecords: getCliRecordContractDocument(),
     globalOptions: [...catalog.globalOptions],
     rootCommands: catalog.rootCommands.filter((root) => allowedRoots.has(root)),
     childCommands: Object.fromEntries(
@@ -396,7 +407,7 @@ export function renderSkillCommandReference(catalog: CommandCatalog = getCommand
   const parts: string[] = [
     '## Command Reference',
     '',
-    '以下命令清单由 licell CLI 注册表自动生成；新增或修改 CLI 命令后，Skills / docs/reference/agent-surfaces.md / MCP / shell completion 会同步反映。'
+    '以下命令清单由 licell CLI 注册表自动生成；新增或修改 CLI 命令后，Skills / docs/reference/agent-surfaces.md / shell completion 会同步反映。'
   ];
 
   for (const section of sections) {
@@ -438,10 +449,6 @@ export function renderSkillCommandReference(catalog: CommandCatalog = getCommand
         metadata.push(`子命令：${catalog.childCommands[command.key].map((child) => `\`${child}\``).join(', ')}`);
       }
       const agentCommand = agentCommandByKey.get(command.key);
-      const generatedMcpToolName = agentCommand?.generatedMcpToolName;
-      if (generatedMcpToolName) {
-        metadata.push(`生成 MCP Tool：\`${generatedMcpToolName}\``);
-      }
 
       parts.push('', `#### \`${toLicellInvocation(command.rawName)}\``);
       if (agentCommand?.description || command.description) {

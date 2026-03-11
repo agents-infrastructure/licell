@@ -4,7 +4,7 @@ import { resolveCliVersion } from '../utils/version';
 
 export const LICELL_OUTPUT_OPTION = {
   rawName: '--output <mode>',
-  description: '输出格式：text|json（json 更适合 Agent/MCP 解析）',
+  description: '输出格式：text|json（json 更适合 Agent / 自动化解析）',
   config: { default: 'text' }
 } as const;
 

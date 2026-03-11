@@ -31,10 +31,15 @@ describe('buildAgentCommandCatalog', () => {
       kind: 'licell-help',
       schemaVersion: '1.0'
     });
+    expect(catalog.schemas.cliRecord).toEqual({
+      kind: 'licell-cli-record',
+      schemaVersion: '1.0'
+    });
     expect(catalog.globalOptions).toContain('--output');
     expect(catalog.rootCommands).toContain('doctor');
     expect(catalog.rootCommands).toContain('deploy');
     expect(catalog.rootCommands).toContain('completion');
+    expect(catalog.rootCommands).toContain('catalog');
 
     const deploy = catalog.commands.find((command) => command.key === 'deploy');
     const deployHelp = buildHelpSemanticDocument({
@@ -60,10 +65,10 @@ describe('buildAgentCommandCatalog', () => {
     const releasePrune = catalog.commands.find((command) => command.key === 'release prune');
     expect(releasePrune?.safety?.level).toBe('destructive');
 
-    const mcp = catalog.commands.find((command) => command.key === 'mcp');
-    expect(mcp?.recommendedFlow[0]?.command).toBe('licell mcp init');
-    expect(mcp?.examples).toContain('licell mcp init');
-    expect(mcp?.agentTips.some((tip) => tip.includes('mcp serve'))).toBe(true);
+    const commandCatalog = catalog.commands.find((command) => command.key === 'catalog');
+    expect(commandCatalog?.recommendedFlow[0]?.command).toBe('licell catalog --output json');
+    expect(commandCatalog?.examples).toContain('licell catalog --output json');
+    expect(commandCatalog?.result?.fields.some((field) => field.name === 'cliRecords.event')).toBe(true);
 
     const doctor = catalog.commands.find((command) => command.key === 'doctor');
     expect(doctor?.title).toBe('Diagnose local licell readiness');
@@ -75,7 +80,6 @@ describe('buildAgentCommandCatalog', () => {
     expect(doctor?.result?.fields.some((field) => field.name === 'checks[].nextActions[].priority')).toBe(true);
     expect(doctor?.result?.fields.some((field) => field.name === 'checks[].nextCommands[].priority')).toBe(true);
     expect(doctor?.result?.fieldTree.some((field) => field.name === 'checks[]')).toBe(true);
-    expect(doctor?.generatedMcpToolName).toBe('licell_cmd_doctor');
 
     const domainAppBind = catalog.commands.find((command) => command.key === 'domain app bind');
     expect(domainAppBind?.result?.outcomeKey).toBe('bound');

@@ -78,15 +78,15 @@ describe('resolveCompletionCandidates', () => {
   });
 
 
-  it('suggests mcp real subcommands from command graph', () => {
+  it('suggests catalog options from command graph', () => {
     const candidates = resolveCompletionCandidates({
-      compWords: 'licell mcp ',
+      compWords: 'licell catalog --',
       compCword: 2,
-      compCur: ''
+      compCur: '--'
     });
 
-    expect(candidates).toContain('init');
-    expect(candidates).toContain('serve');
+    expect(candidates).toContain('--root-command');
+    expect(candidates).toContain('--command-key');
   });
 });
 

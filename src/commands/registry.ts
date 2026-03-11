@@ -1,5 +1,6 @@
 import { authCommandModule } from './auth';
 import { cacheCommandModule } from './cache';
+import { catalogCommandModule } from './catalog';
 import { configCommandModule } from './config';
 import { dbCommandModule } from './db';
 import { deployCommandModule } from './deploy';
@@ -11,7 +12,6 @@ import { envCommandModule } from './env';
 import { fnCommandModule } from './fn';
 import { initCommandModule } from './init';
 import { logsCommandModule } from './logs';
-import { mcpCommandModule } from './mcp';
 import { ossCommandModule } from './oss';
 import { releaseCommandModule } from './release';
 import { shellCommandModule } from './shell';
@@ -26,15 +26,15 @@ export const licellRootHelpSurface = defineCommandBundle({
   descriptors: {
     help: {
       notes: [
-        '帮助信息由共享 CLI 命令注册表生成；CLI / MCP / skills / docs / completion 保持同源。'
+        '帮助信息由共享 CLI 命令注册表生成；CLI / help / catalog / skills / docs / completion 保持同源。'
       ],
       examples: [
         'licell login',
         'licell init',
         'licell doctor',
         'licell deploy',
+        'licell catalog --output json',
         'licell skills init codex',
-        'licell mcp init',
         'licell deploy --output json'
       ],
       agentTips: [
@@ -49,8 +49,8 @@ export const licellRootHelpSurface = defineCommandBundle({
         },
         {
           title: '让 AI Agent 直接操作 licell',
-          description: '用 setup/skills/mcp 完成 Agent 接入，后续 help / MCP / docs 都会走同一套命令源。',
-          commands: ['licell setup', 'licell skills init codex', 'licell mcp init']
+          description: '用 setup/skills/catalog 完成 Agent 接入，后续 help / catalog / docs 都会走同一套命令源。',
+          commands: ['licell setup', 'licell skills init codex', 'licell catalog --output json']
         },
         {
           title: '把命令接入自动化脚本',
@@ -81,7 +81,7 @@ export const LICELL_COMMAND_MANIFEST = defineCommandManifest({
     cacheCommandModule,
     supaCommandModule,
     doctorCommandModule,
-    mcpCommandModule,
+    catalogCommandModule,
     skillsCommandModule,
     setupCommandModule,
     shellCommandModule,

@@ -34,7 +34,7 @@ export async function runWelcomeSetupFlow() {
   // 2. Ask for Setup (AI Skills)
   console.log();
   const wantSetup = await confirm({
-    message: '是否配置 AI Agent Skills 和 MCP（推荐，让 AI 更好地使用 licell）？',
+    message: '是否配置 AI Agent Skills（推荐，让 AI 直接通过 licell CLI 工作）？',
     initialValue: true
   });
 

@@ -38,6 +38,7 @@ import {
   buildCommandReferenceSections,
   type CommandReferenceSection
 } from './command-reference-sections';
+import { getCliRecordContractDocument } from './cli-record-contract';
 
 export type HelpScope = 'root' | 'namespace' | 'command';
 
@@ -172,6 +173,13 @@ export interface HelpDocument extends HelpSemanticDocument {
 export interface SerializedHelpDocument extends HelpSemanticDocument {
   schemaVersion: typeof LICELL_HELP_SCHEMA_VERSION;
   kind: typeof LICELL_HELP_KIND;
+  schemas: {
+    cliRecord: {
+      kind: string;
+      schemaVersion: string;
+    };
+  };
+  cliRecords: ReturnType<typeof getCliRecordContractDocument>;
   version: string;
   renderedText: string;
 }
@@ -197,7 +205,7 @@ const STATIC_GLOBAL_OPTIONS: CatalogOption[] = [
     rawName: '--output <mode>',
     flags: ['--output'],
     primaryFlag: '--output',
-    description: '输出格式：text|json（json 更适合 Agent/MCP 解析）',
+    description: '输出格式：text|json（json 更适合 Agent / 自动化解析）',
     takesValue: true,
     valueRequired: true,
     boolean: false
@@ -864,9 +872,17 @@ export const LICELL_HELP_KIND = 'licell-help' as const;
 export const LICELL_HELP_SCHEMA_VERSION = '1.0' as const;
 
 export function serializeHelpDocument(doc: HelpDocument): SerializedHelpDocument {
+  const cliRecord = getCliRecordContractDocument();
   return {
     schemaVersion: LICELL_HELP_SCHEMA_VERSION,
     kind: LICELL_HELP_KIND,
+    schemas: {
+      cliRecord: {
+        kind: cliRecord.kind,
+        schemaVersion: cliRecord.schemaVersion
+      }
+    },
+    cliRecords: cliRecord,
     version: doc.version,
     scope: doc.scope,
     key: doc.key,

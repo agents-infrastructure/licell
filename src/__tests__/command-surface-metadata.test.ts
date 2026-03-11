@@ -71,9 +71,9 @@ describe('command surface metadata', () => {
     expect(surface.automation?.notes).toEqual([]);
   });
 
-  it('derives recommended flow for command scopes with child commands', () => {
-    const mcp = catalog.commandsByKey['mcp']!;
-    const subcommands = ['mcp init', 'mcp serve']
+  it('resolves explicit recommended flow for deploy command scopes with child commands', () => {
+    const deploy = catalog.commandsByKey['deploy']!;
+    const subcommands = ['deploy spec', 'deploy check']
       .map((key) => catalog.commandsByKey[key]!)
       .map((command) => ({
         key: command.key,
@@ -84,18 +84,20 @@ describe('command surface metadata', () => {
 
     const surface = buildCommandSurfaceMetadata({
       scope: 'command',
-      key: 'mcp',
-      command: mcp,
+      key: 'deploy',
+      command: deploy,
       subcommands,
-      descriptor: getCommandDescriptor('mcp'),
+      descriptor: getCommandDescriptor('deploy'),
       extraTokens: []
     });
 
-    expect(surface.recommendedFlow[0]?.command).toBe('licell mcp init');
-    expect(surface.nextActions.map((action) => action.commandTemplate)).toEqual([
-      'licell mcp init',
-      'licell mcp serve'
-    ]);
-    expect(surface.agentTips.some((tip) => tip.includes('mcp serve'))).toBe(true);
+    expect(surface.recommendedFlow[0]?.command).toBe('licell deploy spec');
+    expect(surface.nextActions.map((action) => action.commandTemplate)).toEqual(expect.arrayContaining([
+      'licell deploy spec',
+      'licell deploy check'
+    ]));
+    expect(surface.nextActions[0]?.commandTemplate).toBe('licell deploy spec');
+    expect(surface.nextActions[1]?.commandTemplate).toBe('licell deploy check');
+    expect(surface.agentTips.some((tip) => tip.includes('deploy spec') && tip.includes('deploy check'))).toBe(true);
   });
 });

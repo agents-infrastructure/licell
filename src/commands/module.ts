@@ -145,7 +145,7 @@ export interface DeclaredCliCommand {
   rawName: string;
   /**
    * Parser-only command signature. Use sparingly when the interactive CLI may
-   * prompt for omitted opaque inputs, but machine-facing surfaces (help/docs/MCP)
+   * prompt for omitted opaque inputs, but machine-facing surfaces (help/docs/catalog)
    * must continue to expose the canonical required arguments via `rawName`.
    */
   cliRawName?: string;

@@ -51,7 +51,7 @@ const skillsInitCommand = defineCliCommand({
     recommendedFlow: [
       { title: '选择目标 Agent', command: 'licell skills init codex', reason: '根据实际使用的 Agent 生成对应技能表面。' },
       { title: '检查写入结果', reason: '确认 skills 文件与 AGENTS 入口写入到了预期目录。' },
-      { title: '必要时接入 MCP', command: 'licell mcp init', reason: '让 Agent 不仅知道命令，还能调用 licell。' }
+      { title: '读取共享命令目录', command: 'licell catalog --output json', reason: '让 Agent 统一通过 catalog / help / JSON output 理解 licell。' }
     ],
     result: {
       summary: '返回 skills 脚手架写入结果。',
@@ -64,7 +64,10 @@ const skillsInitCommand = defineCliCommand({
         { name: 'skippedFiles', description: '内容相同而跳过的文件列表。', required: true },
         { name: 'agentsMdUpdated', description: '是否更新了 `AGENTS.md`。', required: true }
       ]
-    }
+    },
+    agentTips: [
+      'skills 只负责把 licell 的使用模式注入给 Agent；命令发现与执行统一走 `licell catalog --output json`、`licell <command> --help --output json`、`licell ... --output json`。'
+    ]
   }
 });
 
