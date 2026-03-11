@@ -16,7 +16,7 @@ import { formatErrorMessage } from './utils/errors';
 import { Config } from './utils/config';
 import { isInteractiveTTY } from './utils/cli-shared';
 import { runWelcomeSetupFlow } from './utils/first-run';
-import { buildHelpDocument, resolveHelpRequest, shouldRenderCustomHelp, stripArgsFromUsage, suggestCommands, type HelpDocument } from './utils/help';
+import { buildHelpDocument, resolveHelpRequest, serializeHelpDocument, shouldRenderCustomHelp, stripArgsFromUsage, suggestCommands, type HelpDocument } from './utils/help';
 import {
   emitCliError,
   emitCliResult,
@@ -51,7 +51,7 @@ function emitHelpDocument(help: HelpDocument, exitCode = 0): never {
       stage: 'help',
       scope: help.scope,
       key: help.key,
-      help
+      help: serializeHelpDocument(help)
     });
   } else {
     process.stdout.write(help.text);

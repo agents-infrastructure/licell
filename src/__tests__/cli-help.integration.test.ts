@@ -109,9 +109,13 @@ describe('cli help e2e', () => {
     expect(records[0]?.stage).toBe('help');
     expect(records[0]?.scope).toBe('command');
     expect(records[0]?.key).toBe('domain app bind');
+    expect(records[0]?.help?.schemaVersion).toBe('1.0');
+    expect(records[0]?.help?.kind).toBe('licell-help');
     expect(records[0]?.help?.title).toBe('licell domain app bind <domain>');
-    expect(records[0]?.help?.blocks.some((block: { kind?: string }) => block.kind === 'structured-result')).toBe(true);
-    expect(records[0]?.help?.text).toContain('Structured Result:');
-    expect(records[0]?.help?.text).toContain('`finalUrl` · 最终访问 URL。');
+    expect(records[0]?.help?.result?.outcomeKey).toBe('bound');
+    expect(records[0]?.help?.result?.fields.some((field: { name?: string }) => field.name === 'finalUrl')).toBe(true);
+    expect(records[0]?.help?.renderedText).toContain('Structured Result:');
+    expect(records[0]?.help?.renderedText).toContain('`finalUrl` · 最终访问 URL。');
+    expect(records[0]?.help?.blocks).toBeUndefined();
   }, 10000);
 });

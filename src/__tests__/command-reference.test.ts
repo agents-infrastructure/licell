@@ -5,6 +5,7 @@ import {
   filterAgentCommandCatalog,
   renderSkillCommandReference
 } from '../utils/command-reference';
+import { buildHelpSemanticDocument } from '../utils/help';
 
 describe('buildCommandReferenceSections', () => {
   it('groups commands into stable sections', () => {
@@ -28,17 +29,24 @@ describe('buildAgentCommandCatalog', () => {
     expect(catalog.rootCommands).toContain('completion');
 
     const deploy = catalog.commands.find((command) => command.key === 'deploy');
+    const deployHelp = buildHelpSemanticDocument({
+      argv: ['node', 'src/cli.ts', 'deploy', '--help']
+    });
     expect(deploy).toBeDefined();
+    expect(deployHelp?.scope).toBe('command');
     expect(deploy?.subcommands).toContain('spec');
     expect(deploy?.subcommands).toContain('check');
     expect(deploy?.options.some((option) => option.primaryFlag === '--type')).toBe(true);
     expect(deploy?.title).toBe('Deploy current project');
     expect(deploy?.summary).toContain('一键部署 API / Static');
+    expect(deploy?.summary).toBe(deployHelp?.summary);
+    expect(deploy?.decisionGuide).toEqual(deployHelp?.decisionGuide);
     expect(deploy?.optionInsights.some((insight) => insight.flag.includes('--runtime'))).toBe(true);
     expect(deploy?.tasks.some((task) => task.phase === 'inspect')).toBe(true);
     expect(deploy?.decisionGuide.some((group) => group.phase === 'mutate')).toBe(true);
     expect(deploy?.examples).toContain('licell deploy --output json');
     expect(deploy?.recommendedFlow[0]?.command).toBe('licell deploy spec');
+    expect(deploy?.recommendedFlow).toEqual(deployHelp?.recommendedFlow);
 
     const releasePrune = catalog.commands.find((command) => command.key === 'release prune');
     expect(releasePrune?.safety?.level).toBe('destructive');

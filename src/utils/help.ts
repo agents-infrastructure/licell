@@ -23,7 +23,6 @@ import {
   type CommandTaskEntry as HelpTaskDoc,
   type CommandTaskGroup as HelpTaskGroup
 } from './command-tasks';
-import { buildCommandReferenceSections, type CommandReferenceSection } from './command-reference';
 import {
   buildCommandSurfaceMetadata,
   formatInvocationWithSelection,
@@ -32,6 +31,10 @@ import {
   type ResolvedCommandAutomationDescriptor,
   type ResolvedCommandInteractionDescriptor
 } from './command-surface-metadata';
+import {
+  buildCommandReferenceSections,
+  type CommandReferenceSection
+} from './command-reference-sections';
 
 export type HelpScope = 'root' | 'namespace' | 'command';
 
@@ -123,8 +126,7 @@ export type HelpBlock =
       steps: HelpFlowStep[];
     };
 
-export interface HelpDocument {
-  version: string;
+export interface HelpSemanticDocument {
   scope: HelpScope;
   key: string;
   title: string;
@@ -150,9 +152,25 @@ export interface HelpDocument {
   result?: HelpResultDoc;
   optionInsights: HelpOptionInsight[];
   recommendedFlow: HelpFlowStep[];
+}
+
+export interface HelpDocument extends HelpSemanticDocument {
+  version: string;
   blocks: HelpBlock[];
   text: string;
 }
+
+export interface SerializedHelpDocument extends HelpSemanticDocument {
+  schemaVersion: '1.0';
+  kind: 'licell-help';
+  version: string;
+  renderedText: string;
+}
+
+type HelpRenderableDocument = HelpSemanticDocument & {
+  version: string;
+  blocks: HelpBlock[];
+};
 
 interface HelpResolution {
   helpRequested: boolean;
@@ -545,7 +563,7 @@ function buildRelatedCommands(
   );
 }
 
-function buildRootHelpBlocks(doc: Omit<HelpDocument, 'blocks' | 'text'>): HelpBlock[] {
+function buildRootHelpBlocks(doc: HelpSemanticDocument): HelpBlock[] {
   return [
     ...(doc.examples.length > 0 ? [{ kind: 'items', title: 'Quick Start', items: doc.examples } satisfies HelpBlock] : []),
     ...(doc.agentTips.length > 0 ? [{ kind: 'items', title: 'Automation', items: doc.agentTips } satisfies HelpBlock] : []),
@@ -580,7 +598,7 @@ function buildAutomationItems(automation: ResolvedCommandAutomationDescriptor) {
   ]));
 }
 
-function buildCommandLikeHelpBlocks(doc: Omit<HelpDocument, 'blocks' | 'text'>): HelpBlock[] {
+function buildCommandLikeHelpBlocks(doc: HelpSemanticDocument): HelpBlock[] {
   return [
     ...buildDecisionGuideBlock(doc.decisionGuide, doc.tasks),
     ...(doc.interaction ? [{
@@ -752,7 +770,7 @@ function renderHelpBlocks(blocks: HelpBlock[]) {
   return blocks.flatMap((block) => renderHelpBlock(block));
 }
 
-function renderRootHelp(doc: Omit<HelpDocument, 'text'>) {
+function renderRootHelp(doc: HelpRenderableDocument) {
   const lines: string[] = [
     `licell/${doc.version}`,
     '',
@@ -767,7 +785,7 @@ function renderRootHelp(doc: Omit<HelpDocument, 'text'>) {
   return `${lines.join('\n').trim()}\n`;
 }
 
-function renderCommandLikeHelp(doc: Omit<HelpDocument, 'text'>) {
+function renderCommandLikeHelp(doc: HelpRenderableDocument) {
   const lines: string[] = [
     `licell/${doc.version}`,
     '',
@@ -781,13 +799,14 @@ function renderCommandLikeHelp(doc: Omit<HelpDocument, 'text'>) {
   return `${lines.join('\n').trim()}\n`;
 }
 
-function finalizeHelpDocument(baseDoc: Omit<HelpDocument, 'blocks' | 'text'>): HelpDocument {
+function finalizeHelpDocument(baseDoc: HelpSemanticDocument, version: string): HelpDocument {
   const blocks = baseDoc.scope === 'root'
     ? buildRootHelpBlocks(baseDoc)
     : buildCommandLikeHelpBlocks(baseDoc);
 
-  const doc: Omit<HelpDocument, 'text'> = {
+  const doc: HelpRenderableDocument = {
     ...baseDoc,
+    version,
     blocks
   };
 
@@ -797,11 +816,80 @@ function finalizeHelpDocument(baseDoc: Omit<HelpDocument, 'blocks' | 'text'>): H
   };
 }
 
-export function buildHelpDocument(input: {
+const HELP_JSON_SCHEMA_VERSION = '1.0' as const;
+
+export function serializeHelpDocument(doc: HelpDocument): SerializedHelpDocument {
+  return {
+    schemaVersion: HELP_JSON_SCHEMA_VERSION,
+    kind: 'licell-help',
+    version: doc.version,
+    scope: doc.scope,
+    key: doc.key,
+    title: doc.title,
+    summary: doc.summary,
+    usage: [...doc.usage],
+    args: doc.args.map((arg) => ({ ...arg })),
+    options: doc.options.map((option) => ({ ...option, flags: [...option.flags] })),
+    globalOptions: doc.globalOptions.map((option) => ({ ...option, flags: [...option.flags] })),
+    aliases: [...doc.aliases],
+    subcommands: doc.subcommands.map((command) => ({ ...command, aliases: [...command.aliases] })),
+    actionHints: doc.actionHints.map((hint) => ({ ...hint })),
+    tasks: doc.tasks.map((task) => ({ ...task, commands: [...task.commands] })),
+    decisionGuide: doc.decisionGuide.map((group) => ({
+      ...group,
+      tasks: group.tasks.map((task) => ({ ...task, commands: [...task.commands] }))
+    })),
+    notes: [...doc.notes],
+    examples: [...doc.examples],
+    agentTips: [...doc.agentTips],
+    interaction: doc.interaction
+      ? {
+          ...doc.interaction,
+          prompts: [...doc.interaction.prompts],
+          notes: [...doc.interaction.notes]
+        }
+      : undefined,
+    automation: doc.automation
+      ? {
+          ...doc.automation,
+          explicitInputs: [...doc.automation.explicitInputs],
+          notes: [...doc.automation.notes]
+        }
+      : undefined,
+    relatedCommands: doc.relatedCommands.map((command) => ({ ...command, aliases: [...command.aliases] })),
+    sections: doc.sections.map((section) => ({
+      ...section,
+      commands: section.commands.map((command) => ({ ...command, aliases: [...command.aliases] }))
+    })),
+    subcommandGroups: doc.subcommandGroups.map((group) => ({
+      ...group,
+      commands: group.commands.map((command) => ({ ...command, aliases: [...command.aliases] }))
+    })),
+    safety: doc.safety
+      ? {
+          ...doc.safety,
+          confirmFlags: [...doc.safety.confirmFlags]
+        }
+      : undefined,
+    result: doc.result
+      ? {
+          ...doc.result,
+          fields: doc.result.fields.map((field) => ({ ...field }))
+        }
+      : undefined,
+    optionInsights: doc.optionInsights.map((insight) => ({
+      ...insight,
+      cautions: [...insight.cautions]
+    })),
+    recommendedFlow: doc.recommendedFlow.map((step) => ({ ...step })),
+    renderedText: doc.text
+  };
+}
+
+export function buildHelpSemanticDocument(input: {
   argv: string[];
-  version: string;
   catalog?: CommandCatalog;
-}): HelpDocument | null {
+}): HelpSemanticDocument | null {
   const catalog = input.catalog || getCommandCatalog();
   const sections = buildCommandReferenceSections(catalog);
   const resolution = resolveHelpTarget(input.argv, catalog);
@@ -822,8 +910,7 @@ export function buildHelpDocument(input: {
       subcommands: [],
       extraTokens: []
     });
-    return finalizeHelpDocument({
-      version: input.version,
+    return {
       scope: 'root',
       key: 'help',
       title: 'licell',
@@ -853,7 +940,7 @@ export function buildHelpDocument(input: {
       result: surface.result,
       optionInsights: surface.optionInsights,
       recommendedFlow: surface.recommendedFlow
-    });
+    };
   }
 
   if (resolution.scope === 'namespace') {
@@ -869,8 +956,7 @@ export function buildHelpDocument(input: {
       subcommands,
       extraTokens: resolution.extraTokens
     });
-    return finalizeHelpDocument({
-      version: input.version,
+    return {
       scope: 'namespace',
       key: resolution.key,
       title: `licell ${resolution.key}`,
@@ -899,7 +985,7 @@ export function buildHelpDocument(input: {
       result: surface.result,
       optionInsights: surface.optionInsights,
       recommendedFlow: surface.recommendedFlow
-    });
+    };
   }
 
   const command = resolution.exactCommand!;
@@ -917,8 +1003,7 @@ export function buildHelpDocument(input: {
     extraTokens: resolution.extraTokens
   });
 
-  return finalizeHelpDocument({
-    version: input.version,
+  return {
     scope: 'command',
     key: command.key,
     title: toLicellInvocation(command.rawName),
@@ -948,7 +1033,21 @@ export function buildHelpDocument(input: {
     result: surface.result,
     optionInsights: surface.optionInsights,
     recommendedFlow: surface.recommendedFlow
+  };
+}
+
+export function buildHelpDocument(input: {
+  argv: string[];
+  version: string;
+  catalog?: CommandCatalog;
+}): HelpDocument | null {
+  const semanticDoc = buildHelpSemanticDocument({
+    argv: input.argv,
+    catalog: input.catalog
   });
+
+  if (!semanticDoc) return null;
+  return finalizeHelpDocument(semanticDoc, input.version);
 }
 
 export { stripArgsFromUsage };

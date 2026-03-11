@@ -5,38 +5,28 @@ import {
   type CatalogOption
 } from './command-catalog';
 import {
-  COMMAND_SECTION_CONFIG,
+  buildCommandReferenceSections,
+  type CommandReferenceSection
+} from './command-reference-sections';
+import {
   getCommandDescriptor,
   type CommandActionHint,
   type CommandFlowStep,
-  type CommandTaskPhase,
   type CommandOptionInsight,
   type CommandSafetyMetadata,
   type ResolvedCommandResultDescriptor
 } from './command-metadata';
-import {
-  buildCommandTasks,
-  groupCommandTasks,
-  type CommandTaskEntry,
-  type CommandTaskGroup
-} from './command-tasks';
+import { type CommandTaskEntry, type CommandTaskGroup } from './command-tasks';
 import { canExposeCommandAsGeneratedMcpTool, toGeneratedMcpToolName } from './command-surface-ids';
 import {
-  buildCommandSurfaceMetadata,
   type ResolvedCommandAutomationDescriptor,
   type ResolvedCommandInteractionDescriptor,
   toLicellInvocation
 } from './command-surface-metadata';
+import { buildHelpSemanticDocument } from './help';
 
-export interface CommandReferenceSection {
-  id: string;
-  title: string;
-  roots: string[];
-  summary?: string;
-  notes: string[];
-  taskHints: Array<{ title: string; description: string; commands?: string[]; phase?: CommandTaskPhase }>;
-  commands: CatalogCommand[];
-}
+export { buildCommandReferenceSections } from './command-reference-sections';
+export type { CommandReferenceSection } from './command-reference-sections';
 
 export interface AgentCommandCatalogSection {
   id: string;
@@ -107,21 +97,6 @@ function summarizeKeyOptions(command: CatalogCommand) {
   return flags.length > 0 ? flags.map((flag) => `\`${flag}\``).join(', ') : '—';
 }
 
-function sortCommands(commands: CatalogCommand[], roots: string[]) {
-  const rootIndex = new Map(roots.map((root, index) => [root, index]));
-  return [...commands].sort((left, right) => {
-    const leftRootOrder = rootIndex.get(left.rootCommand) ?? Number.MAX_SAFE_INTEGER;
-    const rightRootOrder = rootIndex.get(right.rootCommand) ?? Number.MAX_SAFE_INTEGER;
-    if (leftRootOrder !== rightRootOrder) return leftRootOrder - rightRootOrder;
-
-    const leftDepth = left.commandTokens.length;
-    const rightDepth = right.commandTokens.length;
-    if (leftDepth !== rightDepth) return leftDepth - rightDepth;
-
-    return left.key.localeCompare(right.key);
-  });
-}
-
 function renderCommandTable(commands: CatalogCommand[]) {
   const rows = commands.map((command) => {
     const display = getCommandDisplayDescription(command);
@@ -175,53 +150,9 @@ function renderDecisionGuideMarkdown(command: AgentCommandCatalogEntry) {
   return lines;
 }
 
-export function buildCommandReferenceSections(catalog: CommandCatalog = getCommandCatalog()): CommandReferenceSection[] {
-  const assignedRoots = new Set<string>();
-  const sections: CommandReferenceSection[] = [];
-
-  for (const config of COMMAND_SECTION_CONFIG) {
-    const roots = config.roots.filter((root) => catalog.rootCommands.includes(root));
-    if (roots.length === 0) continue;
-
-    for (const root of roots) assignedRoots.add(root);
-
-    sections.push({
-      id: config.id,
-      title: config.title,
-      roots,
-      summary: config.summary,
-      notes: [...(config.notes || [])],
-      taskHints: (config.taskHints || []).map((task) => ({ ...task, commands: [...(task.commands || [])] })),
-      commands: sortCommands(
-        catalog.commands.filter((command) => roots.includes(command.rootCommand)),
-        roots
-      )
-    });
-  }
-
-  const remainingRoots = catalog.rootCommands.filter((root) => !assignedRoots.has(root));
-  if (remainingRoots.length > 0) {
-    sections.push({
-      id: 'other',
-      title: 'Other Commands',
-      roots: remainingRoots,
-      summary: '当前尚未归类的命令。',
-      notes: [],
-      taskHints: [],
-      commands: sortCommands(
-        catalog.commands.filter((command) => remainingRoots.includes(command.rootCommand)),
-        remainingRoots
-      )
-    });
-  }
-
-  return sections;
-}
-
 export function buildAgentCommandCatalog(catalog: CommandCatalog = getCommandCatalog()): AgentCommandCatalogDocument {
   const sections = buildCommandReferenceSections(catalog);
   const sectionByRoot = new Map<string, CommandReferenceSection>();
-  const commandByKey = new Map(catalog.commands.map((command) => [command.key, command]));
   for (const section of sections) {
     for (const root of section.roots) {
       sectionByRoot.set(root, section);
@@ -247,51 +178,67 @@ export function buildAgentCommandCatalog(catalog: CommandCatalog = getCommandCat
     })),
     commands: sections.flatMap((section) => section.commands.map((command) => {
       const descriptor = getCommandDescriptor(command.key);
-      const subcommands = (catalog.childCommands[command.key] || [])
-        .map((child) => commandByKey.get(`${command.key} ${child}`))
-        .filter((child): child is CatalogCommand => Boolean(child))
-        .map((child) => ({
-          key: child.key,
-          rawName: child.rawName,
-          invocation: toLicellInvocation(child.rawName),
-          description: child.description
-        }));
-      const tasks = buildCommandTasks({ scope: 'command', enhancement: descriptor, subcommands });
-      const decisionGuide = groupCommandTasks(tasks);
-      const surface = buildCommandSurfaceMetadata({
-        scope: 'command',
-        key: command.key,
-        command,
-        subcommands,
-        descriptor,
-        extraTokens: []
+      const help = buildHelpSemanticDocument({
+        argv: ['node', 'src/cli.ts', ...command.key.split(' '), '--help'],
+        catalog
       });
+
+      if (!help || help.scope !== 'command') {
+        throw new Error(`failed to build semantic help for command: ${command.key}`);
+      }
+
       return {
-        key: command.key,
+        key: help.key,
         rawName: command.rawName,
         invocation: toLicellInvocation(command.rawName),
         title: descriptor.title,
-        description: descriptor.summary || command.description,
-        summary: descriptor.summary,
+        description: help.summary || command.description,
+        summary: help.summary,
         rootCommand: command.rootCommand,
-        args: command.args.map((arg) => ({ ...arg })),
-        aliases: [...command.aliases],
-        options: command.options.map((option) => ({ ...option, flags: [...option.flags] })),
+        args: help.args.map((arg) => ({ ...arg })),
+        aliases: [...help.aliases],
+        options: help.options.map((option) => ({ ...option, flags: [...option.flags] })),
         subcommands: [...(catalog.childCommands[command.key] || [])],
-        notes: [...(descriptor.notes || [])],
-        examples: surface.examples,
-        agentTips: surface.agentTips,
-        actionHints: [...(descriptor.actionHints || [])],
-        argumentHints: { ...(descriptor.argumentHints || {}) },
-        tasks,
-        decisionGuide,
-        relatedCommands: [...(descriptor.related || [])],
-        interaction: surface.interaction,
-        automation: surface.automation,
-        safety: surface.safety,
-        optionInsights: surface.optionInsights,
-        recommendedFlow: surface.recommendedFlow,
-        result: surface.result,
+        notes: [...help.notes],
+        examples: [...help.examples],
+        agentTips: [...help.agentTips],
+        actionHints: help.actionHints.map((hint) => ({ ...hint })),
+        argumentHints: Object.fromEntries(
+          help.args
+            .filter((arg) => Boolean(arg.hint))
+            .map((arg) => [arg.name, arg.hint!])
+        ),
+        tasks: help.tasks.map((task) => ({ ...task, commands: [...task.commands] })),
+        decisionGuide: help.decisionGuide.map((group) => ({
+          ...group,
+          tasks: group.tasks.map((task) => ({ ...task, commands: [...task.commands] }))
+        })),
+        relatedCommands: help.relatedCommands.map((entry) => entry.key),
+        interaction: help.interaction
+          ? {
+              ...help.interaction,
+              prompts: [...help.interaction.prompts],
+              notes: [...help.interaction.notes]
+            }
+          : undefined,
+        automation: help.automation
+          ? {
+              ...help.automation,
+              explicitInputs: [...help.automation.explicitInputs],
+              notes: [...help.automation.notes]
+            }
+          : undefined,
+        safety: help.safety
+          ? { ...help.safety, confirmFlags: [...help.safety.confirmFlags] }
+          : undefined,
+        optionInsights: help.optionInsights.map((insight) => ({ ...insight, cautions: [...insight.cautions] })),
+        recommendedFlow: help.recommendedFlow.map((step) => ({ ...step })),
+        result: help.result
+          ? {
+              ...help.result,
+              fields: help.result.fields.map((field) => ({ ...field }))
+            }
+          : undefined,
         sectionId: sectionByRoot.get(command.rootCommand)?.id || section.id,
         sectionTitle: sectionByRoot.get(command.rootCommand)?.title || section.title,
         generatedMcpToolName: canExposeCommandAsGeneratedMcpTool(command.rootCommand)

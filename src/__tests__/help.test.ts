@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildHelpDocument, resolveHelpRequest, shouldRenderCustomHelp, suggestCommands } from '../utils/help';
+import { buildHelpDocument, resolveHelpRequest, serializeHelpDocument, shouldRenderCustomHelp, suggestCommands } from '../utils/help';
 
 const VERSION = '0.10.1';
 
@@ -264,6 +264,25 @@ describe('help utils', () => {
     expect(doc?.recommendedFlow[0]?.command).toBe('licell upgrade --dry-run --output json');
     expect(doc?.text).toContain('Option Guidance:');
     expect(doc?.text).toContain('Recommended Flow:');
+  });
+
+  it('serializes help into a stable machine-facing schema', () => {
+    const doc = buildHelpDocument({
+      argv: ['node', 'src/cli.ts', 'domain', 'app', 'bind', '--help'],
+      version: VERSION
+    });
+
+    const payload = serializeHelpDocument(doc!);
+
+    expect(payload.schemaVersion).toBe('1.0');
+    expect(payload.kind).toBe('licell-help');
+    expect(payload.scope).toBe('command');
+    expect(payload.key).toBe('domain app bind');
+    expect(payload.result?.outcomeKey).toBe('bound');
+    expect(payload.result?.fields.some((field) => field.name === 'finalUrl')).toBe(true);
+    expect(payload.renderedText).toContain('Structured Result:');
+    expect('blocks' in payload).toBe(false);
+    expect('text' in payload).toBe(false);
   });
 
   it('derives a generic recommended flow for namespaces', () => {
