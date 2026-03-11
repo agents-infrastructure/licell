@@ -1,37 +1,25 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { mkdtempSync, rmSync } from 'fs';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { spawnSync } from 'child_process';
-import { tmpdir } from 'os';
-import { join, resolve } from 'path';
+import { resolve } from 'path';
 import { extractJsonRecordsFromOutput } from '../utils/output';
 
-const NPM_CACHE_DIR = mkdtempSync(join(tmpdir(), 'licell-help-e2e-'));
-
-afterAll(() => {
-  rmSync(NPM_CACHE_DIR, { recursive: true, force: true });
-});
-
 beforeAll(() => {
-  const warmup = spawnSync('npx', ['--yes', 'tsx', '--version'], {
+  const warmup = spawnSync('bun', ['x', 'tsx', '--version'], {
     cwd: process.cwd(),
     encoding: 'utf8',
-    env: {
-      ...process.env,
-      npm_config_cache: NPM_CACHE_DIR,
-      FORCE_COLOR: '0'
-    }
+    env: { ...process.env, FORCE_COLOR: '0' }
   });
 
   if (warmup.status !== 0) {
     throw new Error(warmup.stderr || warmup.stdout || warmup.error?.message || 'tsx warmup failed');
   }
-}, 20000);
+}, 30000);
 
 function runCliHelp(args: string[]) {
   const result = spawnSync(
-    'npx',
+    'bun',
     [
-      '--yes',
+      'x',
       'tsx',
       '--tsconfig',
       resolve(process.cwd(), 'tsconfig.json'),
@@ -41,11 +29,7 @@ function runCliHelp(args: string[]) {
     {
       cwd: process.cwd(),
       encoding: 'utf8',
-      env: {
-        ...process.env,
-        npm_config_cache: NPM_CACHE_DIR,
-        FORCE_COLOR: '0'
-      }
+      env: { ...process.env, FORCE_COLOR: '0' }
     }
   );
 

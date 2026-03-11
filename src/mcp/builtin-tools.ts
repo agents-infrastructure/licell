@@ -156,7 +156,12 @@ const BUILTIN_MCP_TOOLS = {
       return {
         kind: 'data',
         structuredContent: catalog,
-        text: `licell command catalog (${scopeLabel})\ncommands=${catalog.commands.length}, sections=${catalog.sections.length}`
+        text: [
+          `licell command catalog (${scopeLabel})`,
+          `schema=${catalog.kind}@${catalog.schemaVersion}`,
+          `help=${catalog.schemas.help.kind}@${catalog.schemas.help.schemaVersion}`,
+          `commands=${catalog.commands.length}, sections=${catalog.sections.length}`
+        ].join('\n')
       };
     }
   }

@@ -23,10 +23,17 @@ import {
   type ResolvedCommandInteractionDescriptor,
   toLicellInvocation
 } from './command-surface-metadata';
-import { buildHelpSemanticDocument } from './help';
+import {
+  buildHelpSemanticDocument,
+  LICELL_HELP_KIND,
+  LICELL_HELP_SCHEMA_VERSION
+} from './help';
 
 export { buildCommandReferenceSections } from './command-reference-sections';
 export type { CommandReferenceSection } from './command-reference-sections';
+
+export const LICELL_AGENT_COMMAND_CATALOG_KIND = 'licell-agent-command-catalog' as const;
+export const LICELL_AGENT_COMMAND_CATALOG_SCHEMA_VERSION = '1.0' as const;
 
 export interface AgentCommandCatalogSection {
   id: string;
@@ -71,6 +78,14 @@ export interface AgentCommandCatalogEntry {
 
 export interface AgentCommandCatalogDocument {
   source: 'licell-cli-registry';
+  kind: typeof LICELL_AGENT_COMMAND_CATALOG_KIND;
+  schemaVersion: typeof LICELL_AGENT_COMMAND_CATALOG_SCHEMA_VERSION;
+  schemas: {
+    help: {
+      kind: typeof LICELL_HELP_KIND;
+      schemaVersion: typeof LICELL_HELP_SCHEMA_VERSION;
+    };
+  };
   globalOptions: string[];
   rootCommands: string[];
   childCommands: CommandCatalog['childCommands'];
@@ -161,6 +176,14 @@ export function buildAgentCommandCatalog(catalog: CommandCatalog = getCommandCat
 
   return {
     source: 'licell-cli-registry',
+    kind: LICELL_AGENT_COMMAND_CATALOG_KIND,
+    schemaVersion: LICELL_AGENT_COMMAND_CATALOG_SCHEMA_VERSION,
+    schemas: {
+      help: {
+        kind: LICELL_HELP_KIND,
+        schemaVersion: LICELL_HELP_SCHEMA_VERSION
+      }
+    },
     globalOptions: [...catalog.globalOptions],
     rootCommands: [...catalog.rootCommands],
     childCommands: Object.fromEntries(
@@ -309,6 +332,11 @@ export function filterAgentCommandCatalog(
 
   return {
     ...catalog,
+    schemas: {
+      help: {
+        ...catalog.schemas.help
+      }
+    },
     globalOptions: [...catalog.globalOptions],
     rootCommands: catalog.rootCommands.filter((root) => allowedRoots.has(root)),
     childCommands: Object.fromEntries(

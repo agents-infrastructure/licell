@@ -1,9 +1,12 @@
 import {
   buildAgentCommandCatalog,
+  LICELL_AGENT_COMMAND_CATALOG_KIND,
+  LICELL_AGENT_COMMAND_CATALOG_SCHEMA_VERSION,
   type AgentCommandCatalogEntry,
   type AgentCommandResult
 } from '../utils/command-reference';
 import type { CommandSafetyMetadata, CommandTaskHint } from '../utils/command-metadata';
+import { LICELL_HELP_KIND, LICELL_HELP_SCHEMA_VERSION } from '../utils/help';
 import {
   groupCommandTasks,
   normalizeCommandTasks,
@@ -22,6 +25,16 @@ export type LicellMcpToolPreferredOutput = 'json' | 'text' | 'mixed';
 export interface LicellMcpToolMetadata {
   source: 'licell-mcp-tool-registry';
   toolKind: LicellMcpToolKind;
+  schemas: {
+    help: {
+      kind: typeof LICELL_HELP_KIND;
+      schemaVersion: typeof LICELL_HELP_SCHEMA_VERSION;
+    };
+    commandCatalog: {
+      kind: typeof LICELL_AGENT_COMMAND_CATALOG_KIND;
+      schemaVersion: typeof LICELL_AGENT_COMMAND_CATALOG_SCHEMA_VERSION;
+    };
+  };
   preferredOutput: LicellMcpToolPreferredOutput;
   supportsStructuredOutput: boolean;
   openWorld: boolean;
@@ -293,6 +306,10 @@ export function cloneLicellMcpToolMetadataEnvelope(metadata?: LicellMcpToolMetad
       ...metadata.licell,
       command: metadata.licell.command ? { ...metadata.licell.command } : undefined,
       section: metadata.licell.section ? { ...metadata.licell.section } : undefined,
+      schemas: {
+        help: { ...metadata.licell.schemas.help },
+        commandCatalog: { ...metadata.licell.schemas.commandCatalog }
+      },
       tags: [...metadata.licell.tags],
       workflows: cloneWorkflows(metadata.licell.workflows),
       tasks: cloneTasks(metadata.licell.tasks),
@@ -328,6 +345,16 @@ export function buildLicellMcpToolMetadata(input: {
     licell: {
       source: 'licell-mcp-tool-registry',
       toolKind: input.toolKind,
+      schemas: {
+        help: {
+          kind: LICELL_HELP_KIND,
+          schemaVersion: LICELL_HELP_SCHEMA_VERSION
+        },
+        commandCatalog: {
+          kind: LICELL_AGENT_COMMAND_CATALOG_KIND,
+          schemaVersion: LICELL_AGENT_COMMAND_CATALOG_SCHEMA_VERSION
+        }
+      },
       preferredOutput: input.preferredOutput,
       supportsStructuredOutput: input.supportsStructuredOutput,
       openWorld: Boolean(input.openWorld),

@@ -12,6 +12,16 @@ describe('mcp tool metadata helpers', () => {
       licell: {
         source: 'licell-mcp-tool-registry',
         toolKind: 'generated',
+        schemas: {
+          help: {
+            kind: 'licell-help',
+            schemaVersion: '1.0'
+          },
+          commandCatalog: {
+            kind: 'licell-agent-command-catalog',
+            schemaVersion: '1.0'
+          }
+        },
         preferredOutput: 'json',
         supportsStructuredOutput: true,
         openWorld: false,
@@ -35,6 +45,16 @@ describe('mcp tool metadata helpers', () => {
       licell: {
         source: 'licell-mcp-tool-registry',
         toolKind: 'builtin',
+        schemas: {
+          help: {
+            kind: 'licell-help',
+            schemaVersion: '1.0'
+          },
+          commandCatalog: {
+            kind: 'licell-agent-command-catalog',
+            schemaVersion: '1.0'
+          }
+        },
         preferredOutput: 'json',
         supportsStructuredOutput: true,
         openWorld: true,

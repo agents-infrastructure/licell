@@ -24,6 +24,12 @@ describe('buildAgentCommandCatalog', () => {
   it('includes command metadata shared across agent surfaces', () => {
     const catalog = buildAgentCommandCatalog();
     expect(catalog.source).toBe('licell-cli-registry');
+    expect(catalog.kind).toBe('licell-agent-command-catalog');
+    expect(catalog.schemaVersion).toBe('1.0');
+    expect(catalog.schemas.help).toEqual({
+      kind: 'licell-help',
+      schemaVersion: '1.0'
+    });
     expect(catalog.globalOptions).toContain('--output');
     expect(catalog.rootCommands).toContain('deploy');
     expect(catalog.rootCommands).toContain('completion');
@@ -69,6 +75,8 @@ describe('buildAgentCommandCatalog', () => {
 
   it('filters by root command without hardcoded command lists', () => {
     const filtered = filterAgentCommandCatalog(buildAgentCommandCatalog(), { rootCommand: 'deploy' });
+    expect(filtered.kind).toBe('licell-agent-command-catalog');
+    expect(filtered.schemas.help.kind).toBe('licell-help');
     expect(filtered.rootCommands).toEqual(['deploy']);
     expect(filtered.sections).toHaveLength(1);
     expect(filtered.commands.length).toBeGreaterThan(1);

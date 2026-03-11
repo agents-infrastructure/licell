@@ -25,6 +25,8 @@ describe('buildGeneratedMcpCommandTools', () => {
     expect(deployCheck.inputSchema.properties).toHaveProperty('timeoutMs');
     expect(deployCheck.description).toContain('Auto-generated from the shared licell CLI registry.');
     expect(tools.licell_cmd_deploy.metadata?.licell.preferredOutput).toBe('json');
+    expect(tools.licell_cmd_deploy.metadata?.licell.schemas.help.kind).toBe('licell-help');
+    expect(tools.licell_cmd_deploy.metadata?.licell.schemas.commandCatalog.kind).toBe('licell-agent-command-catalog');
     expect(tools.licell_cmd_deploy.metadata?.licell.decisionGuide.some((group) => group.phase === 'inspect')).toBe(true);
     expect(tools.licell_cmd_deploy.description).toContain('Decision guide:');
     expect(tools.licell_cmd_deploy.description).toContain('Inspect → licell deploy spec');

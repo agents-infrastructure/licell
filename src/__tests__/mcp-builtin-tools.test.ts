@@ -8,6 +8,8 @@ describe('getBuiltinMcpTools', () => {
     expect(tools).toHaveProperty('licell_command_catalog');
     expect(tools.licell_cli.title).toBe('Deploy & manage Aliyun services (licell)');
     expect(tools.licell_cli.metadata?.licell.toolKind).toBe('builtin');
+    expect(tools.licell_cli.metadata?.licell.schemas.help.kind).toBe('licell-help');
+    expect(tools.licell_cli.metadata?.licell.schemas.commandCatalog.kind).toBe('licell-agent-command-catalog');
     expect(tools.licell_cli.metadata?.licell.openWorld).toBe(true);
     expect(tools.licell_cli.metadata?.licell.summary).toContain('deploy API/static services');
     expect(tools.licell_cli.metadata?.licell.description).toContain('Returns stdout/stderr');
@@ -32,7 +34,11 @@ describe('getBuiltinMcpTools', () => {
     expect(result.kind).toBe('data');
     if (result.kind !== 'data') throw new Error('expected data result');
     expect(result.text).toContain('root=deploy');
+    expect(result.text).toContain('schema=licell-agent-command-catalog@1.0');
+    expect(result.text).toContain('help=licell-help@1.0');
     expect((result.structuredContent as { rootCommands: string[] }).rootCommands).toEqual(['deploy']);
+    expect((result.structuredContent as { schemaVersion: string }).schemaVersion).toBe('1.0');
+    expect((result.structuredContent as { kind: string }).kind).toBe('licell-agent-command-catalog');
   });
 
   it('exposes mcp subcommands in the shared command catalog', () => {

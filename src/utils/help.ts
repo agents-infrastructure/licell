@@ -161,8 +161,8 @@ export interface HelpDocument extends HelpSemanticDocument {
 }
 
 export interface SerializedHelpDocument extends HelpSemanticDocument {
-  schemaVersion: '1.0';
-  kind: 'licell-help';
+  schemaVersion: typeof LICELL_HELP_SCHEMA_VERSION;
+  kind: typeof LICELL_HELP_KIND;
   version: string;
   renderedText: string;
 }
@@ -816,12 +816,13 @@ function finalizeHelpDocument(baseDoc: HelpSemanticDocument, version: string): H
   };
 }
 
-const HELP_JSON_SCHEMA_VERSION = '1.0' as const;
+export const LICELL_HELP_KIND = 'licell-help' as const;
+export const LICELL_HELP_SCHEMA_VERSION = '1.0' as const;
 
 export function serializeHelpDocument(doc: HelpDocument): SerializedHelpDocument {
   return {
-    schemaVersion: HELP_JSON_SCHEMA_VERSION,
-    kind: 'licell-help',
+    schemaVersion: LICELL_HELP_SCHEMA_VERSION,
+    kind: LICELL_HELP_KIND,
     version: doc.version,
     scope: doc.scope,
     key: doc.key,
