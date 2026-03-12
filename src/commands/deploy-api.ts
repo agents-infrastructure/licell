@@ -20,6 +20,7 @@ import { formatErrorMessage } from '../utils/errors';
 import { toPromptValue, withSpinner } from '../utils/cli-shared';
 import { isJsonOutput } from '../utils/output';
 import type { DeployContext } from './deploy-context';
+import { notifyDeployProgress, runDeployProgressStep } from './deploy-progress';
 
 export interface ApiDeployResult {
   url: string;
@@ -60,6 +61,7 @@ export async function executeApiDeploy(
   ctx: DeployContext,
   s: ReturnType<typeof spinner>
 ): Promise<ApiDeployResult | undefined> {
+  const stagePrefix = 'deploy.api';
   let runtime = ctx.cliRuntime || ctx.projectRuntime || ctx.envRuntime || DEFAULT_FC_RUNTIME;
   if (runtime !== 'docker' && !ctx.cliRuntime && existsSync('Dockerfile') && ctx.interactiveTTY) {
     const useDocker = await confirm({ message: '检测到 Dockerfile，是否使用 Docker 容器部署？' });
@@ -123,12 +125,23 @@ export async function executeApiDeploy(
     '❌ 部署失败',
     async () => {
       if (ctx.useVpc && !ctx.project.network) {
-        s.message('🌐 正在自动准备 VPC 网络...');
         try {
-          const defaultNetwork = await ensureDefaultNetwork();
+          const defaultNetwork = await runDeployProgressStep(
+            s,
+            {
+              stage: `${stagePrefix}.vpc`,
+              message: '🌐 正在自动准备 VPC 网络...',
+              okMessage: (network) => `✅ VPC 已就绪: ${network.vpcId} / ${network.vswId}`,
+              okData: (network) => ({
+                vpcId: network.vpcId,
+                vswId: network.vswId,
+                securityGroupId: network.sgId
+              })
+            },
+            () => ensureDefaultNetwork()
+          );
           Config.setProject({ network: defaultNetwork });
           ctx.project = Config.getProject();
-          s.message(`✅ VPC 已就绪: ${defaultNetwork.vpcId} / ${defaultNetwork.vswId}`);
         } catch (err: unknown) {
           console.warn(pc.yellow(`⚠️ VPC 自动接入失败，回退公网模式: ${formatErrorMessage(err)}`));
         }
@@ -141,11 +154,24 @@ export async function executeApiDeploy(
         ...(ctx.cliResources ? { resources: ctx.cliResources } : {}),
         ...(deployNetwork !== undefined ? { network: deployNetwork } : {})
       };
-      const deployResult = await deployFC(
-        ctx.appName,
-        entry,
-        runtime,
-        Object.keys(deployOptions).length > 0 ? deployOptions : undefined
+      const deployResult = await runDeployProgressStep(
+        s,
+        {
+          stage: `${stagePrefix}.function`,
+          message: spinnerMsg,
+          okMessage: '✅ 函数代码已推送到云端',
+          data: {
+            runtime,
+            entry,
+            useVpc: ctx.useVpc
+          }
+        },
+        () => deployFC(
+          ctx.appName,
+          entry,
+          runtime,
+          Object.keys(deployOptions).length > 0 ? deployOptions : undefined
+        )
       );
       const deployedUrl = deployResult.url;
       if (!deployedUrl) {
@@ -158,69 +184,157 @@ export async function executeApiDeploy(
       let nextPreviewVersion: string | undefined;
 
       if (ctx.preview && ctx.domainSuffix) {
-        s.message('函数部署完成，正在发布预览版本...');
-        nextPreviewVersion = await publishFunctionVersion(
-          ctx.appName,
-          `preview at ${new Date().toISOString()}`
+        const previewDomainSuffix = ctx.domainSuffix;
+        const previewVersionId = await runDeployProgressStep(
+          s,
+          {
+            stage: `${stagePrefix}.preview.version`,
+            message: '函数部署完成，正在发布预览版本...',
+            okMessage: (versionId) => `✅ 预览版本已创建: ${versionId}`,
+            data: { domainSuffix: previewDomainSuffix }
+          },
+          () => publishFunctionVersion(
+            ctx.appName,
+            `preview at ${new Date().toISOString()}`
+          )
         );
+        nextPreviewVersion = previewVersionId;
 
-        s.message(`正在配置预览域名 (${ctx.domainSuffix})...`);
-        const previewResult = await bindFunctionPreviewDomainWorkflow(ctx.appName, {
-          functionName: ctx.appName,
-          qualifier: nextPreviewVersion,
-          domainSuffix: ctx.domainSuffix,
-          interactiveTTY: ctx.interactiveTTY,
-          onConfirmWildcardDns: () => confirmPreviewWildcardDns(ctx.domainSuffix!, ctx.appName),
-          enableHttps: ctx.enableSSL,
-          forceSslRenew: ctx.forceSslRenew,
-          spinner: s
-        });
+        const previewResult = await runDeployProgressStep(
+          s,
+          {
+            stage: `${stagePrefix}.preview.domain`,
+            message: `正在配置预览域名 (${previewDomainSuffix})...`,
+            okMessage: (result) => `✅ 预览域名已就绪: ${result.previewDomain}`,
+            data: {
+              domainSuffix: previewDomainSuffix,
+              enableSSL: ctx.enableSSL
+            }
+          },
+          () => bindFunctionPreviewDomainWorkflow(ctx.appName, {
+            functionName: ctx.appName,
+            qualifier: previewVersionId,
+            domainSuffix: previewDomainSuffix,
+            interactiveTTY: ctx.interactiveTTY,
+            onConfirmWildcardDns: () => confirmPreviewWildcardDns(previewDomainSuffix, ctx.appName),
+            enableHttps: ctx.enableSSL,
+            forceSslRenew: ctx.forceSslRenew,
+            spinner: s
+          })
+        );
         nextPreviewDomain = previewResult.previewDomain;
         if (previewResult.wildcardResult.skipped) {
-          s.message(pc.yellow('⚠️ 已跳过通配符 DNS 创建，preview 域名可能无法访问'));
+          notifyDeployProgress(s, {
+            stage: `${stagePrefix}.preview.dns`,
+            message: pc.yellow('⚠️ 已跳过通配符 DNS 创建，preview 域名可能无法访问'),
+            data: {
+              skipped: true,
+              previewDomain: nextPreviewDomain
+            }
+          });
         } else if (previewResult.wildcardResult.created) {
-          s.message(`✅ 通配符 DNS 已创建: ${previewResult.wildcardResult.wildcardDomain} → ${previewResult.wildcardResult.targetValue}`);
+          notifyDeployProgress(s, {
+            stage: `${stagePrefix}.preview.dns`,
+            message: `✅ 通配符 DNS 已创建: ${previewResult.wildcardResult.wildcardDomain} → ${previewResult.wildcardResult.targetValue}`,
+            data: {
+              created: true,
+              wildcardDomain: previewResult.wildcardResult.wildcardDomain,
+              targetValue: previewResult.wildcardResult.targetValue
+            }
+          });
         }
       } else if (ctx.releaseTarget) {
-        s.message(`函数部署完成，正在发布版本并切流到 ${ctx.releaseTarget}...`);
-        const promotedVersion = await publishFunctionVersion(
-          ctx.appName,
-          `deploy ${ctx.releaseTarget} at ${new Date().toISOString()}`
+        const releaseTarget = ctx.releaseTarget;
+        const promotedVersion = await runDeployProgressStep(
+          s,
+          {
+            stage: `${stagePrefix}.release.version`,
+            message: '函数部署完成，正在发布版本...',
+            okMessage: (versionId) => `✅ 已生成发布版本: ${versionId}`,
+            data: { releaseTarget }
+          },
+          () => publishFunctionVersion(
+            ctx.appName,
+            `deploy ${releaseTarget} at ${new Date().toISOString()}`
+          )
         );
         nextPromotedVersion = promotedVersion;
-        await promoteFunctionAlias(
-          ctx.appName,
-          ctx.releaseTarget,
-          promotedVersion,
-          `deployed by licell at ${new Date().toISOString()}`
+        await runDeployProgressStep(
+          s,
+          {
+            stage: `${stagePrefix}.release.alias`,
+            message: `正在切流到 ${releaseTarget}...`,
+            okMessage: `✅ alias 已切到 ${releaseTarget}`,
+            data: {
+              releaseTarget,
+              versionId: promotedVersion
+            }
+          },
+          () => promoteFunctionAlias(
+            ctx.appName,
+            releaseTarget,
+            promotedVersion,
+            `deployed by licell at ${new Date().toISOString()}`
+          )
         );
       }
       const resolvedFixedDomain = resolveApiFixedDomain(ctx);
       if (resolvedFixedDomain) {
         nextFixedDomain = resolvedFixedDomain;
-        s.message(`函数部署完成，正在配置${describeApiFixedDomain(ctx)} ${nextFixedDomain}...`);
-        const domainResult = await bindAppDomainWorkflow(nextFixedDomain, {
-          functionName: ctx.appName,
-          releaseTarget: ctx.releaseTarget,
-          ensureAlias: false,
-          enableCdn: ctx.enableCdn,
-          enableHttps: ctx.enableSSL,
-          forceSslRenew: ctx.forceSslRenew,
-          spinner: s
-        });
+        const domainResult = await runDeployProgressStep(
+          s,
+          {
+            stage: `${stagePrefix}.domain`,
+            message: `函数部署完成，正在配置${describeApiFixedDomain(ctx)} ${resolvedFixedDomain}...`,
+            okMessage: (result) => `✅ 域名 workflow 已完成: ${result.domainName}`,
+            data: {
+              domain: resolvedFixedDomain,
+              enableCdn: ctx.enableCdn,
+              enableSSL: ctx.enableSSL
+            }
+          },
+          () => bindAppDomainWorkflow(resolvedFixedDomain, {
+            functionName: ctx.appName,
+            releaseTarget: ctx.releaseTarget,
+            ensureAlias: false,
+            enableCdn: ctx.enableCdn,
+            enableHttps: ctx.enableSSL,
+            forceSslRenew: ctx.forceSslRenew,
+            spinner: s
+          })
+        );
         nextFixedDomain = domainResult.domainName;
         nextFixedDomainUrl = domainResult.finalUrl;
         if (ctx.enableCdn && domainResult.cdnCname) {
-          s.message(`✅ CDN 加速已校准，CNAME=${domainResult.cdnCname}`);
+          notifyDeployProgress(s, {
+            stage: `${stagePrefix}.domain.cdn`,
+            message: `✅ CDN 加速已校准，CNAME=${domainResult.cdnCname}`,
+            data: {
+              domain: domainResult.domainName,
+              cdnCname: domainResult.cdnCname
+            }
+          });
         }
         if (ctx.enableSSL && ctx.enableCdn && domainResult.edgeHttpsConfigured) {
-          s.message('✅ CDN 边缘 HTTPS 已自动配置。');
+          notifyDeployProgress(s, {
+            stage: `${stagePrefix}.domain.https`,
+            message: '✅ CDN 边缘 HTTPS 已自动配置。',
+            data: { domain: domainResult.domainName, mode: 'cdn-edge' }
+          });
         }
         if (ctx.enableSSL && ctx.enableCdn && !domainResult.edgeHttpsConfigured) {
-          s.message('⚠️ 未能自动配置 CDN 边缘 HTTPS（未获取到可用证书），请在 CDN 控制台补充证书。');
+          notifyDeployProgress(s, {
+            stage: `${stagePrefix}.domain.https`,
+            message: '⚠️ 未能自动配置 CDN 边缘 HTTPS（未获取到可用证书），请在 CDN 控制台补充证书。',
+            data: { domain: domainResult.domainName, mode: 'cdn-edge', configured: false }
+          });
         }
         if (ctx.enableSSL && !ctx.enableCdn && domainResult.domainHttpsConfigured) {
-          s.message('✅ 域名 HTTPS 已自动配置。');
+          notifyDeployProgress(s, {
+            stage: `${stagePrefix}.domain.https`,
+            message: '✅ 域名 HTTPS 已自动配置。',
+            data: { domain: domainResult.domainName, mode: 'domain-gateway' }
+          });
         }
       }
       return {
@@ -236,9 +350,21 @@ export async function executeApiDeploy(
   if (!apiDeployResult) return undefined;
   const { url, promotedVersion, fixedDomain, fixedDomainUrl, previewDomain, previewVersion } = apiDeployResult;
 
-  s.message('🩺 部署完成，正在做可访问性检测...');
+  notifyDeployProgress(s, {
+    stage: `${stagePrefix}.health`,
+    message: '🩺 部署完成，正在做可访问性检测...'
+  });
   const healthCheckLogs: string[] = [];
-  const productionProbe = await probeHttpHealth(url);
+  const productionProbe = await runDeployProgressStep(
+    s,
+    {
+      stage: `${stagePrefix}.health.production`,
+      message: '正在探测生产地址...',
+      okMessage: '✅ 生产地址探测已完成',
+      data: { url }
+    },
+    () => probeHttpHealth(url)
+  );
   if (productionProbe.ok) {
     healthCheckLogs.push(`✅ 生产地址可访问 (${productionProbe.statusCode} ${productionProbe.checkedUrl})`);
   } else {
@@ -249,11 +375,20 @@ export async function executeApiDeploy(
     const fixedProbeAttempts = ctx.enableCdn ? 10 : 6;
     const fixedProbeIntervalMs = ctx.enableCdn ? 3000 : 2000;
     const fixedProbeTimeoutMs = ctx.enableCdn ? 6000 : 5000;
-    const fixedProbe = await probeHttpHealth(fixedProbeUrl, {
-      maxAttempts: fixedProbeAttempts,
-      intervalMs: fixedProbeIntervalMs,
-      timeoutMs: fixedProbeTimeoutMs
-    });
+    const fixedProbe = await runDeployProgressStep(
+      s,
+      {
+        stage: `${stagePrefix}.health.fixed-domain`,
+        message: `正在探测固定域名 ${fixedDomain}...`,
+        okMessage: '✅ 固定域名探测已完成',
+        data: { domain: fixedDomain, url: fixedProbeUrl }
+      },
+      () => probeHttpHealth(fixedProbeUrl, {
+        maxAttempts: fixedProbeAttempts,
+        intervalMs: fixedProbeIntervalMs,
+        timeoutMs: fixedProbeTimeoutMs
+      })
+    );
     if (fixedProbe.ok) {
       healthCheckLogs.push(`✅ 固定域名可访问 (${fixedProbe.statusCode} ${fixedProbe.checkedUrl})`);
     } else {
@@ -262,11 +397,20 @@ export async function executeApiDeploy(
   }
   if (previewDomain) {
     const previewDomainUrl = `${ctx.enableSSL ? 'https' : 'http'}://${previewDomain}`;
-    const previewProbe = await probeHttpHealth(previewDomainUrl, {
-      maxAttempts: 8,
-      intervalMs: 2000,
-      timeoutMs: 5000
-    });
+    const previewProbe = await runDeployProgressStep(
+      s,
+      {
+        stage: `${stagePrefix}.health.preview-domain`,
+        message: `正在探测预览域名 ${previewDomain}...`,
+        okMessage: '✅ 预览域名探测已完成',
+        data: { domain: previewDomain, url: previewDomainUrl }
+      },
+      () => probeHttpHealth(previewDomainUrl, {
+        maxAttempts: 8,
+        intervalMs: 2000,
+        timeoutMs: 5000
+      })
+    );
     if (previewProbe.ok) {
       healthCheckLogs.push(`✅ 预览域名可访问 (${previewProbe.statusCode} ${previewProbe.checkedUrl})`);
     } else {

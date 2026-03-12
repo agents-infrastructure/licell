@@ -17,6 +17,7 @@ import {
 import { formatErrorMessage } from '../utils/errors';
 import { toPromptValue, withSpinner } from '../utils/cli-shared';
 import type { DeployContext } from './deploy-context';
+import { runDeployProgressStep } from './deploy-progress';
 
 export interface TaskDeployResult {
   functionName: string;
@@ -47,6 +48,7 @@ export async function executeTaskDeploy(
   ctx: DeployContext,
   s: ReturnType<typeof spinner>
 ): Promise<TaskDeployResult | undefined> {
+  const stagePrefix = 'deploy.task';
   let runtime = ctx.cliRuntime || ctx.projectRuntime || ctx.envRuntime || DEFAULT_FC_RUNTIME;
   if (runtime !== 'docker' && !ctx.cliRuntime && existsSync('Dockerfile') && ctx.interactiveTTY) {
     const useDocker = await confirm({ message: '检测到 Dockerfile，是否使用 Docker 容器部署任务函数？' });
@@ -109,12 +111,23 @@ export async function executeTaskDeploy(
     '❌ 任务部署失败',
     async () => {
       if (ctx.useVpc && !ctx.project.network) {
-        s.message('🌐 正在自动准备 VPC 网络...');
         try {
-          const defaultNetwork = await ensureDefaultNetwork();
+          const defaultNetwork = await runDeployProgressStep(
+            s,
+            {
+              stage: `${stagePrefix}.vpc`,
+              message: '🌐 正在自动准备 VPC 网络...',
+              okMessage: (network) => `✅ VPC 已就绪: ${network.vpcId} / ${network.vswId}`,
+              okData: (network) => ({
+                vpcId: network.vpcId,
+                vswId: network.vswId,
+                securityGroupId: network.sgId
+              })
+            },
+            () => ensureDefaultNetwork()
+          );
           Config.setProject({ network: defaultNetwork });
           ctx.project = Config.getProject();
-          s.message(`✅ VPC 已就绪: ${defaultNetwork.vpcId} / ${defaultNetwork.vswId}`);
         } catch (err: unknown) {
           console.warn(pc.yellow(`⚠️ VPC 自动接入失败，回退公网模式: ${formatErrorMessage(err)}`));
         }
@@ -126,43 +139,106 @@ export async function executeTaskDeploy(
         ...(deployNetwork !== undefined ? { network: deployNetwork } : {}),
         ensureHttpUrl: false
       };
-      const deployResult = await deployFC(
-        ctx.appName,
-        entry,
-        runtime,
-        deployOptions
+      const deployResult = await runDeployProgressStep(
+        s,
+        {
+          stage: `${stagePrefix}.function`,
+          message: spinnerMsg,
+          okMessage: '✅ 任务函数代码已推送到云端',
+          data: {
+            runtime,
+            entry,
+            useVpc: ctx.useVpc
+          }
+        },
+        () => deployFC(
+          ctx.appName,
+          entry,
+          runtime,
+          deployOptions
+        )
       );
 
       const configuredQualifiers = ['LATEST'];
-      s.message('正在启用异步任务调用配置...');
-      await upsertAsyncInvokeConfig(ctx.appName, { asyncTask: true });
+      await runDeployProgressStep(
+        s,
+        {
+          stage: `${stagePrefix}.async-config.latest`,
+          message: '正在启用 LATEST 的异步任务调用配置...',
+          okMessage: '✅ LATEST 异步任务调用已启用',
+          data: { qualifier: 'LATEST' }
+        },
+        () => upsertAsyncInvokeConfig(ctx.appName, { asyncTask: true })
+      );
 
       let nextPromotedVersion: string | undefined;
       if (ctx.releaseTarget) {
-        s.message(`任务函数部署完成，正在发布版本并切流到 ${ctx.releaseTarget}...`);
-        nextPromotedVersion = await publishFunctionVersion(
-          ctx.appName,
-          `task deploy ${ctx.releaseTarget} at ${new Date().toISOString()}`
+        const releaseTarget = ctx.releaseTarget;
+        const promotedVersionId = await runDeployProgressStep(
+          s,
+          {
+            stage: `${stagePrefix}.release.version`,
+            message: '任务函数部署完成，正在发布版本...',
+            okMessage: (versionId) => `✅ 已生成发布版本: ${versionId}`,
+            data: { releaseTarget }
+          },
+          () => publishFunctionVersion(
+            ctx.appName,
+            `task deploy ${releaseTarget} at ${new Date().toISOString()}`
+          )
         );
-        await promoteFunctionAlias(
-          ctx.appName,
-          ctx.releaseTarget,
-          nextPromotedVersion,
-          `task deployed by licell at ${new Date().toISOString()}`
+        nextPromotedVersion = promotedVersionId;
+        await runDeployProgressStep(
+          s,
+          {
+            stage: `${stagePrefix}.release.alias`,
+            message: `正在切流到 ${releaseTarget}...`,
+            okMessage: `✅ alias 已切到 ${releaseTarget}`,
+            data: {
+              releaseTarget,
+              versionId: promotedVersionId
+            }
+          },
+          () => promoteFunctionAlias(
+            ctx.appName,
+            releaseTarget,
+            promotedVersionId,
+            `task deployed by licell at ${new Date().toISOString()}`
+          )
         );
         if (getRuntime(runtime).supportsInternalDeploymentProbe) {
-          s.message(`等待 ${ctx.releaseTarget} 指向新版本并完成调用链收敛...`);
-          await waitForFunctionDeploymentMarker(ctx.appName, deployResult.deploymentMarker, {
-            qualifier: ctx.releaseTarget,
-            timeoutMs: 90_000,
-            intervalMs: 2_000
-          });
+          await runDeployProgressStep(
+            s,
+            {
+              stage: `${stagePrefix}.release.converge`,
+              message: `等待 ${releaseTarget} 指向新版本并完成调用链收敛...`,
+              okMessage: `✅ ${releaseTarget} 已收敛到新版本`,
+              data: {
+                releaseTarget,
+                deploymentMarker: deployResult.deploymentMarker
+              }
+            },
+            () => waitForFunctionDeploymentMarker(ctx.appName, deployResult.deploymentMarker, {
+              qualifier: releaseTarget,
+              timeoutMs: 90_000,
+              intervalMs: 2_000
+            })
+          );
         }
-        await upsertAsyncInvokeConfig(ctx.appName, {
-          qualifier: ctx.releaseTarget,
-          asyncTask: true
-        });
-        configuredQualifiers.push(ctx.releaseTarget);
+        await runDeployProgressStep(
+          s,
+          {
+            stage: `${stagePrefix}.async-config.alias`,
+            message: `正在启用 ${releaseTarget} 的异步任务调用配置...`,
+            okMessage: `✅ ${releaseTarget} 异步任务调用已启用`,
+            data: { qualifier: releaseTarget }
+          },
+          () => upsertAsyncInvokeConfig(ctx.appName, {
+            qualifier: releaseTarget,
+            asyncTask: true
+          })
+        );
+        configuredQualifiers.push(releaseTarget);
       }
 
       const invokeCommand = ctx.releaseTarget

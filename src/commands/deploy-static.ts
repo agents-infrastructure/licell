@@ -1,4 +1,4 @@
-import { text, isCancel, type spinner } from '@clack/prompts';
+import { text, type spinner } from '@clack/prompts';
 import pc from 'picocolors';
 import { deployOSS, resolveOssBucketName } from '../providers/oss';
 import { issueAndBindSSLWithArtifacts } from '../providers/ssl';
@@ -9,11 +9,11 @@ import { detectStaticDistDir } from '../utils/static-dist';
 import { toPromptValue, withSpinner } from '../utils/cli-shared';
 import {
   deployStaticProxyFunction,
-  publishStaticProxyVersion,
-  resolveStaticProxyFunctionName
+  publishStaticProxyVersion
 } from '../providers/fc/static-proxy.js';
 import type { DeployContext } from './deploy-context.js';
 import { confirmPreviewWildcardDns } from './deploy-preview';
+import { notifyDeployProgress, runDeployProgressStep } from './deploy-progress';
 
 export interface StaticDeployResult {
   url: string;
@@ -34,6 +34,7 @@ export async function executeStaticDeploy(
   ctx: DeployContext,
   s: ReturnType<typeof spinner>
 ): Promise<StaticDeployResult | undefined> {
+  const stagePrefix = 'deploy.static';
   const detectedDist = detectStaticDistDir();
   const dist = ctx.cliDist
     ? toPromptValue(ctx.cliDist, '构建产物目录')
@@ -52,36 +53,83 @@ export async function executeStaticDeploy(
     '❌ 部署失败',
     async () => {
       const bucketName = resolveOssBucketName(ctx.appName);
-      const url = await deployOSS(ctx.appName, dist);
+      const url = await runDeployProgressStep(
+        s,
+        {
+          stage: `${stagePrefix}.upload`,
+          message: '☁️ 正在递归上传静态资源到 OSS 边缘节点...',
+          okMessage: '✅ 静态资源已上传到 OSS',
+          data: { dist, bucketName }
+        },
+        () => deployOSS(ctx.appName, dist)
+      );
       if (!fixedDomain) {
         return { url, fixedDomain: undefined };
       }
 
       let tlsArtifacts: { certificate?: string; privateKey?: string } | undefined;
       if (ctx.enableSSL) {
-        s.message(`静态资源上传完成，正在签发 HTTPS 证书 (${fixedDomain})...`);
-        const sslResult = await issueAndBindSSLWithArtifacts(fixedDomain, s, {
-          forceRenew: ctx.forceSslRenew,
-          bindToFcDomain: false
-        });
+        const sslResult = await runDeployProgressStep(
+          s,
+          {
+            stage: `${stagePrefix}.ssl`,
+            message: `静态资源上传完成，正在签发 HTTPS 证书 (${fixedDomain})...`,
+            okMessage: `✅ HTTPS 证书已就绪: ${fixedDomain}`,
+            data: {
+              domain: fixedDomain,
+              forceRenew: ctx.forceSslRenew
+            }
+          },
+          () => issueAndBindSSLWithArtifacts(fixedDomain, s, {
+            forceRenew: ctx.forceSslRenew,
+            bindToFcDomain: false
+          })
+        );
         tlsArtifacts = {
           certificate: sslResult.certificate,
           privateKey: sslResult.privateKey
         };
       }
 
-      s.message(`静态资源上传完成，正在执行静态域名 workflow (${fixedDomain})...`);
-      const domainResult = await bindStaticDomainWorkflow(fixedDomain, {
-        bucketName,
-        tlsArtifacts,
-        preferHttps: ctx.enableSSL
+      const domainResult = await runDeployProgressStep(
+        s,
+        {
+          stage: `${stagePrefix}.domain`,
+          message: `静态资源上传完成，正在执行静态域名 workflow (${fixedDomain})...`,
+          okMessage: (result) => `✅ 静态域名 workflow 已完成: ${result.domainName}`,
+          data: {
+            domain: fixedDomain,
+            bucketName,
+            enableSSL: ctx.enableSSL
+          }
+        },
+        () => bindStaticDomainWorkflow(fixedDomain, {
+          bucketName,
+          tlsArtifacts,
+          preferHttps: ctx.enableSSL
+        })
+      );
+      notifyDeployProgress(s, {
+        stage: `${stagePrefix}.domain.cdn`,
+        message: `✅ CDN 加速已校准，CNAME=${domainResult.cdnCname}`,
+        data: {
+          domain: domainResult.domainName,
+          cdnCname: domainResult.cdnCname
+        }
       });
-      s.message(`✅ CDN 加速已校准，CNAME=${domainResult.cdnCname}`);
       if (ctx.enableSSL && domainResult.httpsConfigured) {
-        s.message('✅ CDN 边缘 HTTPS 已自动配置。');
+        notifyDeployProgress(s, {
+          stage: `${stagePrefix}.domain.https`,
+          message: '✅ CDN 边缘 HTTPS 已自动配置。',
+          data: { domain: domainResult.domainName }
+        });
       }
       if (ctx.enableSSL && !domainResult.httpsConfigured) {
-        s.message('⚠️ 未能自动配置 CDN 边缘 HTTPS（未获取到可用证书），请在 CDN 控制台补充证书。');
+        notifyDeployProgress(s, {
+          stage: `${stagePrefix}.domain.https`,
+          message: '⚠️ 未能自动配置 CDN 边缘 HTTPS（未获取到可用证书），请在 CDN 控制台补充证书。',
+          data: { domain: domainResult.domainName, configured: false }
+        });
       }
       return { url, fixedDomain: domainResult.domainName };
     }
@@ -90,14 +138,26 @@ export async function executeStaticDeploy(
 
   const { url } = staticDeployResult;
   const healthCheckLogs: string[] = [];
-  s.message('🩺 部署完成，正在做可访问性检测...');
-  const productionProbe = await probeHttpHealth(url, {
-    paths: ['/'],
-    maxAttempts: 5,
-    intervalMs: 1500,
-    timeoutMs: 5000,
-    allowClientError: false
+  notifyDeployProgress(s, {
+    stage: `${stagePrefix}.health`,
+    message: '🩺 部署完成，正在做可访问性检测...'
   });
+  const productionProbe = await runDeployProgressStep(
+    s,
+    {
+      stage: `${stagePrefix}.health.oss`,
+      message: '正在探测 OSS 地址...',
+      okMessage: '✅ OSS 地址探测已完成',
+      data: { url }
+    },
+    () => probeHttpHealth(url, {
+      paths: ['/'],
+      maxAttempts: 5,
+      intervalMs: 1500,
+      timeoutMs: 5000,
+      allowClientError: false
+    })
+  );
   if (productionProbe.ok) {
     healthCheckLogs.push(`✅ OSS 地址可访问 (${productionProbe.statusCode} ${productionProbe.checkedUrl})`);
   } else {
@@ -105,13 +165,22 @@ export async function executeStaticDeploy(
   }
   if (staticDeployResult.fixedDomain) {
     const fixedDomainUrl = `${ctx.enableSSL ? 'https' : 'http'}://${staticDeployResult.fixedDomain}`;
-    const fixedProbe = await probeHttpHealth(fixedDomainUrl, {
-      paths: ['/'],
-      maxAttempts: 20,
-      intervalMs: 5000,
-      timeoutMs: 8000,
-      allowClientError: false
-    });
+    const fixedProbe = await runDeployProgressStep(
+      s,
+      {
+        stage: `${stagePrefix}.health.fixed-domain`,
+        message: `正在探测固定域名 ${staticDeployResult.fixedDomain}...`,
+        okMessage: '✅ 固定域名探测已完成',
+        data: { domain: staticDeployResult.fixedDomain, url: fixedDomainUrl }
+      },
+      () => probeHttpHealth(fixedDomainUrl, {
+        paths: ['/'],
+        maxAttempts: 20,
+        intervalMs: 5000,
+        timeoutMs: 8000,
+        allowClientError: false
+      })
+    );
     if (fixedProbe.ok) {
       healthCheckLogs.push(`✅ 固定域名可访问 (${fixedProbe.statusCode} ${fixedProbe.checkedUrl})`);
     } else {
@@ -130,6 +199,7 @@ async function executeStaticPreviewDeploy(
   s: ReturnType<typeof spinner>,
   dist: string
 ): Promise<StaticDeployResult | undefined> {
+  const stagePrefix = 'deploy.static.preview';
   const bucketName = resolveOssBucketName(ctx.appName);
 
   const staticPreviewResult = await withSpinner(
@@ -138,47 +208,114 @@ async function executeStaticPreviewDeploy(
     '❌ 部署失败',
     async () => {
       // Step 1: Deploy proxy function (placeholder) to get version numbering started
-      s.message('正在部署静态代理函数...');
-      const proxyFunctionName = await deployStaticProxyFunction(
-        ctx.appName,
-        bucketName,
-        '_preview/pending'
+      const proxyFunctionName = await runDeployProgressStep(
+        s,
+        {
+          stage: `${stagePrefix}.proxy.bootstrap`,
+          message: '正在部署静态代理函数...',
+          okMessage: (functionName) => `✅ 静态代理函数已更新: ${functionName}`,
+          data: { bucketName, previewPath: '_preview/pending' }
+        },
+        () => deployStaticProxyFunction(
+          ctx.appName,
+          bucketName,
+          '_preview/pending'
+        )
       );
 
       // Step 2: Publish to get a version number for the OSS path
-      s.message('正在分配预览版本号...');
-      const tempVersionId = await publishStaticProxyVersion(ctx.appName);
+      const tempVersionId = await runDeployProgressStep(
+        s,
+        {
+          stage: `${stagePrefix}.version.seed`,
+          message: '正在分配预览版本号...',
+          okMessage: (versionId) => `✅ 已分配预览版本号: ${versionId}`
+        },
+        () => publishStaticProxyVersion(ctx.appName)
+      );
 
       // Step 3: Upload to OSS using the version number as path
       const previewPath = `_preview/${tempVersionId}`;
-      s.message(`正在上传静态资源到 OSS (${previewPath})...`);
-      const url = await deployOSS(ctx.appName, dist, { targetDir: previewPath });
+      const url = await runDeployProgressStep(
+        s,
+        {
+          stage: `${stagePrefix}.upload`,
+          message: `正在上传静态资源到 OSS (${previewPath})...`,
+          okMessage: '✅ 预览静态资源已上传到 OSS',
+          data: { dist, previewPath, bucketName }
+        },
+        () => deployOSS(ctx.appName, dist, { targetDir: previewPath })
+      );
 
       // Step 4: Update function with correct preview path and re-publish
-      s.message('正在更新代理函数并发布最终版本...');
-      await deployStaticProxyFunction(
-        ctx.appName,
-        bucketName,
-        previewPath
+      await runDeployProgressStep(
+        s,
+        {
+          stage: `${stagePrefix}.proxy.finalize`,
+          message: '正在更新代理函数到最终预览路径...',
+          okMessage: '✅ 代理函数已切到最终预览路径',
+          data: { bucketName, previewPath }
+        },
+        () => deployStaticProxyFunction(
+          ctx.appName,
+          bucketName,
+          previewPath
+        )
       );
-      const versionId = await publishStaticProxyVersion(ctx.appName);
+      const versionId = await runDeployProgressStep(
+        s,
+        {
+          stage: `${stagePrefix}.version.final`,
+          message: '正在发布最终预览版本...',
+          okMessage: (nextVersionId) => `✅ 最终预览版本已发布: ${nextVersionId}`,
+          data: { previewPath }
+        },
+        () => publishStaticProxyVersion(ctx.appName)
+      );
 
       // Step 5: Bind preview domain through shared workflow
-      s.message(`正在配置预览域名 (${ctx.domainSuffix})...`);
-      const previewResult = await bindFunctionPreviewDomainWorkflow(ctx.appName, {
-        functionName: proxyFunctionName,
-        qualifier: versionId,
-        domainSuffix: ctx.domainSuffix!,
-        interactiveTTY: ctx.interactiveTTY,
-        onConfirmWildcardDns: () => confirmPreviewWildcardDns(ctx.domainSuffix!, ctx.appName),
-        enableHttps: ctx.enableSSL,
-        forceSslRenew: ctx.forceSslRenew,
-        spinner: s
-      });
+      const previewResult = await runDeployProgressStep(
+        s,
+        {
+          stage: `${stagePrefix}.domain`,
+          message: `正在配置预览域名 (${ctx.domainSuffix})...`,
+          okMessage: (result) => `✅ 预览域名已就绪: ${result.previewDomain}`,
+          data: {
+            domainSuffix: ctx.domainSuffix,
+            versionId,
+            enableSSL: ctx.enableSSL
+          }
+        },
+        () => bindFunctionPreviewDomainWorkflow(ctx.appName, {
+          functionName: proxyFunctionName,
+          qualifier: versionId,
+          domainSuffix: ctx.domainSuffix!,
+          interactiveTTY: ctx.interactiveTTY,
+          onConfirmWildcardDns: () => confirmPreviewWildcardDns(ctx.domainSuffix!, ctx.appName),
+          enableHttps: ctx.enableSSL,
+          forceSslRenew: ctx.forceSslRenew,
+          spinner: s
+        })
+      );
       if (previewResult.wildcardResult.skipped) {
-        s.message(pc.yellow('⚠️ 已跳过通配符 DNS 创建，preview 域名可能无法访问'));
+        notifyDeployProgress(s, {
+          stage: `${stagePrefix}.dns`,
+          message: pc.yellow('⚠️ 已跳过通配符 DNS 创建，preview 域名可能无法访问'),
+          data: {
+            skipped: true,
+            previewDomain: previewResult.previewDomain
+          }
+        });
       } else if (previewResult.wildcardResult.created) {
-        s.message(`✅ 通配符 DNS 已创建: ${previewResult.wildcardResult.wildcardDomain} → ${previewResult.wildcardResult.targetValue}`);
+        notifyDeployProgress(s, {
+          stage: `${stagePrefix}.dns`,
+          message: `✅ 通配符 DNS 已创建: ${previewResult.wildcardResult.wildcardDomain} → ${previewResult.wildcardResult.targetValue}`,
+          data: {
+            created: true,
+            wildcardDomain: previewResult.wildcardResult.wildcardDomain,
+            targetValue: previewResult.wildcardResult.targetValue
+          }
+        });
       }
 
       return {
@@ -194,14 +331,26 @@ async function executeStaticPreviewDeploy(
   const { url, previewDomain, previewVersion } = staticPreviewResult;
   const healthCheckLogs: string[] = [];
 
-  s.message('🩺 部署完成，正在做可访问性检测...');
-  const productionProbe = await probeHttpHealth(url, {
-    paths: ['/'],
-    maxAttempts: 5,
-    intervalMs: 1500,
-    timeoutMs: 5000,
-    allowClientError: false
+  notifyDeployProgress(s, {
+    stage: `${stagePrefix}.health`,
+    message: '🩺 部署完成，正在做可访问性检测...'
   });
+  const productionProbe = await runDeployProgressStep(
+    s,
+    {
+      stage: `${stagePrefix}.health.oss`,
+      message: '正在探测 OSS 地址...',
+      okMessage: '✅ OSS 地址探测已完成',
+      data: { url }
+    },
+    () => probeHttpHealth(url, {
+      paths: ['/'],
+      maxAttempts: 5,
+      intervalMs: 1500,
+      timeoutMs: 5000,
+      allowClientError: false
+    })
+  );
   if (productionProbe.ok) {
     healthCheckLogs.push(`✅ OSS 地址可访问 (${productionProbe.statusCode} ${productionProbe.checkedUrl})`);
   } else {
@@ -210,11 +359,20 @@ async function executeStaticPreviewDeploy(
 
   if (previewDomain) {
     const previewDomainUrl = `${ctx.enableSSL ? 'https' : 'http'}://${previewDomain}`;
-    const previewProbe = await probeHttpHealth(previewDomainUrl, {
-      maxAttempts: 8,
-      intervalMs: 2000,
-      timeoutMs: 5000
-    });
+    const previewProbe = await runDeployProgressStep(
+      s,
+      {
+        stage: `${stagePrefix}.health.preview-domain`,
+        message: `正在探测预览域名 ${previewDomain}...`,
+        okMessage: '✅ 预览域名探测已完成',
+        data: { domain: previewDomain, url: previewDomainUrl }
+      },
+      () => probeHttpHealth(previewDomainUrl, {
+        maxAttempts: 8,
+        intervalMs: 2000,
+        timeoutMs: 5000
+      })
+    );
     if (previewProbe.ok) {
       healthCheckLogs.push(`✅ 预览域名可访问 (${previewProbe.statusCode} ${previewProbe.checkedUrl})`);
     } else {

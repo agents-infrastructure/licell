@@ -12,6 +12,7 @@ const {
   mockBindAppDomainWorkflow,
   mockBindFunctionPreviewDomainWorkflow,
   mockProbeHttpHealth,
+  mockEmitCommandEvent,
   mockWithSpinner
 } = vi.hoisted(() => ({
   mockSetProject: vi.fn(),
@@ -25,6 +26,7 @@ const {
   mockBindAppDomainWorkflow: vi.fn(),
   mockBindFunctionPreviewDomainWorkflow: vi.fn(),
   mockProbeHttpHealth: vi.fn(),
+  mockEmitCommandEvent: vi.fn(),
   mockWithSpinner: vi.fn()
 }));
 
@@ -77,7 +79,8 @@ vi.mock('../utils/cli-shared', () => ({
 }));
 
 vi.mock('../utils/output', () => ({
-  isJsonOutput: () => false
+  isJsonOutput: () => false,
+  emitCommandEvent: mockEmitCommandEvent
 }));
 
 import { executeApiDeploy } from '../commands/deploy-api';
@@ -95,6 +98,7 @@ describe('executeApiDeploy', () => {
     mockBindAppDomainWorkflow.mockReset();
     mockBindFunctionPreviewDomainWorkflow.mockReset();
     mockProbeHttpHealth.mockReset();
+    mockEmitCommandEvent.mockReset();
     mockWithSpinner.mockReset();
 
     mockGetRuntime.mockReturnValue({ defaultEntry: 'index.ts' });
@@ -160,5 +164,13 @@ describe('executeApiDeploy', () => {
     expect(mockProbeHttpHealth).toHaveBeenNthCalledWith(2, 'https://api.example.com', expect.any(Object));
     expect(result?.fixedDomain).toBe('api.example.com');
     expect(result?.promotedVersion).toBe('9');
+    expect(mockEmitCommandEvent.mock.calls.map(([event]) => event.stage)).toEqual(expect.arrayContaining([
+      'deploy.api.function',
+      'deploy.api.release.version',
+      'deploy.api.release.alias',
+      'deploy.api.domain',
+      'deploy.api.health.production',
+      'deploy.api.health.fixed-domain'
+    ]));
   });
 });

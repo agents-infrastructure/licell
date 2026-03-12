@@ -7,6 +7,7 @@ const {
   mockBindFunctionPreviewDomainWorkflow,
   mockProbeHttpHealth,
   mockDetectStaticDistDir,
+  mockEmitCommandEvent,
   mockWithSpinner,
   mockToPromptValue
 } = vi.hoisted(() => ({
@@ -16,6 +17,7 @@ const {
   mockBindFunctionPreviewDomainWorkflow: vi.fn(),
   mockProbeHttpHealth: vi.fn(),
   mockDetectStaticDistDir: vi.fn(),
+  mockEmitCommandEvent: vi.fn(),
   mockWithSpinner: vi.fn(),
   mockToPromptValue: vi.fn()
 }));
@@ -45,6 +47,10 @@ vi.mock('../utils/static-dist', () => ({
   detectStaticDistDir: mockDetectStaticDistDir
 }));
 
+vi.mock('../utils/output', () => ({
+  emitCommandEvent: mockEmitCommandEvent
+}));
+
 vi.mock('../utils/cli-shared', () => ({
   toPromptValue: mockToPromptValue,
   withSpinner: mockWithSpinner
@@ -70,6 +76,7 @@ describe('executeStaticDeploy', () => {
     mockBindFunctionPreviewDomainWorkflow.mockReset();
     mockProbeHttpHealth.mockReset();
     mockDetectStaticDistDir.mockReset();
+    mockEmitCommandEvent.mockReset();
     mockWithSpinner.mockReset();
     mockToPromptValue.mockReset();
 
@@ -119,5 +126,12 @@ describe('executeStaticDeploy', () => {
       timeoutMs: 8000,
       allowClientError: false
     });
+    expect(mockEmitCommandEvent.mock.calls.map(([event]) => event.stage)).toEqual(expect.arrayContaining([
+      'deploy.static.upload',
+      'deploy.static.ssl',
+      'deploy.static.domain',
+      'deploy.static.health.oss',
+      'deploy.static.health.fixed-domain'
+    ]));
   });
 });

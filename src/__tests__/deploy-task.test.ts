@@ -11,6 +11,7 @@ const {
   mockPromoteFunctionAlias,
   mockWaitForFunctionDeploymentMarker,
   mockUpsertAsyncInvokeConfig,
+  mockEmitCommandEvent,
   mockWithSpinner
 } = vi.hoisted(() => ({
   mockSetProject: vi.fn(),
@@ -23,6 +24,7 @@ const {
   mockPromoteFunctionAlias: vi.fn(),
   mockWaitForFunctionDeploymentMarker: vi.fn(),
   mockUpsertAsyncInvokeConfig: vi.fn(),
+  mockEmitCommandEvent: vi.fn(),
   mockWithSpinner: vi.fn()
 }));
 
@@ -60,6 +62,10 @@ vi.mock('../utils/cli-shared', () => ({
   withSpinner: mockWithSpinner
 }));
 
+vi.mock('../utils/output', () => ({
+  emitCommandEvent: mockEmitCommandEvent
+}));
+
 import { executeTaskDeploy } from '../commands/deploy-task';
 
 describe('executeTaskDeploy', () => {
@@ -74,6 +80,7 @@ describe('executeTaskDeploy', () => {
     mockPromoteFunctionAlias.mockReset();
     mockWaitForFunctionDeploymentMarker.mockReset();
     mockUpsertAsyncInvokeConfig.mockReset();
+    mockEmitCommandEvent.mockReset();
     mockWithSpinner.mockReset();
 
     mockGetRuntime.mockReturnValue({
@@ -126,5 +133,13 @@ describe('executeTaskDeploy', () => {
       mockUpsertAsyncInvokeConfig.mock.invocationCallOrder[1]
     );
     expect(result?.promotedVersion).toBe('9');
+    expect(mockEmitCommandEvent.mock.calls.map(([event]) => event.stage)).toEqual(expect.arrayContaining([
+      'deploy.task.function',
+      'deploy.task.async-config.latest',
+      'deploy.task.release.version',
+      'deploy.task.release.alias',
+      'deploy.task.release.converge',
+      'deploy.task.async-config.alias'
+    ]));
   });
 });
