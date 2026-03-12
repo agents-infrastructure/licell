@@ -3,6 +3,7 @@ import { defineCommandModule, commandInvocation, defineCliCommand, registerCliCo
 import { confirm, isCancel } from '@clack/prompts';
 import pc from 'picocolors';
 import { executeWithAuthRecovery } from '../utils/auth-recovery';
+import { Config } from '../utils/config';
 import {
   provisionSupabase,
   listSupabaseInstances,
@@ -34,6 +35,42 @@ import {
 } from '../utils/cli-shared';
 import { emitCommandResult, isJsonOutput } from '../utils/output';
 import { DATA_SECTION } from './sections';
+
+const SUPABASE_PROJECT_ENV_KEYS = [
+  'SUPABASE_URL',
+  'SUPABASE_ANON_KEY',
+  'SUPABASE_SERVICE_ROLE_KEY',
+  'SUPABASE_INSTANCE_NAME',
+  'SUPABASE_DASHBOARD_USERNAME',
+  'SUPABASE_DASHBOARD_PASSWORD',
+  'SUPABASE_DB_PASSWORD'
+] as const;
+
+function clearProjectSupabaseBinding(instanceName: string, dbInstanceId?: string) {
+  const project = Config.getProject();
+  const nextEnvs = { ...project.envs };
+  let changed = false;
+
+  if ((project.envs.SUPABASE_INSTANCE_NAME || '').trim() === instanceName) {
+    for (const key of SUPABASE_PROJECT_ENV_KEYS) {
+      delete nextEnvs[key];
+    }
+    changed = true;
+  }
+
+  const shouldClearDatabase = Boolean(dbInstanceId && project.database?.instanceId?.trim() === dbInstanceId);
+  if (shouldClearDatabase) {
+    delete nextEnvs.DATABASE_URL;
+    changed = true;
+  }
+
+  if (!changed) return;
+
+  Config.setProject({
+    ...(shouldClearDatabase ? { database: undefined } : {}),
+    envs: nextEnvs
+  }, { replaceEnvs: true });
+}
 
 const supaAddCommand = defineCliCommand({
   rawName: 'supa add',
@@ -487,6 +524,7 @@ export function registerSupaCommands(cli: CAC) {
             })
           );
           if (!result) return;
+          clearProjectSupabaseBinding(result.instanceName, result.dbInstanceId);
           if (isJsonOutput()) { emitCommandResult(result); return; }
           s.stop(pc.green('✅ 删除完成'));
           if (result.dbInstanceId) {

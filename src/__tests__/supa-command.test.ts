@@ -1,8 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cac } from 'cac';
 
-const { executeWithAuthRecoveryMock, showIntroMock, showOutroMock, spinnerStopMock } = vi.hoisted(() => ({
+const {
+  configState,
+  executeWithAuthRecoveryMock,
+  getProjectMock,
+  setProjectMock,
+  showIntroMock,
+  showOutroMock,
+  spinnerStopMock
+} = vi.hoisted(() => ({
+  configState: {
+    current: { envs: {} as Record<string, string>, database: undefined as unknown }
+  },
   executeWithAuthRecoveryMock: vi.fn(async (_options: unknown, task: () => Promise<unknown>) => task()),
+  getProjectMock: vi.fn(),
+  setProjectMock: vi.fn(),
   showIntroMock: vi.fn(),
   showOutroMock: vi.fn(),
   spinnerStopMock: vi.fn()
@@ -35,6 +48,13 @@ vi.mock('../providers/supabase', () => ({
 
 vi.mock('../utils/auth-recovery', () => ({
   executeWithAuthRecovery: executeWithAuthRecoveryMock
+}));
+
+vi.mock('../utils/config', () => ({
+  Config: {
+    getProject: getProjectMock,
+    setProject: setProjectMock
+  }
 }));
 
 vi.mock('../utils/cli-shared', () => ({
@@ -77,7 +97,11 @@ describe('supa rm command', () => {
 
   beforeEach(() => {
     consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    configState.current = { envs: {}, database: undefined };
     executeWithAuthRecoveryMock.mockClear();
+    getProjectMock.mockReset();
+    getProjectMock.mockImplementation(() => configState.current);
+    setProjectMock.mockReset();
     showIntroMock.mockClear();
     showOutroMock.mockClear();
     spinnerStopMock.mockClear();
@@ -94,6 +118,26 @@ describe('supa rm command', () => {
   });
 
   it('requires both rdsai and rds capabilities and cascades postgres deletion', async () => {
+    configState.current = {
+      envs: {
+        SUPABASE_URL: 'http://demo.example',
+        SUPABASE_ANON_KEY: 'anon',
+        SUPABASE_SERVICE_ROLE_KEY: 'service',
+        SUPABASE_INSTANCE_NAME: 'demo-supa',
+        SUPABASE_DASHBOARD_USERNAME: 'supabase',
+        SUPABASE_DASHBOARD_PASSWORD: 'dash-secret',
+        SUPABASE_DB_PASSWORD: 'db-secret',
+        DATABASE_URL: 'postgresql://demo:secret@db.example:5432/app',
+        KEEP_ME: '1'
+      },
+      database: {
+        type: 'postgres',
+        instanceId: 'pgm-demo',
+        user: 'demo',
+        name: 'app'
+      }
+    };
+
     const cli = await createCli();
     await cli.parse(['node', 'src/cli.ts', 'supa rm', 'demo-supa', '--yes']);
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -107,6 +151,35 @@ describe('supa rm command', () => {
     expect(deleteSupabaseInstanceCascadeMock.mock.calls[0]?.[1]).toMatchObject({
       onProgress: expect.any(Function)
     });
+    expect(setProjectMock).toHaveBeenCalledWith({
+      database: undefined,
+      envs: {
+        KEEP_ME: '1'
+      }
+    }, { replaceEnvs: true });
     expect(spinnerStopMock).toHaveBeenCalledWith(expect.stringContaining('删除完成'));
+  });
+
+  it('does not clear unrelated project bindings', async () => {
+    configState.current = {
+      envs: {
+        SUPABASE_INSTANCE_NAME: 'other-supa',
+        SUPABASE_URL: 'http://other.example',
+        DATABASE_URL: 'postgresql://demo:secret@db.example:5432/app',
+        KEEP_ME: '1'
+      },
+      database: {
+        type: 'postgres',
+        instanceId: 'pgm-other',
+        user: 'demo',
+        name: 'app'
+      }
+    };
+
+    const cli = await createCli();
+    await cli.parse(['node', 'src/cli.ts', 'supa rm', 'demo-supa', '--yes']);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(setProjectMock).not.toHaveBeenCalled();
   });
 });
