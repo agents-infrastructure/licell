@@ -4,6 +4,10 @@ import { dirname, join } from 'path';
 import { tmpdir } from 'os';
 import { renderLicellDoctorReport, runLicellDoctor } from '../utils/doctor';
 
+function stripAnsi(text: string) {
+  return text.replace(/\u001B\[[0-9;]*m/g, '');
+}
+
 function createTempDir(prefix: string) {
   return mkdtempSync(join(tmpdir(), prefix));
 }
@@ -231,7 +235,7 @@ describe('runLicellDoctor', () => {
       writeText(join(root, 'src', 'index.ts'), 'export default async function app() { return { statusCode: 200, body: "ok" }; }\n');
 
       const report = await runLicellDoctor({ cwd: root, offline: true });
-      const text = renderLicellDoctorReport(report);
+      const text = stripAnsi(renderLicellDoctorReport(report));
 
       expect(text).toContain('next: licell login');
       expect(text).toContain('alt: licell auth restore <token> [passkey]');
