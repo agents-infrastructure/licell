@@ -4,6 +4,7 @@ import { select, confirm, isCancel } from '@clack/prompts';
 import pc from 'picocolors';
 import { maskConnectionString } from '../utils/cli-helpers';
 import { executeWithAuthRecovery } from '../utils/auth-recovery';
+import { Config } from '../utils/config';
 import {
   getDatabaseInstanceDetail,
   listDatabaseClasses,
@@ -32,6 +33,8 @@ import {
 } from '../utils/cli-shared';
 import { emitCommandResult, isJsonOutput } from '../utils/output';
 import { DATA_SECTION } from './sections';
+
+const DATABASE_PROJECT_ENV_KEYS = ['DATABASE_URL'] as const;
 
 const dbAddOptions = [
   { rawName: '--type <type>', description: '数据库类型：postgresql 或 mysql（默认 serverless-postgresql，即将上线）' },
@@ -176,6 +179,21 @@ function printDatabaseClassCatalog(
       }
     }
   }
+}
+
+function clearProjectDatabaseBinding(instanceId: string) {
+  const project = Config.getProject();
+  if (project.database?.instanceId !== instanceId) return;
+
+  const nextEnvs = { ...project.envs };
+  for (const key of DATABASE_PROJECT_ENV_KEYS) {
+    delete nextEnvs[key];
+  }
+
+  Config.setProject({
+    database: undefined,
+    envs: nextEnvs
+  }, { replaceEnvs: true });
 }
 
 export function registerDbCommands(cli: CAC) {
@@ -623,6 +641,7 @@ export function registerDbCommands(cli: CAC) {
             '❌ 删除失败',
             async () => {
               await deleteDatabaseInstance(id);
+              clearProjectDatabaseBinding(id);
               return { instanceId: id };
             }
           );

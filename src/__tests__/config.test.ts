@@ -237,6 +237,23 @@ describe('normalizeProject', () => {
     });
   });
 
+  it('preserves valid database config', () => {
+    const result = normalizeProject({
+      database: { type: 'postgres', instanceId: 'pgm-123', user: 'demo', name: 'app' }
+    });
+    expect(result.database).toEqual({
+      type: 'postgres',
+      instanceId: 'pgm-123',
+      user: 'demo',
+      name: 'app'
+    });
+  });
+
+  it('drops database when instanceId is missing', () => {
+    const result = normalizeProject({ database: { type: 'postgres', user: 'demo', name: 'app' } });
+    expect(result.database).toBeUndefined();
+  });
+
   it('normalizes resources and hooks fields', () => {
     const result = normalizeProject({
       resources: {

@@ -2,15 +2,23 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cac } from 'cac';
 
 const {
+  configState,
   deleteDatabaseInstanceMock,
   executeWithAuthRecoveryMock,
+  getProjectMock,
   listDatabaseClassesMock,
+  setProjectMock,
   showOutroMock,
   spinnerStopMock
 } = vi.hoisted(() => ({
+  configState: {
+    current: { envs: {} as Record<string, string>, database: undefined as unknown }
+  },
   deleteDatabaseInstanceMock: vi.fn(),
   executeWithAuthRecoveryMock: vi.fn(async (_options: unknown, task: () => Promise<unknown>) => task()),
+  getProjectMock: vi.fn(),
   listDatabaseClassesMock: vi.fn(),
+  setProjectMock: vi.fn(),
   showOutroMock: vi.fn(),
   spinnerStopMock: vi.fn()
 }));
@@ -34,6 +42,13 @@ vi.mock('../providers/infra', () => ({
 
 vi.mock('../utils/auth-recovery', () => ({
   executeWithAuthRecovery: executeWithAuthRecoveryMock
+}));
+
+vi.mock('../utils/config', () => ({
+  Config: {
+    getProject: getProjectMock,
+    setProject: setProjectMock
+  }
 }));
 
 vi.mock('../utils/cli-shared', () => ({
@@ -75,6 +90,9 @@ describe('db commands', () => {
     deleteDatabaseInstanceMock.mockReset();
     deleteDatabaseInstanceMock.mockResolvedValue(undefined);
     executeWithAuthRecoveryMock.mockClear();
+    configState.current = { envs: {}, database: undefined };
+    getProjectMock.mockReset();
+    getProjectMock.mockImplementation(() => configState.current);
     listDatabaseClassesMock.mockReset();
     listDatabaseClassesMock.mockResolvedValue({
       regionId: 'cn-hangzhou',
@@ -103,6 +121,7 @@ describe('db commands', () => {
         }
       ]
     });
+    setProjectMock.mockReset();
     showOutroMock.mockClear();
     spinnerStopMock.mockClear();
   });
@@ -177,11 +196,29 @@ describe('db commands', () => {
   });
 
   it('stops spinner after successful deletion', async () => {
+    configState.current = {
+      envs: {
+        DATABASE_URL: 'postgresql://demo:secret@db.example:5432/app',
+        KEEP_ME: '1'
+      },
+      database: {
+        type: 'postgres',
+        instanceId: 'pgm-demo',
+        user: 'demo',
+        name: 'app'
+      }
+    };
     const cli = await createCli();
     await cli.parse(['node', 'src/cli.ts', 'db rm', 'pgm-demo', '--yes']);
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(deleteDatabaseInstanceMock).toHaveBeenCalledWith('pgm-demo');
+    expect(setProjectMock).toHaveBeenCalledWith({
+      database: undefined,
+      envs: {
+        KEEP_ME: '1'
+      }
+    }, { replaceEnvs: true });
     expect(spinnerStopMock).toHaveBeenCalledWith(expect.stringContaining('实例 pgm-demo 已删除'));
     expect(showOutroMock).toHaveBeenCalledWith('Done.');
   });

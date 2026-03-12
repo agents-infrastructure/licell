@@ -39,9 +39,8 @@ export function parseDatabaseUrl(raw?: string): ParsedDatabaseUrl | null {
 }
 
 export function readProjectDatabase(project: ReturnType<typeof Config.getProject>): ProjectDatabaseLike {
-  const candidate = (project as Record<string, unknown>).database;
-  if (typeof candidate !== 'object' || candidate === null) return {};
-  const db = candidate as Record<string, unknown>;
+  const db = project.database;
+  if (!db) return {};
   return {
     instanceId: typeof db.instanceId === 'string' ? db.instanceId : undefined,
     user: typeof db.user === 'string' ? db.user : undefined,

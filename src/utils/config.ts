@@ -42,6 +42,13 @@ export interface ProjectCacheConfig {
   mode?: string;
 }
 
+export interface ProjectDatabaseConfig {
+  type?: string;
+  instanceId: string;
+  user?: string;
+  name?: string;
+}
+
 export interface ProjectResourcesConfig {
   memorySize?: number;
   timeout?: number;
@@ -64,6 +71,7 @@ export interface ProjectConfig {
   hooks?: ProjectHooksConfig;
   network?: ProjectNetworkConfig;
   cache?: ProjectCacheConfig;
+  database?: ProjectDatabaseConfig;
   [key: string]: unknown;
 }
 
@@ -215,6 +223,17 @@ export function normalizeProject(raw: unknown): ProjectConfig {
     normalized.cache = cache;
   }
 
+  const databaseRaw = isRecord(projectRaw.database) ? projectRaw.database : null;
+  if (databaseRaw && typeof databaseRaw.instanceId === 'string') {
+    const database: ProjectDatabaseConfig = {
+      instanceId: databaseRaw.instanceId,
+      type: typeof databaseRaw.type === 'string' ? databaseRaw.type : undefined,
+      user: typeof databaseRaw.user === 'string' ? databaseRaw.user : undefined,
+      name: typeof databaseRaw.name === 'string' ? databaseRaw.name : undefined
+    };
+    normalized.database = database;
+  }
+
   const {
     appName: _a,
     runtime: _r,
@@ -225,6 +244,7 @@ export function normalizeProject(raw: unknown): ProjectConfig {
     hooks: _h,
     network: _n,
     cache: _c,
+    database: _db,
     ...extra
   } = projectRaw;
   return { ...extra, ...normalized, envs };

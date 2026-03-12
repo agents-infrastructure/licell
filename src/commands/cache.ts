@@ -4,6 +4,7 @@ import { confirm, isCancel } from '@clack/prompts';
 import pc from 'picocolors';
 import { maskConnectionString } from '../utils/cli-helpers';
 import { executeWithAuthRecovery } from '../utils/auth-recovery';
+import { Config } from '../utils/config';
 import {
   getCacheInstanceDetail,
   listCacheClasses,
@@ -29,6 +30,8 @@ import {
 } from '../utils/cli-shared';
 import { emitCommandResult, isJsonOutput } from '../utils/output';
 import { DATA_SECTION } from './sections';
+
+const CACHE_PROJECT_ENV_KEYS = ['REDIS_URL', 'REDIS_HOST', 'REDIS_PORT', 'REDIS_PASSWORD', 'REDIS_USERNAME'] as const;
 
 const cacheAddOptions = [
   { rawName: '--type <type>', description: '缓存类型：redis（CI 场景建议显式传入）' },
@@ -243,6 +246,21 @@ function printCacheClassList(
       console.log(pc.gray(`... 仅展示前 ${shown.length} 条，可通过 --limit 查看更多`));
     }
   }
+}
+
+function clearProjectCacheBinding(instanceId: string) {
+  const project = Config.getProject();
+  if (project.cache?.instanceId !== instanceId) return;
+
+  const nextEnvs = { ...project.envs };
+  for (const key of CACHE_PROJECT_ENV_KEYS) {
+    delete nextEnvs[key];
+  }
+
+  Config.setProject({
+    cache: undefined,
+    envs: nextEnvs
+  }, { replaceEnvs: true });
 }
 
 export function registerCacheCommands(cli: CAC) {
@@ -660,6 +678,7 @@ export function registerCacheCommands(cli: CAC) {
             '❌ 删除失败',
             async () => {
               await deleteCacheInstance(id);
+              clearProjectCacheBinding(id);
               return { instanceId: id };
             }
           );
