@@ -14,7 +14,88 @@ import {
   getTairInstanceById,
   listTairKVCacheInstances
 } from './internals';
-import type { CacheConnectInfo, CacheInstanceDetail, CacheInstanceSummary } from './types';
+import { describeClassicAvailableResource } from './zones';
+import type {
+  CacheClassCatalog,
+  CacheClassEntry,
+  CacheConnectInfo,
+  CacheInstanceDetail,
+  CacheInstanceSummary
+} from './types';
+import { DEFAULT_TAIR_KVCACHE_CLASS } from './types';
+
+function upsertCacheClassEntry(
+  entries: Map<string, CacheClassEntry>,
+  input: {
+    instanceClass?: unknown;
+    remark?: unknown;
+    capacityMb?: unknown;
+    zoneId?: string;
+    source: CacheClassEntry['source'];
+  }
+) {
+  const instanceClass = typeof input.instanceClass === 'string' ? input.instanceClass.trim() : '';
+  if (!instanceClass) return;
+  const remark = typeof input.remark === 'string' ? input.remark.trim() : '';
+  const capacityMb = typeof input.capacityMb === 'number' && Number.isFinite(input.capacityMb)
+    ? input.capacityMb
+    : undefined;
+  const zoneId = input.zoneId?.trim() || '';
+  const current = entries.get(instanceClass);
+  const zoneIds = new Set([...(current?.zoneIds || []), ...(zoneId ? [zoneId] : [])]);
+  entries.set(instanceClass, {
+    instanceClass,
+    remark: current?.remark || remark || undefined,
+    capacityMb: current?.capacityMb ?? capacityMb,
+    zoneIds: [...zoneIds].sort(),
+    source: current?.source || input.source
+  });
+}
+
+function collectClassicCacheClasses(
+  value: unknown,
+  entries: Map<string, CacheClassEntry>,
+  currentZoneId?: string
+) {
+  if (!value || typeof value !== 'object') return;
+  if (Array.isArray(value)) {
+    for (const item of value) collectClassicCacheClasses(item, entries, currentZoneId);
+    return;
+  }
+  const record = value as Record<string, unknown>;
+  const zoneId = typeof record.zoneId === 'string' ? record.zoneId : currentZoneId;
+  if (record.availableResources && typeof record.availableResources === 'object') {
+    const availableResource = (record.availableResources as { availableResource?: unknown }).availableResource;
+    if (Array.isArray(availableResource)) {
+      for (const item of availableResource) {
+        const entry = item as {
+          instanceClass?: unknown;
+          instanceClassRemark?: unknown;
+          capacity?: unknown;
+        };
+        upsertCacheClassEntry(entries, {
+          instanceClass: entry.instanceClass,
+          remark: entry.instanceClassRemark,
+          capacityMb: entry.capacity,
+          zoneId,
+          source: 'available-resource'
+        });
+      }
+    }
+  }
+  for (const child of Object.values(record)) {
+    collectClassicCacheClasses(child, entries, zoneId);
+  }
+}
+
+function sortCacheClassEntries(entries: CacheClassEntry[]) {
+  return [...entries].sort((a, b) => {
+    const capacityA = a.capacityMb ?? Number.MAX_SAFE_INTEGER;
+    const capacityB = b.capacityMb ?? Number.MAX_SAFE_INTEGER;
+    if (capacityA !== capacityB) return capacityA - capacityB;
+    return a.instanceClass.localeCompare(b.instanceClass);
+  });
+}
 
 async function resolvePublicEndpoint(
   redisClient: Kvstore,
@@ -115,6 +196,48 @@ export async function getCacheInstanceDetail(instanceId: string): Promise<CacheI
       vSwitchId: attr.vSwitchId
     },
     accountNames
+  };
+}
+
+export async function listCacheClasses(options: { zoneId?: string } = {}): Promise<CacheClassCatalog> {
+  const auth = Config.requireAuth();
+  const redisClient = createRedisClient(auth);
+
+  const classicRes = await describeClassicAvailableResource(redisClient, auth.region, {
+    zoneId: options.zoneId?.trim() || undefined
+  });
+  const classicEntries = new Map<string, CacheClassEntry>();
+  const classicZones = (classicRes.body?.availableZones?.availableZone || [])
+    .map((zone) => zone.zoneId)
+    .filter((zoneId): zoneId is string => typeof zoneId === 'string' && zoneId.length > 0);
+  collectClassicCacheClasses(classicRes.body?.availableZones?.availableZone || [], classicEntries);
+
+  const serverlessEntries = new Map<string, CacheClassEntry>();
+  const inferInstances = await listTairKVCacheInstances(redisClient, auth.region);
+  for (const item of inferInstances) {
+    upsertCacheClassEntry(serverlessEntries, {
+      instanceClass: item.instanceClass,
+      capacityMb: typeof item.capacity === 'number' ? item.capacity * 1024 : undefined,
+      zoneId: item.zoneId,
+      source: 'observed-infer'
+    });
+  }
+
+  return {
+    regionId: auth.region,
+    serverless: {
+      querySupported: false,
+      defaultClass: DEFAULT_TAIR_KVCACHE_CLASS,
+      observedClasses: sortCacheClassEntries([...serverlessEntries.values()]),
+      notes: [
+        '阿里云当前未开放 Tair Serverless Infer/VNode 的可售 class 枚举接口。',
+        'licell 只能稳定展示默认 class，以及当前账号在本地域已存在实例的观测 class。'
+      ]
+    },
+    classic: {
+      zoneIds: [...new Set(classicZones)].sort(),
+      classes: sortCacheClassEntries([...classicEntries.values()])
+    }
   };
 }
 

@@ -36,11 +36,15 @@ describe('init scaffold', () => {
     expect(getScaffoldFiles('node', 'nodejs22').find((f) => f.path === 'src/app.ts')?.content).toContain("'nodejs22'");
     expect(getScaffoldFiles('python', 'python3.13').find((f) => f.path === 'src/main.py')?.content).toContain('or "python3.13"');
     expect(getScaffoldFiles('python', 'python3.12').find((f) => f.path === 'README.md')?.content).toContain('--runtime python3.12');
+    expect(getScaffoldFiles('node', 'nodejs22', 'task').find((f) => f.path === 'src/task.ts')?.content).toContain("'nodejs22'");
+    expect(getScaffoldFiles('python', 'python3.13', 'task').find((f) => f.path === 'src/task.py')?.content).toContain('or "python3.13"');
+    expect(getScaffoldFiles('python', 'python3.13', 'task').find((f) => f.path === 'README.md')?.content).toContain('--kind task');
   });
 
   it('rejects unsupported runtime values', () => {
     expect(() => resolveInitRuntime('python')).toThrow('函数运行时仅支持');
     expect(() => templateForRuntime('node')).toThrow('不支持的 runtime');
+    expect(() => getScaffoldFiles('docker', 'docker', 'task')).toThrow('docker task 脚手架暂未提供');
   });
 
   it('derives default app name from cwd', () => {
@@ -66,6 +70,19 @@ describe('init scaffold', () => {
     }
   });
 
+  it('writes node task scaffold files', () => {
+    const root = mkdtempSync(join(tmpdir(), 'licell-init-node-task-'));
+    try {
+      const files = getScaffoldFiles('node', 'nodejs22', 'task');
+      const result = writeScaffoldFiles(root, files, false);
+      expect(result.written).toContain('src/task.ts');
+      expect(readFileSync(join(root, 'src/task.ts'), 'utf-8')).toContain('export async function handler');
+      expect(readFileSync(join(root, 'README.md'), 'utf-8')).toContain('licell deploy --type task --runtime nodejs22 --entry src/task.ts --target preview');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('writes docker scaffold files with hono entry', () => {
     const root = mkdtempSync(join(tmpdir(), 'licell-init-docker-'));
     try {
@@ -76,6 +93,19 @@ describe('init scaffold', () => {
       expect(readFileSync(join(root, 'src/index.ts'), 'utf-8')).toContain('from \'hono\'');
       expect(readFileSync(join(root, 'src/index.ts'), 'utf-8')).toContain('GET /healthz');
       expect(readFileSync(join(root, 'package.json'), 'utf-8')).toContain('"@hono/node-server"');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('writes python task scaffold files', () => {
+    const root = mkdtempSync(join(tmpdir(), 'licell-init-python-task-'));
+    try {
+      const files = getScaffoldFiles('python', 'python3.13', 'task');
+      const result = writeScaffoldFiles(root, files, false);
+      expect(result.written).toContain('src/task.py');
+      expect(readFileSync(join(root, 'src/task.py'), 'utf-8')).toContain('def handler(event: Any, context: Any):');
+      expect(readFileSync(join(root, 'README.md'), 'utf-8')).toContain('licell task invoke --target preview --payload');
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

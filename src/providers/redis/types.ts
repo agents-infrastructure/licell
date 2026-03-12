@@ -5,11 +5,16 @@ export const REDIS_BIND_WAIT_TIMEOUT_MS = 3 * 60 * 1000;
 export const DEFAULT_TAIR_KVCACHE_CLASS = 'kvcache.cu.g4b.2';
 export const DEFAULT_TAIR_KVCACHE_COMPUTE_UNIT = 1;
 
+export type CacheProvisionMode = 'classic' | 'serverless';
+
 export interface TairKVCacheInstanceSummary {
   instanceId?: string;
   instanceType?: string;
   instanceStatus?: string;
   instanceName?: string;
+  instanceClass?: string;
+  capacity?: number;
+  computeUnitNum?: number;
   vpcId?: string;
   vSwitchId?: string;
   zoneId?: string;
@@ -38,6 +43,7 @@ export interface InferCreateResult {
 
 export interface ProvisionRedisOptions {
   instanceId?: string;
+  mode?: CacheProvisionMode;
   existingPassword?: string;
   accountName?: string;
   engineVersion?: string;
@@ -50,6 +56,13 @@ export interface ProvisionRedisOptions {
   securityIpList?: string;
   vkName?: string;
   computeUnitNum?: number;
+}
+
+export interface ProvisionRedisResult {
+  redisUrl: string;
+  mode: 'classic-redis' | 'tair-serverless-kv';
+  instanceId: string;
+  instanceClass?: string;
 }
 
 export interface CacheInstanceSummary {
@@ -82,4 +95,26 @@ export interface CacheConnectInfo {
   publicHost?: string;
   publicPort?: number;
   publicConnectionString?: string;
+}
+
+export interface CacheClassEntry {
+  instanceClass: string;
+  remark?: string;
+  capacityMb?: number;
+  zoneIds: string[];
+  source: 'available-resource' | 'observed-infer';
+}
+
+export interface CacheClassCatalog {
+  regionId: string;
+  serverless: {
+    querySupported: boolean;
+    defaultClass: string;
+    observedClasses: CacheClassEntry[];
+    notes: string[];
+  };
+  classic: {
+    zoneIds: string[];
+    classes: CacheClassEntry[];
+  };
 }

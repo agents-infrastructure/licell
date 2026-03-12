@@ -59,3 +59,37 @@ export interface ProvisionDatabaseOptions {
   securityIpList?: string;
   description?: string;
 }
+
+export interface DatabaseClassStorageRange {
+  minGb?: number;
+  maxGb?: number;
+  stepGb?: number;
+}
+
+export interface DatabaseClassEntry {
+  instanceClass: string;
+  storageRange?: DatabaseClassStorageRange;
+  zoneIds: string[];
+}
+
+export interface DatabaseZoneClassEntry {
+  zoneId: string;
+  classCount: number;
+  classes: string[];
+}
+
+export interface DatabaseClassCatalog {
+  regionId: string;
+  dbType: 'postgres' | 'mysql';
+  engine: 'PostgreSQL' | 'MySQL';
+  engineVersion: string;
+  category: string;
+  storageType: string;
+  chargeType: 'PostPaid' | 'Serverless';
+  zoneId?: string;
+  zoneIds: string[];
+  queriedAllZones: boolean;
+  defaultClass: string;
+  classes: DatabaseClassEntry[];
+  zones: DatabaseZoneClassEntry[];
+}

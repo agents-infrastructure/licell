@@ -8,6 +8,7 @@ import { Config, type ProjectNetworkConfig, type ProjectResourcesConfig } from '
 import { isConflictError, isNotFoundError, isTransientError } from '../../utils/alicloud-error';
 import { formatErrorMessage } from '../../utils/errors';
 import { createFcClient } from './client';
+import { computeDeploymentMarker, LICELL_INTERNAL_DEPLOY_MARKER_ENV } from './deployment-probe';
 import { ensureFunctionHttpUrl } from './http';
 import { validateRuntimeEntrypoint } from './runtime-utils';
 import {
@@ -76,6 +77,12 @@ function validateCpuMemoryRatio(memorySizeMb: number, cpu: number) {
 export interface DeployFCOptions {
   resources?: ProjectResourcesConfig;
   network?: ProjectNetworkConfig | null;
+  ensureHttpUrl?: boolean;
+}
+
+export interface DeployFCResult {
+  url?: string;
+  deploymentMarker: string;
 }
 
 export interface ResolvedFunctionResources {
@@ -340,7 +347,7 @@ async function callUpdateFunction(
   }
 }
 
-export async function deployFC(appName: string, entryFile: string, runtime: FcRuntime = DEFAULT_FC_RUNTIME, options: DeployFCOptions = {}) {
+export async function deployFC(appName: string, entryFile: string, runtime: FcRuntime = DEFAULT_FC_RUNTIME, options: DeployFCOptions = {}): Promise<DeployFCResult> {
   const { client } = createFcClient();
   const project = Config.getProject();
 
@@ -379,6 +386,16 @@ export async function deployFC(appName: string, entryFile: string, runtime: FcRu
   if (!runtimeConfig.skipCodePackaging) {
     code = { zipFile: packageCodeAsBase64(outdir) };
   }
+  const deploymentMarker = computeDeploymentMarker(
+    code?.zipFile
+      || JSON.stringify({
+        runtime: runtimeConfig.runtime,
+        handler: runtimeConfig.handler,
+        customRuntimeConfig: runtimeConfig.customRuntimeConfig || null,
+        customContainerConfig: runtimeConfig.customContainerConfig || null
+      })
+  );
+  environmentVariables[LICELL_INTERNAL_DEPLOY_MARKER_ENV] = deploymentMarker;
 
   const resources = resolveFunctionResources(project.resources, options.resources);
   const memorySize = resources.memorySize;
@@ -440,5 +457,11 @@ export async function deployFC(appName: string, entryFile: string, runtime: FcRu
       throw updateErr;
     }
   }
-  return ensureFunctionHttpUrl(appName, client);
+  if (options.ensureHttpUrl === false) {
+    return { deploymentMarker };
+  }
+  return {
+    url: await ensureFunctionHttpUrl(appName, client),
+    deploymentMarker
+  };
 }

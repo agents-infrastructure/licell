@@ -18,6 +18,7 @@ import { shellCommandModule } from './shell';
 import { setupCommandModule } from './setup';
 import { skillsCommandModule } from './skills';
 import { supaCommandModule } from './supa';
+import { taskCommandModule } from './task';
 import { upgradeCommandModule } from './upgrade';
 import { defineCommandBundle, defineCommandManifest } from './module';
 
@@ -70,6 +71,7 @@ export const LICELL_COMMAND_MANIFEST = defineCommandManifest({
     initCommandModule,
     configCommandModule,
     deployCommandModule,
+    taskCommandModule,
     releaseCommandModule,
     logsCommandModule,
     fnCommandModule,

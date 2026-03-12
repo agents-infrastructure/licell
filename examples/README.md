@@ -1,11 +1,13 @@
 # Licell Examples
 
-这 4 个示例分为 3 个 API 示例 + 1 个静态站示例，方便你横向比较和验证部署：
+这 6 个示例分为 3 个 API 示例 + 2 个 task 示例 + 1 个静态站示例，方便你横向比较和验证部署：
 
 1. `node22-express-api`：`nodejs22` + Express
 2. `python313-flask-api`：`python3.13` + Flask
 3. `docker-bun-hono-api`：`docker` + Bun + Hono
-4. `static-oss-site`：`static`（直推 OSS 托管）
+4. `node22-task-worker`：`nodejs22` + task worker
+5. `python313-task-worker`：`python3.13` + task worker
+6. `static-oss-site`：`static`（直推 OSS 托管）
 
 ## 统一 API 能力（仅 API 示例）
 
@@ -43,6 +45,36 @@ licell deploy --type api --target preview
 - Node22：`licell deploy --type api --runtime nodejs22 --entry src/index.ts --target preview`
 - Python3.13：`licell deploy --type api --runtime python3.13 --entry src/main.py --target preview`
 - Docker：`licell deploy --type api --runtime docker --target preview`
+
+## 快速开始（Task 示例）
+
+任选一个目录：
+
+```bash
+cd examples/node22-task-worker
+# 或
+cd examples/python313-task-worker
+```
+
+登录并部署：
+
+```bash
+licell login
+licell deploy --type task --target preview
+```
+
+建议按示例显式声明 runtime 与入口：
+
+- Node22：`licell deploy --type task --runtime nodejs22 --entry src/task.ts --target preview`
+- Python3.13：`licell deploy --type task --runtime python3.13 --entry src/task.py --target preview`
+
+提交任务并跟踪：
+
+```bash
+licell task invoke --target preview --payload '{"job":"demo","mode":"ok"}'
+licell task list --target preview --output json
+licell task info <taskId> --target preview --output json
+```
 
 ## 快速开始（静态站）
 

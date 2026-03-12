@@ -75,7 +75,7 @@ interface JsonFileProbe {
 interface DoctorResolvedRuntime {
   source: 'option' | 'project';
   raw: string;
-  deployTypeHint?: 'api' | 'static';
+  deployTypeHint?: 'api' | 'static' | 'task';
   runtime?: string;
   error?: string;
 }
@@ -170,10 +170,15 @@ function createDoctorContext(options: LicellDoctorRunOptions = {}): LicellDoctor
     const source: 'option' | 'project' = toOptionalString(options.runtime) ? 'option' : 'project';
     try {
       const parsed = parseDeployRuntimeOption(runtimeInput);
+      const projectDeployType = source === 'project' ? toOptionalString(project?.deployType) : undefined;
       effectiveRuntime = {
         source,
         raw: runtimeInput,
-        deployTypeHint: parsed.deployTypeHint,
+        deployTypeHint: parsed.deployTypeHint === 'static'
+          ? 'static'
+          : projectDeployType === 'task'
+            ? 'task'
+            : 'api',
         runtime: parsed.runtime
       };
     } catch (err: unknown) {

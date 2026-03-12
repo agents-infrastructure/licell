@@ -33,7 +33,14 @@ export function createSpinner() {
     const s = spinner();
     let started = false;
     return {
-      start: (msg?: string) => { started = true; s.start(msg); },
+      start: (msg?: string) => {
+        if (started) {
+          if (msg) s.message(msg);
+          return;
+        }
+        started = true;
+        s.start(msg);
+      },
       stop: (msg?: string) => { if (started) { started = false; s.stop(msg); } },
       message: (msg?: string) => { if (started) s.message(msg); }
     } as ReturnType<typeof spinner>;
@@ -211,15 +218,26 @@ export async function ensureDestructiveActionConfirmed(
   if (!secondConfirm) throw new Error('操作已取消');
 }
 
-export const DEPLOY_TYPES = ['api', 'static'] as const;
+export const DEPLOY_TYPES = ['api', 'static', 'task'] as const;
 export type DeployType = (typeof DEPLOY_TYPES)[number];
 
 export function normalizeDeployType(input: string): DeployType {
   const value = input.trim().toLowerCase();
-  if (value !== 'api' && value !== 'static') {
-    throw new Error('--type 仅支持 api 或 static');
+  if (value !== 'api' && value !== 'static' && value !== 'task') {
+    throw new Error('--type 仅支持 api、static 或 task');
   }
   return value;
+}
+
+export function tryNormalizeDeployType(input: unknown) {
+  if (typeof input !== 'string') return undefined;
+  const value = input.trim();
+  if (!value) return undefined;
+  try {
+    return normalizeDeployType(value);
+  } catch {
+    return undefined;
+  }
 }
 
 export type DbTypeInput = 'postgres' | 'mysql' | 'serverless-postgresql';

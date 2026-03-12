@@ -1,33 +1,17 @@
 import { buildAgentCommandCatalog } from './command-reference';
 import {
-  cloneResolvedCommandResultDescriptor,
-  type ResolvedCommandResultDescriptor,
-  type ResolvedCommandResultFieldTreeNode
+  type ResolvedCommandResultDescriptor
 } from './command-metadata';
 import { getCliRecordContractDocument } from './cli-record-contract';
 import { LICELL_HELP_KIND, LICELL_HELP_SCHEMA_VERSION } from './help';
 import { LICELL_CLI_RECORD_KIND, LICELL_CLI_RECORD_SCHEMA_VERSION, LICELL_JSON_PREFIX } from './output';
-
-function renderFieldTree(node: ResolvedCommandResultFieldTreeNode, depth: number): string[] {
-  const optional = node.required === false ? '（可选）' : '';
-  const description = node.description ? `：${node.description}` : '';
-  const rendered = [`${'  '.repeat(depth)}- \`${node.segment}\`${optional}${description}`];
-  for (const child of node.children) {
-    rendered.push(...renderFieldTree(child, depth + 1));
-  }
-  return rendered;
-}
+import { renderStructuredResultLines } from './structured-result-render';
 
 export function renderStructuredDescriptorMarkdown(result: ResolvedCommandResultDescriptor) {
-  const cloned = cloneResolvedCommandResultDescriptor(result)!;
-  const lines: string[] = [];
-  if (cloned.summary) {
-    lines.push(`- ${cloned.summary}`);
-  }
-  for (const node of cloned.fieldTree) {
-    lines.push(...renderFieldTree(node, 1));
-  }
-  return lines;
+  return renderStructuredResultLines(result, {
+    separator: '：',
+    optionalLabel: '（可选）'
+  });
 }
 
 export function renderAgentContractMarkdown(options?: { headingLevel?: 2 | 3 | 4 }) {

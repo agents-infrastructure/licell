@@ -1,8 +1,44 @@
 import * as $Rds from '@alicloud/rds20140815';
 import { Config } from '../../utils/config';
+import { isNotFoundError, isTransientError } from '../../utils/alicloud-error';
+import { sleep } from '../../utils/runtime';
 import { createRdsClient } from './client';
+import { resolveDatabaseProvisionDefaults } from './defaults';
+import { resolveDatabaseAvailableZoneIds } from './zones';
 import { inferDbProtocol, parseDatabaseUrl, readProjectDatabase } from './project-db';
-import type { DatabaseConnectInfo, DatabaseInstanceDetail, DatabaseInstanceSummary } from './types';
+import type {
+  DatabaseClassCatalog,
+  DatabaseClassEntry,
+  DatabaseZoneClassEntry,
+  DatabaseConnectInfo,
+  DatabaseInstanceDetail,
+  DatabaseInstanceSummary
+} from './types';
+
+interface ListDatabaseClassesOptions {
+  engineVersion?: string;
+  category?: string;
+  storageType?: string;
+  zoneId?: string;
+  allZones?: boolean;
+}
+
+async function describeAvailableClassesWithRetry(
+  client: ReturnType<typeof createRdsClient>['client'],
+  request: $Rds.DescribeAvailableClassesRequest
+) {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= 5; attempt += 1) {
+    try {
+      return await client.describeAvailableClasses(request);
+    } catch (err: unknown) {
+      lastError = err;
+      if (!isTransientError(err) || attempt === 5) throw err;
+      await sleep(2000 * attempt);
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error('DescribeAvailableClasses 失败');
+}
 
 function toDatabaseSummary(item: {
   DBInstanceId?: string;
@@ -112,6 +148,121 @@ export async function getDatabaseInstanceDetail(instanceId: string): Promise<Dat
     endpoints,
     databases,
     accounts
+  };
+}
+
+function sortDatabaseClassEntries(entries: DatabaseClassEntry[]) {
+  return [...entries].sort((a, b) => a.instanceClass.localeCompare(b.instanceClass));
+}
+
+function upsertDatabaseClassEntry(
+  entries: Map<string, DatabaseClassEntry>,
+  input: {
+    instanceClass?: string;
+    zoneId: string;
+    storageRange?: DatabaseClassEntry['storageRange'];
+  }
+) {
+  const instanceClass = input.instanceClass?.trim() || '';
+  if (!instanceClass) return;
+  const current = entries.get(instanceClass);
+  const zoneIds = new Set([...(current?.zoneIds || []), input.zoneId]);
+  entries.set(instanceClass, {
+    instanceClass,
+    storageRange: current?.storageRange || input.storageRange,
+    zoneIds: [...zoneIds].sort()
+  });
+}
+
+function sortZoneClassEntries(entries: DatabaseZoneClassEntry[]) {
+  return [...entries].sort((a, b) => a.zoneId.localeCompare(b.zoneId));
+}
+
+export async function listDatabaseClasses(
+  dbType: 'postgres' | 'mysql',
+  options: ListDatabaseClassesOptions = {}
+): Promise<DatabaseClassCatalog> {
+  const { auth, client } = createRdsClient();
+  const defaults = resolveDatabaseProvisionDefaults(dbType, options);
+  const explicitZoneId = options.zoneId?.trim() || '';
+  const allZones = Boolean(options.allZones && !explicitZoneId);
+  const resolvedZoneIds = explicitZoneId
+    ? [explicitZoneId]
+    : await resolveDatabaseAvailableZoneIds(client, auth.region, dbType, {
+        engine: defaults.engine,
+        engineVersion: defaults.engineVersion,
+        category: defaults.category
+      });
+  const zoneIds = explicitZoneId
+    ? resolvedZoneIds
+    : (allZones ? resolvedZoneIds : resolvedZoneIds.slice(0, 1));
+  if (zoneIds.length === 0) {
+    throw new Error(`未查询到 ${defaults.engine} 可用区，请尝试显式传入 --zone`);
+  }
+
+  const entries = new Map<string, DatabaseClassEntry>();
+  const zoneEntries = new Map<string, Set<string>>();
+  for (const zoneId of zoneIds) {
+    let response: Awaited<ReturnType<typeof client.describeAvailableClasses>>;
+    try {
+      response = await describeAvailableClassesWithRetry(client, new $Rds.DescribeAvailableClassesRequest({
+        regionId: auth.region,
+        zoneId,
+        engine: defaults.engine,
+        engineVersion: defaults.engineVersion,
+        instanceChargeType: defaults.instanceChargeType,
+        category: defaults.category,
+        DBInstanceStorageType: defaults.storageType
+      }));
+    } catch (err: unknown) {
+      if (isNotFoundError(err)) continue;
+      throw err;
+    }
+    const zoneClassSet = zoneEntries.get(zoneId) || new Set<string>();
+    for (const item of response.body?.DBInstanceClasses || []) {
+      const normalizedClass = item.DBInstanceClass?.trim() || '';
+      if (normalizedClass) zoneClassSet.add(normalizedClass);
+      upsertDatabaseClassEntry(entries, {
+        instanceClass: item.DBInstanceClass,
+        zoneId,
+        storageRange: {
+          minGb: item.DBInstanceStorageRange?.minValue,
+          maxGb: item.DBInstanceStorageRange?.maxValue,
+          stepGb: item.DBInstanceStorageRange?.step
+        }
+      });
+    }
+    zoneEntries.set(zoneId, zoneClassSet);
+    if (allZones) {
+      await sleep(1200);
+    }
+  }
+  if (entries.size === 0) {
+    throw new Error(
+      `未查询到 ${defaults.engine} 可售规格，请尝试调整 --zone / --engine-version / --category / --storage-type`
+    );
+  }
+
+  return {
+    regionId: auth.region,
+    dbType,
+    engine: defaults.engine,
+    engineVersion: defaults.engineVersion,
+    category: defaults.category,
+    storageType: defaults.storageType,
+    chargeType: defaults.instanceChargeType,
+    zoneId: explicitZoneId || undefined,
+    zoneIds: [...new Set(zoneIds)].sort(),
+    queriedAllZones: allZones,
+    defaultClass: defaults.defaultClass,
+    classes: sortDatabaseClassEntries([...entries.values()]),
+    zones: sortZoneClassEntries(
+      [...zoneEntries.entries()].map(([zoneId, classes]) => ({
+        zoneId,
+        classCount: classes.size,
+        classes: [...classes].sort()
+      }))
+    )
   };
 }
 

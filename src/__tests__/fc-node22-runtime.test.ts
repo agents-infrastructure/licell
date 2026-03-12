@@ -30,6 +30,8 @@ describe('nodejs22 runtime bootstrap', () => {
       expect(launcher).toContain("/code/.licell/node22-bootstrap.cjs");
       expect(bootstrap).toContain("x-fc-control-path");
       expect(bootstrap).toContain("decodeInvokePayload");
+      expect(bootstrap).toContain("function isInternalProbePayload(payload)");
+      expect(bootstrap).toContain('const LICELL_INTERNAL_PROBE_KIND = "licell-deploy-marker@1";');
       expect(bootstrap).toContain("JSON.parse");
       expect(config.customRuntimeConfig?.command).toEqual(['/bin/sh']);
       expect(config.customRuntimeConfig?.args).toEqual(['/code/.licell/node22-launcher.sh']);

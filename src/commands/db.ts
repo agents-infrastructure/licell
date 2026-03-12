@@ -6,6 +6,7 @@ import { maskConnectionString } from '../utils/cli-helpers';
 import { executeWithAuthRecovery } from '../utils/auth-recovery';
 import {
   getDatabaseInstanceDetail,
+  listDatabaseClasses,
   listDatabaseInstances,
   provisionDatabase,
   resolveDatabaseConnectInfo,
@@ -65,6 +66,29 @@ const dbListCommand = defineCliCommand({
   ]
 });
 
+const dbClassCommand = defineCliCommand({
+  rawName: 'db class [type]',
+  description: '查询数据库可用规格（给 Agent/开发者在 db add 前对照）',
+  options: [
+    { rawName: '--engine-version <version>', description: '数据库引擎版本（默认 postgresql=18.0，mysql=8.0）' },
+    { rawName: '--category <category>', description: 'RDS Category（默认 postgresql=Basic，mysql=serverless_basic）' },
+    { rawName: '--storage-type <storageType>', description: '存储类型（默认 cloud_essd）' },
+    { rawName: '--zone <zoneId>', description: '按可用区过滤（如 cn-hangzhou-b）' },
+    { rawName: '--all-zones', description: '聚合当前地域全部可用 zone 的 class，并标明每个 zone 有哪些规格' },
+    { rawName: '--limit <n>', description: '输出数量，默认 20' }
+  ],
+  descriptor: {
+    title: 'List database instance classes',
+    notes: ['查询口径与当前 `db add` 默认创建参数保持一致。', '未传 `--zone` 且未开启 `--all-zones` 时，默认查询首个可用 zone。', '开启 `--all-zones` 后，会同时返回 `class -> zoneIds` 和 `zone -> classes` 两种聚合视角。'],
+    examples: ['licell db class', 'licell db class postgresql --all-zones --limit 50', 'licell db class mysql --zone cn-hangzhou-b --output json'],
+    related: ['db add', 'db list'],
+    recommendedFlow: [
+      { title: '先看可用规格', command: 'licell db class', reason: '确认当前地域/可用区下有哪些 class 可选，再决定 `db add --class`。' },
+      { title: '再执行创建', command: 'licell db add --class <instanceClass>', reason: '把选中的规格显式传给 db add。' }
+    ]
+  }
+});
+
 const dbInfoCommand = defineCliCommand({
   rawName: 'db info <instanceId>',
   description: '查看数据库实例详情'
@@ -102,6 +126,57 @@ const dbRmCommand = defineCliCommand({
     }
   }
 });
+
+type DbClassMode = 'all' | 'postgres' | 'mysql';
+
+function normalizeDbClassMode(input: string | undefined): DbClassMode {
+  const value = (input || '').trim().toLowerCase();
+  if (!value || value === 'all') return 'all';
+  if (value === 'postgres' || value === 'postgresql') return 'postgres';
+  if (value === 'mysql') return 'mysql';
+  throw new Error('db class [type] 仅支持 postgresql / mysql / all');
+}
+
+function printDatabaseClassCatalog(
+  title: string,
+  catalog: Awaited<ReturnType<typeof listDatabaseClasses>>,
+  limit: number
+) {
+  const shown = catalog.classes.slice(0, limit);
+  console.log(pc.bold(title));
+  console.log(`engine:       ${pc.cyan(`${catalog.engine} ${catalog.engineVersion}`)}`);
+  console.log(`chargeType:   ${pc.cyan(catalog.chargeType)}`);
+  console.log(`category:     ${pc.cyan(catalog.category)}`);
+  console.log(`storageType:  ${pc.cyan(catalog.storageType)}`);
+  console.log(`queriedZones: ${pc.cyan(catalog.zoneIds.join(', ') || catalog.zoneId || '-')}`);
+  if (catalog.queriedAllZones) {
+    console.log(`matchedZones: ${pc.cyan(catalog.zones.map((zone) => zone.zoneId).join(', ') || '-')}`);
+  }
+  console.log(`defaultClass: ${pc.cyan(catalog.defaultClass)}`);
+  console.log(`count:        ${pc.cyan(String(catalog.classes.length))}`);
+  for (const item of shown) {
+    const storageRange = item.storageRange?.minGb
+      ? `${item.storageRange.minGb}-${item.storageRange.maxGb || item.storageRange.minGb}GB${item.storageRange.stepGb ? ` step=${item.storageRange.stepGb}` : ''}`
+      : '-';
+    const zones = item.zoneIds.length > 0 ? item.zoneIds.join(',') : '-';
+    console.log(`${pc.cyan(item.instanceClass)}  storage=${pc.gray(storageRange)}  zones=${pc.gray(zones)}`);
+  }
+  if (catalog.classes.length > shown.length) {
+    console.log(pc.gray(`... 仅展示前 ${shown.length} 条，可通过 --limit 查看更多`));
+  }
+  if (catalog.queriedAllZones && catalog.zones.length > 0) {
+    console.log('');
+    console.log(pc.bold('Zone Breakdown'));
+    for (const zone of catalog.zones) {
+      const shownClasses = zone.classes.slice(0, limit);
+      console.log(`${pc.cyan(zone.zoneId)}  count=${pc.gray(String(zone.classCount))}`);
+      console.log(`  classes=${pc.gray(shownClasses.join(', ') || '-')}`);
+      if (zone.classes.length > shownClasses.length) {
+        console.log(pc.gray(`  ... 仅展示前 ${shownClasses.length} 条，可通过 --limit 查看更多`));
+      }
+    }
+  }
+}
 
 export function registerDbCommands(cli: CAC) {
   registerCliCommand(cli, dbAddCommand)
@@ -248,6 +323,100 @@ export function registerDbCommands(cli: CAC) {
             );
           }
           console.log('');
+          showOutro('Done.');
+        }
+      );
+    });
+
+  registerCliCommand(cli, dbClassCommand)
+    .action(async (typeInput: string | undefined, options: {
+      engineVersion?: unknown;
+      category?: unknown;
+      storageType?: unknown;
+      zone?: unknown;
+      allZones?: unknown;
+      limit?: unknown;
+    }) => {
+      await executeWithAuthRecovery(
+        {
+          commandLabel: commandInvocation(dbClassCommand),
+          interactiveTTY: isInteractiveTTY(),
+          requiredCapabilities: ['rds']
+        },
+        async () => {
+          ensureAuthOrExit();
+          const mode = normalizeDbClassMode(toOptionalString(typeInput));
+          const limit = parseListLimit(options.limit, 20, 500);
+          const queryOptions = {
+            engineVersion: toOptionalString(options.engineVersion),
+            category: toOptionalString(options.category),
+            storageType: toOptionalString(options.storageType),
+            zoneId: toOptionalString(options.zone),
+            allZones: Boolean(options.allZones)
+          };
+          const s = createSpinner();
+          const result = await withSpinner(
+            s,
+            '正在查询数据库规格...',
+            '❌ 获取数据库规格失败',
+            async () => {
+              if (mode === 'all') {
+                const postgres = await listDatabaseClasses('postgres', queryOptions);
+                const mysql = await listDatabaseClasses('mysql', queryOptions);
+                return { postgres, mysql };
+              }
+              const catalog = await listDatabaseClasses(mode, queryOptions);
+              return { [mode]: catalog } as { postgres?: typeof catalog; mysql?: typeof catalog };
+            }
+          );
+          if (!result) return;
+          const postgres = result.postgres || null;
+          const mysql = result.mysql || null;
+          if (!isJsonOutput()) {
+            s.stop(pc.green('✅ 数据库规格已返回'));
+          } else {
+            emitCommandResult({
+              mode,
+              allZones: queryOptions.allZones,
+              zoneId: queryOptions.zoneId || null,
+              postgres: postgres ? {
+                ...postgres,
+                matchedZoneIds: postgres.zones.map((zone) => zone.zoneId),
+                totalCount: postgres.classes.length,
+                shownCount: Math.min(limit, postgres.classes.length),
+                truncated: postgres.classes.length > limit,
+                classes: postgres.classes.slice(0, limit),
+                zones: postgres.zones.map((zone) => ({
+                  ...zone,
+                  shownCount: Math.min(limit, zone.classes.length),
+                  truncated: zone.classes.length > limit,
+                  classes: zone.classes.slice(0, limit)
+                }))
+              } : null,
+              mysql: mysql ? {
+                ...mysql,
+                matchedZoneIds: mysql.zones.map((zone) => zone.zoneId),
+                totalCount: mysql.classes.length,
+                shownCount: Math.min(limit, mysql.classes.length),
+                truncated: mysql.classes.length > limit,
+                classes: mysql.classes.slice(0, limit),
+                zones: mysql.zones.map((zone) => ({
+                  ...zone,
+                  shownCount: Math.min(limit, zone.classes.length),
+                  truncated: zone.classes.length > limit,
+                  classes: zone.classes.slice(0, limit)
+                }))
+              } : null
+            });
+            return;
+          }
+          if (postgres) {
+            printDatabaseClassCatalog('PostgreSQL', postgres, limit);
+          }
+          if (postgres && mysql) console.log('');
+          if (mysql) {
+            printDatabaseClassCatalog('MySQL', mysql, limit);
+          }
           showOutro('Done.');
         }
       );
@@ -448,18 +617,23 @@ export function registerDbCommands(cli: CAC) {
           }
 
           const s = createSpinner();
-          await withSpinner(
+          const result = await withSpinner(
             s,
             `正在删除实例 ${id}...`,
             '❌ 删除失败',
-            () => deleteDatabaseInstance(id)
+            async () => {
+              await deleteDatabaseInstance(id);
+              return { instanceId: id };
+            }
           );
+          if (!result) return;
 
           if (isJsonOutput()) {
-            emitCommandResult({ instanceId: id });
+            emitCommandResult(result);
             return;
           }
-          showOutro(`实例 ${id} 已删除`);
+          s.stop(pc.green(`✅ 实例 ${id} 已删除`));
+          showOutro('Done.');
         }
       );
     });
@@ -476,5 +650,5 @@ export const dbCommandModule = defineCommandModule({
       agentTips: ['优先从 `licell db list --output json` 获取实例，再执行 connect / public-access / rm。']
     }
   },
-  commands: [dbAddCommand, dbListCommand, dbInfoCommand, dbConnectCommand, dbPublicAccessCommand, dbRmCommand]
+  commands: [dbAddCommand, dbClassCommand, dbListCommand, dbInfoCommand, dbConnectCommand, dbPublicAccessCommand, dbRmCommand]
 });

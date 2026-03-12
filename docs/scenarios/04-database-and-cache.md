@@ -38,7 +38,7 @@ licell db add --type postgres
 未来在 `deploy` 更新时，由于同一份 `project.json`
 配置被复用，您的应用甚至不需要关心连哪个库，环境会自动挂载好所需的地址！
 
-## 3. 拉起 Serverless 缓存网关 (Tair/Redis)
+## 3. 拉起缓存网关 (Classic Redis / Tair Serverless)
 
 如同加一个库般简单：
 
@@ -46,9 +46,22 @@ licell db add --type postgres
 licell cache add --type redis
 ```
 
-由于你的业务规模很小，Licell 会默认拉起最新架构的 **256M Serverless 通用型 Tair
-实例（100% 兼容 Redis 交互体系）**。当你的 QPS
-徒增时，它的弹性伸缩特性会自动扩容到对应并发处理带宽，你依然也不需要去手动升降配实例。
+现在 `cache add` 默认创建 **classic Redis**。这样语义更稳定：你不显式要求
+serverless，Licell 就不会替你做带有产品语义的推断。
+
+如果你希望显式创建 Tair Serverless KV，需要明确传入：
+
+```bash
+licell cache add --type redis --mode serverless
+```
+
+并且这里有一个重要规则：
+
+- `--mode classic`：就创建 classic Redis
+- `--mode serverless`：只尝试 Tair Serverless KV
+- `serverless` 不可用时会**直接失败**，不会再静默降级成 classic Redis
+
+这样无论是人还是 Agent，都不会拿到“成功了但资源类型不对”的结果。
 
 完成后，您可以通过指令获取所有参数：
 

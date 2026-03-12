@@ -99,7 +99,7 @@ describe('executeApiDeploy', () => {
 
     mockGetRuntime.mockReturnValue({ defaultEntry: 'index.ts' });
     mockRunFcApiDeployPrecheck.mockReturnValue({ ok: true, issues: [] });
-    mockDeployFC.mockResolvedValue('https://demo-app.fcapp.run');
+    mockDeployFC.mockResolvedValue({ url: 'https://demo-app.fcapp.run', deploymentMarker: 'marker-123' });
     mockPublishFunctionVersion.mockResolvedValue('9');
     mockPromoteFunctionAlias.mockResolvedValue(undefined);
     mockBindAppDomainWorkflow.mockResolvedValue({

@@ -2,6 +2,12 @@ import * as $FC from '@alicloud/fc20230330';
 import { mkdirSync, writeFileSync } from 'fs';
 import { dirname, join, relative } from 'path';
 import { buildEntrypointWithBun } from '../../../utils/runtime';
+import {
+  LICELL_INTERNAL_DEPLOY_MARKER_ENV,
+  LICELL_INTERNAL_PROBE_FIELD,
+  LICELL_INTERNAL_PROBE_KIND,
+  LICELL_INTERNAL_PROBE_VALUE
+} from '../deployment-probe';
 import { prepareNode22RuntimeInCode } from '../../../utils/node22-runtime';
 import { createManagedPreferredLauncher, shouldIncludeManagedRuntimeFallback } from '../custom-runtime-launcher';
 import { findFirstJsOutput } from '../runtime-utils';
@@ -24,6 +30,10 @@ const mod = require(${JSON.stringify(entryPath)});
 const handler = typeof mod.handler === 'function'
   ? mod.handler
   : (typeof mod.default === 'function' ? mod.default : null);
+const LICELL_INTERNAL_PROBE_FIELD = ${JSON.stringify(LICELL_INTERNAL_PROBE_FIELD)};
+const LICELL_INTERNAL_PROBE_VALUE = ${JSON.stringify(LICELL_INTERNAL_PROBE_VALUE)};
+const LICELL_INTERNAL_PROBE_KIND = ${JSON.stringify(LICELL_INTERNAL_PROBE_KIND)};
+const LICELL_INTERNAL_DEPLOY_MARKER_ENV = ${JSON.stringify(LICELL_INTERNAL_DEPLOY_MARKER_ENV)};
 
 if (typeof handler !== 'function') {
   throw new Error('入口文件需导出 handler 或 default 函数');
@@ -109,6 +119,15 @@ function toHttpEvent(req, bodyBuffer) {
   };
 }
 
+function isInternalProbePayload(payload) {
+  return Boolean(
+    payload
+    && typeof payload === 'object'
+    && !Array.isArray(payload)
+    && payload[LICELL_INTERNAL_PROBE_FIELD] === LICELL_INTERNAL_PROBE_VALUE
+  );
+}
+
 async function toHandlerEvent(req) {
   const bodyBuffer = await readBody(req);
   if (isFcInvokeRequest(req)) {
@@ -144,6 +163,14 @@ const port = Number(process.env.FC_SERVER_PORT || process.env.PORT || ${PORT});
 const server = http.createServer(async (req, res) => {
   try {
     const event = await toHandlerEvent(req);
+    if (isInternalProbePayload(event)) {
+      writeResult(res, {
+        ok: true,
+        kind: LICELL_INTERNAL_PROBE_KIND,
+        marker: process.env[LICELL_INTERNAL_DEPLOY_MARKER_ENV] || ''
+      });
+      return;
+    }
     const result = await handler(event, {});
     writeResult(res, result);
   } catch (error) {
@@ -165,6 +192,7 @@ export const nodejs22Handler: RuntimeHandler = {
   name: 'nodejs22',
   defaultEntry: 'src/index.ts',
   unsupportedMessage: '当前地域暂不支持 runtime=nodejs22。请改用 nodejs20，或确认 custom.debian12 在目标地域可用后重试。',
+  supportsInternalDeploymentProbe: true,
 
   async prepareBootFile(entryFile: string, outdir: string) {
     const buildResult = await buildEntrypointWithBun(entryFile, outdir);

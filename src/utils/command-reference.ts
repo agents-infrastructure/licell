@@ -15,8 +15,7 @@ import {
   type CommandFlowStep,
   type CommandOptionInsight,
   type CommandSafetyMetadata,
-  type ResolvedCommandResultDescriptor,
-  type ResolvedCommandResultFieldTreeNode
+  type ResolvedCommandResultDescriptor
 } from './command-metadata';
 import { type CommandTaskEntry, type CommandTaskGroup } from './command-tasks';
 import {
@@ -31,6 +30,7 @@ import {
   LICELL_HELP_SCHEMA_VERSION
 } from './help';
 import { getCliRecordContractDocument } from './cli-record-contract';
+import { renderStructuredResultLines } from './structured-result-render';
 
 export { buildCommandReferenceSections } from './command-reference-sections';
 export type { CommandReferenceSection } from './command-reference-sections';
@@ -149,33 +149,10 @@ function renderOptionTable(command: CatalogCommand) {
 }
 
 function renderStructuredResultMarkdown(result: AgentCommandResult) {
-  const lines: string[] = [];
-
-  if (result.summary) {
-    lines.push(`- ${result.summary}`);
-  }
-
-  lines.push('- `stage`：命令阶段标识。');
-
-  if (result.outcomeKey) {
-    lines.push(`- \`${result.outcomeKey}\`：结果布尔态字段。`);
-  }
-
-  const renderFieldTree = (node: ResolvedCommandResultFieldTreeNode, depth: number): string[] => {
-    const optional = node.required === false ? '（可选）' : '';
-    const description = node.description ? `：${node.description}` : '';
-    const rendered = [`${'  '.repeat(depth)}- \`${node.segment}\`${optional}${description}`];
-    for (const child of node.children) {
-      rendered.push(...renderFieldTree(child, depth + 1));
-    }
-    return rendered;
-  };
-
-  for (const node of result.fieldTree) {
-    lines.push(...renderFieldTree(node, 1));
-  }
-
-  return lines;
+  return renderStructuredResultLines(result, {
+    separator: '：',
+    optionalLabel: '（可选）'
+  });
 }
 
 function renderDecisionGuideMarkdown(command: AgentCommandCatalogEntry) {

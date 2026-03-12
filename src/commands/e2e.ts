@@ -1,11 +1,12 @@
 import type { CAC } from 'cac';
 import { defineCommandModule, commandInvocation, defineCliCommand, registerCliCommand } from './module';
 import pc from 'picocolors';
-import { mkdirSync, existsSync, readFileSync, rmSync, writeFileSync } from 'fs';
+import { cpSync, mkdirSync, existsSync, readFileSync, rmSync, writeFileSync } from 'fs';
+import { homedir } from 'os';
 import { basename, join, resolve } from 'path';
 import { spawnSync } from 'child_process';
 import { executeWithAuthRecovery } from '../utils/auth-recovery';
-import { Config } from '../utils/config';
+import { Config, type AuthConfig, type GlobalConfig } from '../utils/config';
 import { deleteOssBucketRecursively } from '../providers/oss';
 import { getRuntime } from '../providers/fc/runtime';
 import {
@@ -160,6 +161,23 @@ export function buildE2eApiDeployArgs(options: {
   return args;
 }
 
+function resolveE2eTaskEntry(runtime: string) {
+  return runtime.startsWith('python') ? 'src/task.py' : 'src/task.ts';
+}
+
+export function buildE2eTaskDeployArgs(options: {
+  runtime: string;
+  target?: string;
+  useVpc: boolean;
+  entry?: string;
+}) {
+  const args = ['deploy', '--type', 'task', '--runtime', options.runtime];
+  if (options.target) args.push('--target', options.target);
+  args.push('--entry', options.entry || resolveE2eTaskEntry(options.runtime));
+  args.push(options.useVpc ? '--enable-vpc' : '--disable-vpc');
+  return args;
+}
+
 function getProjectConfigPaths(workspaceDir: string) {
   return [join(workspaceDir, '.licell', 'project.json'), join(workspaceDir, '.ali', 'project.json')];
 }
@@ -234,6 +252,46 @@ function getE2eBunCacheDir(cwd: string) {
   return cacheDir;
 }
 
+function getE2eHomeDir(cwd: string) {
+  const homeDir = join(getE2eTempDir(cwd), 'home');
+  mkdirSync(homeDir, { recursive: true });
+  return homeDir;
+}
+
+export function seedE2eChildHome(
+  cwd: string,
+  options: {
+    auth?: AuthConfig;
+    globalConfig?: GlobalConfig;
+    sourceAcmeDir?: string;
+  } = {}
+) {
+  const homeDir = getE2eHomeDir(cwd);
+  const globalDir = join(homeDir, '.licell-cli');
+  mkdirSync(globalDir, { recursive: true });
+
+  const authPath = join(globalDir, 'auth.json');
+  if (!existsSync(authPath)) {
+    const auth = options.auth ?? Config.requireAuth();
+    writeFileSync(authPath, `${JSON.stringify(auth, null, 2)}\n`);
+  }
+
+  const globalConfigPath = join(globalDir, 'config.json');
+  if (!existsSync(globalConfigPath)) {
+    const nextGlobalConfig = { ...(options.globalConfig ?? Config.getGlobalConfig()) };
+    delete nextGlobalConfig.domainSuffix;
+    writeFileSync(globalConfigPath, `${JSON.stringify(nextGlobalConfig, null, 2)}\n`);
+  }
+
+  const sourceAcmeDir = options.sourceAcmeDir ?? join(homedir(), '.licell-cli', 'acme');
+  const targetAcmeDir = join(globalDir, 'acme');
+  if (!existsSync(targetAcmeDir) && existsSync(sourceAcmeDir)) {
+    cpSync(sourceAcmeDir, targetAcmeDir, { recursive: true });
+  }
+
+  return homeDir;
+}
+
 export interface CapturedCliCommandResult {
   status: number | null;
   signal: NodeJS.Signals | null;
@@ -271,10 +329,15 @@ export function classifyE2eCleanupCommandResult(
 
 function buildE2eChildEnv(cwd: string) {
   const tempDir = getE2eTempDir(cwd);
+  const homeDir = seedE2eChildHome(cwd);
   const sslAcmeDirectory = readLicellEnv(process.env, 'SSL_ACME_DIRECTORY')?.trim().toLowerCase();
   return {
     ...process.env,
+    HOME: homeDir,
+    USERPROFILE: homeDir,
     LICELL_INTERACTIVE: '0',
+    LICELL_DOMAIN_SUFFIX: '',
+    ALI_DOMAIN_SUFFIX: '',
     ...(sslAcmeDirectory === 'staging' && process.env.NODE_TLS_REJECT_UNAUTHORIZED === undefined
       ? { NODE_TLS_REJECT_UNAUTHORIZED: '0' }
       : {}),
@@ -361,6 +424,112 @@ function createStaticFixture(workspaceDir: string, runId: string) {
   return distDir;
 }
 
+function renderNodeTaskFixture(runId: string) {
+  return `function toRecord(input: unknown): Record<string, unknown> {
+  if (input && typeof input === 'object' && !Array.isArray(input)) {
+    return input as Record<string, unknown>;
+  }
+  if (typeof input === 'string') {
+    try {
+      const parsed = JSON.parse(input);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {
+      return { raw: input };
+    }
+  }
+  return {};
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export async function handler(event: unknown) {
+  const payload = toRecord(event);
+  const mode = typeof payload.mode === 'string' ? payload.mode : 'ok';
+  const runId = typeof payload.runId === 'string' ? payload.runId : '';
+  const rawSleepMs = Number(payload.sleepMs ?? 0);
+  const sleepMs = Number.isFinite(rawSleepMs) && rawSleepMs > 0
+    ? Math.min(Math.floor(rawSleepMs), 120000)
+    : 0;
+
+  if (mode === 'sleep' && sleepMs > 0) {
+    await sleep(sleepMs);
+  }
+
+  return {
+    ok: true,
+    fixture: 'licell-task-node',
+    expectedRunId: '${runId}',
+    runId,
+    mode,
+    sleepMs
+  };
+}
+`;
+}
+
+function renderPythonTaskFixture(runId: string) {
+  return `from __future__ import annotations
+
+import json
+import time
+from typing import Any
+
+
+def _to_dict(event: Any) -> dict[str, Any]:
+    if isinstance(event, dict):
+        return event
+    if isinstance(event, str):
+        try:
+            parsed = json.loads(event)
+            if isinstance(parsed, dict):
+                return parsed
+        except Exception:
+            return {"raw": event}
+    return {}
+
+
+def handler(event: Any, context: Any):
+    payload = _to_dict(event)
+    mode = payload.get("mode") if isinstance(payload.get("mode"), str) else "ok"
+    run_id = payload.get("runId") if isinstance(payload.get("runId"), str) else ""
+    sleep_ms_value = payload.get("sleepMs", 0)
+    try:
+        sleep_ms = int(sleep_ms_value)
+    except Exception:
+        sleep_ms = 0
+    if sleep_ms < 0:
+        sleep_ms = 0
+    if sleep_ms > 120000:
+        sleep_ms = 120000
+
+    if mode == "sleep" and sleep_ms > 0:
+        time.sleep(sleep_ms / 1000.0)
+
+    return {
+        "ok": True,
+        "fixture": "licell-task-python",
+        "expectedRunId": "${runId}",
+        "runId": run_id,
+        "mode": mode,
+        "sleepMs": sleep_ms,
+    }
+`;
+}
+
+function createTaskFixture(workspaceDir: string, runtime: string, runId: string) {
+  const relativeEntry = resolveE2eTaskEntry(runtime);
+  mkdirSync(join(workspaceDir, 'src'), { recursive: true });
+  writeFileSync(
+    join(workspaceDir, relativeEntry),
+    runtime.startsWith('python') ? renderPythonTaskFixture(runId) : renderNodeTaskFixture(runId)
+  );
+  return relativeEntry;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -405,6 +574,27 @@ function readRequiredRecord(value: unknown, label: string) {
     throw new Error(`${label} 缺失或格式非法`);
   }
   return value;
+}
+
+function runJsonCommandCapture<T extends Record<string, unknown>>(
+  invocation: ReturnType<typeof resolveSelfCliInvocation>,
+  args: string[],
+  cwd: string
+) {
+  const jsonArgs = appendJsonOutputArgs(args);
+  const result = runCliCommandCapture(invocation, jsonArgs, cwd);
+  const combinedOutput = `${result.stdout}\n${result.stderr}`;
+  if (result.status !== 0) {
+    const signal = result.signal ? ` signal=${result.signal}` : '';
+    const message = getLatestCliErrorMessage(combinedOutput)
+      || `命令失败: licell ${jsonArgs.join(' ')} (exit=${String(result.status)}${signal})`;
+    throw new Error(message);
+  }
+  const payload = getLatestCliResultRecord(combinedOutput);
+  if (!payload) {
+    throw new Error(`命令未返回 JSON 结果: licell ${jsonArgs.join(' ')}`);
+  }
+  return payload as T;
 }
 
 function persistManifest(manifest: E2eManifest) {
@@ -638,6 +828,62 @@ export function assertE2eInvokeResult(payload: Record<string, unknown>) {
   throw new Error(`fn invoke 返回非预期响应: ${body}`);
 }
 
+export function buildE2eTaskPayload(
+  runId: string,
+  options: { mode?: 'ok' | 'sleep'; sleepMs?: number } = {}
+) {
+  const mode = options.mode || 'ok';
+  const sleepMs = Number.isFinite(options.sleepMs) ? Math.max(0, Math.floor(options.sleepMs || 0)) : 0;
+  return JSON.stringify({
+    runId,
+    mode,
+    ...(sleepMs > 0 ? { sleepMs } : {})
+  });
+}
+
+export function assertE2eTaskInvokeResult(payload: Record<string, unknown>) {
+  const statusCode = Number(payload.statusCode || 0);
+  if (statusCode !== 202) {
+    throw new Error(`task invoke 返回非 202 状态码: ${statusCode}`);
+  }
+  const invocationType = readRequiredString(payload.invocationType, 'task invoke.invocationType');
+  if (invocationType !== 'Async') {
+    throw new Error(`task invoke 返回非 Async invocationType: ${invocationType}`);
+  }
+  return readRequiredString(payload.taskId, 'task invoke.taskId');
+}
+
+function isTerminalTaskStatus(status: string | undefined) {
+  return status === 'Succeeded' || status === 'Failed' || status === 'Stopped';
+}
+
+function parseTaskReturnPayload(payload: Record<string, unknown>) {
+  const raw = toOptionalString(payload.returnPayload);
+  if (!raw) return undefined;
+  try {
+    const parsed = JSON.parse(raw);
+    return isRecord(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function assertE2eTaskReturnPayload(payload: Record<string, unknown>, expected: { runId: string; mode: 'ok' | 'sleep' }) {
+  const parsed = parseTaskReturnPayload(payload);
+  if (!parsed) {
+    throw new Error('task info.returnPayload 不是可解析的 JSON 对象');
+  }
+  if (parsed.ok !== true) {
+    throw new Error(`task info.returnPayload.ok !== true: ${JSON.stringify(parsed)}`);
+  }
+  if (parsed.runId !== expected.runId) {
+    throw new Error(`task info.returnPayload.runId 不匹配: ${JSON.stringify(parsed)}`);
+  }
+  if (parsed.mode !== expected.mode) {
+    throw new Error(`task info.returnPayload.mode 不匹配: ${JSON.stringify(parsed)}`);
+  }
+}
+
 function runStepIf(ctx: E2eStepContext, condition: boolean, name: string, args: string[]) {
   if (!condition) {
     applyStepRecord(ctx.manifest, {
@@ -737,6 +983,81 @@ async function runInlineStep(
   }
 }
 
+async function pollTaskInfoStep(
+  ctx: E2eStepContext,
+  name: string,
+  options: {
+    functionName: string;
+    target: string;
+    taskId: string;
+    timeoutMs?: number;
+    intervalMs?: number;
+    until: (payload: Record<string, unknown>, status: string | undefined) => { done: boolean; error?: string };
+  }
+) {
+  const timeoutMs = Math.max(1_000, options.timeoutMs || 60_000);
+  const intervalMs = Math.max(500, options.intervalMs || 2_000);
+  await runInlineStep(ctx, name, `poll task info ${options.taskId}`, async () => {
+    const deadline = Date.now() + timeoutMs;
+    let lastStatus: string | undefined;
+    while (Date.now() < deadline) {
+      const payload = runJsonCommandCapture<Record<string, unknown>>(
+        ctx.invocation,
+        ['task', 'info', options.taskId, options.functionName, '--target', options.target],
+        ctx.workspaceDir
+      );
+      const status = toOptionalString(payload.status);
+      lastStatus = status;
+      const outcome = options.until(payload, status);
+      if (outcome.error) {
+        throw new Error(outcome.error);
+      }
+      if (outcome.done) {
+        return;
+      }
+      await sleep(intervalMs);
+    }
+    throw new Error(`task info 轮询超时: taskId=${options.taskId}, lastStatus=${lastStatus || '<empty>'}`);
+  });
+}
+
+async function pollTaskListStep(
+  ctx: E2eStepContext,
+  name: string,
+  options: {
+    functionName: string;
+    target: string;
+    taskId: string;
+    prefix?: string;
+    timeoutMs?: number;
+    intervalMs?: number;
+  }
+) {
+  const timeoutMs = Math.max(1_000, options.timeoutMs || 30_000);
+  const intervalMs = Math.max(500, options.intervalMs || 2_000);
+  await runInlineStep(ctx, name, `poll task list ${options.taskId}`, async () => {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      const payload = runJsonCommandCapture<Record<string, unknown>>(
+        ctx.invocation,
+        [
+          'task', 'list', options.functionName,
+          '--target', options.target,
+          '--limit', '10',
+          ...(options.prefix ? ['--prefix', options.prefix] : [])
+        ],
+        ctx.workspaceDir
+      );
+      const tasks = Array.isArray(payload.tasks) ? payload.tasks : [];
+      if (tasks.some((task) => isRecord(task) && toOptionalString(task.taskId) === options.taskId)) {
+        return;
+      }
+      await sleep(intervalMs);
+    }
+    throw new Error(`task list 轮询超时: 未返回 taskId=${options.taskId}`);
+  });
+}
+
 async function runProbeStep(
   ctx: E2eStepContext,
   name: string,
@@ -828,6 +1149,7 @@ async function executeE2eRun(options: E2eRunOptions) {
   }
   const autoCleanup = Boolean(options.cleanup);
   const yes = Boolean(options.yes);
+  const runToken = compactE2eToken(runId);
   const workspaceDir = resolve(
     toOptionalString(options.workspace)
     || join(projectRoot, '.licell', 'e2e-work', runId)
@@ -1015,7 +1337,6 @@ async function executeE2eRun(options: E2eRunOptions) {
         if (suite === 'full') {
           runStep(ctx, 'whoami', ['whoami']);
           const auth = Config.requireAuth();
-          const runToken = compactE2eToken(runId);
           const staticDistDir = createStaticFixture(workspaceDir, runId);
           const downloadDir = join(workspaceDir, 'e2e-downloads');
           mkdirSync(downloadDir, { recursive: true });
@@ -1168,6 +1489,147 @@ async function executeE2eRun(options: E2eRunOptions) {
           runStep(ctx, 'oss-rm-scratch', ['oss', 'rm', scratchBucket, '--recursive', '--yes']);
           untrackManagedBucket(ctx, scratchBucket);
         }
+
+        let taskEntry = '';
+        await runInlineStep(ctx, 'task-fixture', `write ${resolveE2eTaskEntry(runtime)}`, async () => {
+          taskEntry = createTaskFixture(workspaceDir, runtime, runId);
+        });
+        const taskDeployArgs = buildE2eTaskDeployArgs({
+          runtime,
+          target,
+          useVpc,
+          entry: taskEntry
+        });
+        runStep(ctx, 'deploy-task', taskDeployArgs);
+
+        runJsonStep<Record<string, unknown>>(ctx, 'task-config', [
+          'task', 'config', appNameFromConfig, '--target', target
+        ], (payload) => {
+          if (payload.configured !== true || payload.asyncTask !== true) {
+            throw new Error(`deploy task 后 async config 未启用: ${JSON.stringify(payload)}`);
+          }
+        });
+
+        runStep(ctx, 'task-config-set', [
+          'task', 'config', 'set', appNameFromConfig,
+          '--target', target,
+          '--max-retry-attempts', '0',
+          '--max-event-age', '600'
+        ]);
+        runJsonStep<Record<string, unknown>>(ctx, 'task-config-verify', [
+          'task', 'config', appNameFromConfig, '--target', target
+        ], (payload) => {
+          if (payload.configured !== true || payload.asyncTask !== true) {
+            throw new Error(`task config set 后 asyncTask 未启用: ${JSON.stringify(payload)}`);
+          }
+          if (Number(payload.maxAsyncRetryAttempts) !== 0) {
+            throw new Error(`task config set 后 maxAsyncRetryAttempts 非 0: ${JSON.stringify(payload)}`);
+          }
+          if (Number(payload.maxAsyncEventAgeInSeconds) !== 600) {
+            throw new Error(`task config set 后 maxAsyncEventAgeInSeconds 非 600: ${JSON.stringify(payload)}`);
+          }
+        });
+        runStep(ctx, 'task-config-rm', [
+          'task', 'config', 'rm', appNameFromConfig,
+          '--target', target,
+          '--yes'
+        ]);
+        runJsonStep<Record<string, unknown>>(ctx, 'task-config-verify-rm', [
+          'task', 'config', appNameFromConfig, '--target', target
+        ], (payload) => {
+          if (payload.configured !== false) {
+            throw new Error(`task config rm 后仍检测到配置: ${JSON.stringify(payload)}`);
+          }
+        });
+        runStep(ctx, 'task-config-set-reset', [
+          'task', 'config', 'set', appNameFromConfig,
+          '--target', target,
+          '--max-retry-attempts', '0',
+          '--max-event-age', '600'
+        ]);
+
+        const shortTaskRequestedId = `job-${runToken.slice(-10)}-ok`;
+        const shortTaskInvoke = runJsonStep<Record<string, unknown>>(ctx, 'task-invoke-short', [
+          'task', 'invoke', appNameFromConfig,
+          '--target', target,
+          '--payload', buildE2eTaskPayload(runId),
+          '--task-id', shortTaskRequestedId
+        ], (payload) => {
+          assertE2eTaskInvokeResult(payload);
+        });
+        const shortTaskId = readRequiredString(shortTaskInvoke.taskId, 'task invoke short.taskId');
+        await pollTaskListStep(ctx, 'task-list-short', {
+          functionName: appNameFromConfig,
+          target,
+          taskId: shortTaskId,
+          prefix: shortTaskRequestedId,
+          timeoutMs: 30_000,
+          intervalMs: 2_000
+        });
+        await pollTaskInfoStep(ctx, 'task-info-short', {
+          functionName: appNameFromConfig,
+          target,
+          taskId: shortTaskId,
+          timeoutMs: 90_000,
+          intervalMs: 3_000,
+          until: (payload, status) => {
+            if (status === 'Succeeded') {
+              assertE2eTaskReturnPayload(payload, { runId, mode: 'ok' });
+              return { done: true };
+            }
+            if (status === 'Failed' || status === 'Stopped') {
+              return { done: false, error: `short task 进入异常终态: ${status}; payload=${JSON.stringify(payload)}` };
+            }
+            return { done: false };
+          }
+        });
+
+        const stopTaskRequestedId = `job-${runToken.slice(-10)}-stop`;
+        const stopTaskInvoke = runJsonStep<Record<string, unknown>>(ctx, 'task-invoke-stop', [
+          'task', 'invoke', appNameFromConfig,
+          '--target', target,
+          '--payload', buildE2eTaskPayload(runId, { mode: 'sleep', sleepMs: 45_000 }),
+          '--task-id', stopTaskRequestedId
+        ], (payload) => {
+          assertE2eTaskInvokeResult(payload);
+        });
+        const stopTaskId = readRequiredString(stopTaskInvoke.taskId, 'task invoke stop.taskId');
+        await pollTaskInfoStep(ctx, 'task-info-active', {
+          functionName: appNameFromConfig,
+          target,
+          taskId: stopTaskId,
+          timeoutMs: 90_000,
+          intervalMs: 3_000,
+          until: (payload, status) => {
+            if (status && !isTerminalTaskStatus(status)) {
+              return { done: true };
+            }
+            if (status === 'Succeeded' || status === 'Failed' || status === 'Stopped') {
+              return { done: false, error: `stop task 提前进入终态: ${status}; payload=${JSON.stringify(payload)}` };
+            }
+            return { done: false };
+          }
+        });
+        runStep(ctx, 'task-stop', [
+          'task', 'stop', stopTaskId, appNameFromConfig,
+          '--target', target
+        ]);
+        await pollTaskInfoStep(ctx, 'task-info-stopped', {
+          functionName: appNameFromConfig,
+          target,
+          taskId: stopTaskId,
+          timeoutMs: 90_000,
+          intervalMs: 3_000,
+          until: (payload, status) => {
+            if (status === 'Stopped') {
+              return { done: true };
+            }
+            if (status === 'Succeeded' || status === 'Failed') {
+              return { done: false, error: `task stop 后进入非 Stopped 终态: ${status}; payload=${JSON.stringify(payload)}` };
+            }
+            return { done: false };
+          }
+        });
       }
     );
     manifest.status = 'succeeded';

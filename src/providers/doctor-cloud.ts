@@ -82,13 +82,13 @@ export interface DoctorCloudDiagnostics {
 interface DoctorCloudDiagnosticsInput {
   auth: AuthConfig;
   project?: ProjectConfig | null;
-  deployTypeHint?: 'api' | 'static';
+  deployTypeHint?: 'api' | 'static' | 'task';
   runtime?: string | null;
 }
 
 export interface DoctorDeployTargetPlan {
-  mode: 'api' | 'static' | 'skip';
-  reason: 'missing_project' | 'missing_app_name' | 'unknown_deploy_type' | 'api' | 'static';
+  mode: 'api' | 'static' | 'task' | 'skip';
+  reason: 'missing_project' | 'missing_app_name' | 'unknown_deploy_type' | 'api' | 'static' | 'task';
 }
 
 interface DoctorDomainInspection {
@@ -451,7 +451,7 @@ async function probeRamProfile(auth: AuthConfig): Promise<DoctorCloudCheckResult
 
 export function resolveDoctorCapabilityPlan(input: {
   project?: ProjectConfig | null;
-  deployTypeHint?: 'api' | 'static';
+  deployTypeHint?: 'api' | 'static' | 'task';
   runtime?: string | null;
 }): DoctorCloudCapabilityPlan {
   const required = new Set<AuthCapability>();
@@ -482,12 +482,13 @@ export function resolveDoctorCapabilityPlan(input: {
 
 export function resolveDoctorDeployTargetPlan(input: {
   project?: ProjectConfig | null;
-  deployTypeHint?: 'api' | 'static';
+  deployTypeHint?: 'api' | 'static' | 'task';
   runtime?: string | null;
 }): DoctorDeployTargetPlan {
   if (!input.project) return { mode: 'skip', reason: 'missing_project' };
   if (!toOptionalString(input.project.appName)) return { mode: 'skip', reason: 'missing_app_name' };
   if (input.deployTypeHint === 'static') return { mode: 'static', reason: 'static' };
+  if (input.deployTypeHint === 'task') return { mode: 'task', reason: 'task' };
   if (input.deployTypeHint === 'api' || input.runtime) return { mode: 'api', reason: 'api' };
   return { mode: 'skip', reason: 'unknown_deploy_type' };
 }
@@ -988,6 +989,18 @@ export async function probeDoctorDomainConsistency(input: DoctorCloudDiagnostics
     });
   }
 
+  if (plan.mode === 'task') {
+    return normalizeDoctorCloudCheckResult({
+      status: 'skip',
+      summary: '当前项目是任务函数；不涉及固定域名编排，跳过域名一致性检查。',
+      details: [],
+      remediation: [],
+      data: {
+        mode: 'task'
+      }
+    });
+  }
+
   try {
     return normalizeDoctorCloudCheckResult(plan.mode === 'api'
       ? await probeApiDomainConsistency({ ...input, project: input.project })
@@ -1228,10 +1241,15 @@ async function runCapabilityProbe(auth: AuthConfig, capability: AuthCapability, 
   }
 }
 
-async function probeApiDeployTarget(input: DoctorCloudDiagnosticsInput & { project: ProjectConfig }): Promise<DoctorCloudCheckResult> {
+async function probeApiDeployTarget(
+  input: DoctorCloudDiagnosticsInput & { project: ProjectConfig },
+  mode: 'api' | 'task' = 'api'
+): Promise<DoctorCloudCheckResult> {
   const functionName = toOptionalString(input.project.appName)!;
   const expectedRuntime = resolveExpectedFcRuntime(input.runtime);
   const expectedCustomRuntime = resolveExpectedCustomRuntimeSignature(input.runtime);
+  const surfaceLabel = mode === 'task' ? 'Task' : 'API';
+  const deployCommand = mode === 'task' ? 'licell deploy --type task' : 'licell deploy --type api';
 
   try {
     const fn = await withTimeout(getFunctionInfo(functionName), 'API deploy target');
@@ -1262,7 +1280,7 @@ async function probeApiDeployTarget(input: DoctorCloudDiagnosticsInput & { proje
       details.push(`expectedCloudRuntime: ${expectedRuntime}`);
       if ((fn.runtime || '').trim().toLowerCase() !== expectedRuntime) {
         blockingIssues.push(`runtime drift: expected ${expectedRuntime}, got ${fn.runtime || '(missing)'}`);
-        remediation.push(doctorRemediationCommand(`licell deploy --type api --runtime ${input.runtime}`, {
+        remediation.push(doctorRemediationCommand(`${deployCommand} --runtime ${input.runtime}`, {
           text: '按当前项目 runtime 重新部署。'
         }));
       }
@@ -1271,7 +1289,7 @@ async function probeApiDeployTarget(input: DoctorCloudDiagnosticsInput & { proje
     const observedCustomRuntime = (fn as { customRuntimeConfig?: { command?: unknown; args?: unknown } }).customRuntimeConfig;
     if (!matchesCustomRuntimeSignature(observedCustomRuntime, expectedCustomRuntime)) {
       warnings.push('custom runtime launcher drift: cloud command/args 与当前 licell runtime contract 不一致');
-      remediation.push(doctorRemediationCommand(`licell deploy --type api --runtime ${input.runtime}`, {
+      remediation.push(doctorRemediationCommand(`${deployCommand} --runtime ${input.runtime}`, {
         text: '建议重新部署，收敛到当前 runtime contract。'
       }));
     }
@@ -1322,12 +1340,12 @@ async function probeApiDeployTarget(input: DoctorCloudDiagnosticsInput & { proje
       details.push(...blockingIssues.map((item) => `blocking: ${item}`));
       return {
         status: 'error',
-        summary: `API deploy target 存在 ${blockingIssues.length} 个阻塞项。`,
+        summary: `${surfaceLabel} deploy target 存在 ${blockingIssues.length} 个阻塞项。`,
         details,
         remediation: normalizeDoctorRemediationItems(remediation),
-        nextCommands: doctorNextCommands('licell deploy --type api', 'licell release promote --target <alias>', 'licell fn info'),
+        nextCommands: doctorNextCommands(deployCommand, 'licell release promote --target <alias>', 'licell fn info'),
         data: {
-          mode: 'api',
+          mode,
           functionName,
           runtime: fn.runtime || null,
           expectedRuntime: expectedRuntime || null,
@@ -1343,12 +1361,12 @@ async function probeApiDeployTarget(input: DoctorCloudDiagnosticsInput & { proje
       details.push(...warnings.map((item) => `warn: ${item}`));
       return {
         status: 'warn',
-        summary: `API deploy target 已找到，但还有 ${warnings.length} 个待收敛项。`,
+        summary: `${surfaceLabel} deploy target 已找到，但还有 ${warnings.length} 个待收敛项。`,
         details,
         remediation: normalizeDoctorRemediationItems(remediation),
         nextCommands: doctorNextCommands('licell release promote --target prod', 'licell fn info'),
         data: {
-          mode: 'api',
+          mode,
           functionName,
           runtime: fn.runtime || null,
           expectedRuntime: expectedRuntime || null,
@@ -1361,11 +1379,11 @@ async function probeApiDeployTarget(input: DoctorCloudDiagnosticsInput & { proje
 
     return {
       status: 'ok',
-      summary: 'API deploy target 与当前项目一致。',
+      summary: `${surfaceLabel} deploy target 与当前项目一致。`,
       details,
       remediation: [],
       data: {
-        mode: 'api',
+        mode,
         functionName,
         runtime: fn.runtime || null,
         expectedRuntime: expectedRuntime || null,
@@ -1381,19 +1399,19 @@ async function probeApiDeployTarget(input: DoctorCloudDiagnosticsInput & { proje
         summary: `当前 region 未找到项目函数：${functionName}`,
         details: [`region: ${input.auth.region}`],
         remediation: [doctorRemediationNote('先创建或更新函数；若函数部署在别的 region，请先切换 region。', {
-          commandTemplate: 'licell deploy --type api',
+          commandTemplate: deployCommand,
           intent: 'deploy'
         })],
-        nextCommands: doctorNextCommands('licell deploy --type api', 'licell switch --region <region>'),
+        nextCommands: doctorNextCommands(deployCommand, 'licell switch --region <region>'),
         data: {
-          mode: 'api',
+          mode,
           functionName,
           expectedRuntime: expectedRuntime || null
         }
       };
     }
     return classifyCloudError(err, {
-      label: 'API deploy target',
+      label: `${surfaceLabel} deploy target`,
       required: true,
       accessDeniedSummary: '无法读取当前项目对应的 FC function / alias / version 信息。'
     });
@@ -1582,8 +1600,10 @@ export async function probeDoctorDeployTarget(input: DoctorCloudDiagnosticsInput
   }
 
   return normalizeDoctorCloudCheckResult(await (plan.mode === 'api'
-    ? probeApiDeployTarget({ ...input, project: input.project })
-    : probeStaticDeployTarget({ ...input, project: input.project })));
+    ? probeApiDeployTarget({ ...input, project: input.project }, 'api')
+    : plan.mode === 'task'
+      ? probeApiDeployTarget({ ...input, project: input.project }, 'task')
+      : probeStaticDeployTarget({ ...input, project: input.project })));
 }
 
 export function summarizeDoctorCapabilityProbes(

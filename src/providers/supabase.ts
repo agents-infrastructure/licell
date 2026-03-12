@@ -27,5 +27,7 @@ export {
   restartSupabaseInstance,
   stopSupabaseInstance,
   startSupabaseInstance,
-  deleteSupabaseInstance
+  deleteSupabaseInstance,
+  waitForSupabaseInstanceDeleted,
+  deleteSupabaseInstanceCascade
 } from './supabase/query';

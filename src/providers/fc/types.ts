@@ -23,6 +23,61 @@ export interface FunctionInvokeResult {
   body: string;
 }
 
+export interface AsyncTaskInvokeResult extends FunctionInvokeResult {
+  taskId?: string;
+  invocationType: 'Async';
+}
+
+export interface AsyncDestinationConfig {
+  onFailure?: string;
+  onSuccess?: string;
+}
+
+export interface AsyncInvokeConfigSummary {
+  qualifier?: string;
+  asyncTask: boolean;
+  createdTime?: string;
+  destinationConfig?: AsyncDestinationConfig;
+  functionArn?: string;
+  lastModifiedTime?: string;
+  maxAsyncEventAgeInSeconds?: number;
+  maxAsyncRetryAttempts?: number;
+}
+
+export interface RemoveAsyncInvokeConfigResult {
+  functionName: string;
+  qualifier?: string;
+  removed: boolean;
+}
+
+export interface AsyncTaskEventSummary {
+  eventId?: number;
+  status?: string;
+  timestamp?: number;
+  eventDetail?: string;
+}
+
+export interface AsyncTaskSummary {
+  taskId: string;
+  alreadyRetriedTimes?: number;
+  destinationStatus?: string;
+  durationMs?: number;
+  endTime?: number;
+  functionArn?: string;
+  instanceId?: string;
+  qualifier?: string;
+  requestId?: string;
+  startedTime?: number;
+  status?: string;
+  taskErrorMessage?: string;
+}
+
+export interface AsyncTaskDetail extends AsyncTaskSummary {
+  events: AsyncTaskEventSummary[];
+  returnPayload?: string;
+  taskPayload?: string;
+}
+
 export interface RemoveFunctionResult {
   forced: boolean;
   deletedTriggers: string[];

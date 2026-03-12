@@ -19,13 +19,20 @@ export const DELIVERY_SECTION: CommandSectionMembership = {
   summary: '围绕应用部署、发布、函数管理、环境变量、域名、DNS、日志和对象存储的交付链路。',
   notes: [
     'Agent 在 FC API 部署前，优先执行 `licell deploy spec` 与 `licell deploy check`。',
-    '涉及删除或清理的命令通常需要显式传入 `--yes`。'
+    '涉及删除或清理的命令通常需要显式传入 `--yes`。',
+    '任务函数通过 `licell deploy --type task` 交付；部署成功后不返回固定 URL，而是继续用 `licell task invoke / info / list / stop` 完成调用与排查。'
   ],
   taskHints: [
     {
       title: '部署服务并拿到可访问地址',
       description: '用 deploy 完成 API 或静态站点发布，必要时继续绑定域名和 HTTPS。',
       commands: ['licell deploy --type api --target preview', 'licell domain app bind api.example.com --ssl']
+    },
+    {
+      phase: 'mutate',
+      title: '部署任务函数并验证异步调用',
+      description: '用 deploy task 发布函数并启用 asyncTask，再通过 invoke / info 验证任务链路。',
+      commands: ['licell deploy --type task --target preview', 'licell task invoke <name> --target preview --output json']
     }
   ]
 };

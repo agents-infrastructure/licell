@@ -3,6 +3,7 @@ import { basename, dirname, join } from 'path';
 import { normalizeFcRuntime } from '../providers/fc';
 
 export type InitTemplate = 'node' | 'python' | 'docker';
+export type InitKind = 'api' | 'task';
 
 export interface ScaffoldFile {
   path: string;
@@ -53,10 +54,131 @@ function resolveScaffoldRuntime(template: InitTemplate, runtime?: string) {
   return 'nodejs20';
 }
 
-export function getScaffoldFiles(template: InitTemplate, runtime?: string): ScaffoldFile[] {
+function renderNodeTaskEntry(scaffoldRuntime: string) {
+  return `function toRecord(input: unknown): Record<string, unknown> {
+  if (input && typeof input === 'object' && !Array.isArray(input)) {
+    return input as Record<string, unknown>;
+  }
+  if (typeof input === 'string') {
+    try {
+      const parsed = JSON.parse(input);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {
+      return { raw: input };
+    }
+  }
+  return {};
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function clampSleepMs(input: unknown) {
+  const value = Number(input ?? 0);
+  if (!Number.isFinite(value) || value <= 0) return 0;
+  return Math.min(Math.floor(value), 120000);
+}
+
+export async function handler(event: unknown) {
+  const payload = toRecord(event);
+  const job = typeof payload.job === 'string' && payload.job.trim() ? payload.job.trim() : 'demo-job';
+  const mode = typeof payload.mode === 'string' ? payload.mode : 'ok';
+  const sleepMs = clampSleepMs(payload.sleepMs);
+  const attempt = Number.isFinite(Number(payload.attempt)) ? Number(payload.attempt) : 1;
+  const metadata = payload.metadata && typeof payload.metadata === 'object' && !Array.isArray(payload.metadata)
+    ? payload.metadata
+    : {};
+
+  if (mode === 'sleep' && sleepMs > 0) {
+    await sleep(sleepMs);
+  }
+
+  return {
+    ok: true,
+    service: 'licell-node-task-worker',
+    runtime: process.env.LICELL_FC_RUNTIME || process.env.FC_RUNTIME || process.env.RUNTIME || '${scaffoldRuntime}',
+    job,
+    mode,
+    attempt,
+    sleepMs,
+    metadata,
+    now: new Date().toISOString()
+  };
+}
+`;
+}
+
+function renderPythonTaskEntry(scaffoldRuntime: string) {
+  return `from __future__ import annotations
+
+import json
+import os
+import time
+from typing import Any
+
+
+def _to_dict(event: Any) -> dict[str, Any]:
+    if isinstance(event, dict):
+        return event
+    if isinstance(event, str):
+        try:
+            parsed = json.loads(event)
+            if isinstance(parsed, dict):
+                return parsed
+        except Exception:
+            return {"raw": event}
+    return {}
+
+
+def _clamp_sleep_ms(value: Any) -> int:
+    try:
+        parsed = int(value)
+    except Exception:
+        return 0
+    if parsed <= 0:
+        return 0
+    return min(parsed, 120000)
+
+
+def handler(event: Any, context: Any):
+    payload = _to_dict(event)
+    job = payload.get("job") if isinstance(payload.get("job"), str) and str(payload.get("job")).strip() else "demo-job"
+    mode = payload.get("mode") if isinstance(payload.get("mode"), str) else "ok"
+    attempt_value = payload.get("attempt", 1)
+    try:
+        attempt = int(attempt_value)
+    except Exception:
+        attempt = 1
+    sleep_ms = _clamp_sleep_ms(payload.get("sleepMs", 0))
+    metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
+
+    if mode == "sleep" and sleep_ms > 0:
+        time.sleep(sleep_ms / 1000.0)
+
+    return {
+        "ok": True,
+        "service": "licell-python-task-worker",
+        "runtime": os.getenv("LICELL_FC_RUNTIME") or os.getenv("FC_RUNTIME") or os.getenv("RUNTIME") or "${scaffoldRuntime}",
+        "job": job,
+        "mode": mode,
+        "attempt": attempt,
+        "sleepMs": sleep_ms,
+        "metadata": metadata,
+        "now": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    }
+`;
+}
+
+export function getScaffoldFiles(template: InitTemplate, runtime?: string, kind: InitKind = 'api'): ScaffoldFile[] {
   const scaffoldRuntime = resolveScaffoldRuntime(template, runtime);
 
   if (template === 'docker') {
+    if (kind === 'task') {
+      throw new Error('当前 `licell init --kind task` 仅支持 nodejs20/nodejs22/python3.12/python3.13；docker task 脚手架暂未提供。');
+    }
     return [
       {
         path: '.gitignore',
@@ -285,6 +407,59 @@ licell deploy --type api --runtime docker --target preview
   }
 
   if (template === 'python') {
+    if (kind === 'task') {
+      return [
+        {
+          path: '.gitignore',
+          content: `__pycache__/
+.venv/
+.licell/
+.ali/
+.env
+`
+        },
+        {
+          path: 'src/task.py',
+          content: renderPythonTaskEntry(scaffoldRuntime)
+        },
+        {
+          path: 'README.md',
+          content: `# Python Task Worker
+
+通过 \`licell init --runtime ${scaffoldRuntime} --kind task\` 生成，示例风格与仓库 \`examples/python313-task-worker\` 对齐。
+
+## Handler 契约
+
+- 入口文件：\`src/task.py\`
+- 导出：\`handler(event, context)\`
+- 输入：任意 JSON；建议使用对象 payload，例如 \`{"job":"demo","mode":"ok"}\`
+- 输出：任意可 JSON 序列化对象
+
+## 本地参考
+
+\`\`\`bash
+python3 - <<'PY'
+from src.task import handler
+print(handler({"job": "demo", "mode": "ok"}, None))
+PY
+\`\`\`
+
+## 部署
+
+\`\`\`bash
+licell deploy --type task --runtime ${scaffoldRuntime} --entry src/task.py --target preview
+\`\`\`
+
+## 触发任务
+
+\`\`\`bash
+licell task invoke --target preview --payload '{"job":"demo","mode":"ok"}'
+licell task invoke --target preview --payload '{"job":"long-running","mode":"sleep","sleepMs":5000}'
+\`\`\`
+`
+        }
+      ];
+    }
     return [
       {
         path: '.gitignore',
@@ -618,6 +793,85 @@ python src/main.py
 
 \`\`\`bash
 licell deploy --type api --runtime ${scaffoldRuntime} --entry src/main.py --target preview
+\`\`\`
+`
+      }
+    ];
+  }
+
+  if (kind === 'task') {
+    return [
+      {
+        path: '.gitignore',
+        content: `node_modules
+.licell/
+.ali/
+.env
+`
+      },
+      {
+        path: 'package.json',
+        content: `{
+  "name": "licell-node-task-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "bun x tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.57",
+    "typescript": "^5.6.3"
+  }
+}
+`
+      },
+      {
+        path: 'tsconfig.json',
+        content: `{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "types": ["node"]
+  }
+}
+`
+      },
+      {
+        path: 'src/task.ts',
+        content: renderNodeTaskEntry(scaffoldRuntime)
+      },
+      {
+        path: 'README.md',
+        content: `# Node Task Worker
+
+通过 \`licell init --runtime ${scaffoldRuntime} --kind task\` 生成，示例风格与仓库 \`examples/node22-task-worker\` 对齐。
+
+## Handler 契约
+
+- 入口文件：\`src/task.ts\`
+- 导出：\`handler(event)\`
+- 输入：任意 JSON；建议使用对象 payload，例如 \`{"job":"demo","mode":"ok"}\`
+- 输出：任意可 JSON 序列化对象
+
+## 本地参考
+
+\`\`\`bash
+bun x tsx -e "import('./src/task.ts').then(m => m.handler({ job: 'demo', mode: 'ok' }).then(console.log))"
+\`\`\`
+
+## 部署
+
+\`\`\`bash
+licell deploy --type task --runtime ${scaffoldRuntime} --entry src/task.ts --target preview
+\`\`\`
+
+## 触发任务
+
+\`\`\`bash
+licell task invoke --target preview --payload '{"job":"demo","mode":"ok"}'
+licell task invoke --target preview --payload '{"job":"long-running","mode":"sleep","sleepMs":5000}'
 \`\`\`
 `
       }
@@ -1021,8 +1275,8 @@ app.listen(port, '0.0.0.0', () => {
 `
     },
     {
-      path: 'README.md',
-      content: `# Node + Express API
+        path: 'README.md',
+        content: `# Node + Express API
 
 通过 \`licell init --runtime ${scaffoldRuntime}\` 生成，示例风格与仓库 \`examples/node22-express-api\` 对齐。
 

@@ -1,5 +1,8 @@
 import * as $RdsAi from '@alicloud/rdsai20250507';
 import { createRdsAiClient } from './client';
+import { deleteDatabaseInstance } from '../infra';
+import { isNotFoundError } from '../../utils/alicloud-error';
+import { sleep } from '../../utils/runtime';
 import type {
   SupabaseInstanceSummary,
   SupabaseInstanceDetail,
@@ -7,6 +10,19 @@ import type {
   SupabaseAuthInfo,
   SupabaseConfigItem
 } from './types';
+import { SUPABASE_WAIT_INTERVAL_MS, SUPABASE_WAIT_TIMEOUT_MS } from './types';
+
+export interface DeleteSupabaseInstanceCascadeOptions {
+  timeoutMs?: number;
+  intervalMs?: number;
+  onProgress?: (message: string) => void;
+}
+
+export interface DeleteSupabaseInstanceCascadeResult {
+  instanceName: string;
+  dbInstanceId?: string;
+  deletedDatabase: boolean;
+}
 
 function toSummary(item: Record<string, unknown>): SupabaseInstanceSummary {
   return {
@@ -275,4 +291,69 @@ export async function deleteSupabaseInstance(instanceName: string) {
     regionId: auth.region,
     instanceName
   }));
+}
+
+function formatDeleteTimeout(timeoutMs: number) {
+  if (timeoutMs % 60000 === 0) return `${timeoutMs / 60000} 分钟`;
+  if (timeoutMs >= 1000) return `${Math.ceil(timeoutMs / 1000)} 秒`;
+  return `${timeoutMs}ms`;
+}
+
+export async function waitForSupabaseInstanceDeleted(
+  instanceName: string,
+  options: DeleteSupabaseInstanceCascadeOptions = {}
+) {
+  const name = instanceName.trim();
+  if (!name) throw new Error('instanceName 不能为空');
+
+  const intervalMs = Math.max(1, Math.floor(options.intervalMs ?? SUPABASE_WAIT_INTERVAL_MS));
+  const timeoutMs = Math.max(intervalMs, Math.floor(options.timeoutMs ?? SUPABASE_WAIT_TIMEOUT_MS));
+  const { auth, client } = createRdsAiClient();
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    try {
+      const detail = await client.describeAppInstanceAttribute(new $RdsAi.DescribeAppInstanceAttributeRequest({
+        regionId: auth.region,
+        instanceName: name
+      }));
+      const body = (detail.body || {}) as Record<string, unknown>;
+      const status = String(body.Status || body.status || '');
+      options.onProgress?.(`⏳ 正在等待 Supabase 实例 ${name} 完成删除${status ? `（当前状态: ${status}）` : ''}...`);
+    } catch (err: unknown) {
+      if (isNotFoundError(err)) return;
+      throw err;
+    }
+
+    await sleep(intervalMs);
+  }
+
+  throw new Error(`Supabase 实例 ${name} 在 ${formatDeleteTimeout(timeoutMs)} 内未完成删除`);
+}
+
+export async function deleteSupabaseInstanceCascade(
+  instanceName: string,
+  options: DeleteSupabaseInstanceCascadeOptions = {}
+): Promise<DeleteSupabaseInstanceCascadeResult> {
+  const name = instanceName.trim();
+  if (!name) throw new Error('instanceName 不能为空');
+
+  options.onProgress?.(`🔎 正在查询实例 ${name} 的关联资源...`);
+  const detail = await getSupabaseInstanceDetail(name);
+  const dbInstanceId = detail.dbInstanceName?.trim() || undefined;
+
+  options.onProgress?.(`🗑️ 正在删除 Supabase 实例 ${name}...`);
+  await deleteSupabaseInstance(name);
+  await waitForSupabaseInstanceDeleted(name, options);
+
+  if (dbInstanceId) {
+    options.onProgress?.(`🗑️ 正在删除关联 PG 实例 ${dbInstanceId}...`);
+    await deleteDatabaseInstance(dbInstanceId);
+  }
+
+  return {
+    instanceName: name,
+    dbInstanceId,
+    deletedDatabase: Boolean(dbInstanceId)
+  };
 }

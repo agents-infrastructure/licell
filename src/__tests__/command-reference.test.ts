@@ -38,6 +38,7 @@ describe('buildAgentCommandCatalog', () => {
     expect(catalog.globalOptions).toContain('--output');
     expect(catalog.rootCommands).toContain('doctor');
     expect(catalog.rootCommands).toContain('deploy');
+    expect(catalog.rootCommands).toContain('task');
     expect(catalog.rootCommands).toContain('completion');
     expect(catalog.rootCommands).toContain('catalog');
 
@@ -59,8 +60,12 @@ describe('buildAgentCommandCatalog', () => {
     expect(deploy?.tasks.some((task) => task.phase === 'inspect')).toBe(true);
     expect(deploy?.decisionGuide.some((group) => group.phase === 'mutate')).toBe(true);
     expect(deploy?.examples).toContain('licell deploy --output json');
+    expect(deploy?.examples).toContain('licell deploy --type task --runtime nodejs22 --target preview --output json');
     expect(deploy?.recommendedFlow[0]?.command).toBe('licell deploy spec');
     expect(deploy?.recommendedFlow).toEqual(deployHelp?.recommendedFlow);
+    expect(deploy?.result?.fields.some((field) => field.name === 'invokeCommand')).toBe(true);
+    expect(deploy?.result?.fields.some((field) => field.name === 'configuredQualifiers[]')).toBe(true);
+    expect(deploy?.tasks.some((task) => task.phase === 'verify')).toBe(true);
 
     const releasePrune = catalog.commands.find((command) => command.key === 'release prune');
     expect(releasePrune?.safety?.level).toBe('destructive');
@@ -91,6 +96,37 @@ describe('buildAgentCommandCatalog', () => {
     expect(authRestore?.interaction?.prompts.some((item) => item.includes('restore token'))).toBe(true);
     expect(authRestore?.automation?.preferredOutput).toBe('json');
     expect(authRestore?.automation?.explicitInputs).toEqual(expect.arrayContaining(['<token>', '--yes']));
+
+    const init = catalog.commands.find((command) => command.key === 'init');
+    expect(init?.options.some((option) => option.primaryFlag === '--kind')).toBe(true);
+    expect(init?.examples).toContain('licell init --runtime nodejs22 --kind task');
+    expect(init?.result?.fields.some((field) => field.name === 'kind')).toBe(true);
+
+    const taskInvoke = catalog.commands.find((command) => command.key === 'task invoke');
+    expect(taskInvoke?.title).toBe('Invoke task function asynchronously');
+    expect(taskInvoke?.options.some((option) => option.primaryFlag === '--task-id')).toBe(true);
+    expect(taskInvoke?.result?.fields.some((field) => field.name === 'taskId')).toBe(true);
+
+    const taskConfigSet = catalog.commands.find((command) => command.key === 'task config set');
+    expect(taskConfigSet?.title).toBe('Upsert async task invoke config');
+    expect(taskConfigSet?.options.some((option) => option.primaryFlag === '--max-retry-attempts')).toBe(true);
+    expect(taskConfigSet?.result?.fields.some((field) => field.name === 'destinationConfig')).toBe(true);
+
+    const taskList = catalog.commands.find((command) => command.key === 'task list');
+    expect(taskList?.title).toBe('List async task executions');
+    expect(taskList?.result?.fields.some((field) => field.name === 'tasks[].taskId')).toBe(true);
+    expect(taskList?.recommendedFlow.some((step) => step.command === 'licell task info <taskId> [name] --output json')).toBe(true);
+
+    const taskStop = catalog.commands.find((command) => command.key === 'task stop');
+    expect(taskStop?.title).toBe('Stop async task');
+    expect(taskStop?.result?.fields.some((field) => field.name === 'functionName')).toBe(true);
+    expect(taskStop?.recommendedFlow.some((step) => step.command === 'licell task info <taskId> [name] --output json')).toBe(true);
+
+    const cacheAdd = catalog.commands.find((command) => command.key === 'cache add');
+    expect(cacheAdd?.options.some((option) => option.primaryFlag === '--mode')).toBe(true);
+    expect(cacheAdd?.examples).toContain('licell cache add --mode serverless --class kvcache.cu.g4b.2');
+    expect(cacheAdd?.result?.fields.some((field) => field.name === 'requestedMode')).toBe(true);
+    expect(cacheAdd?.summary).toContain('分配 Redis 缓存');
   });
 
   it('filters by root command without hardcoded command lists', () => {
@@ -121,8 +157,17 @@ describe('renderSkillCommandReference', () => {
     expect(markdown).toContain('licell oss domain bind <bucket> <domain>');
     expect(markdown).toContain('licell oss object get <bucket> <key> [file]');
     expect(markdown).toContain('licell oss sync down <bucket> [prefix]');
+    expect(markdown).toContain('licell cache add --mode serverless --class kvcache.cu.g4b.2');
+    expect(markdown).toContain('licell task config [name]');
+    expect(markdown).toContain('licell task config set [name]');
+    expect(markdown).toContain('licell task invoke [name]');
+    expect(markdown).toContain('licell task list [name]');
+    expect(markdown).toContain('licell task stop <taskId> [name]');
+    expect(markdown).toContain('licell deploy --type task');
     expect(markdown).toContain('示例命令：');
     expect(markdown).toContain('`licell deploy --output json`');
+    expect(markdown).toContain('`invokeCommand`：当 `type=task` 时，推荐直接复制执行的任务调用命令。');
+    expect(markdown).toContain('`tasks[]`：异步任务摘要数组。');
     expect(markdown).toContain('决策指南：');
     expect(markdown).toContain('下一步：');
     expect(markdown).toContain('`licell doctor --output json`');
@@ -131,6 +176,8 @@ describe('renderSkillCommandReference', () => {
     expect(markdown).toContain('结构化结果：');
     expect(markdown).toContain('`stage`：命令阶段标识。');
     expect(markdown).toContain('`finalUrl`：最终访问 URL。');
+    expect(markdown).toContain('\n- `workflow`：固定为 app。');
+    expect(markdown).not.toContain('`bound`：结果布尔态字段。\n  - `workflow`');
     expect(markdown).toContain('`checks[]`：逐项诊断结果数组。');
     expect(markdown).toContain('推荐流程：');
     expect(markdown).toContain('licell deploy spec');

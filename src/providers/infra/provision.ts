@@ -7,89 +7,20 @@ import { sleep } from '../../utils/runtime';
 import { ensureDefaultNetwork, resolveProvidedNetwork } from '../vpc';
 import { createRdsClient } from './client';
 import type { ProvisionDatabaseOptions } from './types';
+import {
+  SERVERLESS_DB_CONFIG_FALLBACK,
+  resolveDatabaseProvisionDefaults
+} from './defaults';
+import { resolveDatabaseAvailableZoneIds } from './zones';
 
 const DB_WAIT_TIMEOUT_MS = 20 * 60 * 1000;
 const DB_WAIT_INTERVAL_MS = 5000;
 const DB_NETINFO_WAIT_TIMEOUT_MS = 5 * 60 * 1000;
 const CREATE_DB_MAX_ATTEMPTS = 5;
-const POSTPAID_PG_CLASS_FALLBACK = 'pg.n1e.1c.1m';
-const POSTPAID_PG_STORAGE_FALLBACK = 20;
-const POSTPAID_PG_ENGINE_VERSION = '18.0';
-
-const SERVERLESS_DB_CLASS_FALLBACK = {
-  postgres: 'pg.n2.serverless.1c',
-  mysql: 'mysql.n2.serverless.1c'
-} as const;
-const SERVERLESS_DB_STORAGE_FALLBACK = {
-  postgres: 20,
-  mysql: 20
-} as const;
-const SERVERLESS_DB_CONFIG_FALLBACK = {
-  postgres: { minCapacity: 0.5, maxCapacity: 8, autoPause: true },
-  mysql: { minCapacity: 0.5, maxCapacity: 2, autoPause: true }
-} as const;
 const RDS_SERVICE_LINKED_ROLE_BY_DB = {
   postgres: 'AliyunServiceRoleForRdsPgsqlOnEcs',
   mysql: 'AliyunServiceRoleForRds'
 } as const;
-
-function versionMatches(expectedVersion: string, availableVersion?: string) {
-  if (!availableVersion) return false;
-  if (availableVersion === expectedVersion) return true;
-  const expectedMajor = expectedVersion.split('.')[0];
-  const availableMajor = availableVersion.split('.')[0];
-  return expectedMajor.length > 0 && expectedMajor === availableMajor;
-}
-
-async function resolveServerlessZoneIds(
-  rdsClient: Rds,
-  regionId: string,
-  engine: string,
-  engineVersion: string
-) {
-  try {
-    const directRes = await rdsClient.describeAvailableZones(new $Rds.DescribeAvailableZonesRequest({
-      regionId,
-      engine,
-      engineVersion,
-      category: 'serverless_basic'
-    }));
-    const zoneIds = (directRes.body?.availableZones || [])
-      .map((zone) => zone.zoneId)
-      .filter((zoneId): zoneId is string => typeof zoneId === 'string' && zoneId.length > 0);
-    if (zoneIds.length > 0) return [...new Set(zoneIds)];
-  } catch { /* serverless_basic category query may not be supported in all regions, fall through to broader query */ }
-
-  try {
-    const fallbackRes = await rdsClient.describeAvailableZones(new $Rds.DescribeAvailableZonesRequest({
-      regionId,
-      engine,
-      engineVersion
-    }));
-    const zones = fallbackRes.body?.availableZones || [];
-    const matched: string[] = [];
-    for (const zone of zones) {
-      const zoneId = zone.zoneId;
-      if (typeof zoneId !== 'string' || zoneId.length === 0) continue;
-      const hasServerlessCategory = (zone.supportedEngines || []).some((supportedEngine) => {
-        if ((supportedEngine.engine || '').toLowerCase() !== engine.toLowerCase()) return false;
-        return (supportedEngine.supportedEngineVersions || []).some((supportedVersion) => {
-          if (!versionMatches(engineVersion, supportedVersion.version)) return false;
-          return (supportedVersion.supportedCategorys || []).some((category) => category.category === 'serverless_basic');
-        });
-      });
-      if (hasServerlessCategory) matched.push(zoneId);
-    }
-    if (matched.length > 0) return [...new Set(matched)];
-
-    const allZoneIds = zones
-      .map((zone) => zone.zoneId)
-      .filter((zoneId): zoneId is string => typeof zoneId === 'string' && zoneId.length > 0);
-    return [...new Set(allZoneIds)];
-  } catch { /* fallback zone query failed, return empty to let caller use defaults */
-    return [];
-  }
-}
 
 async function ensureRdsServiceLinkedRole(
   rdsClient: Rds,
@@ -187,14 +118,9 @@ export async function provisionDatabase(
   const databaseName = 'main';
   const dbUser = normalizeDbUser(project.appName || 'licell_app');
   const dbPassword = randomStrongPassword();
-  const engine = dbType === 'postgres' ? 'PostgreSQL' : 'MySQL';
   const isPostPaidPg = dbType === 'postgres';
-  const engineVersion = options.engineVersion?.trim()
-    || (isPostPaidPg ? POSTPAID_PG_ENGINE_VERSION : '8.0');
-  const category = isPostPaidPg
-    ? (options.category?.trim() || 'Basic')
-    : (options.category?.trim() || 'serverless_basic');
-  const storageType = options.storageType?.trim() || 'cloud_essd';
+  const defaults = resolveDatabaseProvisionDefaults(dbType, options);
+  const { engine, engineVersion, category, storageType } = defaults;
 
   if (isPostPaidPg) {
     spinner.message('🔎 正在查询 RDS PostgreSQL 可用区...');
@@ -202,21 +128,11 @@ export async function provisionDatabase(
     spinner.message('🔎 正在查询 RDS Serverless 可用区...');
   }
   let preferredZones: string[];
-  if (isPostPaidPg) {
-    try {
-      const zoneRes = await rdsClient.describeAvailableZones(new $Rds.DescribeAvailableZonesRequest({
-        regionId: auth.region, engine, engineVersion, category
-      }));
-      preferredZones = (zoneRes.body?.availableZones || [])
-        .map((z) => z.zoneId)
-        .filter((id): id is string => typeof id === 'string' && id.length > 0);
-      preferredZones = [...new Set(preferredZones)];
-    } catch {
-      preferredZones = [];
-    }
-  } else {
-    preferredZones = await resolveServerlessZoneIds(rdsClient, auth.region, engine, engineVersion);
-  }
+  preferredZones = await resolveDatabaseAvailableZoneIds(rdsClient, auth.region, dbType, {
+    engine,
+    engineVersion,
+    category
+  });
   spinner.message('🔍 正在探测/拉起专属私有网络平面 (VPC & VSwitch)...');
   const manualZoneId = options.zoneId?.trim();
   const manualVpcId = options.vpcId?.trim();
@@ -240,9 +156,9 @@ export async function provisionDatabase(
   }
 
   let dbInstanceClass: string = options.instanceClass?.trim()
-    || (isPostPaidPg ? POSTPAID_PG_CLASS_FALLBACK : SERVERLESS_DB_CLASS_FALLBACK[dbType]);
+    || defaults.defaultClass;
   let dbInstanceStorage: number = options.storageGb
-    || (isPostPaidPg ? POSTPAID_PG_STORAGE_FALLBACK : SERVERLESS_DB_STORAGE_FALLBACK[dbType]);
+    || defaults.defaultStorageGb;
   try {
     const classesRes = await rdsClient.describeAvailableClasses(new $Rds.DescribeAvailableClassesRequest({
       regionId: auth.region,

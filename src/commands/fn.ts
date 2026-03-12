@@ -1,8 +1,6 @@
 import type { CAC } from 'cac';
 import { defineCommandModule, commandInvocation, defineCliCommand, registerCliCommand } from './module';
 import pc from 'picocolors';
-import { readFileSync, realpathSync } from 'fs';
-import { resolve, relative, isAbsolute } from 'path';
 import { Config } from '../utils/config';
 import {
   getFunctionInfo,
@@ -22,6 +20,7 @@ import {
 } from '../utils/cli-shared';
 import { executeWithAuthRecovery } from '../utils/auth-recovery';
 import { emitCommandResult, isJsonOutput } from '../utils/output';
+import { resolveOptionalPayloadInput } from '../utils/payload-input';
 import { fnDomainCommandBundle } from './fn-domain';
 import { DELIVERY_SECTION } from './sections';
 
@@ -193,25 +192,7 @@ export function registerFnCommands(cli: CAC) {
             throw new Error('请传入函数名，或先在当前项目执行 licell deploy 生成 appName');
           }
           const qualifier = toOptionalString(options.target);
-          const payloadText = toOptionalString(options.payload);
-          const payloadFile = toOptionalString(options.file);
-          if (payloadText && payloadFile) throw new Error('--payload 与 --file 不能同时使用');
-          let payload: string | undefined;
-          if (payloadFile) {
-            let resolvedPath: string;
-            try {
-              resolvedPath = realpathSync(resolve(payloadFile));
-            } catch {
-              throw new Error(`文件不存在或无法访问: ${payloadFile}`);
-            }
-            const rel = relative(process.cwd(), resolvedPath);
-            if (rel.startsWith('..') || isAbsolute(rel)) {
-              throw new Error('--file 路径必须在当前工作目录内');
-            }
-            payload = readFileSync(resolvedPath, 'utf-8');
-          } else {
-            payload = payloadText;
-          }
+          const payload = resolveOptionalPayloadInput({ payload: options.payload, file: options.file });
 
           const s = createSpinner();
           const result = await withSpinner(

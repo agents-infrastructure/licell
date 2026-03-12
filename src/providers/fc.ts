@@ -3,6 +3,13 @@ export {
   DEFAULT_FC_RUNTIME,
   type FunctionSummary,
   type FunctionInvokeResult,
+  type AsyncTaskInvokeResult,
+  type AsyncDestinationConfig,
+  type AsyncInvokeConfigSummary,
+  type RemoveAsyncInvokeConfigResult,
+  type AsyncTaskEventSummary,
+  type AsyncTaskSummary,
+  type AsyncTaskDetail,
   type RemoveFunctionResult,
   type PruneFunctionVersionsResult
 } from './fc/types';
@@ -11,7 +18,8 @@ export { getSupportedRuntimeNames } from './fc/runtime-handler';
 
 export { normalizeFcRuntime, resolveFunctionVpcConfig } from './fc/runtime';
 
-export { deployFC } from './fc/deploy';
+export { deployFC, type DeployFCResult } from './fc/deploy';
+export { waitForFunctionDeploymentMarker } from './fc/deployment-probe';
 
 export {
   getFcApiDeploySpecDocument,
@@ -33,6 +41,15 @@ export {
 } from './fc/deploy-spec';
 
 export { pullFunctionEnvs, listFunctions, getFunctionInfo, removeFunction, invokeFunction, setFunctionEnv, removeFunctionEnv } from './fc/function-ops';
+export {
+  getAsyncInvokeConfig,
+  removeAsyncInvokeConfig,
+  upsertAsyncInvokeConfig,
+  invokeFunctionAsync,
+  listAsyncTasks,
+  getAsyncTask,
+  stopAsyncTask
+} from './fc/async';
 
 export { ensureFunctionHttpUrl } from './fc/http';
 

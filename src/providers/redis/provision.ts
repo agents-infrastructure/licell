@@ -25,11 +25,53 @@ import {
   mergeProjectNetwork
 } from './helpers';
 import {
+  type CacheProvisionMode,
   DEFAULT_TAIR_KVCACHE_CLASS,
   DEFAULT_TAIR_KVCACHE_COMPUTE_UNIT,
   REDIS_BIND_WAIT_TIMEOUT_MS,
-  type ProvisionRedisOptions
+  type ProvisionRedisOptions,
+  type ProvisionRedisResult
 } from './types';
+import { resolveCacheProvisionZoneIds } from './zones';
+
+function inferModeFromInstanceId(instanceId: string | undefined): CacheProvisionMode | undefined {
+  const value = instanceId?.trim() || '';
+  if (!value) return undefined;
+  if (isTairServerlessInstance(value)) return 'serverless';
+  if (isClassicRedisInstance(value)) return 'classic';
+  return undefined;
+}
+
+function resolveProvisionRedisMode(options: ProvisionRedisOptions): CacheProvisionMode {
+  const explicitMode = options.mode;
+  const inferredMode = inferModeFromInstanceId(options.instanceId);
+  if (options.instanceId?.trim() && !inferredMode) {
+    throw new Error('--instance 仅支持 tt-/tk-（Tair）或 r-（经典 Redis）开头的实例 ID');
+  }
+  if (explicitMode && inferredMode && explicitMode !== inferredMode) {
+    throw new Error(`指定 --mode (${explicitMode}) 与 --instance 实例类型不一致`);
+  }
+  return explicitMode || inferredMode || 'classic';
+}
+
+function validateProvisionRedisModeOptions(mode: CacheProvisionMode, options: ProvisionRedisOptions) {
+  if (mode === 'serverless') {
+    if (options.engineVersion || options.nodeType || options.capacityMb) {
+      throw new Error('serverless 模式不支持 --engine-version/--node-type/--capacity');
+    }
+    return;
+  }
+
+  if (options.vkName) {
+    throw new Error('classic 模式不支持 --vk-name');
+  }
+  if (typeof options.computeUnitNum === 'number') {
+    throw new Error('classic 模式不支持 --compute-unit');
+  }
+  if (options.engineVersion || options.nodeType || options.capacityMb) {
+    throw new Error('classic 模式当前仅支持通过 --class 指定规格；--engine-version/--node-type/--capacity 暂未支持');
+  }
+}
 
 async function bindExistingClassicRedisInstance(
   spinner: Spinner,
@@ -38,7 +80,7 @@ async function bindExistingClassicRedisInstance(
   project: ReturnType<typeof Config.getProject>,
   options: ProvisionRedisOptions,
   net: { vpcId: string; vswId: string; zoneId?: string; cidrBlock?: string }
-) {
+): Promise<ProvisionRedisResult> {
   const instanceId = options.instanceId?.trim() || '';
   spinner.message(`🔗 正在绑定已有 Redis 实例 (${instanceId})...`);
 
@@ -95,7 +137,11 @@ async function bindExistingClassicRedisInstance(
     mode: 'classic-redis'
   };
   Config.setProject(project);
-  return redisUrl;
+  return {
+    redisUrl,
+    mode: 'classic-redis',
+    instanceId
+  };
 }
 
 async function bindExistingTairInstance(
@@ -104,7 +150,7 @@ async function bindExistingTairInstance(
   project: ReturnType<typeof Config.getProject>,
   options: ProvisionRedisOptions,
   net: { vpcId: string; vswId: string; zoneId?: string; cidrBlock?: string }
-) {
+): Promise<ProvisionRedisResult> {
   const instanceId = options.instanceId?.trim() || '';
   spinner.message(`🔗 正在绑定已有 Tair Serverless KV 实例 (${instanceId})...`);
   let endpoint = await resolveTairKVCacheEndpoint(
@@ -175,20 +221,33 @@ async function bindExistingTairInstance(
     mode: 'tair-serverless-kv'
   };
   Config.setProject(project);
-  return redisUrl;
+  return {
+    redisUrl,
+    mode: 'tair-serverless-kv',
+    instanceId: endpoint.sourceInstanceId,
+    instanceClass: undefined
+  };
 }
 
-export async function provisionRedis(spinner: Spinner, options: ProvisionRedisOptions = {}) {
+export async function provisionRedis(spinner: Spinner, options: ProvisionRedisOptions = {}): Promise<ProvisionRedisResult> {
   const auth = Config.requireAuth();
   const project = Config.getProject();
+  const redisClient = createRedisClient(auth);
+  const provisionMode = resolveProvisionRedisMode(options);
 
-  if (options.engineVersion || options.nodeType || options.capacityMb) {
-    throw new Error('Tair Serverless KV 不支持 --engine-version/--node-type/--capacity 参数');
-  }
+  validateProvisionRedisModeOptions(provisionMode, options);
 
   const manualZoneId = options.zoneId?.trim();
   const manualVpcId = options.vpcId?.trim();
   const manualVSwitchId = options.vSwitchId?.trim();
+  let preferredZoneIds: string[] | undefined;
+  if (!manualZoneId) {
+    spinner.message('🔎 正在查询缓存可用区...');
+    const zoneResolution = await resolveCacheProvisionZoneIds(redisClient, auth.region);
+    preferredZoneIds = zoneResolution.preferredZoneIds.length > 0
+      ? zoneResolution.preferredZoneIds
+      : undefined;
+  }
   const net = await ((manualVpcId || manualVSwitchId)
     ? (() => {
         if (!manualVpcId || !manualVSwitchId) {
@@ -203,20 +262,19 @@ export async function provisionRedis(spinner: Spinner, options: ProvisionRedisOp
           zoneId: manualZoneId
         });
       })()
-    : ensureDefaultNetwork({ preferredZoneIds: manualZoneId ? [manualZoneId] : undefined }));
-
-  const redisClient = createRedisClient(auth);
+    : ensureDefaultNetwork({ preferredZoneIds: manualZoneId ? [manualZoneId] : preferredZoneIds }));
   await ensureKvstoreServiceLinkedRole(redisClient, auth.region, spinner);
 
   const existingInstanceId = options.instanceId?.trim();
   if (existingInstanceId) {
-    if (isTairServerlessInstance(existingInstanceId)) {
+    if (provisionMode === 'serverless') {
       return bindExistingTairInstance(spinner, redisClient, project, options, net);
     }
-    if (isClassicRedisInstance(existingInstanceId)) {
-      return bindExistingClassicRedisInstance(spinner, redisClient, auth, project, options, net);
-    }
-    throw new Error('--instance 仅支持 tt-/tk-（Tair）或 r-（经典 Redis）开头的实例 ID');
+    return bindExistingClassicRedisInstance(spinner, redisClient, auth, project, options, net);
+  }
+
+  if (provisionMode === 'classic') {
+    return createClassicRedisInstance(spinner, redisClient, auth, project, net, options);
   }
 
   let inferCreateError: unknown;
@@ -246,7 +304,12 @@ export async function provisionRedis(spinner: Spinner, options: ProvisionRedisOp
         mode: 'tair-serverless-kv'
       };
       Config.setProject(project);
-      return inferResult.redisUrl;
+      return {
+        redisUrl: inferResult.redisUrl,
+        mode: 'tair-serverless-kv',
+        instanceId: inferResult.instanceId,
+        instanceClass: options.instanceClass?.trim() || DEFAULT_TAIR_KVCACHE_CLASS
+      };
     }
   } catch (err: unknown) {
     inferCreateError = err;
@@ -257,8 +320,10 @@ export async function provisionRedis(spinner: Spinner, options: ProvisionRedisOp
   const inferInstances = await listTairKVCacheInstances(redisClient, auth.region);
   const vkName = selectVkName(inferInstances, net, options.vkName);
   if (!vkName) {
-    spinner.message('⚠️ Tair Serverless KV 不可用，正在兜底创建云原生 Redis 社区版...');
-    return createClassicRedisInstance(spinner, redisClient, auth, project, net, options);
+    if (inferCreateError instanceof Error && inferCreateError.message) {
+      throw new Error(`serverless 模式创建失败，且当前地域未发现可用 Tair Serverless 虚拟集群：${inferCreateError.message}`);
+    }
+    throw new Error('serverless 模式创建失败：当前地域未发现可用 Tair Serverless 虚拟集群，请稍后重试或改用 --mode classic');
   }
 
   const instanceClass = options.instanceClass?.trim() || DEFAULT_TAIR_KVCACHE_CLASS;
@@ -349,7 +414,12 @@ export async function provisionRedis(spinner: Spinner, options: ProvisionRedisOp
     mode: 'tair-serverless-kv'
   };
   Config.setProject(project);
-  return redisUrl;
+  return {
+    redisUrl,
+    mode: 'tair-serverless-kv',
+    instanceId: endpoint.sourceInstanceId,
+    instanceClass
+  };
 }
 
 const CLASSIC_REDIS_WAIT_TIMEOUT_MS = 10 * 60 * 1000;
@@ -363,10 +433,11 @@ async function createClassicRedisInstance(
   project: ReturnType<typeof Config.getProject>,
   net: { vpcId: string; vswId: string; zoneId?: string; cidrBlock?: string },
   options: ProvisionRedisOptions
-) {
+): Promise<ProvisionRedisResult> {
   const instanceName = `${project.appName || 'licell-app'}-redis`;
   const password = randomStrongPassword();
-  const instanceClass = options.instanceClass?.trim() || DEFAULT_CLASSIC_REDIS_CLASS;
+  const requestedClass = options.instanceClass?.trim() || '';
+  const instanceClass = requestedClass || DEFAULT_CLASSIC_REDIS_CLASS;
 
   spinner.message(`📦 正在创建云原生 Redis 社区版 (${instanceClass}, 按量付费)...`);
   const createRes = await redisClient.createInstance(new $Kvstore.CreateInstanceRequest({
@@ -430,7 +501,12 @@ async function createClassicRedisInstance(
         mode: 'classic-redis'
       };
       Config.setProject(project);
-      return redisUrl;
+      return {
+        redisUrl,
+        mode: 'classic-redis',
+        instanceId,
+        instanceClass
+      };
     }
     spinner.message(`☕ Redis 实例初始化中，请稍候... [${status}]`);
   }

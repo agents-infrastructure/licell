@@ -1,0 +1,4 @@
+node_modules
+.licell/
+.ali/
+.env

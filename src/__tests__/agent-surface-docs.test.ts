@@ -19,6 +19,8 @@ describe('renderSkillAgentUsageGuide', () => {
     expect(output).toContain('`licell catalog --output json`');
     expect(output).toContain('`licell <command> --help --output json`');
     expect(output).toContain('`nextActions[]`');
+    expect(output).toContain('\n- `kind`：固定为 `licell-cli-record`。');
+    expect(output).not.toContain('\n  - `kind`：固定为 `licell-cli-record`。');
   });
 });
 
@@ -36,6 +38,8 @@ describe('renderAgentSurfaceReferenceDoc', () => {
     expect(output).toContain('## Recommended Agent Flow');
     expect(output).toContain('`licell deploy check`');
     expect(output).not.toContain('Tool Reference');
+    expect(output).toContain('\n- `kind`：固定为 `licell-cli-record`。');
+    expect(output).not.toContain('\n  - `kind`：固定为 `licell-cli-record`。');
   });
 
   it('keeps generated docs file in sync with renderer', () => {

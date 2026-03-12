@@ -12,6 +12,7 @@ export interface RuntimeHandler {
   name: string;
   defaultEntry: string;
   unsupportedMessage: string;
+  supportsInternalDeploymentProbe?: boolean;
   prepareBootFile(entryFile: string, outdir: string): Promise<string>;
   resolveConfig(outdir: string, bootFile: string): Promise<ResolvedRuntimeConfig>;
 }

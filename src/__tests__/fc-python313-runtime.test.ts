@@ -30,7 +30,10 @@ describe('python3.13 runtime bootstrap', () => {
       expect(launcher).toContain('/code/.licell/python313-bootstrap.py');
       expect(bootstrap).toContain('"x-fc-control-path"');
       expect(bootstrap).toContain('_decode_invoke_payload');
+      expect(bootstrap).toContain('def _is_internal_probe(event) -> bool:');
+      expect(bootstrap).toContain('"kind": "licell-deploy-marker@1"');
       expect(bootstrap).toContain('json.loads');
+      expect(bootstrap).not.toContain('event: Any');
       expect(config.customRuntimeConfig?.command).toEqual(['/bin/sh']);
       expect(config.customRuntimeConfig?.args).toEqual(['/code/.licell/python313-launcher.sh']);
       expect(mockPreparePython313RuntimeInCode).not.toHaveBeenCalled();

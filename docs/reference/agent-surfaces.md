@@ -21,79 +21,79 @@
 ### CLI Event Record · licell-cli-record@1.0
 
 - CLI 流式事件 record；适合驱动 Agent 的进度感知、日志桥接和阶段判断。
-  - `kind`：固定为 `licell-cli-record`。
-  - `schemaVersion`：CLI record schema 版本；当前为 `1.0`。
-  - `type`：固定为 `event`。
-  - `ts`：事件发出时间（ISO 8601）。
-  - `command`：当前命令 key，例如 `deploy`、`oss upload`。
-  - `stage`：稳定阶段标识，例如 `deploy`、`deploy.api`、`auth.restore`。
-  - `action`：稳定动作标识，例如 `run`、`execute`、`stdout`。
-  - `status`：`start` / `ok` / `failed` / `skipped` / `info`。
-  - `source`：`command` / `console` / `stream`。
-  - `terminal`：该事件是否代表当前动作进入终态。
-  - `ok`（可选）：仅在终态成功/失败事件中出现；`true` 表示成功，`false` 表示失败。
-  - `message`（可选）：面向人类的补充消息。
-  - `data`（可选）：附加结构化上下文对象。
-    - `stream`（可选）：当 `action=stdout|stderr` 时给出流类型。
+- `kind`：固定为 `licell-cli-record`。
+- `schemaVersion`：CLI record schema 版本；当前为 `1.0`。
+- `type`：固定为 `event`。
+- `ts`：事件发出时间（ISO 8601）。
+- `command`：当前命令 key，例如 `deploy`、`oss upload`。
+- `stage`：稳定阶段标识，例如 `deploy`、`deploy.api`、`auth.restore`。
+- `action`：稳定动作标识，例如 `run`、`execute`、`stdout`。
+- `status`：`start` / `ok` / `failed` / `skipped` / `info`。
+- `source`：`command` / `console` / `stream`。
+- `terminal`：该事件是否代表当前动作进入终态。
+- `ok`（可选）：仅在终态成功/失败事件中出现；`true` 表示成功，`false` 表示失败。
+- `message`（可选）：面向人类的补充消息。
+- `data`（可选）：附加结构化上下文对象。
+  - `stream`（可选）：当 `action=stdout|stderr` 时给出流类型。
 
 ### CLI Result Record Envelope
 
 - CLI 成功结果 record；公共包络固定，命令自定义 payload 字段请继续读取对应命令 help/catalog 中的 `result`。
-  - `kind`：固定为 `licell-cli-record`。
-  - `schemaVersion`：CLI record schema 版本；当前为 `1.0`。
-  - `type`：固定为 `result`。
-  - `ts`：结果发出时间（ISO 8601）。
-  - `command`：当前命令 key。
-  - `stage`：命令阶段标识；通常与命令 key 或子阶段一致。
-  - `ok`：固定为 `true`。
+- `kind`：固定为 `licell-cli-record`。
+- `schemaVersion`：CLI record schema 版本；当前为 `1.0`。
+- `type`：固定为 `result`。
+- `ts`：结果发出时间（ISO 8601）。
+- `command`：当前命令 key。
+- `stage`：命令阶段标识；通常与命令 key 或子阶段一致。
+- `ok`：固定为 `true`。
 
 ### CLI Error Record
 
 - CLI 错误结果 record；同时提供兼容层 remediation/nextCommands 和首选的 nextActions。
-  - `kind`：固定为 `licell-cli-record`。
-  - `schemaVersion`：CLI record schema 版本；当前为 `1.0`。
-  - `type`：固定为 `error`。
-  - `ts`：错误发出时间（ISO 8601）。
-  - `command`：当前命令 key。
-  - `stage`：错误阶段，例如 `parse`、`runtime`、`deploy`。
-  - `ok`：固定为 `false`。
-  - `error`：稳定错误对象。
-    - `code`：稳定错误码，例如 `CLI_INVALID_INPUT`、`AUTH_MISSING_CREDENTIAL`。
-    - `category`：`auth` / `permission` / `input` / `network` / `quota` / `conflict` / `not_found` / `internal`。
-    - `message`：错误主消息。
-    - `retryable`：该错误是否适合直接重试。
-  - `provider`（可选）：阿里云 provider 侧上下文。
-    - `service`（可选）：云产品名，例如 `fc`、`oss`、`alidns`。
-    - `action`（可选）：云 API 动作名。
-    - `code`（可选）：云侧原始错误码。
-    - `requestId`（可选）：云侧 requestId。
-    - `httpStatus`（可选）：云侧 HTTP 状态码。
-    - `endpoint`（可选）：命中的云 API endpoint。
-  - `details`（可选）：额外结构化错误上下文。
-  - `remediation[]`：兼容层修复建议数组。
-    - `type`：建议类型，例如 `note` / `command`。
-    - `title`：修复建议标题。
-    - `reason`：为什么建议这样做。
-    - `commandTemplate`：建议命令模板。
-    - `commandKey`（可选）：若可匹配 CLI 注册表，则给出稳定 command key。
-    - `commandDescription`（可选）：匹配到的命令说明。
-    - `phase`：修复阶段，例如 `inspect` / `mutate` / `verify`。
-    - `priority`：`primary` / `secondary`。
-    - `order`：稳定排序值。
-  - `nextCommands[]`：兼容层命令建议数组。
-    - `commandTemplate`：建议命令模板。
-    - `commandKey`（可选）：若可匹配 CLI 注册表，则给出稳定 command key。
-    - `description`（可选）：命令建议说明。
-    - `intent`：命令意图，例如 `inspect` / `repair` / `bind`。
-    - `priority`：`primary` / `secondary`。
-  - `nextActions[]`：推荐优先消费的统一下一步数组。
-    - `title`：下一步动作标题。
-    - `description`：为什么建议执行这一步。
-    - `commandTemplate`：建议命令模板。
-    - `commandKey`（可选）：若可匹配 CLI 注册表，则给出稳定 command key。
-    - `phase`：动作阶段，例如 `inspect` / `verify` / `mutate`。
-    - `priority`：`primary` / `secondary`。
-    - `source`：动作来源，例如 `error-remediation`。
+- `kind`：固定为 `licell-cli-record`。
+- `schemaVersion`：CLI record schema 版本；当前为 `1.0`。
+- `type`：固定为 `error`。
+- `ts`：错误发出时间（ISO 8601）。
+- `command`：当前命令 key。
+- `stage`：错误阶段，例如 `parse`、`runtime`、`deploy`。
+- `ok`：固定为 `false`。
+- `error`：稳定错误对象。
+  - `code`：稳定错误码，例如 `CLI_INVALID_INPUT`、`AUTH_MISSING_CREDENTIAL`。
+  - `category`：`auth` / `permission` / `input` / `network` / `quota` / `conflict` / `not_found` / `internal`。
+  - `message`：错误主消息。
+  - `retryable`：该错误是否适合直接重试。
+- `provider`（可选）：阿里云 provider 侧上下文。
+  - `service`（可选）：云产品名，例如 `fc`、`oss`、`alidns`。
+  - `action`（可选）：云 API 动作名。
+  - `code`（可选）：云侧原始错误码。
+  - `requestId`（可选）：云侧 requestId。
+  - `httpStatus`（可选）：云侧 HTTP 状态码。
+  - `endpoint`（可选）：命中的云 API endpoint。
+- `details`（可选）：额外结构化错误上下文。
+- `remediation[]`：兼容层修复建议数组。
+  - `type`：建议类型，例如 `note` / `command`。
+  - `title`：修复建议标题。
+  - `reason`：为什么建议这样做。
+  - `commandTemplate`：建议命令模板。
+  - `commandKey`（可选）：若可匹配 CLI 注册表，则给出稳定 command key。
+  - `commandDescription`（可选）：匹配到的命令说明。
+  - `phase`：修复阶段，例如 `inspect` / `mutate` / `verify`。
+  - `priority`：`primary` / `secondary`。
+  - `order`：稳定排序值。
+- `nextCommands[]`：兼容层命令建议数组。
+  - `commandTemplate`：建议命令模板。
+  - `commandKey`（可选）：若可匹配 CLI 注册表，则给出稳定 command key。
+  - `description`（可选）：命令建议说明。
+  - `intent`：命令意图，例如 `inspect` / `repair` / `bind`。
+  - `priority`：`primary` / `secondary`。
+- `nextActions[]`：推荐优先消费的统一下一步数组。
+  - `title`：下一步动作标题。
+  - `description`：为什么建议执行这一步。
+  - `commandTemplate`：建议命令模板。
+  - `commandKey`（可选）：若可匹配 CLI 注册表，则给出稳定 command key。
+  - `phase`：动作阶段，例如 `inspect` / `verify` / `mutate`。
+  - `priority`：`primary` / `secondary`。
+  - `source`：动作来源，例如 `error-remediation`。
 
 - Agent 侧做强约束解析时，先匹配 `kind`，再检查 `schemaVersion`；未知更高版本应走兼容分支或降级为文本解析。
 
@@ -114,7 +114,7 @@
 | `licell logout` | 清除本地凭证 | — |
 | `licell whoami` | 查看当前登录身份 | — |
 | `licell switch` | 切换默认 region | `--region` |
-| `licell init` | 初始化 FC 项目（空目录生成脚手架，已有项目写入 licell 配置） | `--runtime`, `--app`, `--force` |
+| `licell init` | 初始化 FC 项目（空目录生成脚手架，已有项目写入 licell 配置） | `--runtime`, `--kind`, `--app` |
 | `licell config domain [suffix]` | 查看或设置全局默认域名后缀 | `--unset` |
 
 ### Delivery Workflow
@@ -123,12 +123,20 @@
 
 - Agent 在 FC API 部署前，优先执行 `licell deploy spec` 与 `licell deploy check`。
 - 涉及删除或清理的命令通常需要显式传入 `--yes`。
+- 任务函数通过 `licell deploy --type task` 交付；部署成功后不返回固定 URL，而是继续用 `licell task invoke / info / list / stop` 完成调用与排查。
 
 | 命令 | 说明 | 关键选项 |
 |------|------|----------|
 | `licell deploy` | 一键极速打包部署 | `--type`, `--entry`, `--dist` |
 | `licell deploy check` | 本地预检 FC API 入口与 runtime 约束（建议 deploy 前执行） | `--runtime`, `--entry`, `--docker-daemon` |
 | `licell deploy spec [runtime]` | 查看 FC API 部署规格（给 Agent/开发者在 deploy 前对照） | `--all` |
+| `licell task config [name]` | 查看任务函数的异步调用配置 | `--target` |
+| `licell task info <taskId> [name]` | 查看单个异步任务详情 | `--target` |
+| `licell task invoke [name]` | 异步调用任务函数 | `--target`, `--payload`, `--file` |
+| `licell task list [name]` | 查看任务函数的异步任务列表 | `--target`, `--status`, `--prefix` |
+| `licell task stop <taskId> [name]` | 停止正在运行的异步任务 | `--target` |
+| `licell task config rm [name]` | 删除任务函数的异步调用配置 | `--target`, `--yes` |
+| `licell task config set [name]` | 写入任务函数的异步调用配置 | `--target`, `--enable`, `--disable` |
 | `licell release list` | 查看函数版本列表 | `--limit` |
 | `licell release promote [versionId]` | 发布并切流到目标别名 | `--target` |
 | `licell release prune` | 清理历史函数版本（默认仅预览） | `--keep`, `--apply`, `--yes` |
@@ -178,12 +186,14 @@
 | 命令 | 说明 | 关键选项 |
 |------|------|----------|
 | `licell db add` | 分配数据库实例 | `--type`, `--engine-version`, `--category` |
+| `licell db class [type]` | 查询数据库可用规格（给 Agent/开发者在 db add 前对照） | `--engine-version`, `--category`, `--storage-type` |
 | `licell db connect [instanceId]` | 输出数据库连接信息 | — |
 | `licell db info <instanceId>` | 查看数据库实例详情 | — |
 | `licell db list` | 查看数据库实例列表 | `--limit` |
 | `licell db public-access [instanceId]` | 开通数据库公网访问并添加当前 IP 到白名单 | `--ip` |
 | `licell db rm <instanceId>` | 删除数据库实例 | `--yes` |
-| `licell cache add` | 分配 Redis 缓存 | `--type`, `--instance`, `--password` |
+| `licell cache add` | 分配 Redis 缓存 | `--type`, `--mode`, `--instance` |
+| `licell cache class [mode]` | 查询缓存可用规格（给 Agent/开发者在 cache add 前对照） | `--zone`, `--limit` |
 | `licell cache connect [instanceId]` | 输出缓存连接信息 | — |
 | `licell cache info <instanceId>` | 查看缓存实例详情 | — |
 | `licell cache list` | 查看缓存实例列表 | `--limit` |

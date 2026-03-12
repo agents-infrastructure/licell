@@ -25,6 +25,7 @@ import { emitCliError, emitCliEvent, emitCommandEvent, emitCommandResult, isJson
 import { resolveDeployContext, type DeployCliOptions } from './deploy-context';
 import { executeApiDeploy } from './deploy-api';
 import { executeStaticDeploy } from './deploy-static';
+import { executeTaskDeploy } from './deploy-task';
 import { DELIVERY_SECTION } from './sections';
 
 export { resolveDeploySslEnabled } from './deploy-context';
@@ -60,11 +61,11 @@ const deployCommand = defineCliCommand({
   rawName: 'deploy',
   description: '一键极速打包部署',
   options: [
-    { rawName: '--type <type>', description: '部署类型：api 或 static（适配 CI 非交互场景）' },
-    { rawName: '--entry <entry>', description: 'API 入口文件（Node 默认 src/index.ts；Python 默认 src/main.py）' },
+    { rawName: '--type <type>', description: '部署类型：api、static 或 task（适配 CI 非交互场景）' },
+    { rawName: '--entry <entry>', description: 'FC 入口文件（Node 默认 src/index.ts；Python 默认 src/main.py）' },
     { rawName: '--dist <dist>', description: '静态站点目录（默认 dist）' },
-    { rawName: '--runtime <runtime>', description: '运行时（API: nodejs20/nodejs22/python3.12/python3.13/docker；静态站: static/statis）' },
-    { rawName: '--target <target>', description: 'API 部署后自动发布并切流到该 alias（如 prod/preview）' },
+    { rawName: '--runtime <runtime>', description: '运行时（FC: nodejs20/nodejs22/python3.12/python3.13/docker；静态站: static/statis）' },
+    { rawName: '--target <target>', description: 'FC 函数部署后自动发布并切流到该 alias（如 prod/preview）' },
     { rawName: '--preview', description: '生成预览部署（自动发版 + 绑定预览域名，不影响生产）' },
     { rawName: '--domain <domain>', description: '绑定完整自定义域名（如 api.your-domain.xyz）' },
     { rawName: '--domain-suffix <suffix>', description: '自动绑定固定子域名后缀（如 your-domain.xyz）' },
@@ -81,22 +82,32 @@ const deployCommand = defineCliCommand({
   ],
   descriptor: {
     title: 'Deploy current project',
-    summary: '一键部署 API / Static，并提供 spec / check 辅助子命令。',
-    notes: ['FC API 部署前，建议先执行 `licell deploy spec` 与 `licell deploy check`。'],
+    summary: '一键部署 API / Static / Task，并提供 spec / check 辅助子命令。',
+    notes: [
+      'FC 函数部署前，建议先执行 `licell deploy spec` 与 `licell deploy check`。',
+      '`--type task` 成功后不会返回固定访问 URL；结果里会给出 `functionName`、`configuredQualifiers[]` 与 `invokeCommand`，后续统一通过 `licell task invoke` 发起调用。',
+      '当 `--type task --target <alias>` 一起使用时，licell 会在 alias 调用入口收敛后再写入 qualifier 级 async invoke config，保证发布后可以直接验证。'
+    ],
     safety: {
       level: 'mutating',
       reason: '会创建或更新函数、域名、SSL、CDN 等云端资源。'
     },
     optionInsights: {
-      '--type': { whenToUse: '在 CI / Agent 非交互场景下显式指定 `api` 或 `static`。', cautions: ['不指定时可能依赖当前项目上下文或交互提示。'] },
-      '--entry': { whenToUse: 'API 入口不是默认的 `src/index.ts` / `src/main.py` 时使用。', cautions: ['建议先运行 `licell deploy check` 验证入口与 runtime 约束。'] },
+      '--type': {
+        whenToUse: '在 CI / Agent 非交互场景下显式指定 `api`、`static` 或 `task`；其中 `task` 适合 FC 异步任务执行，不暴露固定 URL。',
+        cautions: ['不指定时可能依赖当前项目上下文或交互提示。', '`--type task` 的后续验证入口是 `licell task invoke` / `task info`，不是 `fn invoke`。']
+      },
+      '--entry': { whenToUse: 'FC 入口不是默认的 `src/index.ts` / `src/main.py` 时使用。', cautions: ['建议先运行 `licell deploy check` 验证入口与 runtime 约束。'] },
       '--runtime': { whenToUse: '需要强制指定运行时，例如 `nodejs22`、`python3.13`、`docker`。', cautions: ['部分 runtime 有地域限制；先查看 `licell deploy spec`。'] },
       '--preview': { whenToUse: '需要生成预览版本且不影响生产流量时使用。', cautions: ['预览版本通常还需要后续 `licell release promote` 才会进入生产。'] },
       '--domain': { whenToUse: '希望直接绑定完整自定义域名时使用。', cautions: ['可能联动 SSL / CDN / DNS 变更。'] },
       '--domain-suffix': { whenToUse: '希望按固定后缀自动生成子域名时使用。', cautions: ['适合标准化环境，不适合完全自定义主机名。'] },
       '--enable-cdn': { whenToUse: '希望流量走 CDN、获得缓存/加速能力时使用。', cautions: ['会改写 DNS CNAME 指向 CDN。'] },
       '--ssl': { whenToUse: '需要 HTTPS 证书自动签发与绑定时使用。', cautions: ['依赖域名解析正确；必要时结合 `--ssl-force-renew`。'] },
-      '--target': { whenToUse: 'API 部署后需要自动发布到指定 alias（如 `prod` / `preview`）时使用。', cautions: ['会影响 alias 指向的流量入口。'] }
+      '--target': {
+        whenToUse: 'API 或任务函数部署后需要自动发布到指定 alias（如 `prod` / `preview`）时使用。',
+        cautions: ['会影响 alias 指向的调用入口。', '对任务函数来说，`task invoke --target <alias>` 只会命中对应 qualifier 的 async invoke config。']
+      }
     },
     recommendedFlow: [
       { title: '确认部署规格', command: 'licell deploy spec', reason: '先看可用 runtime、资源约束和推荐姿势。' },
@@ -116,16 +127,44 @@ const deployCommand = defineCliCommand({
         title: '让 Agent 稳定拿到部署结果',
         description: '正式执行时优先输出 JSON，方便自动化继续读取版本、域名和资源状态。',
         commands: ['licell deploy --output json']
+      },
+      {
+        phase: 'verify',
+        title: '验证任务函数可立即调用',
+        description: '当 `type=task` 时，先读取结果里的 `invokeCommand` / `configuredQualifiers[]`，再提交一次异步任务并跟踪状态。',
+        commands: ['licell task invoke [name] --output json', 'licell task info <taskId> [name] --output json']
       }
     ],
     examples: [
       'licell deploy spec nodejs22',
       'licell deploy check',
       'licell deploy --type api --entry src/index.ts',
+      'licell deploy --type task --entry src/worker.ts',
+      'licell deploy --type task --runtime nodejs22 --target preview --output json',
       'licell deploy --output json'
     ],
-    agentTips: ['生成或修改部署前配置时，优先调用 `deploy spec` 与 `deploy check`。'],
-    related: ['release promote', 'logs']
+    agentTips: [
+      '生成或修改部署前配置时，优先调用 `deploy spec` 与 `deploy check`。',
+      '当结果 `type=task` 时，优先读取 `functionName`、`configuredQualifiers[]`、`invokeCommand`，不要期待 `url`。'
+    ],
+    related: ['task config', 'task invoke', 'task info', 'task list', 'release promote', 'logs'],
+    result: {
+      summary: '返回值会随部署类型变化：API / Static 关注 URL / 域名；Task 关注函数名、启用的 qualifier 和后续调用入口。',
+      fields: [
+        { name: 'type', description: '部署类型：`api`、`static` 或 `task`。', required: true },
+        { name: 'runtime', description: '实际使用的 runtime。', required: true },
+        { name: 'releaseTarget', description: '自动发布到的 alias；未指定时为 `null`。', required: true },
+        { name: 'promotedVersion', description: '自动发布后的版本号；未发布时为 `null`。', required: true },
+        { name: 'healthCheckLogs[]', description: '部署后补充校验/健康检查日志数组。', required: true },
+        { name: 'hint', description: '文本提示；通常给未发布 alias 或 task workflow 的下一步建议。' },
+        { name: 'url', description: '当 `type=api|static` 时的访问 URL。' },
+        { name: 'fixedDomain', description: '绑定后的固定域名；未配置时为 `null`。' },
+        { name: 'functionName', description: '当 `type=task` 时返回的函数名。' },
+        { name: 'asyncTaskEnabled', description: '当 `type=task` 时，异步任务能力是否已启用。' },
+        { name: 'configuredQualifiers[]', description: '当 `type=task` 时，已经写入 async invoke config 的 qualifier 列表。' },
+        { name: 'invokeCommand', description: '当 `type=task` 时，推荐直接复制执行的任务调用命令。' }
+      ]
+    }
   }
 });
 
@@ -140,7 +179,7 @@ interface DeployCheckOptions {
 }
 
 function resolveDeployRequiredCapabilities(ctx: {
-  type: 'api' | 'static';
+  type: 'api' | 'static' | 'task';
   cliRuntime?: string;
   projectRuntime?: string;
   envRuntime?: string;
@@ -150,7 +189,7 @@ function resolveDeployRequiredCapabilities(ctx: {
   enableCdn: boolean;
 }): AuthCapability[] {
   const capabilities: AuthCapability[] = [];
-  if (ctx.type === 'api') {
+  if (ctx.type === 'api' || ctx.type === 'task') {
     capabilities.push('fc');
     const runtime = (ctx.cliRuntime || ctx.projectRuntime || ctx.envRuntime || '').trim().toLowerCase();
     if (runtime === 'docker') capabilities.push('cr');
@@ -359,12 +398,16 @@ export function registerDeployCommand(cli: CAC) {
               s.stop(pc.green('✅ preDeploy hook 完成'));
             }
 
-            let url: string;
+            let url: string | undefined;
+            let functionName: string | undefined;
             let promotedVersion: string | undefined;
             let fixedDomain: string | undefined;
             let previewDomain: string | undefined;
             let previewVersion: string | undefined;
             let healthCheckLogs: string[] = [];
+            let asyncTaskEnabled: boolean | undefined;
+            let configuredQualifiers: string[] | undefined;
+            let invokeCommand: string | undefined;
 
             if (ctx.type === 'api') {
               emitCommandEvent({ stage: 'deploy.api', action: 'execute', status: 'start' });
@@ -372,16 +415,39 @@ export function registerDeployCommand(cli: CAC) {
               if (!result) return;
               emitCommandEvent({ stage: 'deploy.api', action: 'execute', status: 'ok' });
               ({ url, promotedVersion, fixedDomain, previewDomain, previewVersion, healthCheckLogs } = result);
-            } else {
+            } else if (ctx.type === 'static') {
               emitCommandEvent({ stage: 'deploy.static', action: 'execute', status: 'start' });
               const result = await executeStaticDeploy(ctx, s);
               if (!result) return;
               emitCommandEvent({ stage: 'deploy.static', action: 'execute', status: 'ok' });
               ({ url, fixedDomain, previewDomain, previewVersion, healthCheckLogs } = result);
+            } else {
+              emitCommandEvent({ stage: 'deploy.task', action: 'execute', status: 'start' });
+              const result = await executeTaskDeploy(ctx, s);
+              if (!result) return;
+              emitCommandEvent({ stage: 'deploy.task', action: 'execute', status: 'ok' });
+              ({
+                functionName,
+                promotedVersion,
+                healthCheckLogs,
+                asyncTask: asyncTaskEnabled,
+                configuredQualifiers,
+                invokeCommand
+              } = result);
             }
 
             s.stop(pc.green('✅ 部署成功!'));
-            console.log(`\n🎉 Production URL: ${pc.cyan(pc.underline(url))}\n`);
+            if (ctx.type === 'task') {
+              console.log(`\n🧩 Task Function: ${pc.cyan(functionName || ctx.appName)}\n`);
+              if (ctx.releaseTarget && promotedVersion) {
+                console.log(`🏷️  alias=${pc.cyan(ctx.releaseTarget)} -> version=${pc.cyan(promotedVersion)}\n`);
+              }
+              if (invokeCommand) {
+                console.log(pc.gray(`💡 调用任务：${pc.bold(invokeCommand)}\n`));
+              }
+            } else if (url) {
+              console.log(`\n🎉 Production URL: ${pc.cyan(pc.underline(url))}\n`);
+            }
             if (previewDomain) {
               const previewDomainUrl = `${ctx.enableSSL ? 'https' : 'http'}://${previewDomain}`;
               console.log(`🔍 Preview URL: ${pc.cyan(pc.underline(previewDomainUrl))}`);
@@ -398,6 +464,9 @@ export function registerDeployCommand(cli: CAC) {
             if (!ctx.releaseTarget && !ctx.preview && ctx.type === 'api' && !isJsonOutput()) {
               console.log(pc.gray(`💡 代码已更新到预览环境。运行 ${pc.bold('licell release promote')} 发布到生产。\n`));
             }
+            if (!ctx.releaseTarget && ctx.type === 'task' && !isJsonOutput()) {
+              console.log(pc.gray(`💡 代码已更新到 ${pc.bold('LATEST')}。如需稳定入口，可运行 ${pc.bold('licell release promote')} 发布 alias。\n`));
+            }
             if (healthCheckLogs.length > 0) {
               console.log(`${healthCheckLogs.join('\n')}\n`);
             }
@@ -406,7 +475,10 @@ export function registerDeployCommand(cli: CAC) {
               cliDomainSuffix: ctx.cliDomainSuffix,
               projectDomainSuffix: ctx.projectDomainSuffix,
               cliRuntime: ctx.cliRuntime,
-              projectRuntime: ctx.projectRuntime
+              projectRuntime: ctx.projectRuntime,
+              deployType: ctx.type,
+              projectDeployType: ctx.projectDeployType,
+              persistDeployType: Boolean(ctx.cliType || ctx.projectDeployType || ctx.type === 'task')
             });
             if (Object.keys(projectPatch).length > 0) {
               Config.setProject(projectPatch);
@@ -419,16 +491,31 @@ export function registerDeployCommand(cli: CAC) {
               }
             }
             if (isJsonOutput()) {
-              emitCommandResult({
-                type: ctx.type,
-                runtime: ctx.cliRuntime || ctx.projectRuntime || ctx.envRuntime || null,
-                url,
-                fixedDomain: fixedDomain || null,
-                releaseTarget: ctx.releaseTarget || null,
-                promotedVersion: promotedVersion || null,
-                healthCheckLogs,
-                ...(!ctx.releaseTarget && ctx.type === 'api' ? { hint: '运行 licell release promote 发布到生产' } : {})
-              });
+              if (ctx.type === 'task') {
+                emitCommandResult({
+                  type: ctx.type,
+                  runtime: ctx.cliRuntime || ctx.projectRuntime || ctx.envRuntime || null,
+                  functionName: functionName || ctx.appName,
+                  releaseTarget: ctx.releaseTarget || null,
+                  promotedVersion: promotedVersion || null,
+                  asyncTaskEnabled: asyncTaskEnabled ?? true,
+                  configuredQualifiers: configuredQualifiers || [],
+                  invokeCommand: invokeCommand || null,
+                  healthCheckLogs,
+                  ...(!ctx.releaseTarget ? { hint: '运行 licell release promote 发布 alias；运行 licell task invoke 调用任务' } : {})
+                });
+              } else {
+                emitCommandResult({
+                  type: ctx.type,
+                  runtime: ctx.cliRuntime || ctx.projectRuntime || ctx.envRuntime || null,
+                  url,
+                  fixedDomain: fixedDomain || null,
+                  releaseTarget: ctx.releaseTarget || null,
+                  promotedVersion: promotedVersion || null,
+                  healthCheckLogs,
+                  ...(!ctx.releaseTarget && ctx.type === 'api' ? { hint: '运行 licell release promote 发布到生产' } : {})
+                });
+              }
             } else {
               showOutro('Done!');
             }

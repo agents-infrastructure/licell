@@ -20,7 +20,7 @@ import {
   restartSupabaseInstance,
   stopSupabaseInstance,
   startSupabaseInstance,
-  deleteSupabaseInstance
+  deleteSupabaseInstanceCascade
 } from '../providers/supabase';
 import {
   ensureAuthOrExit,
@@ -128,9 +128,14 @@ const supaRmCommand = defineCliCommand({
   ],
   descriptor: {
     title: 'Delete Supabase instance',
+    notes: [
+      '默认会级联删除关联的 RDS PostgreSQL 实例。',
+      '如果实例绑定的是通过 `--db-instance` 传入的已有 PG，该实例也会一并删除。',
+      'NAT 网关和 EIP 仍需手动删除。'
+    ],
     safety: {
       level: 'destructive',
-      reason: '会删除 Supabase 实例及其相关配置。'
+      reason: '会删除 Supabase 实例及其关联 RDS PostgreSQL 实例；NAT 网关和 EIP 仍需手动删除。'
     }
   }
 });
@@ -460,7 +465,7 @@ export function registerSupaCommands(cli: CAC) {
   registerCliCommand(cli, supaRmCommand)
     .action(async (instanceName: string, options: { yes?: boolean }) => {
       await executeWithAuthRecovery(
-        { commandLabel: commandInvocation(supaRmCommand), interactiveTTY: isInteractiveTTY(), requiredCapabilities: ['rdsai'] },
+        { commandLabel: commandInvocation(supaRmCommand), interactiveTTY: isInteractiveTTY(), requiredCapabilities: ['rdsai', 'rds'] },
         async () => {
           showIntro(pc.bgRed(pc.white(' 🗑️ Delete Supabase Instance ')));
           ensureAuthOrExit();
@@ -468,14 +473,27 @@ export function registerSupaCommands(cli: CAC) {
           if (!name) throw new Error('请提供 instanceName');
 
           if (!options.yes && isInteractiveTTY()) {
-            const ok = await confirm({ message: `确认删除 Supabase 实例 ${pc.red(name)}？此操作不可恢复。\n⚠️ 注意：关联的 RDS PostgreSQL 实例和 NAT 网关需要手动删除。` });
+            const ok = await confirm({ message: `确认删除 Supabase 实例 ${pc.red(name)}？此操作不可恢复。\n⚠️ 注意：关联的 RDS PostgreSQL 实例也会一并删除；NAT 网关和 EIP 仍需手动删除。` });
             if (isCancel(ok) || !ok) { showOutro('已取消'); return; }
           }
 
           const s = createSpinner();
-          await withSpinner(s, `正在删除实例 ${name}...`, '❌ 删除失败', () => deleteSupabaseInstance(name));
-          if (isJsonOutput()) { emitCommandResult({ instanceName: name }); return; }
-          showOutro(`实例 ${name} 已删除。⚠️ 关联的 PG 实例和 NAT 网关需手动清理。`);
+          const result = await withSpinner(
+            s,
+            `正在删除实例 ${name} 及关联 PG...`,
+            '❌ 删除失败',
+            () => deleteSupabaseInstanceCascade(name, {
+              onProgress: (message) => s.message(message)
+            })
+          );
+          if (!result) return;
+          if (isJsonOutput()) { emitCommandResult(result); return; }
+          s.stop(pc.green('✅ 删除完成'));
+          if (result.dbInstanceId) {
+            showOutro(`实例 ${name} 已删除，关联 PG ${result.dbInstanceId} 已提交删除。⚠️ NAT 网关和 EIP 仍需手动清理。`);
+            return;
+          }
+          showOutro(`实例 ${name} 已删除。⚠️ 未发现关联 PG；NAT 网关和 EIP 仍需手动清理。`);
         }
       );
     });

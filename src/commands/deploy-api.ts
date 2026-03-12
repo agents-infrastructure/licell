@@ -141,12 +141,16 @@ export async function executeApiDeploy(
         ...(ctx.cliResources ? { resources: ctx.cliResources } : {}),
         ...(deployNetwork !== undefined ? { network: deployNetwork } : {})
       };
-      const deployedUrl = await deployFC(
+      const deployResult = await deployFC(
         ctx.appName,
         entry,
         runtime,
         Object.keys(deployOptions).length > 0 ? deployOptions : undefined
       );
+      const deployedUrl = deployResult.url;
+      if (!deployedUrl) {
+        throw new Error('API 部署后未获取到函数访问地址');
+      }
       let nextPromotedVersion: string | undefined;
       let nextFixedDomain: string | undefined;
       let nextFixedDomainUrl: string | undefined;

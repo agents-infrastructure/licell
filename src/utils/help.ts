@@ -14,8 +14,7 @@ import {
   type CommandOptionInsight,
   type CommandSafetyLevel,
   type CommandSafetyMetadata,
-  type ResolvedCommandResultDescriptor,
-  type ResolvedCommandResultFieldTreeNode
+  type ResolvedCommandResultDescriptor
 } from './command-metadata';
 import {
   buildCommandTasks,
@@ -39,6 +38,7 @@ import {
   type CommandReferenceSection
 } from './command-reference-sections';
 import { getCliRecordContractDocument } from './cli-record-contract';
+import { renderStructuredResultLines } from './structured-result-render';
 
 export type HelpScope = 'root' | 'namespace' | 'command';
 
@@ -408,14 +408,6 @@ function buildOptionGuidanceRows(insights: HelpOptionInsight[]) {
   }));
 }
 
-function buildStructuredResultItems(result: HelpResultDoc) {
-  const items: string[] = [];
-  if (result.summary) items.push(result.summary);
-  items.push('`stage` · 命令阶段标识。');
-  if (result.outcomeKey) items.push(`\`${result.outcomeKey}\` · 结果布尔态字段。`);
-  return items;
-}
-
 function collectCommandishTokens(argv: string[]) {
   const tokens: string[] = [];
   for (let index = 2; index < argv.length; index += 1) {
@@ -753,27 +745,15 @@ function renderSubcommandGroupsBlock(groups: HelpSubcommandGroup[]) {
 }
 
 function renderStructuredResultBlock(result: HelpResultDoc) {
-  const lines = ['Structured Result:'];
-  for (const item of buildStructuredResultItems(result)) {
-    lines.push(`  - ${item}`);
-  }
-
-  const renderFieldTree = (node: ResolvedCommandResultFieldTreeNode, depth: number): string[] => {
-    const optional = node.required === false ? '（optional）' : '';
-    const description = node.description ? ` · ${node.description}` : '';
-    const rendered = [`${'  '.repeat(depth + 1)}- \`${node.segment}\`${optional}${description}`];
-    for (const child of node.children) {
-      rendered.push(...renderFieldTree(child, depth + 1));
-    }
-    return rendered;
-  };
-
-  for (const node of result.fieldTree) {
-    lines.push(...renderFieldTree(node, 1));
-  }
-
-  lines.push('');
-  return lines;
+  return [
+    'Structured Result:',
+    ...renderStructuredResultLines(result, {
+      baseIndent: '  ',
+      separator: ' · ',
+      optionalLabel: '（optional）'
+    }),
+    ''
+  ];
 }
 
 function renderNextActionsBlock(actions: ResolvedCommandNextAction[]) {

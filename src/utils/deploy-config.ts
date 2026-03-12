@@ -1,4 +1,8 @@
-type DeployProjectPatch = Partial<Record<'domainSuffix' | 'runtime', string>>;
+import type { DeployType } from './cli-shared';
+
+type DeployProjectPatch = Partial<Record<'domainSuffix' | 'runtime', string>> & {
+  deployType?: DeployType;
+};
 
 interface BuildDeployProjectPatchOptions {
   deploySucceeded: boolean;
@@ -6,6 +10,9 @@ interface BuildDeployProjectPatchOptions {
   projectDomainSuffix?: string;
   cliRuntime?: string;
   projectRuntime?: string;
+  deployType?: DeployType;
+  projectDeployType?: DeployType;
+  persistDeployType?: boolean;
 }
 
 export function buildDeployProjectPatch(options: BuildDeployProjectPatchOptions): DeployProjectPatch {
@@ -17,6 +24,9 @@ export function buildDeployProjectPatch(options: BuildDeployProjectPatchOptions)
   }
   if (options.cliRuntime && options.cliRuntime !== options.projectRuntime) {
     patch.runtime = options.cliRuntime;
+  }
+  if (options.persistDeployType && options.deployType && options.deployType !== options.projectDeployType) {
+    patch.deployType = options.deployType;
   }
   return patch;
 }

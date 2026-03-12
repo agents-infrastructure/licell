@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import { computeDeploymentMarker, LICELL_INTERNAL_DEPLOY_MARKER_ENV } from '../providers/fc/deployment-probe';
 
 const {
   mockGetProject,
@@ -60,6 +61,13 @@ vi.mock('../providers/fc/request-guard', () => ({
 
 import { deployFC } from '../providers/fc/deploy';
 
+const expectedDeploymentMarker = computeDeploymentMarker(JSON.stringify({
+  runtime: 'nodejs22',
+  handler: 'index.handler',
+  customRuntimeConfig: null,
+  customContainerConfig: null
+}));
+
 describe('deployFC', () => {
   let originalCwd = '';
   let workdir = '';
@@ -110,9 +118,10 @@ describe('deployFC', () => {
       throw new Error(`unexpected method: ${methodName}`);
     });
 
-    const url = await deployFC('demo-app', 'src/index.ts', 'nodejs22');
+    const result = await deployFC('demo-app', 'src/index.ts', 'nodejs22');
 
-    expect(url).toBe('https://demo-app.fcapp.run');
+    expect(result.url).toBe('https://demo-app.fcapp.run');
+    expect(result.deploymentMarker).toMatch(/^[a-f0-9]{24}$/);
     expect(mockCallFcWithGuard.mock.calls.map((call) => call[1])).toEqual(['getFunction', 'updateFunction']);
     expect(mockWaitForFcFunctionReadable).toHaveBeenCalledTimes(2);
   });
@@ -130,9 +139,10 @@ describe('deployFC', () => {
       throw new Error(`unexpected method: ${methodName}`);
     });
 
-    const url = await deployFC('demo-app', 'src/index.ts', 'nodejs22');
+    const result = await deployFC('demo-app', 'src/index.ts', 'nodejs22');
 
-    expect(url).toBe('https://demo-app.fcapp.run');
+    expect(result.url).toBe('https://demo-app.fcapp.run');
+    expect(result.deploymentMarker).toMatch(/^[a-f0-9]{24}$/);
     expect(mockCallFcWithGuard.mock.calls.map((call) => call[1])).toEqual(['getFunction', 'createFunction']);
     expect(mockWaitForFcFunctionReadable).toHaveBeenCalledTimes(1);
   });
@@ -164,7 +174,10 @@ describe('deployFC', () => {
           timeout: 30,
           cpu: 0.5,
           instanceConcurrency: 10,
-          environmentVariables: { NODE_ENV: 'production' }
+          environmentVariables: {
+            NODE_ENV: 'production',
+            [LICELL_INTERNAL_DEPLOY_MARKER_ENV]: expectedDeploymentMarker
+          }
         };
       }
       return {
@@ -173,9 +186,10 @@ describe('deployFC', () => {
       };
     });
 
-    const url = await deployFC('demo-app', 'src/index.ts', 'nodejs22');
+    const result = await deployFC('demo-app', 'src/index.ts', 'nodejs22');
 
-    expect(url).toBe('https://demo-app.fcapp.run');
+    expect(result.url).toBe('https://demo-app.fcapp.run');
+    expect(result.deploymentMarker).toMatch(/^[a-f0-9]{24}$/);
     expect(mockCallFcWithGuard.mock.calls.map((call) => call[1])).toEqual(['getFunction', 'createFunction']);
   });
 
@@ -201,20 +215,23 @@ describe('deployFC', () => {
       readableCalls += 1;
       if (readableCalls === 1) {
         return {
-          functionName: 'demo-app',
-          lastModifiedTime: '1',
-          runtime: 'nodejs22',
-          handler: 'index.handler',
+        functionName: 'demo-app',
+        lastModifiedTime: '1',
+        runtime: 'nodejs22',
+        handler: 'index.handler',
           memorySize: 512,
           diskSize: 512,
           timeout: 30,
           cpu: 0.5,
           instanceConcurrency: 10,
-          environmentVariables: { NODE_ENV: 'production' }
-        };
-      }
-      return {
-        functionName: 'demo-app',
+        environmentVariables: {
+          NODE_ENV: 'production',
+          [LICELL_INTERNAL_DEPLOY_MARKER_ENV]: expectedDeploymentMarker
+        }
+      };
+    }
+    return {
+      functionName: 'demo-app',
         lastModifiedTime: '2',
         runtime: 'nodejs22',
         handler: 'index.handler',
@@ -223,13 +240,40 @@ describe('deployFC', () => {
         timeout: 30,
         cpu: 0.5,
         instanceConcurrency: 10,
-        environmentVariables: { NODE_ENV: 'production' }
+        environmentVariables: {
+          NODE_ENV: 'production',
+          [LICELL_INTERNAL_DEPLOY_MARKER_ENV]: expectedDeploymentMarker
+        }
       };
     });
 
-    const url = await deployFC('demo-app', 'src/index.ts', 'nodejs22');
+    const result = await deployFC('demo-app', 'src/index.ts', 'nodejs22');
 
-    expect(url).toBe('https://demo-app.fcapp.run');
+    expect(result.url).toBe('https://demo-app.fcapp.run');
+    expect(result.deploymentMarker).toMatch(/^[a-f0-9]{24}$/);
     expect(mockCallFcWithGuard.mock.calls.map((call) => call[1])).toEqual(['getFunction', 'updateFunction']);
+  });
+
+  it('skips HTTP url provisioning when ensureHttpUrl is disabled', async () => {
+    mockCallFcWithGuard.mockImplementation(async (_client: unknown, methodName: string) => {
+      if (methodName === 'getFunction') {
+        return {
+          body: {
+            functionName: 'demo-app',
+            lastModifiedTime: '1'
+          }
+        };
+      }
+      if (methodName === 'updateFunction') {
+        return { body: {} };
+      }
+      throw new Error(`unexpected method: ${methodName}`);
+    });
+
+    const result = await deployFC('demo-app', 'src/index.ts', 'nodejs22', { ensureHttpUrl: false });
+
+    expect(result.url).toBeUndefined();
+    expect(result.deploymentMarker).toMatch(/^[a-f0-9]{24}$/);
+    expect(mockEnsureFunctionHttpUrl).not.toHaveBeenCalled();
   });
 });

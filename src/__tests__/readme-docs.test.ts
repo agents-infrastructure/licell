@@ -39,6 +39,8 @@ describe('syncReadmeQuickReferenceSection', () => {
     expect(output).toContain('licell-help@1.0');
     expect(output).toContain('`nextActions[]`');
     expect(output).toContain('### 命令总览');
+    expect(output).toContain('**Task 函数工作流**');
+    expect(output).toContain('licell deploy --type task --runtime nodejs22 --entry src/task.ts --target preview --output json');
     expect(output).not.toContain('old content');
     expect(output).toContain('upgrade guidance');
   });
@@ -53,5 +55,6 @@ describe('syncReadmeGeneratedSections', () => {
     expect(readme).toContain(renderReadmeQuickReference().trim());
     expect(readme).toContain('### Agent Contract');
     expect(readme).toContain('CLI Event Record');
+    expect(readme).toContain('**Task 函数工作流**');
   });
 });

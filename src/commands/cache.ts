@@ -1,11 +1,12 @@
 import type { CAC } from 'cac';
 import { defineCommandModule, commandInvocation, defineCliCommand, registerCliCommand } from './module';
-import { select, confirm, isCancel } from '@clack/prompts';
+import { confirm, isCancel } from '@clack/prompts';
 import pc from 'picocolors';
 import { maskConnectionString } from '../utils/cli-helpers';
 import { executeWithAuthRecovery } from '../utils/auth-recovery';
 import {
   getCacheInstanceDetail,
+  listCacheClasses,
   listCacheInstances,
   provisionRedis,
   resolveCacheConnectInfo,
@@ -31,15 +32,16 @@ import { DATA_SECTION } from './sections';
 
 const cacheAddOptions = [
   { rawName: '--type <type>', description: '缓存类型：redis（CI 场景建议显式传入）' },
+  { rawName: '--mode <mode>', description: '创建模式：classic 或 serverless（默认 classic）' },
   { rawName: '--instance <instanceId>', description: '绑定已有实例 ID（tt-/tk-/r-），传入后跳过创建' },
   { rawName: '--password <password>', description: '绑定已有实例时的访问密码（不传则尝试自动轮换）' },
   { rawName: '--username <accountName>', description: '绑定已有实例时指定账号名（可选）' },
-  { rawName: '--engine-version <version>', description: '旧版 Redis 参数（Tair Serverless KV 模式下不支持）' },
-  { rawName: '--class <instanceClass>', description: 'Tair Serverless KV 规格（如 kvcache.cu.g4b.2）' },
-  { rawName: '--node-type <type>', description: '旧版 Redis 参数（Tair Serverless KV 模式下不支持）' },
-  { rawName: '--capacity <mb>', description: '旧版 Redis 参数（Tair Serverless KV 模式下不支持）' },
-  { rawName: '--vk-name <vkName>', description: 'Tair KV 回退模式使用的 vkName（tk- 开头，不传则自动探测）' },
-  { rawName: '--compute-unit <n>', description: 'Tair Serverless KV 计算单元（当前仅支持 1）' },
+  { rawName: '--engine-version <version>', description: '兼容保留参数，当前 cache add 暂未支持' },
+  { rawName: '--class <instanceClass>', description: '实例规格：classic 如 redis.master.small.default；serverless 如 kvcache.cu.g4b.2' },
+  { rawName: '--node-type <type>', description: '兼容保留参数，当前 cache add 暂未支持' },
+  { rawName: '--capacity <mb>', description: '兼容保留参数，当前 cache add 暂未支持' },
+  { rawName: '--vk-name <vkName>', description: '仅 serverless 模式使用：指定已有虚拟集群 vkName（tk- 开头）' },
+  { rawName: '--compute-unit <n>', description: '仅 serverless 模式使用：计算单元（当前仅支持 1）' },
   { rawName: '--zone <zoneId>', description: '可用区（如 cn-hangzhou-b）' },
   { rawName: '--vpc <vpcId>', description: '指定 VPC ID' },
   { rawName: '--vsw <vSwitchId>', description: '指定 VSwitch ID' },
@@ -49,7 +51,53 @@ const cacheAddOptions = [
 const cacheAddCommand = defineCliCommand({
   rawName: 'cache add',
   description: '分配 Redis 缓存',
-  options: cacheAddOptions
+  options: cacheAddOptions,
+  descriptor: {
+    title: 'Provision Redis cache',
+    notes: [
+      '`--mode` 默认为 `classic`，因此裸执行 `licell cache add` 会创建 classic Redis。',
+      '显式使用 `--mode serverless` 时，只会尝试 Tair Serverless KV；若当前地域不可用会直接失败，不会自动降级。',
+      '绑定已有实例时，如未传 `--mode`，会按实例 ID 前缀自动识别。'
+    ],
+    examples: [
+      'licell cache add --mode classic',
+      'licell cache add --mode serverless --class kvcache.cu.g4b.2',
+      'licell cache add --instance r-xxxx --password <password>',
+      'licell cache class --output json'
+    ],
+    related: ['cache class', 'cache list', 'cache connect'],
+    optionInsights: {
+      '--mode': {
+        whenToUse: '需要明确创建 classic Redis 或 Tair Serverless KV 时使用。',
+        cautions: ['`serverless` 模式失败后不会自动降级到 classic。']
+      },
+      '--class': {
+        whenToUse: '希望显式指定实例规格时使用。'
+      },
+      '--vk-name': {
+        whenToUse: 'serverless 模式下，需要绑定指定虚拟集群时使用。'
+      },
+      '--compute-unit': {
+        whenToUse: 'serverless 模式下，显式设置计算单元时使用。',
+        cautions: ['当前仅支持 `1`。']
+      }
+    },
+    recommendedFlow: [
+      { title: '先查规格', command: 'licell cache class --output json', reason: '确认当前地域的 classic 可售规格与已观测的 serverless 规格。' },
+      { title: '再创建实例', command: 'licell cache add --mode <classic|serverless> --output json', reason: '按明确模式申请资源，避免拿到非预期缓存类型。' },
+      { title: '读取连接信息', command: 'licell cache connect [instanceId] --output json', reason: '创建完成后核对 host、port 与连接串。' }
+    ],
+    result: {
+      summary: '返回缓存模式、实例 ID、规格与脱敏后的连接串。',
+      fields: [
+        { name: 'requestedMode', description: '请求的创建模式：`classic` 或 `serverless`。', required: true },
+        { name: 'mode', description: '实际创建或绑定后的缓存类型：`classic-redis` 或 `tair-serverless-kv`。', required: true },
+        { name: 'instanceId', description: '缓存实例 ID。', required: true },
+        { name: 'instanceClass', description: '实例规格。', required: false },
+        { name: 'connectionStringMasked', description: '脱敏后的 Redis 连接串。', required: true }
+      ]
+    }
+  }
 });
 
 const cacheListCommand = defineCliCommand({
@@ -58,6 +106,25 @@ const cacheListCommand = defineCliCommand({
   options: [
     { rawName: '--limit <n>', description: '返回数量，默认 20' }
   ]
+});
+
+const cacheClassCommand = defineCliCommand({
+  rawName: 'cache class [mode]',
+  description: '查询缓存可用规格（给 Agent/开发者在 cache add 前对照）',
+  options: [
+    { rawName: '--zone <zoneId>', description: '按可用区过滤 classic Redis 规格（默认查询当前地域全部可售 zone）' },
+    { rawName: '--limit <n>', description: '输出数量，默认 20' }
+  ],
+  descriptor: {
+    title: 'List cache instance classes',
+    notes: ['Tair Serverless 目前只能稳定展示默认 class 和已存在实例观测值；classic Redis 可列出可售规格。'],
+    examples: ['licell cache class', 'licell cache class classic --limit 50', 'licell cache class serverless --output json'],
+    related: ['cache add', 'cache list'],
+    recommendedFlow: [
+      { title: '先看可用规格', command: 'licell cache class', reason: '确认当前地域有哪些 class 可选，避免盲填 --class。' },
+      { title: '再执行创建', command: 'licell cache add --class <instanceClass>', reason: '把选中的规格显式传给 cache add。' }
+    ]
+  }
 });
 
 const cacheInfoCommand = defineCliCommand({
@@ -112,10 +179,77 @@ const cacheRmCommand = defineCliCommand({
   }
 });
 
+type CacheClassMode = 'all' | 'classic' | 'serverless';
+type CacheAddMode = 'classic' | 'serverless';
+
+function normalizeCacheClassMode(input: string | undefined): CacheClassMode {
+  const value = (input || '').trim().toLowerCase();
+  if (!value || value === 'all') return 'all';
+  if (value === 'classic' || value === 'redis') return 'classic';
+  if (value === 'serverless' || value === 'tair') return 'serverless';
+  throw new Error('cache class [mode] 仅支持 classic / serverless / all');
+}
+
+function inferCacheAddModeFromInstanceId(instanceId: string | undefined): CacheAddMode | undefined {
+  const value = (instanceId || '').trim();
+  if (!value) return undefined;
+  if (value.startsWith('tt-') || value.startsWith('tk-')) return 'serverless';
+  if (value.startsWith('r-')) return 'classic';
+  return undefined;
+}
+
+function normalizeCacheAddMode(input: string | undefined, instanceId: string | undefined): CacheAddMode {
+  const value = (input || '').trim().toLowerCase();
+  if (!value) return inferCacheAddModeFromInstanceId(instanceId) || 'classic';
+  if (value === 'classic' || value === 'redis') return 'classic';
+  if (value === 'serverless' || value === 'tair') return 'serverless';
+  throw new Error('cache add --mode 仅支持 classic / serverless');
+}
+
+function printCacheClassList(
+  mode: CacheClassMode,
+  catalog: Awaited<ReturnType<typeof listCacheClasses>>,
+  limit: number
+) {
+  if (mode === 'all' || mode === 'serverless') {
+    console.log(pc.bold('Tair Serverless KV'));
+    console.log(`default: ${pc.cyan(catalog.serverless.defaultClass)}`);
+    for (const note of catalog.serverless.notes) {
+      console.log(`note:    ${pc.gray(note)}`);
+    }
+    if (catalog.serverless.observedClasses.length === 0) {
+      console.log(`observed: ${pc.gray('(当前账号/地域暂无可观测实例)')}`);
+    } else {
+      console.log(`observed: ${pc.cyan(String(catalog.serverless.observedClasses.length))}`);
+      for (const item of catalog.serverless.observedClasses.slice(0, limit)) {
+        const zoneText = item.zoneIds.length > 0 ? item.zoneIds.join(',') : '-';
+        console.log(`  ${pc.cyan(item.instanceClass)}  zones=${pc.gray(zoneText)}`);
+      }
+    }
+    if (mode === 'all') console.log('');
+  }
+
+  if (mode === 'all' || mode === 'classic') {
+    const shown = catalog.classic.classes.slice(0, limit);
+    console.log(pc.bold('Classic Redis'));
+    console.log(`zones:  ${pc.cyan(catalog.classic.zoneIds.join(', ') || '-')}`);
+    console.log(`count:  ${pc.cyan(String(catalog.classic.classes.length))}`);
+    for (const item of shown) {
+      const remark = item.remark ? `  ${pc.gray(item.remark)}` : '';
+      const zones = item.zoneIds.length > 0 ? item.zoneIds.join(',') : '-';
+      console.log(`${pc.cyan(item.instanceClass)}  zones=${pc.gray(zones)}${remark}`);
+    }
+    if (catalog.classic.classes.length > shown.length) {
+      console.log(pc.gray(`... 仅展示前 ${shown.length} 条，可通过 --limit 查看更多`));
+    }
+  }
+}
+
 export function registerCacheCommands(cli: CAC) {
   registerCliCommand(cli, cacheAddCommand)
     .action(async (options: {
       type?: unknown;
+      mode?: unknown;
       instance?: unknown;
       password?: unknown;
       username?: unknown;
@@ -139,29 +273,22 @@ export function registerCacheCommands(cli: CAC) {
         async () => {
           showIntro(pc.bgGreen(pc.black(' 🧠 Cache Provisioning (Redis) ')));
           ensureAuthOrExit();
-          const interactiveTTY = isInteractiveTTY();
-          let type = toOptionalString(options.type)?.toLowerCase();
-          if (!type) {
-            if (!interactiveTTY) throw new Error('非交互模式下请传入 --type redis');
-            const selected = await select({
-              message: '选择缓存引擎:',
-              options: [{ value: 'redis', label: '🟥 Tair/Redis (VPC 内网)' }]
-            });
-            if (isCancel(selected)) process.exit(0);
-            type = toPromptValue(selected, '缓存类型').toLowerCase();
-          }
+          const type = toOptionalString(options.type)?.toLowerCase() || 'redis';
           if (type !== 'redis') throw new Error('--type 目前仅支持 redis');
+          const instanceId = toOptionalString(options.instance);
+          const mode = normalizeCacheAddMode(toOptionalString(options.mode), instanceId);
 
           const capacityMb = parseOptionalPositiveInt(options.capacity, 'capacity');
           const computeUnitNum = parseOptionalPositiveInt(options.computeUnit, 'compute-unit');
 
           const s = createSpinner();
-          const redisUrl = await withSpinner(
+          const result = await withSpinner(
             s,
             '正在初始化缓存资源编排...',
             '❌ 缓存拉起失败',
             () => provisionRedis(s, {
-              instanceId: toOptionalString(options.instance),
+              instanceId,
+              mode,
               existingPassword: toOptionalString(options.password),
               accountName: toOptionalString(options.username),
               engineVersion: toOptionalString(options.engineVersion),
@@ -176,18 +303,26 @@ export function registerCacheCommands(cli: CAC) {
               securityIpList: toOptionalString(options.securityIpList)
             })
           );
-          if (!redisUrl) return;
+          if (!result) return;
           if (!isJsonOutput()) {
-            s.stop(pc.green('✅ Redis 缓存已就绪并绑定到本工程内网！'));
+            s.stop(
+              result.mode === 'tair-serverless-kv'
+                ? pc.green('✅ Tair Serverless KV 已就绪并绑定到本工程内网！')
+                : pc.green('✅ Redis 缓存已就绪并绑定到本工程内网！')
+            );
           }
           if (isJsonOutput()) {
             emitCommandResult({
+              requestedMode: mode,
               type,
-              connectionStringMasked: maskConnectionString(redisUrl)
+              mode: result.mode,
+              instanceId: result.instanceId,
+              instanceClass: result.instanceClass || null,
+              connectionStringMasked: maskConnectionString(result.redisUrl)
             });
             return;
           }
-          console.log(`\n🔑 缓存连接串已生成: ${pc.cyan(maskConnectionString(redisUrl))}\n`);
+          console.log(`\n🔑 缓存连接串已生成: ${pc.cyan(maskConnectionString(result.redisUrl))}\n`);
           showOutro('下次执行 licell deploy 时，将自动作为 process.env.REDIS_URL 注入！');
         }
       );
@@ -232,6 +367,62 @@ export function registerCacheCommands(cli: CAC) {
             );
           }
           console.log('');
+          showOutro('Done.');
+        }
+      );
+    });
+
+  registerCliCommand(cli, cacheClassCommand)
+    .action(async (modeInput: string | undefined, options: { zone?: unknown; limit?: unknown }) => {
+      await executeWithAuthRecovery(
+        {
+          commandLabel: commandInvocation(cacheClassCommand),
+          interactiveTTY: isInteractiveTTY(),
+          requiredCapabilities: ['redis']
+        },
+        async () => {
+          ensureAuthOrExit();
+          const mode = normalizeCacheClassMode(toOptionalString(modeInput));
+          const limit = parseListLimit(options.limit, 20, 500);
+          const zoneId = toOptionalString(options.zone);
+          const s = createSpinner();
+          const catalog = await withSpinner(
+            s,
+            '正在查询缓存规格...',
+            '❌ 获取缓存规格失败',
+            () => listCacheClasses({ zoneId })
+          );
+          if (!catalog) return;
+          const classicClasses = catalog.classic.classes.slice(0, limit);
+          const serverlessObservedClasses = catalog.serverless.observedClasses.slice(0, limit);
+          const payload = {
+            regionId: catalog.regionId,
+            mode,
+            zoneId: zoneId || null,
+            classic: {
+              zoneIds: catalog.classic.zoneIds,
+              totalCount: catalog.classic.classes.length,
+              shownCount: classicClasses.length,
+              truncated: catalog.classic.classes.length > classicClasses.length,
+              classes: classicClasses
+            },
+            serverless: {
+              querySupported: catalog.serverless.querySupported,
+              defaultClass: catalog.serverless.defaultClass,
+              notes: catalog.serverless.notes,
+              totalObservedCount: catalog.serverless.observedClasses.length,
+              shownObservedCount: serverlessObservedClasses.length,
+              truncated: catalog.serverless.observedClasses.length > serverlessObservedClasses.length,
+              observedClasses: serverlessObservedClasses
+            }
+          };
+          if (!isJsonOutput()) {
+            s.stop(pc.green('✅ 缓存规格已返回'));
+          } else {
+            emitCommandResult(payload);
+            return;
+          }
+          printCacheClassList(mode, catalog, limit);
           showOutro('Done.');
         }
       );
@@ -463,18 +654,23 @@ export function registerCacheCommands(cli: CAC) {
           }
 
           const s = createSpinner();
-          await withSpinner(
+          const result = await withSpinner(
             s,
             `正在删除实例 ${id}...`,
             '❌ 删除失败',
-            () => deleteCacheInstance(id)
+            async () => {
+              await deleteCacheInstance(id);
+              return { instanceId: id };
+            }
           );
+          if (!result) return;
 
           if (isJsonOutput()) {
-            emitCommandResult({ instanceId: id });
+            emitCommandResult(result);
             return;
           }
-          showOutro(`实例 ${id} 已删除`);
+          s.stop(pc.green(`✅ 实例 ${id} 已删除`));
+          showOutro('Done.');
         }
       );
     });
@@ -492,6 +688,7 @@ export const cacheCommandModule = defineCommandModule({
   },
   commands: [
     cacheAddCommand,
+    cacheClassCommand,
     cacheListCommand,
     cacheInfoCommand,
     cacheConnectCommand,

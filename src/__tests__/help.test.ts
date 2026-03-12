@@ -62,6 +62,29 @@ describe('help utils', () => {
     expect(doc?.text).toContain('DNS 解析记录的查看、添加与删除');
   });
 
+  it('builds namespace help for task with deploy-task workflow guidance', () => {
+    const doc = buildHelpDocument({
+      argv: ['node', 'src/cli.ts', 'task', '--help'],
+      version: VERSION
+    });
+
+    expect(doc?.scope).toBe('namespace');
+    expect(doc?.key).toBe('task');
+    expect(doc?.subcommands.map((command) => command.key)).toEqual(expect.arrayContaining([
+      'task config',
+      'task invoke',
+      'task info',
+      'task list',
+      'task stop'
+    ]));
+    expect(doc?.text).toContain('围绕 `deploy --type task` 交付结果');
+    expect(doc?.text).toContain('任务函数没有固定访问 URL');
+    expect(doc?.text).toContain('licell deploy --type task --output json');
+    expect(doc?.text).toContain('Decision Guide:');
+    expect(doc?.text).toContain('Mutate:');
+    expect(doc?.text).toContain('Verify:');
+  });
+
 
   it('builds namespace help for oss with bucket lifecycle commands', () => {
     const doc = buildHelpDocument({
@@ -84,6 +107,22 @@ describe('help utils', () => {
     expect(doc?.text).toContain('Subcommands:');
     expect(doc?.text).toContain('Inspect:');
     expect(doc?.text).toContain('Mutate:');
+  });
+
+  it('builds command help for cache add with explicit mode semantics', () => {
+    const doc = buildHelpDocument({
+      argv: ['node', 'src/cli.ts', 'cache', 'add', '--help'],
+      version: VERSION
+    });
+
+    expect(doc?.scope).toBe('command');
+    expect(doc?.key).toBe('cache add');
+    expect(doc?.options.some((option) => option.primaryFlag === '--mode')).toBe(true);
+    expect(doc?.examples).toContain('licell cache add --mode serverless --class kvcache.cu.g4b.2');
+    expect(doc?.text).toContain('`--mode` 默认为 `classic`');
+    expect(doc?.text).toContain('不会自动降级');
+    expect(doc?.result?.fields.some((field) => field.name === 'requestedMode')).toBe(true);
+    expect(doc?.text).toContain('\n  - `requestedMode` · 请求的创建模式：`classic` 或 `serverless`。');
   });
 
   it('builds nested namespace help for oss object', () => {
@@ -175,6 +214,12 @@ describe('help utils', () => {
 
     expect(doc?.safety?.level).toBe('mutating');
     expect(doc?.text).toContain('创建或更新函数');
+    expect(doc?.result?.fields.some((field) => field.name === 'invokeCommand')).toBe(true);
+    expect(doc?.result?.fields.some((field) => field.name === 'configuredQualifiers[]')).toBe(true);
+    expect(doc?.text).toContain('`--type task` 成功后不会返回固定访问 URL');
+    expect(doc?.text).toContain('Structured Result:');
+    expect(doc?.text).toContain('`invokeCommand` · 当 `type=task` 时，推荐直接复制执行的任务调用命令。');
+    expect(doc?.text).toContain('`configuredQualifiers[]` · 当 `type=task` 时，已经写入 async invoke config 的 qualifier 列表。');
   });
 
   it('builds command help for skills init with argument hints', () => {
@@ -189,6 +234,21 @@ describe('help utils', () => {
     expect(doc?.args[0]?.hint).toContain('claude');
     expect(doc?.examples).toContain('licell skills init codex');
     expect(doc?.text).toContain('Global Options:');
+  });
+
+  it('builds command help for init with task scaffold guidance', () => {
+    const doc = buildHelpDocument({
+      argv: ['node', 'src/cli.ts', 'init', '--help'],
+      version: VERSION
+    });
+
+    expect(doc?.scope).toBe('command');
+    expect(doc?.key).toBe('init');
+    expect(doc?.options.some((option) => option.primaryFlag === '--kind')).toBe(true);
+    expect(doc?.examples).toContain('licell init --runtime nodejs22 --kind task');
+    expect(doc?.text).toContain('`--kind task` 会生成任务函数入口');
+    expect(doc?.result?.fields.some((field) => field.name === 'kind')).toBe(true);
+    expect(doc?.recommendedFlow.some((step) => step.command === 'licell task invoke [name] --output json')).toBe(true);
   });
 
   it('builds command help for auth restore with explicit TTY prompting hints', () => {
@@ -245,6 +305,7 @@ describe('help utils', () => {
     ]));
     expect(doc?.text).toContain('Structured Result:');
     expect(doc?.text).toContain('`healthy` · 是否不存在 error 级阻塞项。');
+    expect(doc?.text).not.toContain('`healthy` · 结果布尔态字段。');
     expect(doc?.text).toContain('Next Actions:');
     expect(doc?.text).toContain('command: licell doctor --output json');
     expect(doc?.text).toContain('`checks[]` · 逐项诊断结果数组。');
@@ -253,6 +314,25 @@ describe('help utils', () => {
     expect(doc?.text).toContain('`priority` · `primary` 为首选下一步，`secondary` 为补充路径。');
     expect(doc?.text).toContain('Decision Guide:');
     expect(doc?.text).toContain('Inspect:');
+  });
+
+  it('builds command help for task list with structured result guidance', () => {
+    const doc = buildHelpDocument({
+      argv: ['node', 'src/cli.ts', 'task', 'list', '--help'],
+      version: VERSION
+    });
+
+    expect(doc?.scope).toBe('command');
+    expect(doc?.key).toBe('task list');
+    expect(doc?.result?.fields.some((field) => field.name === 'tasks[].taskId')).toBe(true);
+    expect(doc?.result?.fields.some((field) => field.name === 'nextToken')).toBe(true);
+    expect(doc?.recommendedFlow.map((step) => step.command)).toEqual(expect.arrayContaining([
+      'licell task list [name] --output json',
+      'licell task info <taskId> [name] --output json',
+      'licell task stop <taskId> [name] --output json'
+    ]));
+    expect(doc?.text).toContain('Structured Result:');
+    expect(doc?.text).toContain('`tasks[]` · 异步任务摘要数组。');
   });
 
   it('treats bare namespace as custom help target', () => {
@@ -360,6 +440,8 @@ describe('domain help', () => {
     expect(doc?.text).toContain('Structured Result:');
     expect(doc?.text).toContain('`stage` · 命令阶段标识。');
     expect(doc?.text).toContain('`finalUrl` · 最终访问 URL。');
+    expect(doc?.text).toContain('\n  - `workflow` · 固定为 app。');
+    expect(doc?.text).not.toContain('`bound` · 结果布尔态字段。\n    - `workflow`');
     expect(doc?.text).not.toContain('Aliases:');
   });
 
@@ -409,6 +491,43 @@ describe('domain help', () => {
       'fn domain bind',
       'fn domain unbind'
     ]));
+  });
+
+  it('builds namespace help for task', () => {
+    const doc = buildHelpDocument({
+      argv: ['node', 'src/cli.ts', 'task', '--help'],
+      version: VERSION
+    });
+
+    expect(doc?.scope).toBe('namespace');
+    expect(doc?.key).toBe('task');
+    expect(doc?.subcommands.map((command) => command.key)).toEqual(expect.arrayContaining([
+      'task config',
+      'task invoke',
+      'task list',
+      'task info',
+      'task stop'
+    ]));
+    expect(doc?.text).toContain('任务函数的异步配置、调用、任务列表、详情查询与终止');
+    expect(doc?.text).toContain('licell deploy --type task');
+    expect(doc?.text).toContain('licell task config set');
+    expect(doc?.text).toContain('licell task invoke');
+  });
+
+  it('builds command help for task config set', () => {
+    const doc = buildHelpDocument({
+      argv: ['node', 'src/cli.ts', 'task', 'config', 'set', '--help'],
+      version: VERSION
+    });
+
+    expect(doc?.scope).toBe('command');
+    expect(doc?.key).toBe('task config set');
+    expect(doc?.result?.outcomeKey).toBe('configured');
+    expect(doc?.optionInsights.some((insight) => insight.flag.includes('--max-retry-attempts'))).toBe(true);
+    expect(doc?.recommendedFlow[0]?.command).toBe('licell task config [name] --output json');
+    expect(doc?.text).toContain('`configured` · 写入后始终为 `true`。');
+    expect(doc?.text).not.toContain('`configured` · 结果布尔态字段。');
+    expect(doc?.text).toContain('licell task invoke [name] --output json');
   });
 
   it('builds structured result help for fn domain unbind', () => {

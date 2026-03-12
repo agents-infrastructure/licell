@@ -57,6 +57,7 @@ export interface ProjectHooksConfig {
 export interface ProjectConfig {
   appName?: string;
   runtime?: string;
+  deployType?: string;
   acrNamespace?: string;
   envs: Record<string, string>;
   resources?: ProjectResourcesConfig;
@@ -146,6 +147,9 @@ export function normalizeProject(raw: unknown): ProjectConfig {
   if (typeof projectRaw.runtime === 'string' && projectRaw.runtime.trim().length > 0) {
     normalized.runtime = projectRaw.runtime.trim();
   }
+  if (typeof projectRaw.deployType === 'string' && projectRaw.deployType.trim().length > 0) {
+    normalized.deployType = projectRaw.deployType.trim();
+  }
   if (typeof projectRaw.acrNamespace === 'string' && projectRaw.acrNamespace.trim().length > 0) {
     normalized.acrNamespace = projectRaw.acrNamespace.trim();
   }
@@ -214,6 +218,7 @@ export function normalizeProject(raw: unknown): ProjectConfig {
   const {
     appName: _a,
     runtime: _r,
+    deployType: _dt,
     acrNamespace: _an,
     envs: _e,
     resources: _res,

@@ -1,0 +1,12 @@
+{
+  "name": "node22-task-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "bun x tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.57",
+    "typescript": "^5.6.3"
+  }
+}

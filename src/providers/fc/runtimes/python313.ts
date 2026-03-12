@@ -2,6 +2,12 @@ import * as $FC from '@alicloud/fc20230330';
 import { mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { preparePythonEntrypoint } from '../runtime-utils';
+import {
+  LICELL_INTERNAL_DEPLOY_MARKER_ENV,
+  LICELL_INTERNAL_PROBE_FIELD,
+  LICELL_INTERNAL_PROBE_KIND,
+  LICELL_INTERNAL_PROBE_VALUE
+} from '../deployment-probe';
 import { preparePython313RuntimeInCode } from '../../../utils/python313-runtime';
 import { createManagedPreferredLauncher, shouldIncludeManagedRuntimeFallback } from '../custom-runtime-launcher';
 import type { RuntimeHandler, ResolvedRuntimeConfig } from '../runtime-handler';
@@ -106,6 +112,9 @@ def _decode_invoke_payload(body_bytes: bytes, headers: dict[str, str]):
     return text
   return body_bytes.hex()
 
+def _is_internal_probe(event) -> bool:
+  return isinstance(event, dict) and event.get(${JSON.stringify(LICELL_INTERNAL_PROBE_FIELD)}) == ${JSON.stringify(LICELL_INTERNAL_PROBE_VALUE)}
+
 def _normalize_response(result):
   if isinstance(result, dict) and "statusCode" in result:
     status = int(result.get("statusCode", 200) or 200)
@@ -140,7 +149,14 @@ class RequestHandler(BaseHTTPRequestHandler):
       else _normalize_event(self.command, self.path, headers, body, source_ip)
     )
     try:
-      result = handler(event, {})
+      if _is_internal_probe(event):
+        result = {
+          "ok": True,
+          "kind": ${JSON.stringify(LICELL_INTERNAL_PROBE_KIND)},
+          "marker": os.getenv(${JSON.stringify(LICELL_INTERNAL_DEPLOY_MARKER_ENV)}, "")
+        }
+      else:
+        result = handler(event, {})
       if asyncio.iscoroutine(result):
         result = asyncio.run(result)
       status, out_headers, out_body = _normalize_response(result)
@@ -184,6 +200,7 @@ export const python313Handler: RuntimeHandler = {
   name: 'python3.13',
   defaultEntry: 'src/main.py',
   unsupportedMessage: '当前地域暂不支持 runtime=python3.13。请改用 nodejs20，或确认 custom.debian12（含 python3.13）在目标地域可用后重试。',
+  supportsInternalDeploymentProbe: true,
 
   async prepareBootFile(entryFile: string, outdir: string) {
     return preparePythonEntrypoint(entryFile, outdir, 'python3.13');
