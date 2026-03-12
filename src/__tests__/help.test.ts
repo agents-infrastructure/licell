@@ -233,6 +233,9 @@ describe('help utils', () => {
     expect(doc?.args[0]?.raw).toBe('[agent]');
     expect(doc?.args[0]?.hint).toContain('claude');
     expect(doc?.examples).toContain('licell skills init codex');
+    expect(doc?.examples).toContain('licell skills init codex --global --output json');
+    expect(doc?.text).toContain('`--global`');
+    expect(doc?.text).toContain('`licell setup` 是它的交互式包装');
     expect(doc?.text).toContain('Global Options:');
   });
 
@@ -292,6 +295,8 @@ describe('help utils', () => {
     expect(doc?.key).toBe('setup');
     expect(doc?.text).toContain('Decision Guide:');
     expect(doc?.text).toContain('Mutate:');
+    expect(doc?.text).toContain('默认按当前项目初始化');
+    expect(doc?.text).toContain('licell setup --agent codex --output json');
     expect(doc?.text).toContain('licell setup --agent codex --global --output json');
   });
 

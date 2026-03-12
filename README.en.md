@@ -258,6 +258,7 @@ If you want Claude Code, Codex, Cursor, or other agents to call Licell directly 
 
 ```bash
 licell setup
+licell setup --agent codex
 licell setup --agent codex --global
 licell setup --agent claude --global
 ```
@@ -296,7 +297,12 @@ If you want the agent to have a richer task-oriented instruction surface inside 
 ```bash
 licell skills init codex
 licell skills init claude
+licell skills init codex --global
 ```
+
+By default, `skills init` writes into the current project. Use `--global` only when you explicitly want user-level global skills.
+
+`licell setup` is the interactive wrapper, but it reuses the same underlying skills write flow.
 
 Skills, MCP, help, and docs are meant to stay aligned through the shared command model.
 

@@ -8,24 +8,52 @@ import { emitCliError, emitCommandEvent, emitCommandResult, isJsonOutput } from 
 import { AUTOMATION_SECTION } from './sections';
 
 type AgentType = 'claude' | 'codex';
+export type SkillsScope = 'global' | 'project';
 
 const SUPPORTED_AGENTS = new Set<AgentType>(['claude', 'codex']);
 
 interface SkillsInitOptions {
   projectRoot?: string;
+  global?: boolean;
   force?: boolean;
+}
+
+export interface SkillsInitExecutionOptions {
+  agent: AgentType;
+  scope: SkillsScope;
+  projectRoot: string;
+  force?: boolean;
+}
+
+export interface SkillsInitExecutionResult {
+  agent: AgentType;
+  scope: SkillsScope;
+  projectRoot: string;
+  writtenFiles: string[];
+  skippedFiles: string[];
+  agentsMdUpdated: boolean;
 }
 
 const skillsInitCommand = defineCliCommand({
   rawName: 'skills init [agent]',
   description: '为 AI Agent 生成 licell skills（claude / codex）',
   options: [
+    { rawName: '--global', description: '全局配置（所有项目生效）' },
     { rawName: '--project-root <path>', description: '目标项目目录（默认当前目录）' },
     { rawName: '--force', description: '覆盖已有文件' }
   ],
   descriptor: {
-    notes: ['未传 `[agent]` 且处于交互终端时，会提示选择 `claude` 或 `codex`。'],
-    examples: ['licell skills init codex', 'licell skills init claude', 'licell skills init codex --project-root .'],
+    summary: '直接生成 licell skills；默认写入当前项目，传 `--global` 时写入用户级全局技能目录。',
+    notes: [
+      '未传 `[agent]` 且处于交互终端时，会提示选择 `claude` 或 `codex`。',
+      '`licell setup` 是它的交互式包装；真正的 skills 写入逻辑与结果字段保持一致。'
+    ],
+    examples: [
+      'licell skills init codex',
+      'licell skills init claude',
+      'licell skills init codex --project-root .',
+      'licell skills init codex --global --output json'
+    ],
     argumentHints: {
       agent: '支持 `claude` | `codex`。'
     },
@@ -39,9 +67,13 @@ const skillsInitCommand = defineCliCommand({
       notes: ['自动化执行时建议显式传入 `[agent]`，避免命令等待交互选择。']
     },
     optionInsights: {
+      '--global': {
+        whenToUse: '希望 skills 对所有项目生效时使用。',
+        cautions: ['会写入用户级全局技能目录，不会更新当前项目 `AGENTS.md`。']
+      },
       '--project-root': {
         whenToUse: '需要把 skills 写入其它项目目录时使用。',
-        cautions: ['会写入目标项目的技能文件与 AGENTS 入口。']
+        cautions: ['仅 project 模式生效；会写入目标项目的技能文件与 AGENTS 入口。']
       },
       '--force': {
         whenToUse: '已有目标文件且你明确希望覆盖时使用。',
@@ -49,7 +81,8 @@ const skillsInitCommand = defineCliCommand({
       }
     },
     recommendedFlow: [
-      { title: '选择目标 Agent', command: 'licell skills init codex', reason: '根据实际使用的 Agent 生成对应技能表面。' },
+      { title: '项目内初始化 skills', command: 'licell skills init codex', reason: '默认把 skills 与 AGENTS 入口写入当前项目。' },
+      { title: '需要全局生效时显式指定', command: 'licell skills init codex --global', reason: '避免 project/global scope 被误判。' },
       { title: '检查写入结果', reason: '确认 skills 文件与 AGENTS 入口写入到了预期目录。' },
       { title: '读取共享命令目录', command: 'licell catalog --output json', reason: '让 Agent 统一通过 catalog / help / JSON output 理解 licell。' }
     ],
@@ -59,17 +92,46 @@ const skillsInitCommand = defineCliCommand({
       fields: [
         { name: 'stage', description: '固定为 `skills`。', required: true },
         { name: 'agent', description: '目标 Agent 类型。', required: true },
-        { name: 'projectRoot', description: '目标项目目录。', required: true },
+        { name: 'scope', description: '`global` 或 `project`。', required: true },
+        { name: 'projectRoot', description: '目标项目目录；global 模式下用于指示当前调用上下文。', required: true },
         { name: 'writtenFiles', description: '实际写入的文件列表。', required: true },
         { name: 'skippedFiles', description: '内容相同而跳过的文件列表。', required: true },
-        { name: 'agentsMdUpdated', description: '是否更新了 `AGENTS.md`。', required: true }
+        { name: 'agentsMdUpdated', description: '是否更新了 `AGENTS.md`；global 模式下固定为 `false`。', required: true }
       ]
     },
     agentTips: [
-      'skills 只负责把 licell 的使用模式注入给 Agent；命令发现与执行统一走 `licell catalog --output json`、`licell <command> --help --output json`、`licell ... --output json`。'
+      'skills 只负责把 licell 的使用模式注入给 Agent；命令发现与执行统一走 `licell catalog --output json`、`licell <command> --help --output json`、`licell ... --output json`。',
+      '自动化调用时，project/global scope 最好显式传清楚，不要依赖外部包装命令的默认行为。'
     ]
   }
 });
+
+export async function executeSkillsInit(options: SkillsInitExecutionOptions): Promise<SkillsInitExecutionResult> {
+  const {
+    getSkillFiles,
+    getGlobalSkillFiles,
+    writeSkillFiles,
+    ensureAgentsMdEntry
+  } = await import('../utils/skills-scaffold');
+
+  const files = options.scope === 'global' ? getGlobalSkillFiles(options.agent) : getSkillFiles(options.agent);
+  const root = options.scope === 'global' ? '' : options.projectRoot;
+  const { written, skipped } = writeSkillFiles(root, files, Boolean(options.force));
+
+  let agentsMdUpdated = false;
+  if (options.scope === 'project') {
+    agentsMdUpdated = ensureAgentsMdEntry(options.projectRoot).updated;
+  }
+
+  return {
+    agent: options.agent,
+    scope: options.scope,
+    projectRoot: options.projectRoot,
+    writtenFiles: written,
+    skippedFiles: skipped,
+    agentsMdUpdated
+  };
+}
 
 export function registerSkillsCommands(cli: CAC) {
   registerCliCommand(cli, skillsInitCommand)
@@ -84,7 +146,6 @@ export function registerSkillsCommands(cli: CAC) {
       const projectRoot = typeof options.projectRoot === 'string' && options.projectRoot.trim()
         ? options.projectRoot.trim()
         : process.cwd();
-      const { getSkillFiles, writeSkillFiles, ensureAgentsMdEntry } = await import('../utils/skills-scaffold');
 
       try {
         let agent: AgentType;
@@ -110,37 +171,44 @@ export function registerSkillsCommands(cli: CAC) {
           throw new Error('非交互模式下必须指定 agent 参数（claude / codex）');
         }
 
-        const s = createSpinner();
-        s.start(`正在生成 ${agent} skills...`);
+        const scope: SkillsScope = options.global ? 'global' : 'project';
 
-        const files = getSkillFiles(agent);
-        const { written, skipped } = writeSkillFiles(projectRoot, files, Boolean(options.force));
-        const agentsMd = ensureAgentsMdEntry(projectRoot);
+        const s = createSpinner();
+        s.start(`正在生成 ${scope === 'global' ? '全局' : '项目'} ${agent} skills...`);
+
+        const result = await executeSkillsInit({
+          agent,
+          scope,
+          projectRoot,
+          force: options.force
+        });
 
         s.stop(pc.green('✅ Skills 生成完成'));
 
         console.log(`agent:    ${pc.cyan(agent)}`);
-        if (written.length > 0) {
+        console.log(`scope:    ${pc.cyan(scope)}`);
+        if (result.writtenFiles.length > 0) {
           console.log(`\n已写入文件:`);
-          for (const f of written) console.log(`  ${pc.green('+')} ${f}`);
+          for (const f of result.writtenFiles) console.log(`  ${pc.green('+')} ${f}`);
         }
-        if (skipped.length > 0) {
+        if (result.skippedFiles.length > 0) {
           console.log(`\n已跳过（内容相同）:`);
-          for (const f of skipped) console.log(`  ${pc.gray('=')} ${f}`);
+          for (const f of result.skippedFiles) console.log(`  ${pc.gray('=')} ${f}`);
         }
-        if (agentsMd.updated) {
+        if (result.scope === 'project' && result.agentsMdUpdated) {
           console.log(`  ${pc.green('+')} AGENTS.md`);
-        } else {
+        } else if (result.scope === 'project') {
           console.log(`  ${pc.gray('=')} AGENTS.md（已包含 licell 条目）`);
         }
 
         if (isJsonOutput()) {
           emitCommandResult({
-            agent,
-            projectRoot,
-            writtenFiles: written,
-            skippedFiles: skipped,
-            agentsMdUpdated: agentsMd.updated
+            agent: result.agent,
+            scope: result.scope,
+            projectRoot: result.projectRoot,
+            writtenFiles: result.writtenFiles,
+            skippedFiles: result.skippedFiles,
+            agentsMdUpdated: result.agentsMdUpdated
           }, { stage: 'skills' });
         } else {
           showOutro('Done.');
@@ -162,7 +230,7 @@ export const skillsCommandModule = defineCommandModule({
   namespaces: {
     skills: {
       summary: '为 Claude / Codex 生成 licell skills 与 AGENTS 接入文件。',
-      examples: ['licell skills init codex', 'licell skills init claude']
+      examples: ['licell skills init codex', 'licell skills init codex --global', 'licell skills init claude']
     }
   },
   commands: [skillsInitCommand]

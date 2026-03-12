@@ -284,7 +284,12 @@ licell deploy --type api --output json
 ```bash
 licell skills init codex
 licell skills init claude
+licell skills init codex --global
 ```
+
+默认会把 skills 写入当前项目；只有显式传 `--global` 时，才会写到用户级全局技能目录。
+
+`licell setup` 是交互式包装命令，底层仍然复用同一套 skills 写入逻辑。
 
 Skills 与 catalog、help、README 共享同一套命令描述体系，所以更容易保持一致。
 
@@ -690,8 +695,8 @@ licell e2e cleanup <runId>
 |------|------|----------|
 | `licell doctor` | 诊断本机 licell 登录态、云端权限/目标资源/域名入口、项目配置与部署前置条件 | `--runtime`, `--entry`, `--docker-daemon` |
 | `licell catalog` | 输出共享 CLI 命令目录，供 Agent / 自动化发现命令、选项和结构化契约 | `--root-command`, `--command-key` |
-| `licell skills init [agent]` | 为 AI Agent 生成 licell skills（claude / codex） | `--project-root`, `--force` |
-| `licell setup` | 安装后引导：配置 AI Agent skills | `--agent`, `--global`, `--project-root` |
+| `licell skills init [agent]` | 为 AI Agent 生成 licell skills（claude / codex） | `--global`, `--project-root`, `--force` |
+| `licell setup` | 安装后引导：交互式配置 AI Agent skills | `--agent`, `--global`, `--project-root` |
 | `licell completion [shell]` | 输出 shell 补全脚本（bash/zsh） | `--engine` |
 | `licell upgrade` | 按当前安装来源升级 licell | `--channel`, `--target-version`, `--repo` |
 | `licell e2e cleanup [runId]` | 清理指定 E2E run 产生的资源 | `--manifest`, `--keep-workspace`, `--yes` |
@@ -761,7 +766,7 @@ licell deploy --type api --target preview
 ### 我希望 Agent 自动、安全地部署
 
 ```bash
-licell setup --agent codex --global
+licell setup --agent codex
 licell catalog --output json
 licell deploy spec nodejs22 --output json
 licell deploy check --runtime nodejs22 --entry src/index.ts --output json
