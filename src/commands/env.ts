@@ -75,7 +75,29 @@ const envPullCommand = defineCliCommand({
   description: '拉取云端环境变量',
   options: [
     { rawName: '--target <target>', description: '从指定 FC alias 拉取环境变量（如 prod/preview）' }
-  ]
+  ],
+  descriptor: {
+    notes: [
+      '默认会把云端环境变量同步到本地 `.licell/project.json` 与 `.env`。',
+      '传入 `--target` 时，会把指定 alias/version 的环境变量写入 `.env`，但不会覆盖本地项目默认环境变量。'
+    ],
+    optionInsights: {
+      '--target': {
+        whenToUse: '需要查看或导出某个 alias / version 的环境变量快照时使用。',
+        cautions: ['该模式只更新 `.env`，不会覆盖本地 `.licell/project.json` 默认 env。']
+      }
+    },
+    result: {
+      summary: '返回本次拉取的 qualifier、环境变量数量、`.env` 写入结果，以及是否同步了本地项目配置。',
+      fields: [
+        { name: 'qualifier', description: '本次拉取的 alias / version；默认函数环境时为 null。' },
+        { name: 'count', description: '本次拉取到的环境变量数量。' },
+        { name: 'envFile', description: '写入的本地 `.env` 文件路径。' },
+        { name: 'emptied', description: '云端无环境变量时，是否已清空 `.env`。' },
+        { name: 'projectConfigSynced', description: '是否已把拉取结果同步回本地 `.licell/project.json`。' }
+      ]
+    }
+  }
 });
 
 export function registerEnvCommands(cli: CAC) {
@@ -228,7 +250,10 @@ export function registerEnvCommands(cli: CAC) {
             () => pullFunctionEnvs(project.appName, qualifier)
           );
           if (!envs) return;
-          Config.setProject({ envs }, { replaceEnvs: true });
+          const projectConfigSynced = !qualifier;
+          if (projectConfigSynced) {
+            Config.setProject({ envs }, { replaceEnvs: true });
+          }
           const entries = Object.entries(envs);
           if (entries.length === 0) {
             try {
@@ -237,13 +262,18 @@ export function registerEnvCommands(cli: CAC) {
               throw new Error(`写入 .env 文件失败: ${e instanceof Error ? e.message : String(e)}`);
             }
             if (!isJsonOutput()) {
-              s.stop(pc.yellow('云端无环境变量，已清空本地 .env'));
+              s.stop(pc.yellow(
+                projectConfigSynced
+                  ? '云端无环境变量，已清空本地 .env'
+                  : `alias=${qualifier} 当前无环境变量，已清空本地 .env（未覆盖项目配置）`
+              ));
             }
             emitCommandResult({
               qualifier: qualifier || null,
               count: 0,
               envFile: '.env',
-              emptied: true
+              emptied: true,
+              projectConfigSynced
             });
             return;
           }
@@ -255,13 +285,18 @@ export function registerEnvCommands(cli: CAC) {
           }
           ensureEnvIgnored();
           if (!isJsonOutput()) {
-            s.stop(pc.green(`✅ 已拉取 ${entries.length} 个环境变量并写入 .env`));
+            s.stop(pc.green(
+              projectConfigSynced
+                ? `✅ 已拉取 ${entries.length} 个环境变量并写入 .env`
+                : `✅ 已拉取 alias=${qualifier} 的 ${entries.length} 个环境变量并写入 .env（未覆盖项目配置）`
+            ));
           }
           emitCommandResult({
             qualifier: qualifier || null,
             count: entries.length,
             envFile: '.env',
-            emptied: false
+            emptied: false,
+            projectConfigSynced
           });
         }
       );

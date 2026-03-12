@@ -269,6 +269,19 @@ describe('help utils', () => {
     expect(doc?.text).toContain('仅在 TTY 交互环境下允许省略 token / passkey');
   });
 
+  it('builds command help for env pull with alias-safe sync guidance', () => {
+    const doc = buildHelpDocument({
+      argv: ['node', 'src/cli.ts', 'env', 'pull', '--help'],
+      version: VERSION
+    });
+
+    expect(doc?.scope).toBe('command');
+    expect(doc?.key).toBe('env pull');
+    expect(doc?.text).toContain('默认会把云端环境变量同步到本地 `.licell/project.json` 与 `.env`。');
+    expect(doc?.text).toContain('该模式只更新 `.env`，不会覆盖本地 `.licell/project.json` 默认 env。');
+    expect(doc?.text).toContain('`projectConfigSynced` · 是否已把拉取结果同步回本地 `.licell/project.json`。');
+  });
+
   it('builds command help for setup with explicit task hints', () => {
     const doc = buildHelpDocument({
       argv: ['node', 'src/cli.ts', 'setup', '--help'],
