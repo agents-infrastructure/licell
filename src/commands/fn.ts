@@ -8,13 +8,16 @@ import {
   listFunctions,
   removeFunction
 } from '../providers/fc';
+import { tailLogs } from '../providers/logs';
 import {
   ensureAuthOrExit,
   ensureDestructiveActionConfirmed,
   isInteractiveTTY,
   toOptionalString,
   parseListLimit,
+  parseOptionalPositiveInt,
   createSpinner,
+  showIntro,
   showOutro,
   withSpinner
 } from '../utils/cli-shared';
@@ -58,6 +61,57 @@ const fnRmCommand = defineCliCommand({
     { rawName: '--force', description: '级联删除触发器、alias、已发布版本后再删除函数' },
     { rawName: '--yes', description: '跳过二次确认（危险）' }
   ]
+});
+
+const fnLogsCommand = defineCliCommand({
+  rawName: 'fn logs [name]',
+  description: '查看函数日志（默认实时流式）',
+  options: [
+    { rawName: '--once', description: '仅拉取一次最近日志并退出' },
+    { rawName: '--window <seconds>', description: '一次拉取模式的时间窗（默认 120 秒）' },
+    { rawName: '--lines <n>', description: '每次请求最大日志条数（默认 1000）' }
+  ],
+  descriptor: {
+    title: 'View FC function logs',
+    notes: [
+      '默认读取当前函数在 FC 默认 SLS project / logstore 中的日志；会自动探测 FC 2.0 / 3.0 的默认日志项目。',
+      '需要跨 project/logstore 或自定义 SLS 语法时，改用 `licell logs query` 或 `licell logs tail`。',
+      '当使用 `--output json` 时，会自动退化为一次性拉取模式，避免持续流式输出。'
+    ],
+    examples: [
+      'licell fn logs',
+      'licell fn logs my-function',
+      'licell fn logs my-function --once --window 300 --output json',
+      'licell logs query -p your-project -s your-store \'level:error\' --output json'
+    ],
+    optionInsights: {
+      '--once': { whenToUse: '需要抓取最近一批日志并立即退出时使用。' },
+      '--window': { whenToUse: '一次性抓取时需要扩大或缩小时间范围时使用。' },
+      '--lines': { whenToUse: '希望限制单次请求返回的最大日志条数时使用。' }
+    },
+    recommendedFlow: [
+      { title: '先单次拉取', command: 'licell fn logs [name] --once --output json', reason: '先确认当前函数是否有日志以及日志格式。' },
+      { title: '必要时扩大时间窗', command: 'licell fn logs [name] --once --window 300 --output json', reason: '排查较早前的报错或冷启动日志。' },
+      { title: '进入实时流', command: 'licell fn logs [name]', reason: '确认问题仍在发生时，持续观察新日志。' },
+      { title: '切换到通用 SLS 查询', command: 'licell logs query -p <project> -s <store> --output json', reason: '需要跨 logstore 或使用更复杂的查询条件时使用。' }
+    ],
+    result: {
+      summary: '返回某个函数的一次性日志抓取结果。',
+      outcomeKey: 'lines',
+      fields: [
+        { name: 'stage', description: '固定为 `fn.logs`。', required: true },
+        { name: 'functionName', description: '实际查询的函数名。', required: true },
+        { name: 'once', description: '是否为一次性抓取模式。', required: true },
+        { name: 'lines', description: '日志行数组；流式模式下不返回。', required: true },
+        { name: 'count', description: '返回日志条数。', required: true }
+      ]
+    },
+    agentTips: [
+      'Agent 优先使用 `licell fn logs [name] --once --output json`。',
+      '如果要查询任意 SLS logstore，改用 `licell logs query --output json`。'
+    ],
+    related: ['logs query', 'logs tail', 'fn info', 'task info']
+  }
 });
 
 export function registerFnCommands(cli: CAC) {
@@ -278,16 +332,54 @@ export function registerFnCommands(cli: CAC) {
         }
       );
     });
+
+  registerCliCommand(cli, fnLogsCommand)
+    .action(async (name: string | undefined, options: { once?: unknown; window?: unknown; lines?: unknown }) => {
+      await executeWithAuthRecovery(
+        {
+          commandLabel: commandInvocation(fnLogsCommand),
+          interactiveTTY: isInteractiveTTY(),
+          requiredCapabilities: ['fc', 'logs']
+        },
+        async () => {
+          showIntro(pc.bgBlue(pc.white(' 📡 Function Log Stream ')));
+          ensureAuthOrExit();
+          const project = Config.getProject();
+          const functionName = toOptionalString(name) || project.appName;
+          if (!functionName) {
+            throw new Error('请传入函数名，或先在当前项目执行 licell deploy 生成 appName');
+          }
+
+          const once = isJsonOutput() ? true : Boolean(options.once);
+          const result = await tailLogs(functionName, {
+            once,
+            windowSeconds: parseOptionalPositiveInt(options.window, '--window'),
+            lineLimit: parseOptionalPositiveInt(options.lines, '--lines'),
+            silent: isJsonOutput()
+          });
+
+          if (isJsonOutput()) {
+            emitCommandResult({
+              stage: 'fn.logs',
+              functionName,
+              once,
+              lines: result && 'lines' in result ? result.lines : [],
+              count: result && 'logs' in result ? result.logs.length : 0
+            });
+          }
+        }
+      );
+    });
 }
 
 export const fnCommandModule = defineCommandModule({
   section: DELIVERY_SECTION,
   register: registerFnCommands,
-  commands: [fnListCommand, fnInfoCommand, fnInvokeCommand, fnRmCommand],
+  commands: [fnListCommand, fnInfoCommand, fnInvokeCommand, fnRmCommand, fnLogsCommand],
   namespaces: {
     fn: {
-      summary: '函数与 FC 自定义域名的查看、详情、调用与删除。',
-      examples: ['licell fn list', 'licell fn info hello-world', 'licell fn domain list', 'licell fn invoke hello-world --output json']
+      summary: '函数、函数日志与 FC 自定义域名的查看、详情、调用与删除。',
+      examples: ['licell fn list', 'licell fn info hello-world', 'licell fn logs hello-world --once --output json', 'licell fn domain list', 'licell fn invoke hello-world --output json']
     }
   },
   mergeBundles: [fnDomainCommandBundle]

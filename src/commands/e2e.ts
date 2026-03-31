@@ -356,7 +356,10 @@ function runCliCommand(
   const result = spawnSync(invocation.command, argv, {
     cwd,
     stdio: 'inherit',
-    env: buildE2eChildEnv(cwd)
+    env: {
+      ...buildE2eChildEnv(cwd),
+      ...(invocation.env || {})
+    }
   });
   if (result.status !== 0) {
     const signal = result.signal ? ` signal=${result.signal}` : '';
@@ -374,7 +377,10 @@ function runCliCommandCapture(
   const result = spawnSync(invocation.command, argv, {
     cwd,
     stdio: ['ignore', 'pipe', 'pipe'],
-    env: buildE2eChildEnv(cwd),
+    env: {
+      ...buildE2eChildEnv(cwd),
+      ...(invocation.env || {})
+    },
     encoding: 'utf8',
     maxBuffer: 64 * 1024 * 1024
   });
@@ -1311,7 +1317,7 @@ async function executeE2eRun(options: E2eRunOptions) {
           runStep(ctx, 'release-prune-preview', ['release', 'prune', '--preview', '--keep', '2']);
         }
 
-        runStep(ctx, 'logs-once', ['logs', '--once', '--window', '180', '--lines', '200']);
+        runStep(ctx, 'logs-once', ['fn', 'logs', '--once', '--window', '180', '--lines', '200']);
         runStep(ctx, 'oss-list', ['oss', 'list', '--limit', '5']);
         runStep(ctx, 'db-list', ['db', 'list', '--limit', '5']);
         runStep(ctx, 'cache-list', ['cache', 'list', '--limit', '5']);

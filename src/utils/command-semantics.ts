@@ -27,7 +27,7 @@ const TEXT_PHASE_RULES: CommandTextPhaseRule[] = [
   {
     phase: 'inspect',
     chineseKeywords: ['查看', '先看', '现状', '状态', '详情', '规格', '日志', '拉出来'],
-    englishTokens: ['list', 'info', 'check', 'spec', 'status', 'whoami', 'logs', 'describe', 'get', 'pull', 'tail', 'diff']
+    englishTokens: ['list', 'info', 'check', 'spec', 'status', 'whoami', 'logs', 'query', 'describe', 'get', 'pull', 'tail', 'diff']
   },
   {
     phase: 'verify',
@@ -47,9 +47,9 @@ const TEXT_PHASE_RULES: CommandTextPhaseRule[] = [
 ];
 
 const PREFERRED_SUBCOMMAND_SUFFIXES: Record<CommandTaskPhase, string[]> = {
-  inspect: ['list', 'info', 'check', 'spec', 'status', 'whoami', 'logs', 'describe', 'get', 'pull', 'tail'],
+  inspect: ['list', 'info', 'check', 'spec', 'status', 'whoami', 'logs', 'query', 'describe', 'get', 'pull', 'tail'],
   mutate: ['add', 'bind', 'create', 'set', 'update', 'deploy', 'init', 'upgrade', 'promote', 'rollback', 'unbind', 'rm', 'remove', 'delete', 'prune', 'repair', 'public-access', 'rotate-password', 'reset-password', 'config', 'invoke', 'serve', 'start', 'restart'],
-  verify: ['info', 'list', 'status', 'logs', 'describe', 'get', 'whoami', 'pull', 'tail'],
+  verify: ['info', 'list', 'status', 'logs', 'query', 'describe', 'get', 'whoami', 'pull', 'tail'],
   cleanup: ['unbind', 'rm', 'remove', 'delete', 'prune', 'rollback', 'stop']
 };
 

@@ -613,10 +613,12 @@ licell e2e cleanup <runId>
 | `licell release promote [versionId]` | 发布并切流到目标别名 | `--target` |
 | `licell release prune` | 清理历史函数版本（默认仅预览） | `--keep`, `--apply`, `--yes` |
 | `licell release rollback <versionId>` | 回滚到指定函数版本 | `--target` |
-| `licell logs` | 查看云端日志（默认实时流式） | `--once`, `--window`, `--lines` |
+| `licell logs query [query]` | 按 SLS project/logstore/query 一次性检索日志 | `--project`, `--store`, `--region` |
+| `licell logs tail [query]` | 按 SLS project/logstore/query 持续跟随日志流 | `--project`, `--store`, `--region` |
 | `licell fn info [name]` | 查看函数详情 | `--target` |
 | `licell fn invoke [name]` | 调用函数（同步） | `--target`, `--payload`, `--file` |
 | `licell fn list` | 查看函数列表 | `--limit`, `--prefix` |
+| `licell fn logs [name]` | 查看函数日志（默认实时流式） | `--once`, `--window`, `--lines` |
 | `licell fn rm [name]` | 删除函数 | `--force`, `--yes` |
 | `licell fn domain bind <domain>` | 绑定或更新 FC 自定义域名（资源级，不默认改 DNS） | `--function`, `--target`, `--path` |
 | `licell fn domain info <domain>` | 查看 FC 自定义域名详情 | — |

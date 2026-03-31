@@ -13,6 +13,7 @@ import { getOssBucketInfo, listOssBuckets, listOssObjects, resolveOssBucketName,
 import { listCacheInstances } from './redis/query';
 import { listSupabaseInstances } from './supabase/query';
 import { listDnsRecords, normalizeDnsValue, resolveAuthoritativeDnsSnapshot } from './dns';
+import { discoverDefaultFcSlsTargets } from './logs';
 import { isAccessDeniedError, isAuthCredentialInvalidError, isNotFoundError, isTransientError } from '../utils/alicloud-error';
 import { AUTH_CAPABILITY_LABELS, type AuthCapability } from '../utils/auth-recovery';
 import type { AuthConfig, ProjectConfig } from '../utils/config';
@@ -1151,10 +1152,14 @@ async function probeLogsCapability(auth: AuthConfig): Promise<DoctorCloudCapabil
   }));
   const to = Math.floor(Date.now() / 1000);
   const from = Math.max(0, to - 60);
-  const project = `aliyun-fc-${auth.region}-${auth.accountId}`;
   try {
+    const targets = await discoverDefaultFcSlsTargets(auth, auth.region);
+    const target = targets[0];
+    if (!target) {
+      throw new Error('未发现默认 FC 日志项目');
+    }
     await withTimeout(
-      client.getLogs(project, 'function-log', new $SLS.GetLogsRequest({
+      client.getLogs(target.project, target.logstore, new $SLS.GetLogsRequest({
         from,
         to,
         query: '*',

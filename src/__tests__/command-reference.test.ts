@@ -122,6 +122,21 @@ describe('buildAgentCommandCatalog', () => {
     expect(taskStop?.result?.fields.some((field) => field.name === 'functionName')).toBe(true);
     expect(taskStop?.recommendedFlow.some((step) => step.command === 'licell task info <taskId> [name] --output json')).toBe(true);
 
+    const fnLogs = catalog.commands.find((command) => command.key === 'fn logs');
+    expect(fnLogs?.title).toBe('View FC function logs');
+    expect(fnLogs?.examples).toContain('licell fn logs my-function --once --window 300 --output json');
+    expect(fnLogs?.result?.fields.some((field) => field.name === 'functionName')).toBe(true);
+
+    const logsQuery = catalog.commands.find((command) => command.key === 'logs query');
+    expect(logsQuery?.title).toBe('Query SLS logs');
+    expect(logsQuery?.examples).toContain('licell logs query -p your-project -s your-store --from 1710000000 --to 1710000300 --output json');
+    expect(logsQuery?.result?.fields.some((field) => field.name === 'project')).toBe(true);
+
+    const logsTail = catalog.commands.find((command) => command.key === 'logs tail');
+    expect(logsTail?.title).toBe('Tail SLS logs');
+    expect(logsTail?.examples).toContain('licell logs tail -p your-project -s your-store \'status:500\'');
+    expect(logsTail?.result).toBeUndefined();
+
     const cacheAdd = catalog.commands.find((command) => command.key === 'cache add');
     expect(cacheAdd?.options.some((option) => option.primaryFlag === '--mode')).toBe(true);
     expect(cacheAdd?.examples).toContain('licell cache add --mode serverless --class kvcache.cu.g4b.2');
@@ -157,6 +172,9 @@ describe('renderSkillCommandReference', () => {
     expect(markdown).toContain('licell oss domain bind <bucket> <domain>');
     expect(markdown).toContain('licell oss object get <bucket> <key> [file]');
     expect(markdown).toContain('licell oss sync down <bucket> [prefix]');
+    expect(markdown).toContain('licell fn logs [name]');
+    expect(markdown).toContain('licell logs query [query]');
+    expect(markdown).toContain('licell logs tail [query]');
     expect(markdown).toContain('licell cache add --mode serverless --class kvcache.cu.g4b.2');
     expect(markdown).toContain('licell task config [name]');
     expect(markdown).toContain('licell task config set [name]');

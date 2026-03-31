@@ -32,7 +32,9 @@ function inferDoctorCommandIntent(commandTemplate: string, commandKey: string | 
     || key === 'deploy spec'
     || key.endsWith(' list')
     || key.endsWith(' info')
-    || key === 'logs'
+    || key === 'fn logs'
+    || key === 'logs query'
+    || key === 'logs tail'
     || key.startsWith('dns records list')
   ) {
     return 'inspect';

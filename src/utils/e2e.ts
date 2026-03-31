@@ -173,6 +173,7 @@ export function ensureEmptyOrMissingDir(path: string) {
 export interface CliSelfInvocation {
   command: string;
   prefixArgs: string[];
+  env?: Record<string, string>;
 }
 
 export function resolveSelfCliInvocation(
@@ -183,17 +184,24 @@ export function resolveSelfCliInvocation(
   existsFn: (path: string) => boolean = existsSync
 ): CliSelfInvocation {
   const scriptArg = processArgv[1];
+  const invocationEnv: Record<string, string> = {};
+  const tsxTsconfigPath = process.env.TSX_TSCONFIG_PATH;
+  if (tsxTsconfigPath) {
+    invocationEnv.TSX_TSCONFIG_PATH = resolve(cwd, tsxTsconfigPath);
+  }
   if (scriptArg && typeof scriptArg === 'string' && !scriptArg.startsWith('-')) {
     const scriptPath = resolve(cwd, scriptArg);
     if (existsFn(scriptPath)) {
       return {
         command: execPath,
-        prefixArgs: [...execArgv, scriptPath]
+        prefixArgs: [...execArgv, scriptPath],
+        ...(Object.keys(invocationEnv).length > 0 ? { env: invocationEnv } : {})
       };
     }
   }
   return {
     command: execPath,
-    prefixArgs: []
+    prefixArgs: [],
+    ...(Object.keys(invocationEnv).length > 0 ? { env: invocationEnv } : {})
   };
 }

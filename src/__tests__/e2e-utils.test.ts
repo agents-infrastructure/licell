@@ -123,4 +123,27 @@ describe('e2e utils', () => {
       prefixArgs: []
     });
   });
+
+  it('resolves tsx tsconfig path to an absolute env override', () => {
+    const previous = process.env.TSX_TSCONFIG_PATH;
+    process.env.TSX_TSCONFIG_PATH = 'tsconfig.json';
+    try {
+      const invocation = resolveSelfCliInvocation(
+        ['node', 'src/cli.ts', 'e2e', 'run'],
+        '/usr/local/bin/node',
+        ['--require', '/tmp/tsx/preflight.cjs'],
+        '/repo',
+        (path) => path === '/repo/src/cli.ts'
+      );
+      expect(invocation.env).toEqual({
+        TSX_TSCONFIG_PATH: '/repo/tsconfig.json'
+      });
+    } finally {
+      if (previous === undefined) {
+        delete process.env.TSX_TSCONFIG_PATH;
+      } else {
+        process.env.TSX_TSCONFIG_PATH = previous;
+      }
+    }
+  });
 });

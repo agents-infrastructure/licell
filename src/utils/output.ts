@@ -416,7 +416,9 @@ function inferCliErrorCommandIntent(commandTemplate: string, commandKey: string 
     || key === 'help'
     || key.endsWith(' list')
     || key.endsWith(' info')
-    || key === 'logs'
+    || key === 'fn logs'
+    || key === 'logs query'
+    || key === 'logs tail'
     || key === 'deploy spec'
     || key.startsWith('dns records list')
   ) {

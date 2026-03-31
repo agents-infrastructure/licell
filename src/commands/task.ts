@@ -311,7 +311,7 @@ const taskInfoCommand = defineCliCommand({
     recommendedFlow: [
       { title: '先获得 taskId', command: 'licell task invoke [name] --output json', reason: '直接提交一个新任务，并把返回的 `taskId` 带入后续排查。' },
       { title: '读取任务详情', command: 'licell task info <taskId> [name] --output json', reason: '查看状态、return payload、事件流和失败原因。' },
-      { title: '必要时结合日志排查', command: 'licell logs --once --output json', reason: '当 `taskErrorMessage` 或 `returnPayload` 仍不足以定位问题时，继续查看函数日志。' }
+      { title: '必要时结合日志排查', command: 'licell fn logs [name] --once --output json', reason: '当 `taskErrorMessage` 或 `returnPayload` 仍不足以定位问题时，继续查看函数日志。' }
     ],
     result: {
       outcomeKey: 'taskId',

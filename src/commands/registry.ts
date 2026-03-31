@@ -56,7 +56,7 @@ export const licellRootHelpSurface = defineCommandBundle({
         {
           title: '把命令接入自动化脚本',
           description: '优先选择支持结构化结果的命令，并统一追加 --output json。',
-          commands: ['licell deploy --output json', 'licell logs --once --output json']
+          commands: ['licell deploy --output json', 'licell fn logs --once --output json']
         }
       ]
     }
