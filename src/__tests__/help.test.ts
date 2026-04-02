@@ -270,6 +270,23 @@ describe('help utils', () => {
     expect(doc?.text).toContain('不要与 `--expires` 同时传入');
   });
 
+  it('builds command help for auth inspect with token decode guidance', () => {
+    const doc = buildHelpDocument({
+      argv: ['node', 'src/cli.ts', 'auth', 'inspect', '--help'],
+      version: VERSION
+    });
+
+    expect(doc?.scope).toBe('command');
+    expect(doc?.key).toBe('auth inspect');
+    expect(doc?.args[0]?.raw).toBe('<token>');
+    expect(doc?.args[0]?.hint).toContain('TTY 交互环境下可省略并提示输入');
+    expect(doc?.examples).toContain('licell auth inspect licell-auth-v1.<token> --output json');
+    expect(doc?.text).toContain('不会访问网络');
+    expect(doc?.text).toContain('签名下载 URL');
+    expect(doc?.text).toContain('Structured Result:');
+    expect(doc?.result?.fields.some((field) => field.name === 'signedGet.host')).toBe(true);
+  });
+
   it('builds command help for auth restore with explicit TTY prompting hints', () => {
     const doc = buildHelpDocument({
       argv: ['node', 'src/cli.ts', 'auth', 'restore', '--help'],

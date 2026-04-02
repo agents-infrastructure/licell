@@ -354,12 +354,14 @@ export function decodeAuthTransferToken(token: string): AuthTransferTokenPayload
     const payload = JSON.parse(fromBase64Url(trimmed.slice(prefix.length)).toString('utf8')) as AuthTransferTokenPayload;
     if (
       payload.kind !== 'licell-auth-restore'
+      || typeof payload.schemaVersion !== 'string'
       || typeof payload.bucket !== 'string'
       || typeof payload.key !== 'string'
       || typeof payload.region !== 'string'
       || typeof payload.signedGetUrl !== 'string'
       || typeof payload.expiresAt !== 'string'
       || typeof payload.objectSha256 !== 'string'
+      || typeof payload.createdAt !== 'string'
     ) {
       throw new Error('restore token 内容不完整');
     }

@@ -109,6 +109,7 @@
 |------|------|----------|
 | `licell login` | 配置阿里云凭证 | `--account-id`, `--ak`, `--sk` |
 | `licell auth export [passkey]` | 加密打包当前 licell 全局凭证状态到私有 OSS，并生成 restore token | `--bucket`, `--expires`, `--expires-hours` |
+| `licell auth inspect <token>` | 解析并查看 restore token 的内容与有效期 | — |
 | `licell auth repair` | 修复凭证权限（推荐：用超级 AK/SK 自动补齐 licell 最小权限并继续使用） | `--account-id`, `--ak`, `--sk` |
 | `licell auth restore <token> [passkey]` | 使用 restore token + passkey 一键恢复 licell 全局凭证状态 | `--yes` |
 | `licell logout` | 清除本地凭证 | — |

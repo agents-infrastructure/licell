@@ -97,6 +97,11 @@ describe('buildAgentCommandCatalog', () => {
     expect(authExport?.examples).toContain('licell auth export --expires 30d --output json');
     expect(authExport?.optionInsights.some((insight) => insight.flag.includes('--expires'))).toBe(true);
 
+    const authInspect = catalog.commands.find((command) => command.key === 'auth inspect');
+    expect(authInspect?.examples).toContain('licell auth inspect licell-auth-v1.<token> --output json');
+    expect(authInspect?.automation?.explicitInputs).toEqual(expect.arrayContaining(['<token>']));
+    expect(authInspect?.result?.fields.some((field) => field.name === 'signedGet.host')).toBe(true);
+
     const authRestore = catalog.commands.find((command) => command.key === 'auth restore');
     expect(authRestore?.interaction?.ttyOnly).toBe(true);
     expect(authRestore?.interaction?.prompts.some((item) => item.includes('restore token'))).toBe(true);
@@ -174,6 +179,7 @@ describe('renderSkillCommandReference', () => {
     expect(markdown).toContain('licell setup');
     expect(markdown).toContain('licell upgrade');
     expect(markdown).toContain('licell auth repair');
+    expect(markdown).toContain('licell auth inspect <token>');
     expect(markdown).toContain('licell oss create <bucket>');
     expect(markdown).toContain('licell oss domain bind <bucket> <domain>');
     expect(markdown).toContain('licell oss object get <bucket> <key> [file]');

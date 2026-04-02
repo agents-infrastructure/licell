@@ -31,7 +31,8 @@ const {
   hasExistingAuthTransferTargetsMock,
   restoreAuthTransferArchiveMock,
   emitCommandEventMock,
-  emitCommandResultMock
+  emitCommandResultMock,
+  isJsonOutputMock
 } = vi.hoisted(() => ({
   getGlobalConfigMock: vi.fn(),
   setGlobalConfigMock: vi.fn(),
@@ -62,7 +63,8 @@ const {
   hasExistingAuthTransferTargetsMock: vi.fn(),
   restoreAuthTransferArchiveMock: vi.fn(),
   emitCommandEventMock: vi.fn(),
-  emitCommandResultMock: vi.fn()
+  emitCommandResultMock: vi.fn(),
+  isJsonOutputMock: vi.fn(() => false)
 }));
 
 vi.mock('@clack/prompts', () => ({
@@ -129,7 +131,7 @@ vi.mock('../utils/output', () => ({
   emitCliEvent: vi.fn(),
   emitCommandEvent: emitCommandEventMock,
   emitCommandResult: emitCommandResultMock,
-  isJsonOutput: vi.fn(() => false)
+  isJsonOutput: isJsonOutputMock
 }));
 
 vi.mock('../utils/auth-transfer', () => ({
@@ -185,6 +187,7 @@ beforeEach(() => {
   restoreAuthTransferArchiveMock.mockReset();
   emitCommandEventMock.mockReset();
   emitCommandResultMock.mockReset();
+  isJsonOutputMock.mockReset();
   Object.keys(capturedActions).forEach((key) => delete capturedActions[key]);
 
   registerCliCommandMock.mockImplementation((_cli, command: { rawName: string }) => ({
@@ -193,6 +196,7 @@ beforeEach(() => {
     })
   }));
   isInteractiveTTYMock.mockReturnValue(false);
+  isJsonOutputMock.mockReturnValue(false);
   executeWithAuthRecoveryMock.mockImplementation(async (_context: unknown, run: () => unknown) => await run());
 
   getGlobalConfigMock.mockReturnValue({
@@ -341,6 +345,65 @@ describe('registerAuthCommands / auth export', () => {
       '--expires 格式非法，请使用如 90m、12h、30d'
     );
     expect(createSignedOssGetUrlMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('registerAuthCommands / auth inspect', () => {
+  it('keeps canonical required args while allowing TTY prompting for inspect', async () => {
+    const { registerAuthCommands } = await import('../commands/auth');
+
+    registerAuthCommands({} as never);
+
+    const inspectRegistration = registerCliCommandMock.mock.calls
+      .map((call) => call[1] as { rawName: string; cliRawName?: string })
+      .find((command) => command.rawName === 'auth inspect <token>');
+
+    expect(inspectRegistration).toBeDefined();
+    expect(inspectRegistration?.cliRawName).toBe('auth inspect [token]');
+  });
+
+  it('decodes token payload and emits derived metadata in json mode', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-04-02T00:00:00.000Z'));
+    isJsonOutputMock.mockReturnValue(true);
+    decodeAuthTransferTokenMock.mockReturnValue({
+      schemaVersion: '1.0',
+      kind: 'licell-auth-restore',
+      bucket: 'demo-bucket',
+      key: 'auth-transfer/2026/04/02/demo.json',
+      region: 'cn-hangzhou',
+      signedGetUrl: 'https://demo-bucket.oss-cn-hangzhou.aliyuncs.com/auth-transfer/2026/04/02/demo.json?OSSAccessKeyId=test&Expires=1775088000&Signature=abc',
+      expiresAt: '2026-04-03T00:00:00.000Z',
+      objectSha256: 'abc123',
+      createdAt: '2026-04-02T00:00:00.000Z'
+    });
+
+    const { registerAuthCommands } = await import('../commands/auth');
+    registerAuthCommands({} as never);
+    const inspectAction = capturedActions['auth inspect <token>'];
+
+    await inspectAction?.('licell-auth-v1.demo-token');
+
+    expect(decodeAuthTransferTokenMock).toHaveBeenCalledWith('licell-auth-v1.demo-token');
+    expect(emitCommandResultMock).toHaveBeenCalledTimes(1);
+    expect(emitCommandResultMock).toHaveBeenCalledWith(expect.objectContaining({
+      kind: 'licell-auth-restore',
+      bucket: 'demo-bucket',
+      key: 'auth-transfer/2026/04/02/demo.json',
+      region: 'cn-hangzhou',
+      expired: false,
+      objectSha256: 'abc123'
+    }), { stage: 'auth.inspect', inferOutcome: false });
+
+    const detail = emitCommandResultMock.mock.calls[0]?.[0] as {
+      expiresInSeconds: number;
+      signedGet: { host?: string; path?: string; expiresUnix?: number | null };
+    };
+    expect(detail.expiresInSeconds).toBe(86_400);
+    expect(detail.signedGet.host).toBe('demo-bucket.oss-cn-hangzhou.aliyuncs.com');
+    expect(detail.signedGet.path).toBe('/auth-transfer/2026/04/02/demo.json');
+    expect(detail.signedGet.expiresUnix).toBe(1775088000);
+    vi.useRealTimers();
   });
 });
 

@@ -19,8 +19,8 @@ import {
 import { createOssBucket, createSignedOssGetUrl, isOssBucketNameUnavailableError, uploadOssObjectContent } from '../providers/oss';
 import { emitCliError, emitCliEvent, emitCommandEvent, emitCommandResult, isJsonOutput } from '../utils/output';
 import {
-  buildAuthTransferBucketName,
   buildAuthTransferBucketCandidates,
+  type AuthTransferTokenPayload,
   buildAuthTransferObjectKey,
   collectAuthTransferSnapshot,
   createEncryptedAuthTransferBundle,
@@ -186,6 +186,58 @@ const authRestoreCommand = defineCliCommand({
   }
 });
 
+const authInspectCommand = defineCliCommand({
+  rawName: 'auth inspect <token>',
+  cliRawName: 'auth inspect [token]',
+  description: '解析并查看 restore token 的内容与有效期',
+  descriptor: {
+    summary: '本地解码 restore token，查看其 bucket/key/过期时间等元信息，不会访问网络或修改本机状态。',
+    examples: [
+      'licell auth inspect licell-auth-v1.<token>',
+      'licell auth inspect licell-auth-v1.<token> --output json'
+    ],
+    argumentHints: {
+      token: 'restore token。TTY 交互环境下可省略并提示输入；自动化 / Agent 调用请显式传入。'
+    },
+    notes: [
+      'inspect 只会本地 decode token，不会下载 OSS 对象，也不会校验 passkey 是否正确。',
+      'token 内已包含 bucket、object key、signedGetUrl 与 expiresAt；适合排查“为什么看起来没变化”。',
+      'restore token 本身仍应按敏感信息处理，inspect 时注意不要直接贴到公共频道。'
+    ],
+    interaction: {
+      ttyOnly: true,
+      prompts: ['可直接执行 `licell auth inspect`，然后按提示输入 restore token。']
+    },
+    automation: {
+      preferredOutput: 'json',
+      explicitInputs: ['<token>'],
+      notes: ['自动化排查时建议显式传入 `<token>` 并追加 `--output json`。']
+    },
+    related: ['auth export', 'auth restore'],
+    result: {
+      summary: '返回 token 内的原始 payload，以及基于当前时间推导的过期状态。',
+      outcomeKey: 'expired',
+      fields: [
+        { name: 'stage', description: '固定为 `auth.inspect`。', required: true },
+        { name: 'schemaVersion', description: 'token payload schema 版本。', required: true },
+        { name: 'kind', description: 'token kind，当前为 `licell-auth-restore`。', required: true },
+        { name: 'bucket', description: 'restore 时要下载对象的 OSS Bucket。', required: true },
+        { name: 'key', description: 'restore 时要下载对象的 OSS Object Key。', required: true },
+        { name: 'region', description: '生成 token 时使用的 region。', required: true },
+        { name: 'createdAt', description: 'token 创建时间（ISO 8601）。', required: true },
+        { name: 'expiresAt', description: 'token 过期时间（ISO 8601）。', required: true },
+        { name: 'expired', description: '按当前本机时间判断 token 是否已过期。', required: true },
+        { name: 'expiresInSeconds', description: '距离过期剩余秒数；过期后为负数。', required: true },
+        { name: 'objectSha256', description: '远端加密 bundle 的 SHA-256 校验值。', required: true },
+        { name: 'signedGetUrl', description: 'token 内嵌的 OSS 签名下载 URL。', required: true },
+        { name: 'signedGet.host', description: '签名 URL 的 host。' },
+        { name: 'signedGet.path', description: '签名 URL 的 pathname。' },
+        { name: 'signedGet.expiresUnix', description: '签名 URL query 中的 `Expires` Unix 秒时间戳。' }
+      ]
+    }
+  }
+});
+
 const logoutCommand = defineCliCommand({
   rawName: 'logout',
   description: '清除本地凭证'
@@ -324,6 +376,53 @@ function formatHumanDateTime(value: string) {
   const offsetHours = Math.floor(offsetAbs / 60);
   const offsetRemainderMinutes = offsetAbs % 60;
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())} UTC${sign}${pad(offsetHours)}:${pad(offsetRemainderMinutes)}`;
+}
+
+function formatRelativeSeconds(totalSeconds: number) {
+  const sign = totalSeconds < 0 ? '-' : '';
+  let remaining = Math.abs(Math.trunc(totalSeconds));
+  const days = Math.floor(remaining / 86_400);
+  remaining -= days * 86_400;
+  const hours = Math.floor(remaining / 3_600);
+  remaining -= hours * 3_600;
+  const minutes = Math.floor(remaining / 60);
+  remaining -= minutes * 60;
+  const parts = [
+    days > 0 ? `${days}d` : null,
+    days > 0 || hours > 0 ? `${hours}h` : null,
+    days > 0 || hours > 0 || minutes > 0 ? `${minutes}m` : null,
+    `${remaining}s`
+  ].filter(Boolean);
+  return `${sign}${parts.join(' ')}`;
+}
+
+function inspectAuthTransferTokenPayload(payload: AuthTransferTokenPayload) {
+  const expiresAtMs = new Date(payload.expiresAt).getTime();
+  const nowMs = Date.now();
+  const expiresInSeconds = Number.isFinite(expiresAtMs)
+    ? Math.floor((expiresAtMs - nowMs) / 1000)
+    : Number.NaN;
+  const expired = Number.isFinite(expiresAtMs) ? expiresAtMs <= nowMs : false;
+
+  let signedGet: { host?: string; path?: string; expiresUnix?: number | null } = {};
+  try {
+    const parsed = new URL(payload.signedGetUrl);
+    const expiresUnixRaw = parsed.searchParams.get('Expires');
+    signedGet = {
+      host: parsed.host,
+      path: parsed.pathname,
+      expiresUnix: expiresUnixRaw ? Number(expiresUnixRaw) : null
+    };
+  } catch {
+    signedGet = {};
+  }
+
+  return {
+    ...payload,
+    expired,
+    expiresInSeconds,
+    signedGet
+  };
 }
 
 export function buildAuthExportHumanOutput(input: {
@@ -723,6 +822,37 @@ export function registerAuthCommands(cli: CAC) {
       }
     });
 
+  registerCliCommand(cli, authInspectCommand)
+    .action(async (token: unknown) => {
+      const interactiveTTY = isInteractiveTTY();
+      const resolvedToken = await resolveRestoreToken(token, interactiveTTY);
+      const detail = inspectAuthTransferTokenPayload(decodeAuthTransferToken(resolvedToken));
+
+      if (isJsonOutput()) {
+        emitCommandResult(detail, { stage: 'auth.inspect', inferOutcome: false });
+        return;
+      }
+
+      showIntro(pc.bgBlue(pc.white(' ▲ Licell Auth Inspect ')));
+      console.log(`\nkind:            ${pc.cyan(detail.kind)}`);
+      console.log(`schemaVersion:   ${pc.cyan(detail.schemaVersion)}`);
+      console.log(`bucket:          ${pc.cyan(detail.bucket)}`);
+      console.log(`key:             ${pc.cyan(detail.key)}`);
+      console.log(`region:          ${pc.cyan(detail.region)}`);
+      console.log(`createdAt:       ${pc.cyan(formatHumanDateTime(detail.createdAt))}`);
+      console.log(`expiresAt:       ${pc.cyan(formatHumanDateTime(detail.expiresAt))}`);
+      console.log(`expired:         ${pc.cyan(detail.expired ? 'yes' : 'no')}`);
+      console.log(`expiresIn:       ${pc.cyan(formatRelativeSeconds(detail.expiresInSeconds))}`);
+      console.log(`objectSha256:    ${pc.cyan(detail.objectSha256)}`);
+      if (detail.signedGet.host) console.log(`signedGet host:  ${pc.cyan(detail.signedGet.host)}`);
+      if (detail.signedGet.path) console.log(`signedGet path:  ${pc.cyan(detail.signedGet.path)}`);
+      if (detail.signedGet.expiresUnix !== undefined) {
+        console.log(`signedGet exp:   ${pc.cyan(String(detail.signedGet.expiresUnix))}`);
+      }
+      console.log('');
+      showOutro('Done.');
+    });
+
   registerCliCommand(cli, logoutCommand)
     .action(() => {
       const existing = Config.getAuth();
@@ -827,8 +957,8 @@ export const authCommandModule = defineCommandModule({
         '首次配置凭证通常使用 `licell login`；`licell auth repair` 用于补齐 RAM 权限。',
         '`licell auth export` / `licell auth restore` 可把当前 ~/.licell-cli 全局状态加密转移到另一台机器。'
       ],
-      examples: ['licell login', 'licell auth repair', 'licell auth export', 'licell auth restore <token>']
+      examples: ['licell login', 'licell auth repair', 'licell auth export', 'licell auth inspect <token>', 'licell auth restore <token>']
     }
   },
-  commands: [loginCommand, authRepairCommand, authExportCommand, authRestoreCommand, logoutCommand, whoamiCommand, switchCommand]
+  commands: [loginCommand, authRepairCommand, authExportCommand, authInspectCommand, authRestoreCommand, logoutCommand, whoamiCommand, switchCommand]
 });
