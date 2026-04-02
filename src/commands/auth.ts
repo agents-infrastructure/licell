@@ -34,6 +34,8 @@ import {
 } from '../utils/auth-transfer';
 import { SETUP_SECTION } from './sections';
 
+const DEFAULT_AUTH_EXPORT_EXPIRES_HOURS = 168;
+
 const loginCommand = defineCliCommand({
   rawName: 'login',
   description: '配置阿里云凭证',
@@ -94,7 +96,8 @@ const authExportCommand = defineCliCommand({
   description: '加密打包当前 licell 全局凭证状态到私有 OSS，并生成 restore token',
   options: [
     { rawName: '--bucket <bucket>', description: '指定导出到哪个 OSS Bucket；默认按账号+region 推导并自动创建' },
-    { rawName: '--expires-hours <hours>', description: 'restore token 内签名下载链接的有效小时数，默认 168' }
+    { rawName: '--expires <duration>', description: 'restore token 内签名下载链接的有效期（如 12h、30d；默认 7d）' },
+    { rawName: '--expires-hours <hours>', description: '兼容旧用法：按小时设置 restore token 内签名下载链接的有效期（默认 168）' }
   ],
   descriptor: {
     safety: {
@@ -105,6 +108,7 @@ const authExportCommand = defineCliCommand({
     examples: [
       'licell auth export',
       'licell auth export my-passphrase-123',
+      'licell auth export --expires 30d --output json',
       'licell auth export --expires-hours 72 --output json'
     ],
     optionInsights: {
@@ -112,13 +116,18 @@ const authExportCommand = defineCliCommand({
         whenToUse: '需要把 auth bundle 上传到指定 Bucket，而不是默认的账号级 auth Bucket 时使用。',
         cautions: ['目标 Bucket 需要属于当前账号且允许 PutObject。']
       },
+      '--expires': {
+        whenToUse: '需要用更自然的时长语法控制 restore token 有效期时使用。',
+        cautions: ['请使用带单位的时长，如 `90m`、`12h`、`30d`。']
+      },
       '--expires-hours': {
-        whenToUse: '需要控制 restore token 内签名下载链接的有效时间时使用。',
-        cautions: ['超时后 token 将无法直接 restore，但 OSS 对象仍保留在 Bucket 中。']
+        whenToUse: '已有脚本仍按小时数传参时使用，作为 `--expires` 的兼容别名。',
+        cautions: ['不要与 `--expires` 同时传入。', '超时后 token 将无法直接 restore，但 OSS 对象仍保留在 Bucket 中。']
       }
     },
     notes: [
       '默认会一起打包 ~/.licell-cli/auth.json、~/.licell-cli/config.json、~/.licell-cli/acme/ 下的文件。',
+      '默认 restore token 有效期为 7 天；也可通过 `--expires 30d` / `--expires 12h` 覆盖。',
       'OSS 对象默认放在 private + public-access-block=on 的 Bucket 中，restore 通过时效性签名 URL 拉取。',
       'restore token 不包含明文 AK/SK；真正敏感内容在对象内，需 passkey 才能解密。'
     ],
@@ -203,6 +212,37 @@ function parsePositiveHours(value: unknown, fallbackHours: number) {
     throw new Error('--expires-hours 必须是大于 0 的数字');
   }
   return parsed;
+}
+
+function parseDurationToHours(value: string) {
+  const normalized = value.trim().toLowerCase();
+  const matched = normalized.match(/^(\d+(?:\.\d+)?)\s*(m|h|d)$/);
+  if (!matched) {
+    throw new Error('--expires 格式非法，请使用如 90m、12h、30d');
+  }
+
+  const amount = Number(matched[1]);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new Error('--expires 必须是大于 0 的时长');
+  }
+
+  const unit = matched[2];
+  if (unit === 'm') return amount / 60;
+  if (unit === 'h') return amount;
+  return amount * 24;
+}
+
+function parseAuthExportExpiryHours(options: { expires?: unknown; expiresHours?: unknown }, fallbackHours: number) {
+  const expires = toOptionalString(options.expires);
+  const expiresHours = toOptionalString(options.expiresHours);
+
+  if (expires && expiresHours) {
+    throw new Error('--expires 与 --expires-hours 不能同时传入');
+  }
+  if (expires) {
+    return parseDurationToHours(expires);
+  }
+  return parsePositiveHours(expiresHours, fallbackHours);
 }
 
 async function resolvePasskey(
@@ -543,7 +583,7 @@ export function registerAuthCommands(cli: CAC) {
     });
 
   registerCliCommand(cli, authExportCommand)
-    .action(async (passkey: unknown, options: { bucket?: unknown; expiresHours?: unknown }) => {
+    .action(async (passkey: unknown, options: { bucket?: unknown; expires?: unknown; expiresHours?: unknown }) => {
       const interactiveTTY = isInteractiveTTY();
       const run = async () => {
         const auth = Config.requireAuth();
@@ -554,7 +594,7 @@ export function registerAuthCommands(cli: CAC) {
         });
         const snapshot = collectAuthTransferSnapshot();
         const bundle = createEncryptedAuthTransferBundle(resolvedPasskey, snapshot);
-        const expiresHours = parsePositiveHours(options.expiresHours, 168);
+        const expiresHours = parseAuthExportExpiryHours(options, DEFAULT_AUTH_EXPORT_EXPIRES_HOURS);
         const objectKey = buildAuthTransferObjectKey();
 
         const { bucket, bucketResult, bucketPreferenceSaved } = await ensureAuthTransferBucket({

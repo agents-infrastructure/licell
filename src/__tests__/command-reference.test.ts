@@ -91,6 +91,12 @@ describe('buildAgentCommandCatalog', () => {
     expect(domainAppBind?.result?.fields.some((field) => field.name === 'finalUrl')).toBe(true);
     expect(domainAppBind?.result?.fieldTree.some((field) => field.name === 'finalUrl')).toBe(true);
 
+    const authExport = catalog.commands.find((command) => command.key === 'auth export');
+    expect(authExport?.options.some((option) => option.primaryFlag === '--expires')).toBe(true);
+    expect(authExport?.options.some((option) => option.primaryFlag === '--expires-hours')).toBe(true);
+    expect(authExport?.examples).toContain('licell auth export --expires 30d --output json');
+    expect(authExport?.optionInsights.some((insight) => insight.flag.includes('--expires'))).toBe(true);
+
     const authRestore = catalog.commands.find((command) => command.key === 'auth restore');
     expect(authRestore?.interaction?.ttyOnly).toBe(true);
     expect(authRestore?.interaction?.prompts.some((item) => item.includes('restore token'))).toBe(true);

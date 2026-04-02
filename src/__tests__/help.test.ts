@@ -254,6 +254,22 @@ describe('help utils', () => {
     expect(doc?.recommendedFlow.some((step) => step.command === 'licell task invoke [name] --output json')).toBe(true);
   });
 
+  it('builds command help for auth export with duration guidance', () => {
+    const doc = buildHelpDocument({
+      argv: ['node', 'src/cli.ts', 'auth', 'export', '--help'],
+      version: VERSION
+    });
+
+    expect(doc?.scope).toBe('command');
+    expect(doc?.key).toBe('auth export');
+    expect(doc?.options.some((option) => option.primaryFlag === '--expires')).toBe(true);
+    expect(doc?.options.some((option) => option.primaryFlag === '--expires-hours')).toBe(true);
+    expect(doc?.examples).toContain('licell auth export --expires 30d --output json');
+    expect(doc?.text).toContain('默认 restore token 有效期为 7 天');
+    expect(doc?.text).toContain('90m');
+    expect(doc?.text).toContain('不要与 `--expires` 同时传入');
+  });
+
   it('builds command help for auth restore with explicit TTY prompting hints', () => {
     const doc = buildHelpDocument({
       argv: ['node', 'src/cli.ts', 'auth', 'restore', '--help'],
