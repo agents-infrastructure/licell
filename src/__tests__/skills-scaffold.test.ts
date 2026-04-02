@@ -59,6 +59,9 @@ describe('getSkillFiles', () => {
     expect(file.content).toContain('licell-help@1.0');
     expect(file.content).toContain('`licell catalog --output json`');
     expect(file.content).toContain('CLI Event Record');
+    expect(file.content).toContain('## SLS Query Reference');
+    expect(file.content).toContain('https://help.aliyun.com/zh/sls/query-syntax/');
+    expect(file.content).toContain("licell logs query '*' --output json");
   });
 });
 

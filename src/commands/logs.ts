@@ -54,21 +54,29 @@ const logsQueryCommand = defineCliCommand({
   descriptor: {
     title: 'Query SLS logs',
     notes: [
+      '对日志进行查询前，目标 Logstore 需要先创建索引；字段查询是否生效也取决于对应字段的索引类型。',
       '位置参数 `query` 与 `--query` 二选一；复杂查询建议整体加引号。',
+      '`query` 会原样透传给 SLS `GetLogs.query`；licell 不会把 skill 里的写法或自定义 DSL 转换成另一套查询语法。',
+      'SLS 官方语法里：`*` 表示无过滤条件；全文检索可用 `GET or POST`；字段检索可用 `request_method:GET`；数值字段可用 `request_time_msec>50`。',
+      '查询语句与分析语句可通过 `|` 分隔，例如 `request_method:GET | select count(*) as total`。',
+      '如果不确定目标 logstore 的字段索引 / 分词规则，先用 `*` 拉原始日志，再在本地基于 `--output json` 结果做聚合或过滤。',
+      '`field:value` / `field:"value"` 这类过滤是否有效，取决于目标 logstore 是否已为对应字段建立索引。',
       '`logs query` 不会隐式追加 `functionName` 过滤；函数日志请改用 `licell fn logs`，或直接在 query 里写 `functionName:"..."`。',
       '这是通用的一次性检索入口，适合 Agent / 自动化配合 `--output json` 使用。'
     ],
     examples: [
       'licell logs query --output json',
-      'licell logs query \'level:error and requestId:abc123\' --output json',
-      'licell logs query -p your-project -s your-store \'status:500\' --lines 200 --output json',
-      'licell logs query -p your-project -s your-store \'functionName:\"my-app\" | select count(*) as total\' --power-sql --output json',
+      'licell logs query \'*\' --output json',
+      'licell logs query \'GET or POST\' --output json',
+      'licell logs query \'request_method:GET and status:200\' --output json',
+      'licell logs query -p your-project -s your-store \'*\' --lines 200 --output json',
+      'licell logs query -p your-project -s your-store \'request_method:GET | select count(*) as total\' --power-sql --output json',
       'licell logs query -p your-project -s your-store --from 1710000000 --to 1710000300 --output json'
     ],
     optionInsights: {
       '--project': { whenToUse: '日志不在自动探测到的默认 FC project 时使用。' },
       '--store': { whenToUse: '日志不在自动选择的默认 logstore 时使用。' },
-      '--query': { whenToUse: '要直接写 SLS 查询语法、SQL pipeline 或复杂过滤条件时使用。' },
+      '--query': { whenToUse: '要直接写原生 SLS 查询语句、SQL pipeline 或显式传入 `*` 时使用。' },
       '--from': { whenToUse: '需要锁定历史时间范围时使用。' },
       '--to': { whenToUse: '需要锁定结束时间时使用。' },
       '--since': { whenToUse: '快速查看最近 N 秒日志，替代手动换算 `--from`。' },
@@ -78,8 +86,9 @@ const logsQueryCommand = defineCliCommand({
     recommendedFlow: [
       { title: '先查默认日志源', command: 'licell logs query --output json', reason: '先确认自动发现到的默认 project/logstore 是否有结果。' },
       { title: '切到自定义 project/logstore', command: 'licell logs query -p <project> -s <store> --output json', reason: '确认目标日志源正确。' },
-      { title: '再加筛选条件', command: 'licell logs query -p <project> -s <store> \'level:error\' --output json', reason: '逐步收敛查询条件，避免一次写太复杂。' },
-      { title: '需要持续观察时再 tail', command: 'licell logs tail -p <project> -s <store> \'level:error\'', reason: '查询语句正确后，切到流式跟随。' }
+      { title: '先用 * 看原始日志', command: 'licell logs query -p <project> -s <store> \'*\' --output json', reason: '先确认日志字段长什么样，再决定是否在 SLS 侧筛选。' },
+      { title: '再尝试 SLS 原生过滤或 SQL', command: 'licell logs query -p <project> -s <store> \'<sls-query>\' --output json', reason: '确认字段已建索引后，再逐步收敛查询条件。' },
+      { title: '需要持续观察时再 tail', command: 'licell logs tail -p <project> -s <store> \'*\'', reason: '确认日志源与查询语句正确后，切到流式跟随。' }
     ],
     result: {
       summary: '返回一次性 SLS 查询结果。',
@@ -99,7 +108,8 @@ const logsQueryCommand = defineCliCommand({
     },
     agentTips: [
       'Agent 优先使用 `licell logs query --output json`。',
-      '复杂查询条件统一放进一个带引号的 `query` 字符串。'
+      '复杂查询条件统一放进一个带引号的 `query` 字符串。',
+      '如果字段过滤不稳定，优先执行 `licell logs query \'*\' --output json`，再在本地聚合或过滤。'
     ],
     related: ['fn logs', 'logs tail']
   }
@@ -123,29 +133,38 @@ const logsTailCommand = defineCliCommand({
   descriptor: {
     title: 'Tail SLS logs',
     notes: [
+      '对日志进行查询前，目标 Logstore 需要先创建索引；字段查询是否生效也取决于对应字段的索引类型。',
       '位置参数 `query` 与 `--query` 二选一；复杂查询建议整体加引号。',
+      '`query` 会原样透传给 SLS `GetLogs.query`；licell 不会把 skill 示例或本地过滤语法翻译成 SLS 查询。',
+      'SLS 官方语法里：`*` 表示无过滤条件；全文检索可用 `GET or POST`；字段检索可用 `request_method:GET`；数值字段可用 `request_time_msec>50`。',
       '`logs tail` 是持续流式命令，不支持 `--output json`；需要结构化结果时请改用 `licell logs query --output json`。',
+      '如果不确定字段过滤是否生效，先用 `licell logs query \'*\' --output json` 验证，再切回 tail。',
       '`logs tail` 不会隐式追加 `functionName` 过滤；函数日志请改用 `licell fn logs`，或直接在 query 里写 `functionName:"..."`。'
     ],
     examples: [
       'licell logs tail',
-      'licell logs tail \'level:error and requestId:abc123\'',
-      'licell logs tail -p your-project -s your-store \'status:500\'',
-      'licell logs tail -p your-project -s your-store \'functionName:\"my-app\"\' --since 300'
+      'licell logs tail \'*\'',
+      'licell logs tail \'GET or POST\'',
+      'licell logs tail \'request_method:GET and status:200\'',
+      'licell logs tail -p your-project -s your-store \'*\'',
+      'licell logs tail -p your-project -s your-store \'*\' --since 300'
     ],
     optionInsights: {
       '--project': { whenToUse: '日志不在自动探测到的默认 FC project 时使用。' },
       '--store': { whenToUse: '日志不在自动选择的默认 logstore 时使用。' },
-      '--query': { whenToUse: '要直接写 SLS 查询语法或复杂过滤条件时使用。' },
+      '--query': { whenToUse: '要直接写原生 SLS 查询语法，或显式传入 `*` 监听全部日志时使用。' },
       '--from': { whenToUse: '需要从固定历史时刻开始回放并继续跟随时使用。' },
       '--since': { whenToUse: '从最近 N 秒开始进入 tail，替代手动换算 `--from`。' },
       '--power-sql': { whenToUse: '查询里带 SQL pipeline 时使用。' }
     },
     recommendedFlow: [
-      { title: '先 query 验证语句', command: 'licell logs query -p <project> -s <store> \'level:error\' --output json', reason: '先确认查询条件命中正确日志。' },
-      { title: '再进入 tail', command: 'licell logs tail -p <project> -s <store> \'level:error\'', reason: '查询语句正确后，持续观察新日志。' }
+      { title: '先 query 验证语句', command: 'licell logs query -p <project> -s <store> \'*\' --output json', reason: '先确认日志源、字段与返回格式都正确。' },
+      { title: '再进入 tail', command: 'licell logs tail -p <project> -s <store> \'*\'', reason: '查询语句正确后，持续观察新日志。' }
     ],
-    agentTips: ['Agent 不要对 `logs tail` 使用 `--output json`；改用 `logs query`。'],
+    agentTips: [
+      'Agent 不要对 `logs tail` 使用 `--output json`；改用 `logs query`。',
+      '如果筛选条件来源于外部 skill/文档，先在 `logs query` 里用 `*` 验证日志结构。'
+    ],
     related: ['logs query', 'fn logs']
   }
 });
@@ -269,9 +288,12 @@ export const logsCommandModule = defineCommandModule({
       summary: '通用 SLS 日志入口，区分一次性 query 与持续跟随 tail。',
       examples: [
         'licell logs query --output json',
-        'licell logs tail \'level:error\''
+        'licell logs tail \'*\''
       ],
-      notes: ['如果你只是要看某个 FC 函数的默认日志，优先使用 `licell fn logs`。'],
+      notes: [
+        '如果你只是要看某个 FC 函数的默认日志，优先使用 `licell fn logs`。',
+        '若不确定 SLS 字段过滤是否有效，先用 `logs query \'*\' --output json` 看原始日志。'
+      ],
       related: ['fn logs']
     }
   }

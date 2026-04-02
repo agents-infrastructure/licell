@@ -194,6 +194,21 @@ describe('help utils', () => {
     expect(doc?.text).toContain('Automation:');
   });
 
+  it('builds command help for logs query with pass-through SLS guidance', () => {
+    const doc = buildHelpDocument({
+      argv: ['node', 'src/cli.ts', 'logs', 'query', '--help'],
+      version: VERSION
+    });
+
+    expect(doc?.scope).toBe('command');
+    expect(doc?.key).toBe('logs query');
+    expect(doc?.examples).toContain("licell logs query '*' --output json");
+    expect(doc?.examples).toContain("licell logs query -p your-project -s your-store 'request_method:GET | select count(*) as total' --power-sql --output json");
+    expect(doc?.text).toContain('原样透传给 SLS `GetLogs.query`');
+    expect(doc?.text).toContain('先用 `*` 拉原始日志');
+    expect(doc?.text).toContain('字段索引');
+  });
+
 
   it('adds safety metadata for destructive commands', () => {
     const doc = buildHelpDocument({

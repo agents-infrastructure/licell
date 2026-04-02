@@ -88,6 +88,24 @@ licell supa connect <instanceName>
 licell deploy --type api --target preview --enable-vpc
 \`\`\`
 
+## SLS Query Reference
+
+- \`licell logs query\` / \`licell logs tail\` 会把 \`query\` 原样透传给阿里云 SLS \`GetLogs.query\`；Licell 不会把别的 skill / DSL 语法自动翻译成 SLS 查询。
+- 官方语法参考：<https://help.aliyun.com/zh/sls/query-syntax/>
+- 开始排查时，优先用 \`*\` 获取原始日志，再在本地做聚合或过滤：
+
+\`\`\`bash
+licell logs query '*' --output json
+\`\`\`
+
+- 常见 SLS 查询语法（前提：目标 Logstore 已建立索引）：
+  - 全量：\`*\`
+  - 全文检索：\`GET or POST\`
+  - 字段检索：\`request_method:GET\`
+  - 数值过滤：\`request_time_msec>50\`
+  - 查询 + 分析：\`request_method:GET | select count(*) as total\`
+- 如果 \`field:value\` 看起来没生效，优先检查目标字段是否已建索引、类型是否正确；不确定时回退到 \`*\` + \`--output json\`。
+
 ## Error Handling
 
 - 认证失败：运行 \`licell login\` 重新配置凭证

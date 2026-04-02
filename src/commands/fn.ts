@@ -82,7 +82,7 @@ const fnLogsCommand = defineCliCommand({
       'licell fn logs',
       'licell fn logs my-function',
       'licell fn logs my-function --once --window 300 --output json',
-      'licell logs query -p your-project -s your-store \'level:error\' --output json'
+      'licell logs query -p your-project -s your-store \'*\' --output json'
     ],
     optionInsights: {
       '--once': { whenToUse: '需要抓取最近一批日志并立即退出时使用。' },

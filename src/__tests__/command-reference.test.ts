@@ -140,12 +140,14 @@ describe('buildAgentCommandCatalog', () => {
 
     const logsQuery = catalog.commands.find((command) => command.key === 'logs query');
     expect(logsQuery?.title).toBe('Query SLS logs');
+    expect(logsQuery?.examples).toContain('licell logs query \'*\' --output json');
+    expect(logsQuery?.examples).toContain('licell logs query -p your-project -s your-store \'request_method:GET | select count(*) as total\' --power-sql --output json');
     expect(logsQuery?.examples).toContain('licell logs query -p your-project -s your-store --from 1710000000 --to 1710000300 --output json');
     expect(logsQuery?.result?.fields.some((field) => field.name === 'project')).toBe(true);
 
     const logsTail = catalog.commands.find((command) => command.key === 'logs tail');
     expect(logsTail?.title).toBe('Tail SLS logs');
-    expect(logsTail?.examples).toContain('licell logs tail -p your-project -s your-store \'status:500\'');
+    expect(logsTail?.examples).toContain('licell logs tail -p your-project -s your-store \'*\'');
     expect(logsTail?.result).toBeUndefined();
 
     const cacheAdd = catalog.commands.find((command) => command.key === 'cache add');
