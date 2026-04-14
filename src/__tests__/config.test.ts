@@ -1,5 +1,8 @@
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
 import { describe, it, expect } from 'vitest';
-import { normalizeProject, normalizeAuth } from '../utils/config';
+import { Config, normalizeProject, normalizeAuth } from '../utils/config';
 
 describe('normalizeAuth', () => {
   it('returns valid auth from correct input', () => {
@@ -310,5 +313,46 @@ describe('normalizeProject', () => {
     expect(result.network).toBeUndefined();
     expect(result.cache).toBeUndefined();
     expect(result.envs).toEqual({ valid: 'yes' });
+  });
+});
+
+describe('Config.setProject', () => {
+  it('writes project config without mutating an existing .gitignore', () => {
+    const root = mkdtempSync(join(tmpdir(), 'licell-config-'));
+    const previousCwd = process.cwd();
+    try {
+      process.chdir(root);
+      writeFileSync(join(root, '.gitignore'), 'node_modules\n');
+
+      Config.setProject({ appName: 'demo-app', envs: { FOO: 'bar' } });
+
+      expect(readFileSync(join(root, '.gitignore'), 'utf-8')).toBe('node_modules\n');
+      expect(JSON.parse(readFileSync(join(root, '.licell', 'project.json'), 'utf-8'))).toMatchObject({
+        appName: 'demo-app',
+        envs: { FOO: 'bar' }
+      });
+    } finally {
+      process.chdir(previousCwd);
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('does not create .gitignore when persisting local project state', () => {
+    const root = mkdtempSync(join(tmpdir(), 'licell-config-'));
+    const previousCwd = process.cwd();
+    try {
+      process.chdir(root);
+
+      Config.setProject({ appName: 'demo-app' });
+
+      expect(existsSync(join(root, '.gitignore'))).toBe(false);
+      expect(JSON.parse(readFileSync(join(root, '.licell', 'project.json'), 'utf-8'))).toMatchObject({
+        appName: 'demo-app',
+        envs: {}
+      });
+    } finally {
+      process.chdir(previousCwd);
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });

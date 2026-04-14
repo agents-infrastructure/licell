@@ -295,6 +295,6 @@ export async function provisionDatabase(
     name: databaseName
   };
   Config.setProject(project);
-  spinner.message('⚠️ DATABASE_URL（含密码）已写入 .licell/project.json，请确认该目录已在 .gitignore 中');
+  spinner.message('⚠️ DATABASE_URL（含密码）已写入 .licell/project.json；如需提交仓库，请先移除或改用不含密钥的配置。');
   return dbUrl;
 }

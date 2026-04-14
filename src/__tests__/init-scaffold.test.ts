@@ -41,6 +41,22 @@ describe('init scaffold', () => {
     expect(getScaffoldFiles('python', 'python3.13', 'task').find((f) => f.path === 'README.md')?.content).toContain('--kind task');
   });
 
+  it('does not scaffold .gitignore entries for local licell state', () => {
+    const gitignores = [
+      getScaffoldFiles('node', 'nodejs22'),
+      getScaffoldFiles('node', 'nodejs22', 'task'),
+      getScaffoldFiles('python', 'python3.13'),
+      getScaffoldFiles('python', 'python3.13', 'task'),
+      getScaffoldFiles('docker')
+    ].map((files) => files.find((file) => file.path === '.gitignore')?.content || '');
+
+    for (const content of gitignores) {
+      expect(content).toContain('.env');
+      expect(content).not.toContain('.licell/');
+      expect(content).not.toContain('.ali/');
+    }
+  });
+
   it('rejects unsupported runtime values', () => {
     expect(() => resolveInitRuntime('python')).toThrow('函数运行时仅支持');
     expect(() => templateForRuntime('node')).toThrow('不支持的 runtime');

@@ -14,6 +14,13 @@ const NODE_RUNTIMES = new Set(['nodejs20', 'nodejs22']);
 const PYTHON_RUNTIMES = new Set(['python3.12', 'python3.13']);
 const DOCKER_RUNTIMES = new Set(['docker']);
 const WORKSPACE_IGNORE_ENTRIES = new Set(['.licell', '.ali', '.git', '.DS_Store', '.vscode', '.idea', 'node_modules']);
+const NODE_GITIGNORE = `node_modules
+.env
+`;
+const PYTHON_GITIGNORE = `__pycache__/
+.venv/
+.env
+`;
 
 export function deriveDefaultAppName(cwd = process.cwd()) {
   const raw = basename(cwd).toLowerCase();
@@ -182,11 +189,7 @@ export function getScaffoldFiles(template: InitTemplate, runtime?: string, kind:
     return [
       {
         path: '.gitignore',
-        content: `node_modules
-.licell/
-.ali/
-.env
-`
+        content: NODE_GITIGNORE
       },
       {
         path: 'package.json',
@@ -411,12 +414,7 @@ licell deploy --type api --runtime docker --target preview
       return [
         {
           path: '.gitignore',
-          content: `__pycache__/
-.venv/
-.licell/
-.ali/
-.env
-`
+          content: PYTHON_GITIGNORE
         },
         {
           path: 'src/task.py',
@@ -463,12 +461,7 @@ licell task invoke --target preview --payload '{"job":"long-running","mode":"sle
     return [
       {
         path: '.gitignore',
-        content: `__pycache__/
-.venv/
-.licell/
-.ali/
-.env
-`
+        content: PYTHON_GITIGNORE
       },
       {
         path: 'requirements.txt',
@@ -803,11 +796,7 @@ licell deploy --type api --runtime ${scaffoldRuntime} --entry src/main.py --targ
     return [
       {
         path: '.gitignore',
-        content: `node_modules
-.licell/
-.ali/
-.env
-`
+        content: NODE_GITIGNORE
       },
       {
         path: 'package.json',
@@ -881,11 +870,7 @@ licell task invoke --target preview --payload '{"job":"long-running","mode":"sle
   return [
     {
       path: '.gitignore',
-      content: `node_modules
-.licell/
-.ali/
-.env
-`
+      content: NODE_GITIGNORE
     },
     {
       path: 'package.json',

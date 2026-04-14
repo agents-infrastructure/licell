@@ -281,30 +281,6 @@ export function normalizeAuth(raw: unknown): AuthConfig | null {
   };
 }
 
-function ensureProjectConfigIgnored() {
-  const gitignore = join(process.cwd(), '.gitignore');
-  const ignoreEntries = ['.licell/', '.ali/'];
-  if (!existsSync(gitignore)) {
-    writeFileSync(gitignore, `${ignoreEntries.join('\n')}\n`);
-    return;
-  }
-
-  let current = readFileSync(gitignore, 'utf-8');
-  for (const ignoreEntry of ignoreEntries) {
-    const normalizedEntry = ignoreEntry.replace(/\/$/, '');
-    const hasEntry = current
-      .split(/\r?\n/)
-      .some((line) => {
-        const trimmed = line.trim();
-        return trimmed === ignoreEntry || trimmed === normalizedEntry;
-      });
-    if (hasEntry) continue;
-    const suffix = current.endsWith('\n') || current.length === 0 ? '' : '\n';
-    current = `${current}${suffix}${ignoreEntry}\n`;
-  }
-  writeFileSync(gitignore, current);
-}
-
 function getReadableAuthFile() {
   if (existsSync(GLOBAL_FILE)) return GLOBAL_FILE;
   if (existsSync(LEGACY_GLOBAL_FILE)) return LEGACY_GLOBAL_FILE;
@@ -349,7 +325,6 @@ export const Config = {
   },
   setProject(data: Partial<ProjectConfig>, options?: SetProjectOptions) {
     ensureSecureDir(getLocalDir());
-    ensureProjectConfigIgnored();
     const current = this.getProject();
     const mergedEnvs = options?.replaceEnvs
       ? { ...(data.envs || {}) }
