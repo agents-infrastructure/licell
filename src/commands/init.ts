@@ -102,7 +102,7 @@ export function registerInitCommand(cli: CAC) {
       const shouldPromptRuntime = workspaceEmpty && !hasExplicitRuntime && !nonInteractive;
 
       try {
-        const project = Config.getProject();
+        const project = Config.getProject({ localOnly: true });
         let runtimeInput = options.runtime;
         if (!runtimeInput && shouldPromptRuntime) {
           const selected = await select({
@@ -167,7 +167,7 @@ export function registerInitCommand(cli: CAC) {
         const { written, skipped } = shouldWriteScaffold
           ? writeScaffoldFiles(process.cwd(), getScaffoldFiles(template, runtime, kind), Boolean(options.force))
           : { written: [] as string[], skipped: [] as string[] };
-        Config.setProject({ appName, runtime, deployType: kind });
+        Config.setProject({ appName, runtime, deployType: kind }, { localOnly: true });
         s.stop(pc.green(shouldWriteScaffold ? '✅ 脚手架创建完成' : '✅ 配置写入完成'));
 
         console.log(`runtime:  ${pc.cyan(runtime)}`);

@@ -12,6 +12,7 @@ import {
   requireAppName,
   isInteractiveTTY,
   showOutro,
+  toOptionalString,
   toPromptValue,
   normalizeEnvKey,
   ensureEnvIgnored,
@@ -25,6 +26,7 @@ const envListCommand = defineCliCommand({
   rawName: 'env list',
   description: '查看云端环境变量',
   options: [
+    { rawName: '--component <name>', description: '在 workspace / monorepo 根目录显式选择 component' },
     { rawName: '--target <target>', description: '查看指定 FC alias 的环境变量（如 prod/preview）' },
     { rawName: '--show-values', description: '显示完整变量值（默认隐藏）' }
   ]
@@ -33,6 +35,9 @@ const envListCommand = defineCliCommand({
 const envSetCommand = defineCliCommand({
   rawName: 'env set <key> <value>',
   description: '设置云端环境变量（并同步本地 .licell/project.json）',
+  options: [
+    { rawName: '--component <name>', description: '在 workspace / monorepo 根目录显式选择 component' }
+  ],
   descriptor: {
     examples: ['licell env set API_BASE_URL https://api.example.com', 'licell env set NODE_ENV production --output json'],
     argumentHints: {
@@ -55,6 +60,7 @@ const envRmCommand = defineCliCommand({
   rawName: 'env rm <key>',
   description: '删除云端环境变量（并同步本地 .licell/project.json）',
   options: [
+    { rawName: '--component <name>', description: '在 workspace / monorepo 根目录显式选择 component' },
     { rawName: '--yes', description: '跳过二次确认（危险）' }
   ],
   descriptor: {
@@ -74,6 +80,7 @@ const envPullCommand = defineCliCommand({
   rawName: 'env pull',
   description: '拉取云端环境变量',
   options: [
+    { rawName: '--component <name>', description: '在 workspace / monorepo 根目录显式选择 component' },
     { rawName: '--target <target>', description: '从指定 FC alias 拉取环境变量（如 prod/preview）' }
   ],
   descriptor: {
@@ -102,7 +109,7 @@ const envPullCommand = defineCliCommand({
 
 export function registerEnvCommands(cli: CAC) {
   registerCliCommand(cli, envListCommand)
-    .action(async (options: { target?: string; showValues?: boolean }) => {
+    .action(async (options: { component?: unknown; target?: string; showValues?: boolean }) => {
       await executeWithAuthRecovery(
         {
           commandLabel: commandInvocation(envListCommand),
@@ -111,7 +118,8 @@ export function registerEnvCommands(cli: CAC) {
         },
         async () => {
           ensureAuthOrExit();
-          const project = Config.getProject();
+          const component = toOptionalString(options.component);
+          const project = Config.getProject({ component });
           requireAppName(project);
           const qualifier = options.target ? normalizeReleaseTarget(options.target) : undefined;
 
@@ -133,6 +141,7 @@ export function registerEnvCommands(cli: CAC) {
               ? Object.fromEntries(entries)
               : Object.fromEntries(entries.map(([key, value]) => [key, `<hidden:${String(value).length} chars>`]));
             emitCommandResult({
+              component: component || null,
               qualifier: qualifier || null,
               count: entries.length,
               showValues,
@@ -155,7 +164,8 @@ export function registerEnvCommands(cli: CAC) {
     });
 
   registerCliCommand(cli, envSetCommand)
-    .action(async (key: string, value: string) => {
+    .option('--component <name>', '在 workspace / monorepo 根目录显式选择 component')
+    .action(async (key: string, value: string, options: { component?: unknown }) => {
       await executeWithAuthRecovery(
         {
           commandLabel: commandInvocation(envSetCommand),
@@ -164,7 +174,8 @@ export function registerEnvCommands(cli: CAC) {
         },
         async () => {
           ensureAuthOrExit();
-          const project = Config.getProject();
+          const component = toOptionalString(options.component);
+          const project = Config.getProject({ component });
           requireAppName(project);
           const envKey = normalizeEnvKey(toPromptValue(key, '环境变量名'));
           const envValue = toPromptValue(value, '环境变量值');
@@ -177,12 +188,13 @@ export function registerEnvCommands(cli: CAC) {
             () => setFunctionEnv(project.appName, envKey, envValue)
           );
           if (!envs) return;
-          Config.setProject({ envs }, { replaceEnvs: true });
+          Config.setProject({ envs }, { replaceEnvs: true, component });
           if (!isJsonOutput()) {
             s.stop(pc.green('✅ 环境变量已写入云端并同步到本地配置'));
             showOutro('Done.');
           } else {
             emitCommandResult({
+              component: component || null,
               key: envKey,
               updatedCount: Object.keys(envs).length
             });
@@ -192,7 +204,7 @@ export function registerEnvCommands(cli: CAC) {
     });
 
   registerCliCommand(cli, envRmCommand)
-    .action(async (key: string, options: { yes?: boolean }) => {
+    .action(async (key: string, options: { component?: unknown; yes?: boolean }) => {
       await executeWithAuthRecovery(
         {
           commandLabel: commandInvocation(envRmCommand),
@@ -201,7 +213,8 @@ export function registerEnvCommands(cli: CAC) {
         },
         async () => {
           ensureAuthOrExit();
-          const project = Config.getProject();
+          const component = toOptionalString(options.component);
+          const project = Config.getProject({ component });
           requireAppName(project);
           const envKey = normalizeEnvKey(toPromptValue(key, '环境变量名'));
           await ensureDestructiveActionConfirmed(`删除环境变量 ${envKey}`, { yes: Boolean(options.yes) });
@@ -214,12 +227,13 @@ export function registerEnvCommands(cli: CAC) {
             () => removeFunctionEnv(project.appName, envKey)
           );
           if (!envs) return;
-          Config.setProject({ envs }, { replaceEnvs: true });
+          Config.setProject({ envs }, { replaceEnvs: true, component });
           if (!isJsonOutput()) {
             s.stop(pc.green('✅ 环境变量已从云端移除（若存在）并同步本地配置'));
             showOutro('Done.');
           } else {
             emitCommandResult({
+              component: component || null,
               key: envKey,
               updatedCount: Object.keys(envs).length
             });
@@ -229,7 +243,7 @@ export function registerEnvCommands(cli: CAC) {
     });
 
   registerCliCommand(cli, envPullCommand)
-    .action(async (options: { target?: string }) => {
+    .action(async (options: { component?: unknown; target?: string }) => {
       await executeWithAuthRecovery(
         {
           commandLabel: commandInvocation(envPullCommand),
@@ -238,7 +252,8 @@ export function registerEnvCommands(cli: CAC) {
         },
         async () => {
           ensureAuthOrExit();
-          const project = Config.getProject();
+          const component = toOptionalString(options.component);
+          const project = Config.getProject({ component });
           requireAppName(project);
           const qualifier = options.target ? normalizeReleaseTarget(options.target) : undefined;
 
@@ -252,7 +267,7 @@ export function registerEnvCommands(cli: CAC) {
           if (!envs) return;
           const projectConfigSynced = !qualifier;
           if (projectConfigSynced) {
-            Config.setProject({ envs }, { replaceEnvs: true });
+            Config.setProject({ envs }, { replaceEnvs: true, component });
           }
           const entries = Object.entries(envs);
           if (entries.length === 0) {
@@ -269,6 +284,7 @@ export function registerEnvCommands(cli: CAC) {
               ));
             }
             emitCommandResult({
+              component: component || null,
               qualifier: qualifier || null,
               count: 0,
               envFile: '.env',
@@ -292,6 +308,7 @@ export function registerEnvCommands(cli: CAC) {
             ));
           }
           emitCommandResult({
+            component: component || null,
             qualifier: qualifier || null,
             count: entries.length,
             envFile: '.env',

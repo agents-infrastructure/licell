@@ -39,6 +39,14 @@ const fnDomainInfoCommand = defineCliCommand({
 const fnDomainBindCommand = defineCliCommand({
   rawName: 'fn domain bind <domain>',
   description: '绑定或更新 FC 自定义域名（资源级，不默认改 DNS）',
+  options: [
+    { rawName: '--function <name>', description: '指定函数名；默认使用当前项目 appName' },
+    { rawName: '--component <name>', description: '在 workspace / monorepo 根目录显式选择 component' },
+    { rawName: '--target <target>', description: '指定 alias/version（如 prod/preview/1）' },
+    { rawName: '--path <path>', description: '路由路径，默认 /*' },
+    { rawName: '--protocol <protocol>', description: '自定义域名协议，默认 HTTP' },
+    { rawName: '--ensure-dns', description: '同时确保 DNS CNAME 指向当前账号 FC 网关' }
+  ],
   descriptor: {
     summary: '绑定或更新 FC 自定义域名路由。',
     related: ['domain app bind', 'dns records add'],
@@ -115,10 +123,10 @@ const fnDomainUnbindCommand = defineCliCommand({
   }
 });
 
-function resolveFunctionName(input: unknown) {
+function resolveFunctionName(input: unknown, component?: string) {
   const explicit = toOptionalString(input);
   if (explicit) return explicit;
-  const project = Config.getProject();
+  const project = Config.getProject(component ? { component } : undefined);
   if (project.appName) return project.appName;
   throw new Error('请通过 --function 指定函数名，或先在当前项目执行 licell deploy 生成 appName');
 }
@@ -223,11 +231,12 @@ export function registerFnDomainCommands(cli: CAC) {
 
   registerCliCommand(cli, fnDomainBindCommand)
     .option('--function <name>', '指定函数名；默认使用当前项目 appName')
+    .option('--component <name>', '在 workspace / monorepo 根目录显式选择 component')
     .option('--target <target>', '指定 alias/version（如 prod/preview/1）')
     .option('--path <path>', '路由路径，默认 /*')
     .option('--protocol <protocol>', '自定义域名协议，默认 HTTP')
     .option('--ensure-dns', '同时确保 DNS CNAME 指向当前账号 FC 网关')
-    .action(async (domain: string, options: { function?: unknown; target?: unknown; path?: unknown; protocol?: unknown; ensureDns?: boolean }) => {
+    .action(async (domain: string, options: { function?: unknown; component?: unknown; target?: unknown; path?: unknown; protocol?: unknown; ensureDns?: boolean }) => {
       const requiredCapabilities: AuthCapability[] = options.ensureDns ? ['fc', 'dns'] : ['fc'];
       await executeWithAuthRecovery(
         {
@@ -238,7 +247,8 @@ export function registerFnDomainCommands(cli: CAC) {
         async () => {
           ensureAuthOrExit();
           const normalizedDomain = toPromptValue(domain, '域名').toLowerCase();
-          const functionName = resolveFunctionName(options.function);
+          const component = toOptionalString(options.component);
+          const functionName = resolveFunctionName(options.function, component);
           const qualifier = toOptionalString(options.target);
           const path = toOptionalString(options.path) || '/*';
           const protocol = toOptionalString(options.protocol) || 'HTTP';
@@ -265,6 +275,7 @@ export function registerFnDomainCommands(cli: CAC) {
           }
           if (isJsonOutput()) {
             emitCommandResult({
+              component: component || null,
               domain: normalizedDomain,
               functionName,
               qualifier: qualifier || null,
@@ -371,4 +382,3 @@ export const fnDomainCommandBundle = defineCommandBundle({
   },
   commands: [fnDomainListCommand, fnDomainInfoCommand, fnDomainBindCommand, fnDomainUnbindCommand]
 });
-

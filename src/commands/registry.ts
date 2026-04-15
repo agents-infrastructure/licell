@@ -1,6 +1,8 @@
 import { authCommandModule } from './auth';
+import { bootstrapCommandModule } from './bootstrap';
 import { cacheCommandModule } from './cache';
 import { catalogCommandModule } from './catalog';
+import { ciCommandModule } from './ci';
 import { configCommandModule } from './config';
 import { dbCommandModule } from './db';
 import { deployCommandModule } from './deploy';
@@ -17,9 +19,11 @@ import { releaseCommandModule } from './release';
 import { shellCommandModule } from './shell';
 import { setupCommandModule } from './setup';
 import { skillsCommandModule } from './skills';
+import { stateCommandModule } from './state';
 import { supaCommandModule } from './supa';
 import { taskCommandModule } from './task';
 import { upgradeCommandModule } from './upgrade';
+import { workspaceCommandModule } from './workspace';
 import { defineCommandBundle, defineCommandManifest } from './module';
 
 export const licellRootHelpSurface = defineCommandBundle({
@@ -69,6 +73,8 @@ export const LICELL_COMMAND_MANIFEST = defineCommandManifest({
   modules: [
     authCommandModule,
     initCommandModule,
+    bootstrapCommandModule,
+    workspaceCommandModule,
     configCommandModule,
     deployCommandModule,
     taskCommandModule,
@@ -84,8 +90,10 @@ export const LICELL_COMMAND_MANIFEST = defineCommandManifest({
     supaCommandModule,
     doctorCommandModule,
     catalogCommandModule,
+    ciCommandModule,
     skillsCommandModule,
     setupCommandModule,
+    stateCommandModule,
     shellCommandModule,
     upgradeCommandModule,
     e2eCommandModule

@@ -245,4 +245,52 @@ describe('runLicellDoctor', () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+
+  it('aggregates workspace component reports when all-components is enabled', async () => {
+    const home = createTempDir('licell-doctor-home-');
+    const root = createTempDir('licell-doctor-project-');
+    vi.stubEnv('HOME', home);
+
+    try {
+      writeJson(join(home, '.licell-cli', 'auth.json'), {
+        accountId: '1494910986361453',
+        ak: 'demo-ak',
+        sk: 'demo-sk',
+        region: 'cn-hangzhou'
+      });
+      writeJson(join(root, '.licell', 'project.json'), {
+        defaultComponent: 'api',
+        components: {
+          api: {
+            path: 'apps/api',
+            appName: 'doctor-api',
+            deployType: 'api',
+            runtime: 'nodejs22',
+            entry: 'apps/api/src/index.ts',
+            envs: {}
+          },
+          web: {
+            path: 'apps/web',
+            appName: 'doctor-web',
+            deployType: 'static',
+            dist: 'apps/web/dist',
+            envs: {}
+          }
+        }
+      });
+      writeText(join(root, 'apps', 'api', 'src', 'index.ts'), 'export default async function app() { return { statusCode: 200, body: "ok" }; }\n');
+
+      const report = await runLicellDoctor({ cwd: root, offline: true, allComponents: true });
+
+      expect(report.components?.map((item) => item.component)).toEqual(['api', 'web']);
+      expect(report.components?.find((item) => item.component === 'api')?.report.healthy).toBe(true);
+      expect(report.components?.find((item) => item.component === 'web')?.report.checks.find((check) => check.id === 'deploy.precheck')?.status).toBe('skip');
+      expect(report.context.workspaceMode).toBe('workspace');
+      expect(report.context.component).toBeNull();
+      expect(report.checkCount).toBeGreaterThan(report.checks.length);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });

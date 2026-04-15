@@ -451,6 +451,36 @@ describe('help utils', () => {
     expect(doc?.text).toContain('Recommended Flow:');
   });
 
+  it('explains single vs batch semantics for bootstrap', () => {
+    const doc = buildHelpDocument({
+      argv: ['node', 'src/cli.ts', 'bootstrap', '--help'],
+      version: VERSION
+    });
+
+    expect(doc?.key).toBe('bootstrap');
+    expect(doc?.optionInsights.some((insight) => insight.flag.includes('--all-discovered'))).toBe(true);
+    expect(doc?.optionInsights.some((insight) => insight.flag.includes('--include'))).toBe(true);
+    expect(doc?.optionInsights.some((insight) => insight.flag.includes('--default-component'))).toBe(true);
+    expect(doc?.recommendedFlow.some((step) => step.command === 'licell workspace discover --output json')).toBe(true);
+    expect(doc?.recommendedFlow.some((step) => step.command === 'licell bootstrap --all-discovered --apply --output json')).toBe(true);
+    expect(doc?.text).toContain('单组件模式');
+    expect(doc?.text).toContain('批量模式');
+  });
+
+  it('explains bootstrap-aware selection semantics for deploy plan', () => {
+    const doc = buildHelpDocument({
+      argv: ['node', 'src/cli.ts', 'deploy', 'plan', '--help'],
+      version: VERSION
+    });
+
+    expect(doc?.key).toBe('deploy plan');
+    expect(doc?.optionInsights.some((insight) => insight.flag.includes('--include'))).toBe(true);
+    expect(doc?.optionInsights.some((insight) => insight.flag.includes('--exclude'))).toBe(true);
+    expect(doc?.recommendedFlow.some((step) => step.command === 'licell bootstrap --all-discovered --apply --output json')).toBe(true);
+    expect(doc?.recommendedFlow.some((step) => step.command === 'licell deploy plan --include web,api --output json')).toBe(true);
+    expect(doc?.text).toContain('bootstrap selection');
+  });
+
   it('serializes help into a stable machine-facing schema', () => {
     const doc = buildHelpDocument({
       argv: ['node', 'src/cli.ts', 'domain', 'app', 'bind', '--help'],

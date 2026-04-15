@@ -1,6 +1,7 @@
 import type { CAC } from 'cac';
 import { commandInvocation, defineCliCommand, defineCommandBundle, registerCliCommand } from './module';
 import pc from 'picocolors';
+import { Config } from '../utils/config';
 import { normalizeReleaseTarget } from '../utils/cli-helpers';
 import { bindAppDomainWorkflow, unbindAppDomainWorkflow } from '../workflows/domain';
 import { executeWithAuthRecovery } from '../utils/auth-recovery';
@@ -9,8 +10,10 @@ import {
   ensureDestructiveActionConfirmed,
   createSpinner,
   isInteractiveTTY,
+  requireAppName,
   showIntro,
   showOutro,
+  toOptionalString,
   toPromptValue,
   withSpinner
 } from '../utils/cli-shared';
@@ -20,6 +23,12 @@ import { emitCommandResult, isJsonOutput } from '../utils/output';
 const domainAppBindCommand = defineCliCommand({
   rawName: 'domain app bind <domain>',
   description: '为当前应用编排 DNS、函数域名与可选 SSL',
+  options: [
+    { rawName: '--component <name>', description: '在 workspace / monorepo 根目录显式选择 component' },
+    { rawName: '--ssl', description: '自动配置 Let\'s Encrypt 免费证书开启 HTTPS' },
+    { rawName: '--ssl-force-renew', description: '配合 --ssl 强制续签证书（忽略到期阈值）' },
+    { rawName: '--target <target>', description: '将域名路由到指定 FC alias（如 prod/preview）' }
+  ],
   descriptor: {
     summary: '为当前应用编排 DNS CNAME、FC custom domain，并可选自动开启 HTTPS。',
     related: ['fn domain bind', 'dns records add', 'release promote'],
@@ -78,10 +87,11 @@ const domainAppUnbindCommand = defineCliCommand({
 
 export function registerDomainAppCommands(cli: CAC) {
   registerCliCommand(cli, domainAppBindCommand)
+    .option('--component <name>', '在 workspace / monorepo 根目录显式选择 component')
     .option('--ssl', '自动配置 Let\'s Encrypt 免费证书开启 HTTPS')
     .option('--ssl-force-renew', '配合 --ssl 强制续签证书（忽略到期阈值）')
     .option('--target <target>', '将域名路由到指定 FC alias（如 prod/preview）')
-    .action(async (domain: string, options: { ssl?: boolean; sslForceRenew?: boolean; target?: string }) => {
+    .action(async (domain: string, options: { component?: unknown; ssl?: boolean; sslForceRenew?: boolean; target?: string }) => {
       await executeWithAuthRecovery(
         {
           commandLabel: commandInvocation(domainAppBindCommand),
@@ -91,6 +101,9 @@ export function registerDomainAppCommands(cli: CAC) {
         async () => {
           showIntro(pc.bgCyan(pc.black(' 🌐 App Domain Workflow ')));
           await ensureAuthOrExit();
+          const component = toOptionalString(options.component);
+          const project = Config.getProject(component ? { component } : undefined);
+          requireAppName(project);
           const normalizedDomain = toPromptValue(domain, '域名');
           const releaseTarget = normalizeReleaseTarget(options.target);
           if (options.sslForceRenew && !options.ssl) throw new Error('--ssl-force-renew 需要与 --ssl 一起使用');
@@ -101,6 +114,7 @@ export function registerDomainAppCommands(cli: CAC) {
             `正在配置应用域名 ${normalizedDomain}...`,
             '❌ 应用域名工作流执行失败',
             () => bindAppDomainWorkflow(normalizedDomain, {
+              functionName: project.appName,
               releaseTarget,
               enableHttps: Boolean(options.ssl),
               forceSslRenew: Boolean(options.sslForceRenew),
@@ -114,7 +128,9 @@ export function registerDomainAppCommands(cli: CAC) {
           if (isJsonOutput()) {
             emitCommandResult({
               workflow: 'app',
+              component: component || null,
               domain: result.domainName,
+              functionName: project.appName,
               releaseTarget: result.releaseTarget,
               ssl: Boolean(options.ssl),
               aliasEnsured: result.aliasEnsured,

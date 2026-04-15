@@ -1,6 +1,8 @@
 import type { CAC } from 'cac';
 import { commandInvocation, defineCliCommand, defineCommandBundle, registerCliCommand } from './module';
 import pc from 'picocolors';
+import { Config } from '../utils/config';
+import { resolveOssBucketName } from '../providers/oss';
 import { issueAndBindSSLWithArtifacts } from '../providers/ssl';
 import { bindStaticDomainWorkflow, unbindStaticDomainWorkflow } from '../workflows/domain';
 import { executeWithAuthRecovery } from '../utils/auth-recovery';
@@ -9,6 +11,7 @@ import {
   ensureDestructiveActionConfirmed,
   createSpinner,
   isInteractiveTTY,
+  requireAppName,
   showIntro,
   showOutro,
   toOptionalString,
@@ -21,6 +24,12 @@ import { emitCommandResult, isJsonOutput } from '../utils/output';
 const domainStaticBindCommand = defineCliCommand({
   rawName: 'domain static bind <domain>',
   description: '为静态站点编排 CDN、DNS 与可选 HTTPS',
+  options: [
+    { rawName: '--component <name>', description: '在 workspace / monorepo 根目录显式选择 component' },
+    { rawName: '--bucket <bucket>', description: '指定已有 OSS Bucket；默认使用当前项目推导出的 Bucket' },
+    { rawName: '--ssl', description: '自动签发证书并配置 CDN HTTPS' },
+    { rawName: '--ssl-force-renew', description: '配合 --ssl 强制续签证书（忽略到期阈值）' }
+  ],
   descriptor: {
     summary: '将静态站点域名接到 CDN，并把 DNS CNAME 切到 CDN；可选自动启用 HTTPS。',
     related: ['oss domain bind', 'deploy --type static'],
@@ -78,10 +87,11 @@ const domainStaticUnbindCommand = defineCliCommand({
 
 export function registerDomainStaticCommands(cli: CAC) {
   registerCliCommand(cli, domainStaticBindCommand)
+    .option('--component <name>', '在 workspace / monorepo 根目录显式选择 component')
     .option('--bucket <bucket>', '指定已有 OSS Bucket；默认使用当前项目推导出的 Bucket')
     .option('--ssl', '自动签发证书并配置 CDN HTTPS')
     .option('--ssl-force-renew', '配合 --ssl 强制续签证书（忽略到期阈值）')
-    .action(async (domain: string, options: { bucket?: unknown; ssl?: boolean; sslForceRenew?: boolean }) => {
+    .action(async (domain: string, options: { component?: unknown; bucket?: unknown; ssl?: boolean; sslForceRenew?: boolean }) => {
       await executeWithAuthRecovery(
         {
           commandLabel: commandInvocation(domainStaticBindCommand),
@@ -92,7 +102,15 @@ export function registerDomainStaticCommands(cli: CAC) {
           showIntro(pc.bgCyan(pc.black(' 🌐 Static Domain Workflow ')));
           await ensureAuthOrExit();
           const normalizedDomain = toPromptValue(domain, '域名');
-          const bucketName = toOptionalString(options.bucket);
+          const component = toOptionalString(options.component);
+          const project = Config.getProject(component ? { component } : undefined);
+          const bucketName = (() => {
+            const explicitBucket = toOptionalString(options.bucket);
+            if (explicitBucket) return explicitBucket;
+            if (!component) return undefined;
+            requireAppName(project);
+            return resolveOssBucketName(project.appName);
+          })();
           if (options.sslForceRenew && !options.ssl) throw new Error('--ssl-force-renew 需要与 --ssl 一起使用');
 
           const s = createSpinner();
@@ -126,6 +144,7 @@ export function registerDomainStaticCommands(cli: CAC) {
           if (isJsonOutput()) {
             emitCommandResult({
               workflow: 'static',
+              component: component || null,
               domain: result.domainName,
               bucket: result.bucketName,
               originDomain: result.originDomain,
@@ -207,4 +226,3 @@ export const domainStaticCommandBundle = defineCommandBundle({
   },
   commands: [domainStaticBindCommand, domainStaticUnbindCommand]
 });
-

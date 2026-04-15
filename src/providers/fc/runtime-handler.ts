@@ -1,4 +1,5 @@
 import type * as $FC from '@alicloud/fc20230330';
+import type { ProjectConfig } from '../../utils/config';
 
 export interface ResolvedRuntimeConfig {
   runtime: string;
@@ -13,8 +14,8 @@ export interface RuntimeHandler {
   defaultEntry: string;
   unsupportedMessage: string;
   supportsInternalDeploymentProbe?: boolean;
-  prepareBootFile(entryFile: string, outdir: string): Promise<string>;
-  resolveConfig(outdir: string, bootFile: string): Promise<ResolvedRuntimeConfig>;
+  prepareBootFile(entryFile: string, outdir: string, project?: ProjectConfig): Promise<string>;
+  resolveConfig(outdir: string, bootFile: string, project?: ProjectConfig): Promise<ResolvedRuntimeConfig>;
 }
 
 const registry = new Map<string, RuntimeHandler>();

@@ -4,6 +4,7 @@ import { cac } from 'cac';
 const {
   ensureDestructiveActionConfirmedMock,
   executeWithAuthRecoveryMock,
+  getProjectMock,
   getAsyncInvokeConfigMock,
   removeAsyncInvokeConfigMock,
   showOutroMock,
@@ -12,6 +13,7 @@ const {
 } = vi.hoisted(() => ({
   ensureDestructiveActionConfirmedMock: vi.fn(async () => {}),
   executeWithAuthRecoveryMock: vi.fn(async (_options: unknown, task: () => Promise<unknown>) => task()),
+  getProjectMock: vi.fn(() => ({ appName: 'demo-worker' })),
   getAsyncInvokeConfigMock: vi.fn(),
   removeAsyncInvokeConfigMock: vi.fn(),
   showOutroMock: vi.fn(),
@@ -35,7 +37,7 @@ vi.mock('../utils/auth-recovery', () => ({
 
 vi.mock('../utils/config', () => ({
   Config: {
-    getProject: vi.fn(() => ({ appName: 'demo-worker' }))
+    getProject: getProjectMock
   }
 }));
 
@@ -80,6 +82,8 @@ describe('task commands', () => {
     ensureDestructiveActionConfirmedMock.mockClear();
     executeWithAuthRecoveryMock.mockClear();
     getAsyncInvokeConfigProviderMock.mockReset();
+    getProjectMock.mockReset();
+    getProjectMock.mockImplementation(() => ({ appName: 'demo-worker' }));
     removeAsyncInvokeConfigProviderMock.mockReset();
     showOutroMock.mockClear();
     spinnerStopMock.mockClear();
@@ -175,5 +179,26 @@ describe('task commands', () => {
 
     expect(ensureDestructiveActionConfirmedMock).toHaveBeenCalledTimes(1);
     expect(removeAsyncInvokeConfigProviderMock).toHaveBeenCalledWith('image-worker', 'prod');
+  });
+
+  it('resolves project appName from the selected component', async () => {
+    getAsyncInvokeConfigProviderMock.mockResolvedValue({
+      qualifier: 'preview',
+      asyncTask: true
+    });
+
+    const cli = await createCli();
+    await cli.parse([
+      'node',
+      'src/cli.ts',
+      'task config',
+      '--component',
+      'worker',
+      '--target',
+      'preview'
+    ]);
+
+    expect(getProjectMock).toHaveBeenCalledWith({ component: 'worker' });
+    expect(getAsyncInvokeConfigProviderMock).toHaveBeenCalledWith('demo-worker', 'preview');
   });
 });

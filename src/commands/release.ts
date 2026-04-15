@@ -16,6 +16,7 @@ import {
   showIntro,
   showOutro,
   requireAppName,
+  toOptionalString,
   toPromptValue,
   isNoChangesPublishError,
   getLatestPublishedVersionId,
@@ -33,6 +34,7 @@ const releaseListCommand = defineCliCommand({
   rawName: 'release list',
   description: '查看函数版本列表',
   options: [
+    { rawName: '--component <name>', description: '在 workspace / monorepo 根目录显式选择 component' },
     { rawName: '--limit <n>', description: '返回版本数量，默认 20' }
   ]
 });
@@ -41,6 +43,7 @@ const releasePromoteCommand = defineCliCommand({
   rawName: 'release promote [versionId]',
   description: '发布并切流到目标别名',
   options: [
+    { rawName: '--component <name>', description: '在 workspace / monorepo 根目录显式选择 component' },
     { rawName: '--target <target>', description: '目标别名，默认 prod' }
   ],
   descriptor: {
@@ -56,6 +59,7 @@ const releaseRollbackCommand = defineCliCommand({
   rawName: 'release rollback <versionId>',
   description: '回滚到指定函数版本',
   options: [
+    { rawName: '--component <name>', description: '在 workspace / monorepo 根目录显式选择 component' },
     { rawName: '--target <target>', description: '目标别名，默认 prod' }
   ],
   descriptor: {
@@ -71,6 +75,7 @@ const releasePruneCommand = defineCliCommand({
   rawName: 'release prune',
   description: '清理历史函数版本（默认仅预览）',
   options: [
+    { rawName: '--component <name>', description: '在 workspace / monorepo 根目录显式选择 component' },
     { rawName: '--keep <n>', description: '保留最近 N 个版本，默认 10' },
     { rawName: '--apply', description: '执行删除，未传则仅预览' },
     { rawName: '--yes', description: '跳过二次确认（危险）' },
@@ -102,7 +107,7 @@ const releasePruneCommand = defineCliCommand({
 
 export function registerReleaseCommands(cli: CAC) {
   registerCliCommand(cli, releaseListCommand)
-    .action(async (options: { limit?: string }) => {
+    .action(async (options: { component?: unknown; limit?: string }) => {
       await executeWithAuthRecovery(
         {
           commandLabel: commandInvocation(releaseListCommand),
@@ -112,7 +117,8 @@ export function registerReleaseCommands(cli: CAC) {
         async () => {
           showIntro(pc.bgBlue(pc.white(' 📚 Function Versions ')));
           ensureAuthOrExit();
-          const project = Config.getProject();
+          const component = toOptionalString(options.component);
+          const project = Config.getProject({ component });
           requireAppName(project);
 
           const limit = parseListLimit(options.limit, 20, 100);
@@ -130,6 +136,7 @@ export function registerReleaseCommands(cli: CAC) {
           }
           if (isJsonOutput()) {
             emitCommandResult({
+              component: component || null,
               appName: project.appName,
               count: versions.length,
               versions
@@ -152,7 +159,7 @@ export function registerReleaseCommands(cli: CAC) {
     });
 
   registerCliCommand(cli, releasePromoteCommand)
-    .action(async (versionIdArg: string | undefined, options: { target?: string }) => {
+    .action(async (versionIdArg: string | undefined, options: { component?: unknown; target?: string }) => {
       await executeWithAuthRecovery(
         {
           commandLabel: commandInvocation(releasePromoteCommand),
@@ -162,7 +169,8 @@ export function registerReleaseCommands(cli: CAC) {
         async () => {
           showIntro(pc.bgBlue(pc.white(' 🚀 Promote Release ')));
           ensureAuthOrExit();
-          const project = Config.getProject();
+          const component = toOptionalString(options.component);
+          const project = Config.getProject({ component });
           requireAppName(project);
 
           const target = normalizeReleaseTarget(options.target);
@@ -201,6 +209,7 @@ export function registerReleaseCommands(cli: CAC) {
           }
           if (isJsonOutput()) {
             emitCommandResult({
+              component: component || null,
               appName: project.appName,
               target,
               versionId
@@ -214,7 +223,7 @@ export function registerReleaseCommands(cli: CAC) {
     });
 
   registerCliCommand(cli, releaseRollbackCommand)
-    .action(async (versionId: string, options: { target?: string }) => {
+    .action(async (versionId: string, options: { component?: unknown; target?: string }) => {
       await executeWithAuthRecovery(
         {
           commandLabel: commandInvocation(releaseRollbackCommand),
@@ -224,7 +233,8 @@ export function registerReleaseCommands(cli: CAC) {
         async () => {
           showIntro(pc.bgBlue(pc.white(' ↩ Rollback Release ')));
           ensureAuthOrExit();
-          const project = Config.getProject();
+          const component = toOptionalString(options.component);
+          const project = Config.getProject({ component });
           requireAppName(project);
 
           const target = normalizeReleaseTarget(options.target);
@@ -250,6 +260,7 @@ export function registerReleaseCommands(cli: CAC) {
           }
           if (isJsonOutput()) {
             emitCommandResult({
+              component: component || null,
               appName: project.appName,
               target,
               versionId: rollbackVersion
@@ -263,7 +274,7 @@ export function registerReleaseCommands(cli: CAC) {
     });
 
   registerCliCommand(cli, releasePruneCommand)
-    .action(async (options: { keep?: string; apply?: boolean; yes?: boolean; preview?: boolean }) => {
+    .action(async (options: { component?: unknown; keep?: string; apply?: boolean; yes?: boolean; preview?: boolean }) => {
       await executeWithAuthRecovery(
         {
           commandLabel: commandInvocation(releasePruneCommand),
@@ -273,7 +284,8 @@ export function registerReleaseCommands(cli: CAC) {
         async () => {
           showIntro(pc.bgBlue(pc.white(options.preview ? ' 🧹 Prune Preview Domains ' : ' 🧹 Prune Function Versions ')));
           ensureAuthOrExit();
-          const project = Config.getProject();
+          const component = toOptionalString(options.component);
+          const project = Config.getProject({ component });
           requireAppName(project);
 
           const keep = parseOptionalPositiveInt(options.keep, 'keep') || (options.preview ? 3 : 10);
@@ -296,6 +308,7 @@ export function registerReleaseCommands(cli: CAC) {
             }
             if (isJsonOutput()) {
               emitCommandResult({
+                component: component || null,
                 appName: project.appName,
                 keepRequested: keep,
                 applyRequested: apply,
@@ -342,6 +355,7 @@ export function registerReleaseCommands(cli: CAC) {
           }
           if (isJsonOutput()) {
             emitCommandResult({
+              component: component || null,
               appName: project.appName,
               keepRequested: keep,
               applyRequested: apply,

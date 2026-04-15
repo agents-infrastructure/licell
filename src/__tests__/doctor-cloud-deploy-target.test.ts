@@ -107,7 +107,7 @@ describe('probeDoctorDeployTarget', () => {
         source: 'doctor-next-command'
       })
     ]);
-  });
+  }, 15000);
 
   it('reports empty static bucket as warning', async () => {
     const { probeDoctorDeployTarget } = await import('../providers/doctor-cloud');

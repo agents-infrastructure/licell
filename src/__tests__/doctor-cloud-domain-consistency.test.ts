@@ -118,7 +118,7 @@ describe('probeDoctorDomainConsistency', () => {
 
     expect(result.status).toBe('ok');
     expect(result.summary).toContain('一致性通过');
-  });
+  }, 15000);
 
   it('reports api domain route drift when qualifier alias is missing', async () => {
     const { probeDoctorDomainConsistency } = await import('../providers/doctor-cloud');

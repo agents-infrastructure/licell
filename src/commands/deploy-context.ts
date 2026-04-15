@@ -13,6 +13,7 @@ import {
   parseOptionalPositiveNumber,
   normalizeCustomDomain,
   normalizeDomainSuffix,
+  tryNormalizeCustomDomain,
   tryNormalizeDeployType,
   tryNormalizeDomainSuffix,
   tryNormalizeFcRuntime
@@ -20,6 +21,7 @@ import {
 import { isJsonOutput } from '../utils/output';
 
 export interface DeployCliOptions {
+  component?: string;
   target?: string;
   domain?: string;
   domainSuffix?: string;
@@ -41,10 +43,12 @@ export interface DeployCliOptions {
 }
 
 export interface DeployContext {
+  component?: string;
   appName: string;
   type: 'api' | 'static' | 'task';
   releaseTarget?: string;
   cliDomain?: string;
+  projectDomain?: string;
   domainSuffix?: string;
   enableCdn: boolean;
   useVpc: boolean;
@@ -58,6 +62,10 @@ export interface DeployContext {
   project: ProjectConfig;
   cliDomainSuffix?: string;
   projectDomainSuffix?: string;
+  projectTarget?: string;
+  projectEnableCdn?: boolean;
+  projectEnableSSL?: boolean;
+  projectUseVpc?: boolean;
   cliType?: 'api' | 'static' | 'task';
   projectDeployType?: 'api' | 'static' | 'task';
   envDeployType?: 'api' | 'static' | 'task';
@@ -65,7 +73,9 @@ export interface DeployContext {
   projectRuntime?: string;
   envRuntime?: string;
   cliEntry?: string;
+  projectEntry?: string;
   cliDist?: string;
+  projectDist?: string;
 }
 
 export function resolveDeploySslEnabled(
@@ -81,7 +91,7 @@ export async function resolveDeployContext(options: DeployCliOptions): Promise<D
   const auth = await ensureAuthOrExit();
   const interactiveTTY = isInteractiveTTY();
 
-  let project = Config.getProject();
+  let project = Config.getProject({ component: options.component });
   if (!project.appName) {
     if (!interactiveTTY) {
       throw new Error('缺少应用名，请先配置 .licell/project.json 的 appName，或在交互终端执行 deploy 初始化');
@@ -92,11 +102,12 @@ export async function resolveDeployContext(options: DeployCliOptions): Promise<D
     }), '应用名');
     if (!/^[a-z0-9-]+$/.test(appName)) throw new Error('应用名仅允许小写字母、数字和短横线');
     if (appName.length > 128) throw new Error('应用名长度不能超过 128 个字符');
-    Config.setProject({ appName });
-    project = Config.getProject();
+    Config.setProject({ appName }, { component: options.component });
+    project = Config.getProject({ component: options.component });
   }
 
   const cliDomain = options.domain ? normalizeCustomDomain(options.domain) : undefined;
+  const projectDomain = tryNormalizeCustomDomain(project.domain);
   const cliDomainSuffix = options.domainSuffix ? normalizeDomainSuffix(options.domainSuffix) : undefined;
   const projectDomainSuffix = tryNormalizeDomainSuffix(project.domainSuffix);
   const envDomainSuffix = tryNormalizeDomainSuffix(readLicellEnv(process.env, 'DOMAIN_SUFFIX'));
@@ -107,6 +118,18 @@ export async function resolveDeployContext(options: DeployCliOptions): Promise<D
   const envRuntime = tryNormalizeFcRuntime(readLicellEnv(process.env, 'FC_RUNTIME'));
   const projectDeployType = tryNormalizeDeployType(project.deployType);
   const envDeployType = tryNormalizeDeployType(readLicellEnv(process.env, 'DEPLOY_TYPE'));
+  const projectTarget = typeof project.target === 'string' && project.target.trim().length > 0
+    ? normalizeReleaseTarget(project.target)
+    : undefined;
+  const projectEnableCdn = typeof project.enableCdn === 'boolean' ? project.enableCdn : undefined;
+  const projectEnableSSL = typeof project.enableSSL === 'boolean' ? project.enableSSL : undefined;
+  const projectUseVpc = typeof project.useVpc === 'boolean' ? project.useVpc : undefined;
+  const projectEntry = typeof project.entry === 'string' && project.entry.trim().length > 0
+    ? project.entry.trim()
+    : undefined;
+  const projectDist = typeof project.dist === 'string' && project.dist.trim().length > 0
+    ? project.dist.trim()
+    : undefined;
   const cliAcrNamespace = options.acrNamespace ? normalizeAcrNamespace(options.acrNamespace) : undefined;
   const cliType = options.type ? normalizeDeployType(options.type) : undefined;
   let type: 'api' | 'static' | 'task';
@@ -149,28 +172,29 @@ export async function resolveDeployContext(options: DeployCliOptions): Promise<D
   } else {
     type = 'api';
   }
-  const domainSuffix = cliDomain
+  const resolvedDomain = cliDomain || projectDomain;
+  const domainSuffix = resolvedDomain
     ? undefined
     : type === 'static'
-      ? cliDomainSuffix
+      ? (cliDomainSuffix || projectDomainSuffix)
       : type === 'api'
         ? (cliDomainSuffix || projectDomainSuffix || envDomainSuffix || globalDomainSuffix)
         : undefined;
-  const releaseTarget = options.target ? normalizeReleaseTarget(options.target) : undefined;
-  const staticDomainRequested = type === 'static' && Boolean(cliDomain || domainSuffix);
+  const releaseTarget = options.target ? normalizeReleaseTarget(options.target) : projectTarget;
+  const staticDomainRequested = type === 'static' && Boolean(resolvedDomain || domainSuffix);
   const enableCdn = type === 'static'
-    ? Boolean(options.enableCdn || staticDomainRequested)
-    : Boolean(options.enableCdn);
+    ? Boolean(options.enableCdn || projectEnableCdn || staticDomainRequested)
+    : Boolean(options.enableCdn || projectEnableCdn);
   const enableSSL = type === 'static'
-    ? Boolean(options.ssl || staticDomainRequested || enableCdn)
+    ? Boolean(options.ssl || projectEnableSSL || staticDomainRequested || enableCdn)
     : type === 'api'
-      ? resolveDeploySslEnabled(options.ssl, cliDomain, enableCdn, domainSuffix)
+      ? resolveDeploySslEnabled(Boolean(options.ssl || projectEnableSSL), resolvedDomain, enableCdn, domainSuffix)
       : false;
   const forceSslRenew = Boolean(options.sslForceRenew);
   if (type === 'task') {
-    if (cliDomain || cliDomainSuffix) throw new Error('任务函数不支持 --domain / --domain-suffix');
-    if (options.enableCdn) throw new Error('任务函数不支持 --enable-cdn');
-    if (options.ssl) throw new Error('任务函数不支持 --ssl');
+    if (cliDomain || projectDomain || cliDomainSuffix || projectDomainSuffix) throw new Error('任务函数不支持 --domain / --domain-suffix');
+    if (options.enableCdn || projectEnableCdn) throw new Error('任务函数不支持 --enable-cdn');
+    if (options.ssl || projectEnableSSL) throw new Error('任务函数不支持 --ssl');
     if (forceSslRenew) throw new Error('任务函数不支持 --ssl-force-renew');
     if (options.preview) throw new Error('任务函数不支持 --preview');
   }
@@ -179,13 +203,13 @@ export async function resolveDeployContext(options: DeployCliOptions): Promise<D
   if (options.enableVpc && options.disableVpc) throw new Error('--enable-vpc 与 --disable-vpc 不能同时使用');
   if (type === 'static' && options.enableVpc) throw new Error('--enable-vpc 仅适用于 FC 函数部署（api / task）');
   if (type === 'static' && options.disableVpc) throw new Error('--disable-vpc 仅适用于 FC 函数部署（api / task）');
-  if (enableCdn && !cliDomain && !domainSuffix) {
+  if (enableCdn && !resolvedDomain && !domainSuffix) {
     throw new Error('--enable-cdn 需要域名，请提供 --domain（完整域名）或 --domain-suffix');
   }
   if (type === 'static' && cliRuntime) throw new Error('--runtime 的 FC 运行时仅适用于 api / task；静态站请使用 --runtime static');
   if (type === 'static' && cliAcrNamespace) throw new Error('--acr-namespace 仅适用于 FC Docker 部署');
   if (forceSslRenew && !enableSSL) throw new Error('--ssl-force-renew 需要启用 HTTPS（请使用 --domain 或 --ssl）');
-  if (enableSSL && !cliDomain && !domainSuffix) {
+  if (enableSSL && !resolvedDomain && !domainSuffix) {
     throw new Error('--ssl 需要域名，请提供 --domain（完整域名）或 --domain-suffix');
   }
 
@@ -194,7 +218,7 @@ export async function resolveDeployContext(options: DeployCliOptions): Promise<D
   if (preview && !domainSuffix) {
     throw new Error('--preview 需要域名后缀，请先执行 licell deploy --domain-suffix your-domain.com 或 licell config domain your-domain.com');
   }
-  if (preview && cliDomain) throw new Error('--preview 与 --domain 不能同时使用，preview 会自动生成预览域名');
+  if (preview && resolvedDomain) throw new Error('--preview 与 --domain 不能同时使用，preview 会自动生成预览域名');
 
   const appName = project.appName;
   if (!appName) {
@@ -213,13 +237,21 @@ export async function resolveDeployContext(options: DeployCliOptions): Promise<D
       ...(cliTimeout !== undefined ? { timeout: cliTimeout } : {})
     }
     : undefined;
-  const useVpc = type === 'static' ? false : !Boolean(options.disableVpc);
+  const useVpc = type === 'static'
+    ? false
+    : options.disableVpc
+      ? false
+      : options.enableVpc
+        ? true
+        : (projectUseVpc ?? true);
 
   return {
+    component: options.component,
     appName,
     type,
     releaseTarget,
     cliDomain,
+    projectDomain,
     domainSuffix,
     enableCdn,
     useVpc,
@@ -233,6 +265,10 @@ export async function resolveDeployContext(options: DeployCliOptions): Promise<D
     project,
     cliDomainSuffix,
     projectDomainSuffix,
+    projectTarget,
+    projectEnableCdn,
+    projectEnableSSL,
+    projectUseVpc,
     cliType,
     projectDeployType,
     envDeployType,
@@ -240,6 +276,8 @@ export async function resolveDeployContext(options: DeployCliOptions): Promise<D
     projectRuntime,
     envRuntime,
     cliEntry: options.entry,
-    cliDist: options.dist
+    projectEntry,
+    cliDist: options.dist,
+    projectDist
   };
 }

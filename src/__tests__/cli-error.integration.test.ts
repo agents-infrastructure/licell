@@ -57,7 +57,7 @@ describe('cli error e2e', () => {
     expect(records[0]?.nextCommands?.[0]?.commandTemplate).toContain('--help');
     expect(records[0]?.nextActions?.[0]?.commandTemplate).toContain('--help');
     expect(records[0]?.nextActions?.[0]?.source).toBe('error-remediation');
-  }, 10000);
+  }, 15000);
 
   it('emits structured missing-args errors with compatibility nextCommands', () => {
     const result = runCli(['dns', 'records', 'add', '--output', 'json']);

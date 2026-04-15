@@ -31,6 +31,7 @@ const taskConfigCommand = defineCliCommand({
   rawName: 'task config [name]',
   description: '查看任务函数的异步调用配置',
   options: [
+    { rawName: '--component <name>', description: '在 workspace / monorepo 根目录显式选择 component' },
     { rawName: '--target <target>', description: '指定 alias/version（如 prod/preview/1）' }
   ],
   descriptor: {
@@ -66,6 +67,7 @@ const taskConfigSetCommand = defineCliCommand({
   rawName: 'task config set [name]',
   description: '写入任务函数的异步调用配置',
   options: [
+    { rawName: '--component <name>', description: '在 workspace / monorepo 根目录显式选择 component' },
     { rawName: '--target <target>', description: '指定 alias/version（如 prod/preview/1）' },
     { rawName: '--enable', description: '显式启用 asyncTask（默认行为）' },
     { rawName: '--disable', description: '显式关闭 asyncTask' },
@@ -137,6 +139,7 @@ const taskConfigRmCommand = defineCliCommand({
   rawName: 'task config rm [name]',
   description: '删除任务函数的异步调用配置',
   options: [
+    { rawName: '--component <name>', description: '在 workspace / monorepo 根目录显式选择 component' },
     { rawName: '--target <target>', description: '指定 alias/version（如 prod/preview/1）' },
     { rawName: '--yes', description: '跳过二次确认（危险）' }
   ],
@@ -172,6 +175,7 @@ const taskInvokeCommand = defineCliCommand({
   rawName: 'task invoke [name]',
   description: '异步调用任务函数',
   options: [
+    { rawName: '--component <name>', description: '在 workspace / monorepo 根目录显式选择 component' },
     { rawName: '--target <target>', description: '指定 alias/version（如 prod/preview/1）' },
     { rawName: '--payload <text>', description: '传入原始 payload 文本' },
     { rawName: '--file <path>', description: '从文件读取 payload' },
@@ -225,6 +229,7 @@ const taskListCommand = defineCliCommand({
   rawName: 'task list [name]',
   description: '查看任务函数的异步任务列表',
   options: [
+    { rawName: '--component <name>', description: '在 workspace / monorepo 根目录显式选择 component' },
     { rawName: '--target <target>', description: '指定 alias/version（如 prod/preview/1）' },
     { rawName: '--status <status>', description: '按任务状态过滤（如 Running/Succeeded/Failed/Stopped）' },
     { rawName: '--prefix <prefix>', description: '按任务 ID 前缀过滤' },
@@ -296,6 +301,7 @@ const taskInfoCommand = defineCliCommand({
   rawName: 'task info <taskId> [name]',
   description: '查看单个异步任务详情',
   options: [
+    { rawName: '--component <name>', description: '在 workspace / monorepo 根目录显式选择 component' },
     { rawName: '--target <target>', description: '指定 alias/version（如 prod/preview/1）' }
   ],
   descriptor: {
@@ -338,6 +344,7 @@ const taskStopCommand = defineCliCommand({
   rawName: 'task stop <taskId> [name]',
   description: '停止正在运行的异步任务',
   options: [
+    { rawName: '--component <name>', description: '在 workspace / monorepo 根目录显式选择 component' },
     { rawName: '--target <target>', description: '指定 alias/version（如 prod/preview/1）' }
   ],
   descriptor: {
@@ -369,8 +376,8 @@ const taskStopCommand = defineCliCommand({
   }
 });
 
-function requireFunctionName(name: string | undefined) {
-  const project = Config.getProject();
+function requireFunctionName(name: string | undefined, component?: string) {
+  const project = Config.getProject(component ? { component } : undefined);
   const functionName = toOptionalString(name) || project.appName;
   if (!functionName) {
     throw new Error('请传入函数名，或先在当前项目执行 licell deploy 生成 appName');
@@ -498,7 +505,7 @@ export function buildNextAsyncInvokeConfig(
 
 export function registerTaskCommands(cli: CAC) {
   registerCliCommand(cli, taskConfigCommand)
-    .action(async (name: string | undefined, options: { target?: unknown }) => {
+    .action(async (name: string | undefined, options: { component?: unknown; target?: unknown }) => {
       await executeWithAuthRecovery(
         {
           commandLabel: commandInvocation(taskConfigCommand),
@@ -507,7 +514,8 @@ export function registerTaskCommands(cli: CAC) {
         },
         async () => {
           ensureAuthOrExit();
-          const functionName = requireFunctionName(name);
+          const component = toOptionalString(options.component);
+          const functionName = requireFunctionName(name, component);
           const qualifier = toOptionalString(options.target);
           const s = createSpinner();
           const config = (await withSpinner(
@@ -520,7 +528,7 @@ export function registerTaskCommands(cli: CAC) {
             s.stop(pc.green(config ? '✅ 已读取异步调用配置' : '✅ 当前未配置异步调用'));
           }
           if (isJsonOutput()) {
-            emitCommandResult(toTaskConfigResult(functionName, qualifier || undefined, config));
+            emitCommandResult({ component: component || null, ...toTaskConfigResult(functionName, qualifier || undefined, config) });
             return;
           }
           printTaskConfigSummary(functionName, qualifier || undefined, config);
@@ -536,6 +544,7 @@ export function registerTaskCommands(cli: CAC) {
 
   registerCliCommand(cli, taskConfigSetCommand)
     .action(async (name: string | undefined, options: {
+      component?: unknown;
       target?: unknown;
       enable?: boolean;
       disable?: boolean;
@@ -554,7 +563,8 @@ export function registerTaskCommands(cli: CAC) {
         },
         async () => {
           ensureAuthOrExit();
-          const functionName = requireFunctionName(name);
+          const component = toOptionalString(options.component);
+          const functionName = requireFunctionName(name, component);
           const qualifier = toOptionalString(options.target);
           const s = createSpinner();
           const current = (await withSpinner(
@@ -575,7 +585,7 @@ export function registerTaskCommands(cli: CAC) {
             s.stop(pc.green('✅ 异步调用配置已更新'));
           }
           if (isJsonOutput()) {
-            emitCommandResult(toTaskConfigResult(functionName, qualifier || undefined, result));
+            emitCommandResult({ component: component || null, ...toTaskConfigResult(functionName, qualifier || undefined, result) });
             return;
           }
           printTaskConfigSummary(functionName, qualifier || undefined, result);
@@ -586,7 +596,7 @@ export function registerTaskCommands(cli: CAC) {
     });
 
   registerCliCommand(cli, taskConfigRmCommand)
-    .action(async (name: string | undefined, options: { target?: unknown; yes?: boolean }) => {
+    .action(async (name: string | undefined, options: { component?: unknown; target?: unknown; yes?: boolean }) => {
       await executeWithAuthRecovery(
         {
           commandLabel: commandInvocation(taskConfigRmCommand),
@@ -595,7 +605,8 @@ export function registerTaskCommands(cli: CAC) {
         },
         async () => {
           ensureAuthOrExit();
-          const functionName = requireFunctionName(name);
+          const component = toOptionalString(options.component);
+          const functionName = requireFunctionName(name, component);
           const qualifier = toOptionalString(options.target);
           await ensureDestructiveActionConfirmed(
             `删除 ${functionName}${qualifier ? `@${qualifier}` : '@LATEST'} 的异步调用配置`,
@@ -613,7 +624,7 @@ export function registerTaskCommands(cli: CAC) {
             s.stop(result.removed ? pc.green('✅ 异步调用配置已删除') : pc.yellow('⚠️ 当前 qualifier 没有可删除的异步调用配置'));
           }
           if (isJsonOutput()) {
-            emitCommandResult(toTaskConfigResult(functionName, qualifier || undefined, null, { removed: result.removed }));
+            emitCommandResult({ component: component || null, ...toTaskConfigResult(functionName, qualifier || undefined, null, { removed: result.removed }) });
             return;
           }
           console.log('');
@@ -627,7 +638,7 @@ export function registerTaskCommands(cli: CAC) {
     });
 
   registerCliCommand(cli, taskInvokeCommand)
-    .action(async (name: string | undefined, options: { target?: unknown; payload?: unknown; file?: unknown; taskId?: unknown }) => {
+    .action(async (name: string | undefined, options: { component?: unknown; target?: unknown; payload?: unknown; file?: unknown; taskId?: unknown }) => {
       await executeWithAuthRecovery(
         {
           commandLabel: commandInvocation(taskInvokeCommand),
@@ -636,7 +647,8 @@ export function registerTaskCommands(cli: CAC) {
         },
         async () => {
           ensureAuthOrExit();
-          const functionName = requireFunctionName(name);
+          const component = toOptionalString(options.component);
+          const functionName = requireFunctionName(name, component);
           const qualifier = toOptionalString(options.target);
           const payload = resolveOptionalPayloadInput({ payload: options.payload, file: options.file });
           const taskId = toOptionalString(options.taskId);
@@ -671,6 +683,7 @@ export function registerTaskCommands(cli: CAC) {
           }
           if (isJsonOutput()) {
             emitCommandResult({
+              component: component || null,
               functionName,
               qualifier: qualifier || null,
               taskId: result.taskId || null,
@@ -694,6 +707,7 @@ export function registerTaskCommands(cli: CAC) {
 
   registerCliCommand(cli, taskListCommand)
     .action(async (name: string | undefined, options: {
+      component?: unknown;
       target?: unknown;
       status?: unknown;
       prefix?: unknown;
@@ -711,7 +725,8 @@ export function registerTaskCommands(cli: CAC) {
         },
         async () => {
           ensureAuthOrExit();
-          const functionName = requireFunctionName(name);
+          const component = toOptionalString(options.component);
+          const functionName = requireFunctionName(name, component);
           const qualifier = toOptionalString(options.target);
           const limit = parseListLimit(options.limit, 20, 200);
           const result = await listAsyncTasks(functionName, {
@@ -727,6 +742,7 @@ export function registerTaskCommands(cli: CAC) {
 
           if (isJsonOutput()) {
             emitCommandResult({
+              component: component || null,
               functionName,
               qualifier: qualifier || null,
               count: result.tasks.length,
@@ -756,7 +772,7 @@ export function registerTaskCommands(cli: CAC) {
     });
 
   registerCliCommand(cli, taskInfoCommand)
-    .action(async (taskId: string, name: string | undefined, options: { target?: unknown }) => {
+    .action(async (taskId: string, name: string | undefined, options: { component?: unknown; target?: unknown }) => {
       await executeWithAuthRecovery(
         {
           commandLabel: commandInvocation(taskInfoCommand),
@@ -765,12 +781,14 @@ export function registerTaskCommands(cli: CAC) {
         },
         async () => {
           ensureAuthOrExit();
-          const functionName = requireFunctionName(name);
+          const component = toOptionalString(options.component);
+          const functionName = requireFunctionName(name, component);
           const qualifier = toOptionalString(options.target);
           const detail = await getAsyncTask(functionName, taskId, qualifier || undefined);
 
           if (isJsonOutput()) {
             emitCommandResult({
+              component: component || null,
               functionName,
               qualifier: qualifier || null,
               ...detail
@@ -804,7 +822,7 @@ export function registerTaskCommands(cli: CAC) {
     });
 
   registerCliCommand(cli, taskStopCommand)
-    .action(async (taskId: string, name: string | undefined, options: { target?: unknown }) => {
+    .action(async (taskId: string, name: string | undefined, options: { component?: unknown; target?: unknown }) => {
       await executeWithAuthRecovery(
         {
           commandLabel: commandInvocation(taskStopCommand),
@@ -813,7 +831,8 @@ export function registerTaskCommands(cli: CAC) {
         },
         async () => {
           ensureAuthOrExit();
-          const functionName = requireFunctionName(name);
+          const component = toOptionalString(options.component);
+          const functionName = requireFunctionName(name, component);
           const qualifier = toOptionalString(options.target);
           const s = createSpinner();
           const result = await withSpinner(
@@ -828,6 +847,7 @@ export function registerTaskCommands(cli: CAC) {
           }
           if (isJsonOutput()) {
             emitCommandResult({
+              component: component || null,
               ...result
             });
             return;

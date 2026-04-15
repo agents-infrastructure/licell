@@ -1,7 +1,7 @@
 import * as $FC from '@alicloud/fc20230330';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { join, relative } from 'path';
-import { Config } from '../../../utils/config';
+import { Config, type ProjectConfig } from '../../../utils/config';
 import { checkDockerAvailable, dockerBuild, dockerLogin, dockerPush } from '../../../utils/docker';
 import { generateDockerfile, detectProjectType } from '../../../utils/dockerfile';
 import { ensureAcrReady, getDockerLoginCredentials, buildImageUri, formatTimestampTag } from '../../cr';
@@ -345,7 +345,7 @@ export const dockerHandler: RuntimeHandler = {
   defaultEntry: '',
   unsupportedMessage: '当前地域暂不支持 custom-container 运行时。请确认目标地域支持自定义容器镜像后重试。',
 
-  async prepareBootFile(entryFile: string, _outdir: string) {
+  async prepareBootFile(entryFile: string, _outdir: string, projectOverride?: ProjectConfig) {
     const projectRoot = process.cwd();
 
     checkDockerAvailable();
@@ -355,7 +355,7 @@ export const dockerHandler: RuntimeHandler = {
       : ensureGeneratedDockerfile(projectRoot, entryFile);
 
     const auth = Config.requireAuth();
-    const project = Config.getProject();
+    const project = projectOverride || Config.getProject();
     const appName = project.appName;
     if (!appName) throw new Error('appName 未设置，请检查项目配置');
 

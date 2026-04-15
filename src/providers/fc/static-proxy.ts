@@ -192,10 +192,10 @@ export function resolveStaticProxyFunctionName(appName: string): string {
 export async function deployStaticProxyFunction(
   appName: string,
   bucketName: string,
-  previewPath: string
+  previewPath: string,
+  projectEnvs?: Record<string, string>
 ): Promise<string> {
   const auth = Config.requireAuth();
-  const project = Config.getProject();
   const { client: fcClient } = createFcClient();
   const functionName = resolveStaticProxyFunctionName(appName);
 
@@ -212,7 +212,7 @@ export async function deployStaticProxyFunction(
     // Try with FC service role first (more secure: uses temporary STS credentials)
     // Fall back to AK/SK env vars if role doesn't exist or permission denied
     const result = await deployWithRoleFallback(
-      fcClient, functionName, codeBase64, project.envs || {}, previewPath, fcRole, auth
+      fcClient, functionName, codeBase64, projectEnvs || {}, previewPath, fcRole, auth
     );
 
     return result;

@@ -1,4 +1,4 @@
-import { type ProjectNetworkConfig } from '../../utils/config';
+import { type ProjectConfig, type ProjectNetworkConfig } from '../../utils/config';
 import { resolveProvidedNetwork } from '../vpc';
 import { getRuntime, getSupportedRuntimeNames, type ResolvedRuntimeConfig } from './runtime-handler';
 import './runtimes';
@@ -39,12 +39,12 @@ export function normalizeFcRuntime(input: string): string {
   throw new Error(`函数运行时仅支持: ${supported.join(', ')}`);
 }
 
-export async function prepareBootFile(entryFile: string, outdir: string, runtime: string) {
-  return getRuntime(runtime).prepareBootFile(entryFile, outdir);
+export async function prepareBootFile(entryFile: string, outdir: string, runtime: string, project?: ProjectConfig) {
+  return getRuntime(runtime).prepareBootFile(entryFile, outdir, project);
 }
 
-export async function resolveRuntimeConfig(runtime: string, outdir: string, bootFile: string): Promise<ResolvedRuntimeConfig> {
-  return getRuntime(runtime).resolveConfig(outdir, bootFile);
+export async function resolveRuntimeConfig(runtime: string, outdir: string, bootFile: string, project?: ProjectConfig): Promise<ResolvedRuntimeConfig> {
+  return getRuntime(runtime).resolveConfig(outdir, bootFile, project);
 }
 
 export function buildUnsupportedRuntimeMessage(runtime: string) {

@@ -4,7 +4,7 @@ import { join, resolve } from 'path';
 import pc from 'picocolors';
 import { runFcApiDeployPrecheck } from '../providers/fc';
 import { runDoctorCloudDiagnostics } from '../providers/doctor-cloud';
-import { normalizeAuth, normalizeProject, type AuthConfig, type ProjectConfig } from './config';
+import { Config, normalizeAuth, normalizeProject, type AuthConfig, type ProjectConfig } from './config';
 import { parseDeployRuntimeOption } from './deploy-runtime';
 import {
   buildDoctorNextActions,
@@ -38,6 +38,14 @@ export interface LicellDoctorRunOptions {
   entry?: string;
   checkDockerDaemon?: boolean;
   offline?: boolean;
+  component?: string;
+  allComponents?: boolean;
+}
+
+export interface LicellDoctorComponentReport {
+  component: string;
+  path: string | null;
+  report: LicellDoctorReport;
 }
 
 export interface LicellDoctorReport {
@@ -54,11 +62,15 @@ export interface LicellDoctorReport {
     authFile: string | null;
     globalConfigFile: string | null;
     projectFile: string | null;
+    component: string | null;
+    workspaceMode: 'single' | 'workspace' | 'missing';
+    workspaceRoot: string | null;
     runtime: string | null;
     entry: string | null;
     offline: boolean;
   };
   checks: LicellDoctorCheck[];
+  components?: LicellDoctorComponentReport[];
 }
 
 type ProbeSource = 'current' | 'legacy' | 'missing';
@@ -87,6 +99,12 @@ interface LicellDoctorContext {
   globalConfigProbe: JsonFileProbe;
   projectProbe: JsonFileProbe;
   project: ProjectConfig | null;
+  requestedComponent: string | null;
+  component: string | null;
+  workspaceMode: 'single' | 'workspace' | 'missing';
+  workspaceRoot: string | null;
+  workspaceComponents: Array<{ name: string; path: string | null }>;
+  componentResolutionError: string | null;
   effectiveRuntime: DoctorResolvedRuntime | null;
   entry: string | null;
   checkDockerDaemon: boolean;
@@ -151,16 +169,74 @@ function probePreferredJsonFile(preferredPath: string, legacyPath?: string): Jso
   };
 }
 
-function createDoctorContext(options: LicellDoctorRunOptions = {}): LicellDoctorContext {
+function probeNearestProjectFile(cwd: string): JsonFileProbe {
+  let currentDir = cwd;
+  while (true) {
+    const preferredPath = join(currentDir, '.licell', 'project.json');
+    const legacyPath = join(currentDir, '.ali', 'project.json');
+    if (existsSync(preferredPath)) return readJsonProbe(preferredPath, 'current');
+    if (existsSync(legacyPath)) return readJsonProbe(legacyPath, 'legacy');
+    const parentDir = resolve(currentDir, '..');
+    if (parentDir === currentDir) {
+      return {
+        source: 'missing',
+        path: preferredPath,
+        exists: false,
+        parseOk: false
+      };
+    }
+    currentDir = parentDir;
+  }
+}
+
+function createDoctorContext(options: LicellDoctorRunOptions = {}, selectWorkspaceComponent = true): LicellDoctorContext {
   const cwd = resolve(options.cwd || process.cwd());
   const globalDir = join(homedir(), '.licell-cli');
   const legacyGlobalDir = join(homedir(), '.ali-cli');
   const authProbe = probePreferredJsonFile(join(globalDir, 'auth.json'), join(legacyGlobalDir, 'auth.json'));
   const globalConfigProbe = probePreferredJsonFile(join(globalDir, 'config.json'));
-  const projectProbe = probePreferredJsonFile(join(cwd, '.licell', 'project.json'), join(cwd, '.ali', 'project.json'));
+  const projectProbe = probeNearestProjectFile(cwd);
+  const requestedComponent = toOptionalString(options.component) || null;
 
   let project: ProjectConfig | null = null;
-  if (projectProbe.exists && projectProbe.parseOk && isRecord(projectProbe.raw)) {
+  let component: string | null = null;
+  let workspaceMode: 'single' | 'workspace' | 'missing' = 'missing';
+  let workspaceRoot: string | null = null;
+  let workspaceComponents: Array<{ name: string; path: string | null }> = [];
+  let componentResolutionError: string | null = null;
+
+  if (projectProbe.exists && projectProbe.parseOk) {
+    const snapshot = Config.getWorkspace({
+      cwd,
+      ...(requestedComponent ? { component: requestedComponent } : {})
+    });
+    if (snapshot) {
+      workspaceMode = snapshot.mode;
+      workspaceRoot = snapshot.rootDir;
+      workspaceComponents = snapshot.components.map((item) => ({
+        name: item.name,
+        path: item.path || null
+      }));
+      if (snapshot.mode === 'workspace') {
+        const matchedRequestedComponent = requestedComponent
+          ? snapshot.components.find((item) => item.name === requestedComponent)
+          : undefined;
+        if (requestedComponent && !matchedRequestedComponent) {
+          componentResolutionError = `workspace 中未找到 component: ${requestedComponent}`;
+        } else if (selectWorkspaceComponent) {
+          if (requestedComponent && matchedRequestedComponent) {
+            component = requestedComponent;
+            project = matchedRequestedComponent.project;
+          } else if (snapshot.componentName) {
+            component = snapshot.componentName;
+            project = snapshot.project;
+          }
+        }
+      } else {
+        project = snapshot.project;
+      }
+    }
+  } else if (projectProbe.exists && projectProbe.parseOk && isRecord(projectProbe.raw)) {
     project = normalizeProject(projectProbe.raw);
   }
 
@@ -197,8 +273,14 @@ function createDoctorContext(options: LicellDoctorRunOptions = {}): LicellDoctor
     globalConfigProbe,
     projectProbe,
     project,
+    requestedComponent,
+    component,
+    workspaceMode,
+    workspaceRoot,
+    workspaceComponents,
+    componentResolutionError,
     effectiveRuntime,
-    entry: toOptionalString(options.entry) || null,
+    entry: toOptionalString(options.entry) || toOptionalString(project?.entry) || null,
     checkDockerDaemon: Boolean(options.checkDockerDaemon),
     offline: Boolean(options.offline)
   };
@@ -427,8 +509,27 @@ const DOCTOR_CHECKS: readonly DoctorCheckDefinition[] = [
       }
 
       const details = [`path: ${probe.path}`];
+      if (context.workspaceMode === 'workspace') {
+        details.push(`workspaceRoot: ${context.workspaceRoot || '-'}`);
+        details.push(`workspaceComponents: ${context.workspaceComponents.length}`);
+        if (context.component) details.push(`component: ${context.component}`);
+      }
+      if (context.componentResolutionError) details.push(`componentError: ${context.componentResolutionError}`);
       if (context.project?.appName) details.push(`appName: ${context.project.appName}`);
       if (context.project?.runtime) details.push(`runtime: ${context.project.runtime}`);
+
+      if (context.workspaceMode === 'workspace' && context.componentResolutionError) {
+        return createCheck({
+          id: 'project.config',
+          title: 'Project config',
+          category: 'project',
+          status: 'error',
+          summary: context.componentResolutionError,
+          details,
+          remediation: [doctorRemediationNote('先执行 `licell workspace list` 查看可用 component 名称，再重试 doctor / deploy。')],
+          nextCommands: doctorNextCommands('licell workspace list')
+        });
+      }
 
       if (probe.source === 'legacy') {
         return createCheck({
@@ -468,6 +569,20 @@ const DOCTOR_CHECKS: readonly DoctorCheckDefinition[] = [
   {
     id: 'project.app',
     run(context) {
+      if (context.workspaceMode === 'workspace' && !context.project && !context.componentResolutionError) {
+        return createCheck({
+          id: 'project.app',
+          title: 'Project appName',
+          category: 'project',
+          status: 'skip',
+          summary: '当前为 workspace 根级诊断，未选择单个 component，跳过 appName 检查。',
+          details: context.workspaceComponents.length > 0
+            ? [`components: ${context.workspaceComponents.map((item) => item.name).join(', ')}`]
+            : [],
+          remediation: [],
+          nextCommands: []
+        });
+      }
       if (!context.project) {
         return createCheck({
           id: 'project.app',
@@ -511,6 +626,18 @@ const DOCTOR_CHECKS: readonly DoctorCheckDefinition[] = [
   {
     id: 'deploy.runtime',
     run(context) {
+      if (context.workspaceMode === 'workspace' && !context.project && !context.componentResolutionError) {
+        return createCheck({
+          id: 'deploy.runtime',
+          title: 'Deploy runtime',
+          category: 'deploy',
+          status: 'skip',
+          summary: '当前为 workspace 根级诊断，未选择单个 component，跳过 runtime 解析。',
+          details: [],
+          remediation: [],
+          nextCommands: []
+        });
+      }
       if (!context.effectiveRuntime) {
         if (context.project) {
           return createCheck({
@@ -586,6 +713,18 @@ const DOCTOR_CHECKS: readonly DoctorCheckDefinition[] = [
   {
     id: 'deploy.precheck',
     run(context) {
+      if (context.workspaceMode === 'workspace' && !context.project && !context.componentResolutionError) {
+        return createCheck({
+          id: 'deploy.precheck',
+          title: 'Deploy precheck',
+          category: 'deploy',
+          status: 'skip',
+          summary: '当前为 workspace 根级诊断，未选择单个 component，跳过 deploy precheck。',
+          details: [],
+          remediation: [],
+          nextCommands: []
+        });
+      }
       if (!context.effectiveRuntime || context.effectiveRuntime.error) {
         return createCheck({
           id: 'deploy.precheck',
@@ -708,8 +847,11 @@ function countStatuses(checks: LicellDoctorCheck[]) {
   return counts;
 }
 
-export async function runLicellDoctor(options: LicellDoctorRunOptions = {}): Promise<LicellDoctorReport> {
-  const context = createDoctorContext(options);
+async function runLicellDoctorSingle(
+  options: LicellDoctorRunOptions = {},
+  selectWorkspaceComponent = true
+): Promise<LicellDoctorReport> {
+  const context = createDoctorContext(options, selectWorkspaceComponent);
   const checks = DOCTOR_CHECKS.map((definition) => definition.run(context));
   const authCheck = checks.find((check) => check.id === 'auth.credentials');
   const auth = context.authProbe.exists && context.authProbe.parseOk ? normalizeAuth(context.authProbe.raw) : null;
@@ -883,11 +1025,73 @@ export async function runLicellDoctor(options: LicellDoctorRunOptions = {}): Pro
       authFile: context.authProbe.exists ? context.authProbe.path : null,
       globalConfigFile: context.globalConfigProbe.exists ? context.globalConfigProbe.path : null,
       projectFile: context.projectProbe.exists ? context.projectProbe.path : null,
+      component: context.component,
+      workspaceMode: context.workspaceMode,
+      workspaceRoot: context.workspaceRoot,
       runtime: resolvedRuntime,
       entry: resolvedEntry,
       offline: context.offline
     },
     checks
+  };
+}
+
+export async function runLicellDoctor(options: LicellDoctorRunOptions = {}): Promise<LicellDoctorReport> {
+  if (!options.allComponents) {
+    return runLicellDoctorSingle(options);
+  }
+
+  const aggregateContext = createDoctorContext(options, false);
+  if (aggregateContext.workspaceMode !== 'workspace' || aggregateContext.workspaceComponents.length === 0) {
+    return runLicellDoctorSingle(options);
+  }
+
+  const workspaceRoot = aggregateContext.workspaceRoot || aggregateContext.cwd;
+  const sharedReport = await runLicellDoctorSingle(
+    {
+      ...options,
+      cwd: workspaceRoot,
+      component: undefined,
+      allComponents: false
+    },
+    false
+  );
+  const components = await Promise.all(
+    aggregateContext.workspaceComponents.map(async (componentInfo) => ({
+      component: componentInfo.name,
+      path: componentInfo.path,
+      report: await runLicellDoctorSingle({
+        ...options,
+        cwd: workspaceRoot,
+        component: componentInfo.name,
+        allComponents: false
+      })
+    }))
+  );
+
+  const aggregatedCounts = components.reduce((counts, item) => ({
+    okCount: counts.okCount + item.report.okCount,
+    warnCount: counts.warnCount + item.report.warnCount,
+    errorCount: counts.errorCount + item.report.errorCount,
+    skipCount: counts.skipCount + item.report.skipCount,
+    checkCount: counts.checkCount + item.report.checkCount
+  }), {
+    okCount: sharedReport.okCount,
+    warnCount: sharedReport.warnCount,
+    errorCount: sharedReport.errorCount,
+    skipCount: sharedReport.skipCount,
+    checkCount: sharedReport.checkCount
+  });
+
+  return {
+    ...sharedReport,
+    healthy: sharedReport.healthy && components.every((item) => item.report.healthy),
+    checkCount: aggregatedCounts.checkCount,
+    okCount: aggregatedCounts.okCount,
+    warnCount: aggregatedCounts.warnCount,
+    errorCount: aggregatedCounts.errorCount,
+    skipCount: aggregatedCounts.skipCount,
+    components
   };
 }
 
@@ -928,10 +1132,33 @@ export function renderLicellDoctorReport(report: LicellDoctorReport) {
     ''
   ];
 
+  if (report.components && report.components.length > 0) {
+    lines.push(`${pc.bold('components')}: ${report.components.length}`);
+    for (const component of report.components) {
+      lines.push(
+        `${component.report.healthy ? pc.green('✓') : pc.red('✖')} ${pc.bold(component.component)}`
+        + `${component.path ? ` (${component.path})` : ''}`
+        + `  ok=${component.report.okCount} warn=${component.report.warnCount} error=${component.report.errorCount} skip=${component.report.skipCount}`
+      );
+    }
+    lines.push('');
+  }
+
   for (const check of report.checks) {
     lines.push(`${STATUS_ICON[check.status]} ${pc.bold(check.id)}  ${check.summary}`);
     lines.push(...renderCheckDetails(check));
     lines.push('');
+  }
+
+  if (report.components && report.components.length > 0) {
+    for (const component of report.components) {
+      lines.push(`${pc.bold('component')}: ${component.component}${component.path ? ` (${component.path})` : ''}`);
+      lines.push(...renderLicellDoctorReport({
+        ...component.report,
+        components: undefined
+      }).split('\n').map((line) => line ? `  ${line}` : ''));
+      lines.push('');
+    }
   }
 
   return lines.join('\n').trimEnd();

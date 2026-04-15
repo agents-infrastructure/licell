@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { describe, it, expect } from 'vitest';
@@ -257,6 +257,25 @@ describe('normalizeProject', () => {
     expect(result.database).toBeUndefined();
   });
 
+  it('normalizes nested artifact/deployTarget/route and backfills legacy fields', () => {
+    const result = normalizeProject({
+      schemaVersion: 3,
+      artifact: { kind: 'directory', path: 'apps/web/dist' },
+      deployTarget: { service: 'oss-static', region: 'CN-HANGZHOU', bucket: 'demo-web' },
+      route: { domain: 'WWW.EXAMPLE.COM', cdn: true, ssl: true }
+    });
+    expect(result.schemaVersion).toBe(3);
+    expect(result.artifact).toEqual({ kind: 'directory', path: 'apps/web/dist' });
+    expect(result.deployTarget).toEqual({ service: 'oss-static', region: 'cn-hangzhou', bucket: 'demo-web' });
+    expect(result.route).toEqual({ domain: 'www.example.com', cdn: true, ssl: true });
+    expect(result.deployType).toBe('static');
+    expect(result.dist).toBe('apps/web/dist');
+    expect(result.region).toBe('cn-hangzhou');
+    expect(result.domain).toBe('www.example.com');
+    expect(result.enableCdn).toBe(true);
+    expect(result.enableSSL).toBe(true);
+  });
+
   it('normalizes resources and hooks fields', () => {
     const result = normalizeProject({
       resources: {
@@ -304,6 +323,31 @@ describe('normalizeProject', () => {
     expect((result as any).customField).toBe('value');
   });
 
+  it('normalizes deploy intent fields', () => {
+    const result = normalizeProject({
+      domain: '  API.EXAMPLE.COM ',
+      domainSuffix: ' Example.COM ',
+      entry: ' src/index.ts ',
+      dist: ' dist ',
+      target: ' prod ',
+      enableCdn: 'true',
+      enableSSL: false,
+      useVpc: 'false',
+      region: ' CN-HANGZHOU '
+    });
+    expect(result).toMatchObject({
+      domain: 'api.example.com',
+      domainSuffix: 'example.com',
+      entry: 'src/index.ts',
+      dist: 'dist',
+      target: 'prod',
+      enableCdn: true,
+      enableSSL: false,
+      useVpc: false,
+      region: 'cn-hangzhou'
+    });
+  });
+
   it('handles deeply nested invalid data gracefully', () => {
     const result = normalizeProject({
       network: { vpcId: 123, vswId: null },
@@ -349,6 +393,97 @@ describe('Config.setProject', () => {
       expect(JSON.parse(readFileSync(join(root, '.licell', 'project.json'), 'utf-8'))).toMatchObject({
         appName: 'demo-app',
         envs: {}
+      });
+    } finally {
+      process.chdir(previousCwd);
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('resolves a workspace component from the current subdirectory', () => {
+    const root = mkdtempSync(join(tmpdir(), 'licell-config-'));
+    const previousCwd = process.cwd();
+    try {
+      mkdirSync(join(root, '.licell'), { recursive: true });
+      mkdirSync(join(root, 'apps', 'web'), { recursive: true });
+      mkdirSync(join(root, 'apps', 'api'), { recursive: true });
+      writeFileSync(join(root, '.licell', 'project.json'), JSON.stringify({
+        defaultComponent: 'api',
+        defaults: {
+          domainSuffix: 'example.com',
+          envs: { SHARED: '1' }
+        },
+        components: {
+          web: {
+            path: 'apps/web',
+            appName: 'demo-web',
+            deployType: 'static',
+            dist: 'build',
+            envs: { WEB_ONLY: '1' }
+          },
+          api: {
+            path: 'apps/api',
+            appName: 'demo-api',
+            deployType: 'api',
+            runtime: 'nodejs22',
+            entry: 'src/index.ts',
+            envs: { API_ONLY: '1' }
+          }
+        }
+      }, null, 2));
+      process.chdir(join(root, 'apps', 'web'));
+
+      expect(Config.getProject()).toMatchObject({
+        appName: 'demo-web',
+        deployType: 'static',
+        dist: 'build',
+        domainSuffix: 'example.com',
+        envs: {
+          SHARED: '1',
+          WEB_ONLY: '1'
+        }
+      });
+    } finally {
+      process.chdir(previousCwd);
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('updates the matched workspace component instead of flattening the root file', () => {
+    const root = mkdtempSync(join(tmpdir(), 'licell-config-'));
+    const previousCwd = process.cwd();
+    try {
+      mkdirSync(join(root, '.licell'), { recursive: true });
+      mkdirSync(join(root, 'apps', 'web'), { recursive: true });
+      writeFileSync(join(root, '.licell', 'project.json'), JSON.stringify({
+        components: {
+          web: {
+            path: 'apps/web',
+            appName: 'demo-web',
+            deployType: 'static',
+            dist: 'dist'
+          }
+        }
+      }, null, 2));
+      process.chdir(join(root, 'apps', 'web'));
+
+      Config.setProject({
+        domain: 'www.example.com',
+        enableCdn: true
+      });
+
+      const next = JSON.parse(readFileSync(join(root, '.licell', 'project.json'), 'utf-8'));
+      expect(next).toMatchObject({
+        components: {
+          web: {
+            path: 'apps/web',
+            appName: 'demo-web',
+            deployType: 'static',
+            dist: 'dist',
+            domain: 'www.example.com',
+            enableCdn: true
+          }
+        }
       });
     } finally {
       process.chdir(previousCwd);

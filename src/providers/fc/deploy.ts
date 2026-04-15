@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, statSync } from 'fs';
 import { tmpdir } from 'os';
 import { isAbsolute, join, relative, resolve } from 'path';
 import { spawnSync } from 'child_process';
-import { Config, type ProjectNetworkConfig, type ProjectResourcesConfig } from '../../utils/config';
+import { Config, type ProjectConfig, type ProjectNetworkConfig, type ProjectResourcesConfig } from '../../utils/config';
 import { isConflictError, isNotFoundError, isTransientError } from '../../utils/alicloud-error';
 import { formatErrorMessage } from '../../utils/errors';
 import { createFcClient } from './client';
@@ -78,6 +78,7 @@ export interface DeployFCOptions {
   resources?: ProjectResourcesConfig;
   network?: ProjectNetworkConfig | null;
   ensureHttpUrl?: boolean;
+  project?: ProjectConfig;
 }
 
 export interface DeployFCResult {
@@ -349,7 +350,7 @@ async function callUpdateFunction(
 
 export async function deployFC(appName: string, entryFile: string, runtime: FcRuntime = DEFAULT_FC_RUNTIME, options: DeployFCOptions = {}): Promise<DeployFCResult> {
   const { client } = createFcClient();
-  const project = Config.getProject();
+  const project = options.project || Config.getProject();
 
   const outdir = './.licell/dist';
   rmSync(outdir, { recursive: true, force: true });
@@ -369,8 +370,8 @@ export async function deployFC(appName: string, entryFile: string, runtime: FcRu
   }
 
   const entryRelative = isDocker ? entryFile : relative(process.cwd(), resolve(entryFile)).replace(/\\/g, '/');
-  const bootFile = await prepareBootFile(entryRelative, outdir, runtime);
-  const runtimeConfig = await resolveRuntimeConfig(runtime, outdir, bootFile);
+  const bootFile = await prepareBootFile(entryRelative, outdir, runtime, project);
+  const runtimeConfig = await resolveRuntimeConfig(runtime, outdir, bootFile, project);
 
   const environmentVariables: Record<string, string> = { NODE_ENV: 'production' };
   for (const [key, value] of Object.entries(project.envs)) {

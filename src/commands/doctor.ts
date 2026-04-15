@@ -10,6 +10,8 @@ const doctorCommand = defineCliCommand({
   rawName: 'doctor',
   description: '诊断本机 licell 登录态、云端权限/目标资源/域名入口、项目配置与部署前置条件',
   options: [
+    { rawName: '--component <name>', description: '在 workspace / monorepo 根目录显式选择 component' },
+    { rawName: '--all-components', description: 'workspace 模式下扫描所有 components，而不是只诊断当前/默认 component' },
     { rawName: '--runtime <runtime>', description: '覆盖项目 runtime 做 deploy 诊断（如 nodejs22 / python3.13 / docker）' },
     { rawName: '--entry <entry>', description: '覆盖 deploy 入口文件路径（默认按项目配置与 runtime 推断）' },
     { rawName: '--docker-daemon', description: '当 runtime=docker 时，附带检查本机 Docker daemon 是否可用' },
@@ -21,11 +23,14 @@ const doctorCommand = defineCliCommand({
     notes: [
       '默认包含云端只读探测，会检查身份、权限、deploy target 与域名入口一致性，但不会创建或修改任何云端资源。',
       '当前目录不是 licell 项目时，项目相关检查会以 warn/skip 呈现。',
+      '在 workspace / monorepo 根目录，可用 `--component` 聚焦单个 deploy unit，或用 `--all-components` 做整仓扫描。',
       '如果只想排查本地文件与入口契约，可追加 `--offline`。',
       '`checks[].remediation[]`、`checks[].nextCommands[]` 与 `checks[].nextActions[]` 都是稳定的结构化 guidance；Agent 优先读取 `checks[].nextActions[]`。'
     ],
     examples: [
       'licell doctor',
+      'licell doctor --component api',
+      'licell doctor --all-components --output json',
       'licell doctor --runtime nodejs22 --entry src/index.ts',
       'licell doctor --runtime docker --docker-daemon --output json',
       'licell doctor --offline'
@@ -42,6 +47,14 @@ const doctorCommand = defineCliCommand({
       '--runtime': {
         whenToUse: '当前目录项目未配置 runtime，或你想临时按另一个 runtime 做 deploy 诊断时使用。',
         cautions: ['传入 static/statis 时会跳过 FC API 预检。']
+      },
+      '--component': {
+        whenToUse: '在 workspace / monorepo 根目录只想诊断某个 component 时使用。',
+        cautions: ['component 名称必须存在于当前 workspace 配置中。']
+      },
+      '--all-components': {
+        whenToUse: '需要一次扫描 workspace 中所有 deploy units 的 deploy intent 与云端漂移时使用。',
+        cautions: ['输出会包含顶层 shared 检查和每个 component 的子报告。']
       },
       '--entry': {
         whenToUse: '入口文件不走默认路径，或你希望排查某个候选入口时使用。',
@@ -82,6 +95,7 @@ const doctorCommand = defineCliCommand({
         { name: 'skipCount', description: 'skip 检查项数量。', required: true },
         { name: 'context', description: '当前 cwd、命中的配置文件路径，以及本次解析出的 runtime/entry/offline。', required: true },
         { name: 'checks', description: '逐项诊断结果数组。', required: true },
+        { name: 'components[]', description: '当启用 `--all-components` 时，返回每个 component 的子报告。' },
         { name: 'checks[].id', description: '稳定的检查项标识，例如 `auth.credentials`、`deploy.precheck`、`domain.consistency`。', required: true },
         { name: 'checks[].status', description: '检查项状态：`ok` / `warn` / `error` / `skip`。', required: true },
         { name: 'checks[].summary', description: '面向人类的简短诊断结论。', required: true },
@@ -111,6 +125,8 @@ const doctorCommand = defineCliCommand({
 });
 
 interface DoctorOptions {
+  component?: string;
+  allComponents?: boolean;
   runtime?: string;
   entry?: string;
   dockerDaemon?: boolean;
@@ -120,7 +136,12 @@ interface DoctorOptions {
 export function registerDoctorCommands(cli: CAC) {
   registerCliCommand(cli, doctorCommand)
     .action(async (options: DoctorOptions) => {
+      if (options.component && options.allComponents) {
+        throw new Error('--component 与 --all-components 不能同时使用');
+      }
       const report = await runLicellDoctor({
+        component: options.component,
+        allComponents: options.allComponents,
         runtime: options.runtime,
         entry: options.entry,
         checkDockerDaemon: options.dockerDaemon,

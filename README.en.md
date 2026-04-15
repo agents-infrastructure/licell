@@ -168,13 +168,45 @@ Licell has three main state layers:
 | Type | Default location | Purpose |
 |------|------------------|---------|
 | Global auth | `~/.licell-cli/auth.json` | Alibaba Cloud credentials and default region |
-| Project state | `<project>/.licell/project.json` | app name, envs, network, deploy state |
+| Project state | `<project>/.licell/project.json` | app name, envs, network, deploy state; can also be a workspace file for multiple components in one repo |
 | MCP project config | `<project>/.mcp.json` | MCP discovery for Claude / Codex / Cursor |
 
 Compatibility notes:
 
 - Licell still supports some legacy `~/.ali-cli/*` paths
 - current canonical global path is `~/.licell-cli/*`
+
+### Workspace / Monorepo
+
+If one repository contains multiple deployable directories (for example `apps/web` for a static site
+plus `apps/api` for an FC API), prefer a workspace-style root `.licell/project.json`:
+
+```json
+{
+  "defaultComponent": "api",
+  "components": {
+    "web": {
+      "path": "apps/web",
+      "appName": "demo-web",
+      "deployType": "static",
+      "dist": "dist",
+      "domain": "www.example.com"
+    },
+    "api": {
+      "path": "apps/api",
+      "appName": "demo-api",
+      "deployType": "api",
+      "runtime": "nodejs22",
+      "entry": "src/index.ts",
+      "target": "prod"
+    }
+  }
+}
+```
+
+- Running `licell deploy` inside `apps/web` resolves the `web` component automatically.
+- Running `licell deploy` inside `apps/api` resolves the `api` component automatically.
+- After a successful deploy, Licell now persists stable deploy intent back into the matched component (for example `domain`, `domainSuffix`, `entry`, `dist`, `target`, `enableCdn`, `enableSSL`, `useVpc`) instead of only writing a very small subset of fields.
 
 ## Team Auth Distribution
 

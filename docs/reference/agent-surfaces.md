@@ -116,6 +116,12 @@
 | `licell whoami` | 查看当前登录身份 | — |
 | `licell switch` | 切换默认 region | `--region` |
 | `licell init` | 初始化 FC 项目（空目录生成脚手架，已有项目写入 licell 配置） | `--runtime`, `--kind`, `--app` |
+| `licell bootstrap` | 把已确认的部署方案初始化到 `.licell/project.json` / `.licell/state.json` | `--component`, `--path`, `--type` |
+| `licell workspace discover` | 扫描 repo，给出候选 components 与部署提案 | — |
+| `licell workspace doctor` | 在 workspace / monorepo 根目录诊断全部或指定 component | `--component`, `--runtime`, `--entry` |
+| `licell workspace init` | 在 repo 根目录创建或更新 licell workspace component | `--component`, `--path`, `--type` |
+| `licell workspace list` | 列出当前 repo / workspace 中可部署的 components | `--component` |
+| `licell workspace migrate` | 把旧单项目 `.licell/project.json` 升级成兼容旧版的 workspace/component 格式 | `--component`, `--path`, `--default` |
 | `licell config domain [suffix]` | 查看或设置全局默认域名后缀 | `--unset` |
 
 ### Delivery Workflow
@@ -128,38 +134,39 @@
 
 | 命令 | 说明 | 关键选项 |
 |------|------|----------|
-| `licell deploy` | 一键极速打包部署 | `--type`, `--entry`, `--dist` |
+| `licell deploy` | 一键极速打包部署 | `--component`, `--type`, `--entry` |
 | `licell deploy check` | 本地预检 FC API 入口与 runtime 约束（建议 deploy 前执行） | `--runtime`, `--entry`, `--docker-daemon` |
+| `licell deploy plan` | 基于 `.licell/project.json` 生成部署计划（不执行云端变更） | `--component`, `--include`, `--exclude` |
 | `licell deploy spec [runtime]` | 查看 FC API 部署规格（给 Agent/开发者在 deploy 前对照） | `--all` |
-| `licell task config [name]` | 查看任务函数的异步调用配置 | `--target` |
-| `licell task info <taskId> [name]` | 查看单个异步任务详情 | `--target` |
-| `licell task invoke [name]` | 异步调用任务函数 | `--target`, `--payload`, `--file` |
-| `licell task list [name]` | 查看任务函数的异步任务列表 | `--target`, `--status`, `--prefix` |
-| `licell task stop <taskId> [name]` | 停止正在运行的异步任务 | `--target` |
-| `licell task config rm [name]` | 删除任务函数的异步调用配置 | `--target`, `--yes` |
-| `licell task config set [name]` | 写入任务函数的异步调用配置 | `--target`, `--enable`, `--disable` |
-| `licell release list` | 查看函数版本列表 | `--limit` |
-| `licell release promote [versionId]` | 发布并切流到目标别名 | `--target` |
-| `licell release prune` | 清理历史函数版本（默认仅预览） | `--keep`, `--apply`, `--yes` |
-| `licell release rollback <versionId>` | 回滚到指定函数版本 | `--target` |
+| `licell task config [name]` | 查看任务函数的异步调用配置 | `--component`, `--target` |
+| `licell task info <taskId> [name]` | 查看单个异步任务详情 | `--component`, `--target` |
+| `licell task invoke [name]` | 异步调用任务函数 | `--component`, `--target`, `--payload` |
+| `licell task list [name]` | 查看任务函数的异步任务列表 | `--component`, `--target`, `--status` |
+| `licell task stop <taskId> [name]` | 停止正在运行的异步任务 | `--component`, `--target` |
+| `licell task config rm [name]` | 删除任务函数的异步调用配置 | `--component`, `--target`, `--yes` |
+| `licell task config set [name]` | 写入任务函数的异步调用配置 | `--component`, `--target`, `--enable` |
+| `licell release list` | 查看函数版本列表 | `--component`, `--limit` |
+| `licell release promote [versionId]` | 发布并切流到目标别名 | `--component`, `--target` |
+| `licell release prune` | 清理历史函数版本（默认仅预览） | `--component`, `--keep`, `--apply` |
+| `licell release rollback <versionId>` | 回滚到指定函数版本 | `--component`, `--target` |
 | `licell logs query [query]` | 按 SLS project/logstore/query 一次性检索日志 | `--project`, `--store`, `--region` |
 | `licell logs tail [query]` | 按 SLS project/logstore/query 持续跟随日志流 | `--project`, `--store`, `--region` |
-| `licell fn info [name]` | 查看函数详情 | `--target` |
-| `licell fn invoke [name]` | 调用函数（同步） | `--target`, `--payload`, `--file` |
+| `licell fn info [name]` | 查看函数详情 | `--component`, `--target` |
+| `licell fn invoke [name]` | 调用函数（同步） | `--component`, `--target`, `--payload` |
 | `licell fn list` | 查看函数列表 | `--limit`, `--prefix` |
-| `licell fn logs [name]` | 查看函数日志（默认实时流式） | `--once`, `--window`, `--lines` |
-| `licell fn rm [name]` | 删除函数 | `--force`, `--yes` |
-| `licell fn domain bind <domain>` | 绑定或更新 FC 自定义域名（资源级，不默认改 DNS） | `--function`, `--target`, `--path` |
+| `licell fn logs [name]` | 查看函数日志（默认实时流式） | `--component`, `--once`, `--window` |
+| `licell fn rm [name]` | 删除函数 | `--component`, `--force`, `--yes` |
+| `licell fn domain bind <domain>` | 绑定或更新 FC 自定义域名（资源级，不默认改 DNS） | `--function`, `--component`, `--target` |
 | `licell fn domain info <domain>` | 查看 FC 自定义域名详情 | — |
 | `licell fn domain list` | 查看 FC 自定义域名列表 | `--limit`, `--prefix` |
 | `licell fn domain unbind <domain>` | 解绑 FC 自定义域名 | `--cleanup-dns`, `--yes` |
-| `licell env list` | 查看云端环境变量 | `--target`, `--show-values` |
-| `licell env pull` | 拉取云端环境变量 | `--target` |
-| `licell env rm <key>` | 删除云端环境变量（并同步本地 .licell/project.json） | `--yes` |
-| `licell env set <key> <value>` | 设置云端环境变量（并同步本地 .licell/project.json） | — |
-| `licell domain app bind <domain>` | 为当前应用编排 DNS、函数域名与可选 SSL | `--ssl`, `--ssl-force-renew`, `--target` |
+| `licell env list` | 查看云端环境变量 | `--component`, `--target`, `--show-values` |
+| `licell env pull` | 拉取云端环境变量 | `--component`, `--target` |
+| `licell env rm <key>` | 删除云端环境变量（并同步本地 .licell/project.json） | `--component`, `--yes` |
+| `licell env set <key> <value>` | 设置云端环境变量（并同步本地 .licell/project.json） | `--component` |
+| `licell domain app bind <domain>` | 为当前应用编排 DNS、函数域名与可选 SSL | `--component`, `--ssl`, `--ssl-force-renew` |
 | `licell domain app unbind <domain>` | 解绑当前应用域名，并清理 FC custom domain / DNS CNAME | `--yes` |
-| `licell domain static bind <domain>` | 为静态站点编排 CDN、DNS 与可选 HTTPS | `--bucket`, `--ssl`, `--ssl-force-renew` |
+| `licell domain static bind <domain>` | 为静态站点编排 CDN、DNS 与可选 HTTPS | `--component`, `--bucket`, `--ssl` |
 | `licell domain static unbind <domain>` | 解绑静态站点域名，并清理 CDN / DNS | `--yes` |
 | `licell dns records add <domain>` | 添加域名解析记录 | `--rr`, `--type`, `--value` |
 | `licell dns records list [domain]` | 查看域名解析记录 | `--limit` |
@@ -224,10 +231,13 @@
 
 | 命令 | 说明 | 关键选项 |
 |------|------|----------|
-| `licell doctor` | 诊断本机 licell 登录态、云端权限/目标资源/域名入口、项目配置与部署前置条件 | `--runtime`, `--entry`, `--docker-daemon` |
+| `licell doctor` | 诊断本机 licell 登录态、云端权限/目标资源/域名入口、项目配置与部署前置条件 | `--component`, `--all-components`, `--runtime` |
 | `licell catalog` | 输出共享 CLI 命令目录，供 Agent / 自动化发现命令、选项和结构化契约 | `--root-command`, `--command-key` |
+| `licell ci init github` | 生成 GitHub Actions 的 deploy-only workflow（只调用 licell，不负责编译） | `--apply`, `--force`, `--workflow` |
+| `licell ci init gitlab` | 生成 GitLab CI 的 deploy-only pipeline（只调用 licell，不负责编译） | `--apply`, `--force`, `--pipeline` |
 | `licell skills init [agent]` | 为 AI Agent 生成 licell skills（claude / codex） | `--global`, `--project-root`, `--force` |
 | `licell setup` | 安装后引导：交互式配置 AI Agent skills | `--agent`, `--global`, `--project-root` |
+| `licell state show` | 查看当前 repo 的 `.licell/state.json` | `--component` |
 | `licell completion [shell]` | 输出 shell 补全脚本（bash/zsh） | `--engine` |
 | `licell upgrade` | 按当前安装来源升级 licell | `--channel`, `--target-version`, `--repo` |
 | `licell e2e cleanup [runId]` | 清理指定 E2E run 产生的资源 | `--manifest`, `--keep-workspace`, `--yes` |

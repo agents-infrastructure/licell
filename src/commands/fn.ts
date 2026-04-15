@@ -40,6 +40,7 @@ const fnInfoCommand = defineCliCommand({
   rawName: 'fn info [name]',
   description: '查看函数详情',
   options: [
+    { rawName: '--component <name>', description: '在 workspace / monorepo 根目录显式选择 component' },
     { rawName: '--target <target>', description: '指定 alias/version（如 prod/preview/1）' }
   ]
 });
@@ -48,6 +49,7 @@ const fnInvokeCommand = defineCliCommand({
   rawName: 'fn invoke [name]',
   description: '调用函数（同步）',
   options: [
+    { rawName: '--component <name>', description: '在 workspace / monorepo 根目录显式选择 component' },
     { rawName: '--target <target>', description: '指定 alias/version（如 prod/preview/1）' },
     { rawName: '--payload <text>', description: '传入原始 payload 文本' },
     { rawName: '--file <path>', description: '从文件读取 payload' }
@@ -58,6 +60,7 @@ const fnRmCommand = defineCliCommand({
   rawName: 'fn rm [name]',
   description: '删除函数',
   options: [
+    { rawName: '--component <name>', description: '在 workspace / monorepo 根目录显式选择 component' },
     { rawName: '--force', description: '级联删除触发器、alias、已发布版本后再删除函数' },
     { rawName: '--yes', description: '跳过二次确认（危险）' }
   ]
@@ -67,6 +70,7 @@ const fnLogsCommand = defineCliCommand({
   rawName: 'fn logs [name]',
   description: '查看函数日志（默认实时流式）',
   options: [
+    { rawName: '--component <name>', description: '在 workspace / monorepo 根目录显式选择 component' },
     { rawName: '--once', description: '仅拉取一次最近日志并退出' },
     { rawName: '--window <seconds>', description: '一次拉取模式的时间窗（默认 120 秒）' },
     { rawName: '--lines <n>', description: '每次请求最大日志条数（默认 1000）' }
@@ -164,7 +168,7 @@ export function registerFnCommands(cli: CAC) {
     });
 
   registerCliCommand(cli, fnInfoCommand)
-    .action(async (name: string | undefined, options: { target?: unknown }) => {
+    .action(async (name: string | undefined, options: { component?: unknown; target?: unknown }) => {
       await executeWithAuthRecovery(
         {
           commandLabel: commandInvocation(fnInfoCommand),
@@ -173,7 +177,8 @@ export function registerFnCommands(cli: CAC) {
         },
         async () => {
           ensureAuthOrExit();
-          const project = Config.getProject();
+          const component = toOptionalString(options.component);
+          const project = Config.getProject({ component });
           const functionName = toOptionalString(name) || project.appName;
           if (!functionName) {
             throw new Error('请传入函数名，或先在当前项目执行 licell deploy 生成 appName');
@@ -192,6 +197,7 @@ export function registerFnCommands(cli: CAC) {
             s.stop(pc.green('✅ 获取成功'));
           } else {
             emitCommandResult({
+              component: component || null,
               functionName: fn.functionName || functionName,
               qualifier: qualifier || null,
               runtime: fn.runtime || null,
@@ -231,7 +237,7 @@ export function registerFnCommands(cli: CAC) {
     });
 
   registerCliCommand(cli, fnInvokeCommand)
-    .action(async (name: string | undefined, options: { target?: unknown; payload?: unknown; file?: unknown }) => {
+    .action(async (name: string | undefined, options: { component?: unknown; target?: unknown; payload?: unknown; file?: unknown }) => {
       await executeWithAuthRecovery(
         {
           commandLabel: commandInvocation(fnInvokeCommand),
@@ -240,7 +246,8 @@ export function registerFnCommands(cli: CAC) {
         },
         async () => {
           ensureAuthOrExit();
-          const project = Config.getProject();
+          const component = toOptionalString(options.component);
+          const project = Config.getProject({ component });
           const functionName = toOptionalString(name) || project.appName;
           if (!functionName) {
             throw new Error('请传入函数名，或先在当前项目执行 licell deploy 生成 appName');
@@ -262,6 +269,7 @@ export function registerFnCommands(cli: CAC) {
           const responseBody = result.body && result.body.trim().length > 0 ? result.body : '';
           if (isJsonOutput()) {
             emitCommandResult({
+              component: component || null,
               functionName,
               qualifier: qualifier || null,
               statusCode: result.statusCode,
@@ -282,7 +290,7 @@ export function registerFnCommands(cli: CAC) {
     });
 
   registerCliCommand(cli, fnRmCommand)
-    .action(async (name: string | undefined, options: { force?: boolean; yes?: boolean }) => {
+    .action(async (name: string | undefined, options: { component?: unknown; force?: boolean; yes?: boolean }) => {
       await executeWithAuthRecovery(
         {
           commandLabel: commandInvocation(fnRmCommand),
@@ -291,7 +299,8 @@ export function registerFnCommands(cli: CAC) {
         },
         async () => {
           ensureAuthOrExit();
-          const project = Config.getProject();
+          const component = toOptionalString(options.component);
+          const project = Config.getProject({ component });
           const functionName = toOptionalString(name) || project.appName;
           if (!functionName) {
             throw new Error('请传入函数名，或先在当前项目执行 licell deploy 生成 appName');
@@ -316,6 +325,7 @@ export function registerFnCommands(cli: CAC) {
           }
           if (isJsonOutput()) {
             emitCommandResult({
+              component: component || null,
               functionName,
               force: Boolean(options.force),
               forced: deleted.forced,
@@ -334,7 +344,7 @@ export function registerFnCommands(cli: CAC) {
     });
 
   registerCliCommand(cli, fnLogsCommand)
-    .action(async (name: string | undefined, options: { once?: unknown; window?: unknown; lines?: unknown }) => {
+    .action(async (name: string | undefined, options: { component?: unknown; once?: unknown; window?: unknown; lines?: unknown }) => {
       await executeWithAuthRecovery(
         {
           commandLabel: commandInvocation(fnLogsCommand),
@@ -344,7 +354,8 @@ export function registerFnCommands(cli: CAC) {
         async () => {
           showIntro(pc.bgBlue(pc.white(' 📡 Function Log Stream ')));
           ensureAuthOrExit();
-          const project = Config.getProject();
+          const component = toOptionalString(options.component);
+          const project = Config.getProject({ component });
           const functionName = toOptionalString(name) || project.appName;
           if (!functionName) {
             throw new Error('请传入函数名，或先在当前项目执行 licell deploy 生成 appName');
@@ -361,6 +372,7 @@ export function registerFnCommands(cli: CAC) {
           if (isJsonOutput()) {
             emitCommandResult({
               stage: 'fn.logs',
+              component: component || null,
               functionName,
               once,
               lines: result && 'lines' in result ? result.lines : [],

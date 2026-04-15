@@ -17,6 +17,9 @@ import { notifyDeployProgress, runDeployProgressStep } from './deploy-progress';
 
 export interface StaticDeployResult {
   url: string;
+  dist: string;
+  bucketName: string;
+  cdnCname?: string;
   fixedDomain?: string;
   previewDomain?: string;
   previewVersion?: string;
@@ -25,6 +28,7 @@ export interface StaticDeployResult {
 
 function resolveStaticFixedDomain(ctx: DeployContext) {
   if (ctx.cliDomain) return ctx.cliDomain;
+  if (ctx.projectDomain) return ctx.projectDomain;
   if (ctx.domainSuffix) return `${ctx.appName}.${ctx.domainSuffix}`;
   return undefined;
 }
@@ -38,6 +42,8 @@ export async function executeStaticDeploy(
   const detectedDist = detectStaticDistDir();
   const dist = ctx.cliDist
     ? toPromptValue(ctx.cliDist, '构建产物目录')
+    : ctx.projectDist
+      ? ctx.projectDist
     : ctx.interactiveTTY
       ? toPromptValue(await text({ message: '前端构建产物目录:', initialValue: detectedDist }), '构建产物目录')
       : detectedDist;
@@ -64,7 +70,7 @@ export async function executeStaticDeploy(
         () => deployOSS(ctx.appName, dist)
       );
       if (!fixedDomain) {
-        return { url, fixedDomain: undefined };
+        return { url, dist, bucketName, fixedDomain: undefined };
       }
 
       let tlsArtifacts: { certificate?: string; privateKey?: string } | undefined;
@@ -131,7 +137,7 @@ export async function executeStaticDeploy(
           data: { domain: domainResult.domainName, configured: false }
         });
       }
-      return { url, fixedDomain: domainResult.domainName };
+      return { url, dist, bucketName, fixedDomain: domainResult.domainName, cdnCname: domainResult.cdnCname };
     }
   );
   if (!staticDeployResult) return undefined;
@@ -219,7 +225,8 @@ async function executeStaticPreviewDeploy(
         () => deployStaticProxyFunction(
           ctx.appName,
           bucketName,
-          '_preview/pending'
+          '_preview/pending',
+          ctx.project.envs
         )
       );
 
@@ -259,7 +266,8 @@ async function executeStaticPreviewDeploy(
         () => deployStaticProxyFunction(
           ctx.appName,
           bucketName,
-          previewPath
+          previewPath,
+          ctx.project.envs
         )
       );
       const versionId = await runDeployProgressStep(
@@ -320,6 +328,8 @@ async function executeStaticPreviewDeploy(
 
       return {
         url,
+        dist,
+        bucketName,
         previewDomain: previewResult.previewDomain,
         previewVersion: versionId
       };
@@ -328,7 +338,7 @@ async function executeStaticPreviewDeploy(
 
   if (!staticPreviewResult) return undefined;
 
-  const { url, previewDomain, previewVersion } = staticPreviewResult;
+  const { url, bucketName: deployedBucketName, previewDomain, previewVersion } = staticPreviewResult;
   const healthCheckLogs: string[] = [];
 
   notifyDeployProgress(s, {
@@ -382,6 +392,8 @@ async function executeStaticPreviewDeploy(
 
   return {
     url,
+    dist,
+    bucketName: deployedBucketName,
     previewDomain,
     previewVersion,
     healthCheckLogs

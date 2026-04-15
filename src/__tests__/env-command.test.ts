@@ -64,6 +64,7 @@ vi.mock('../utils/cli-shared', () => ({
   isInteractiveTTY: vi.fn(() => false),
   showOutro: showOutroMock,
   toPromptValue: (value: string) => value,
+  toOptionalString: (value: unknown) => value == null ? undefined : String(value).trim() || undefined,
   normalizeEnvKey: (value: string) => value.trim().toUpperCase(),
   ensureEnvIgnored: ensureEnvIgnoredMock,
   withSpinner: async (_spinner: unknown, _startMsg: string, _failMsg: string, fn: () => Promise<unknown>) => fn()
@@ -132,5 +133,17 @@ describe('env pull command', () => {
     expect(setProjectMock).not.toHaveBeenCalled();
     expect(writeFileSyncMock).toHaveBeenCalledWith('.env', 'API_KEY=\"secret\"', { mode: 0o600 });
     expect(spinnerStopMock).toHaveBeenCalledWith(expect.stringContaining('未覆盖项目配置'));
+  });
+
+  it('forwards component selection to config lookup and persistence', async () => {
+    const cli = await createCli();
+    await getCommandAction(cli, 'env pull')({ component: 'api' });
+
+    expect(getProjectMock).toHaveBeenCalledWith({ component: 'api' });
+    expect(setProjectMock).toHaveBeenCalledWith({
+      envs: {
+        API_KEY: 'secret'
+      }
+    }, { replaceEnvs: true, component: 'api' });
   });
 });

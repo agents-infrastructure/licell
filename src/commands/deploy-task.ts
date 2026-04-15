@@ -22,6 +22,7 @@ import { runDeployProgressStep } from './deploy-progress';
 export interface TaskDeployResult {
   functionName: string;
   runtime: string;
+  entry: string;
   asyncTask: boolean;
   configuredQualifiers: string[];
   invokeCommand: string;
@@ -61,7 +62,7 @@ export async function executeTaskDeploy(
     throw new Error('--acr-namespace 仅适用于 --runtime docker');
   }
   if (runtime === 'docker' && ctx.cliAcrNamespace) {
-    Config.setProject({ acrNamespace: ctx.cliAcrNamespace });
+    Config.setProject({ acrNamespace: ctx.cliAcrNamespace }, { component: ctx.component });
   }
 
   const defaultEntry = getRuntime(runtime).defaultEntry;
@@ -70,6 +71,8 @@ export async function executeTaskDeploy(
     entry = ctx.cliEntry || '';
   } else if (ctx.cliEntry) {
     entry = toPromptValue(ctx.cliEntry, '入口文件路径');
+  } else if (ctx.projectEntry) {
+    entry = ctx.projectEntry;
   } else if (ctx.interactiveTTY) {
     entry = toPromptValue(await text({
       message: runtime.startsWith('python')
@@ -126,8 +129,8 @@ export async function executeTaskDeploy(
             },
             () => ensureDefaultNetwork()
           );
-          Config.setProject({ network: defaultNetwork });
-          ctx.project = Config.getProject();
+          Config.setProject({ network: defaultNetwork }, { component: ctx.component });
+          ctx.project = Config.getProject({ component: ctx.component });
         } catch (err: unknown) {
           console.warn(pc.yellow(`⚠️ VPC 自动接入失败，回退公网模式: ${formatErrorMessage(err)}`));
         }
@@ -155,7 +158,10 @@ export async function executeTaskDeploy(
           ctx.appName,
           entry,
           runtime,
-          deployOptions
+          {
+            ...deployOptions,
+            project: ctx.project
+          }
         )
       );
 
@@ -250,6 +256,7 @@ export async function executeTaskDeploy(
       return {
         functionName: ctx.appName,
         runtime,
+        entry,
         asyncTask: true,
         configuredQualifiers,
         invokeCommand,

@@ -11,6 +11,8 @@ import {
 import { formatErrorMessage } from '../utils/errors';
 import { runHook } from '../utils/hooks';
 import { buildDeployProjectPatch } from '../utils/deploy-config';
+import { buildDeployStatePatch } from '../utils/deploy-state';
+import { buildDeployPlan, getDeployPlanSnapshot } from '../utils/deploy-plan';
 import { parseDeployRuntimeOption } from '../utils/deploy-runtime';
 import { readLicellEnv } from '../utils/env';
 import {
@@ -22,6 +24,7 @@ import {
 } from '../utils/auth-recovery';
 import { createSpinner, isInteractiveTTY, showIntro, showOutro, tryNormalizeFcRuntime } from '../utils/cli-shared';
 import { emitCliError, emitCliEvent, emitCommandEvent, emitCommandResult, isJsonOutput } from '../utils/output';
+import { updateLicellComponentState } from '../utils/project-state';
 import { resolveDeployContext, type DeployCliOptions } from './deploy-context';
 import { executeApiDeploy } from './deploy-api';
 import { executeStaticDeploy } from './deploy-static';
@@ -57,10 +60,59 @@ const deployCheckCommand = defineCliCommand({
   }
 });
 
+const deployPlanCommand = defineCliCommand({
+  rawName: 'deploy plan',
+  description: '基于 `.licell/project.json` 生成部署计划（不执行云端变更）',
+  options: [
+    { rawName: '--component <name>', description: '只生成指定 component 的 deploy plan' },
+    { rawName: '--include <names>', description: '只为这些 component 生成 deploy plan（逗号分隔）' },
+    { rawName: '--exclude <names>', description: '跳过这些 component，不生成对应 deploy plan（逗号分隔）' }
+  ],
+  descriptor: {
+    title: 'Plan deployment from persisted config',
+    summary: '只读取 repo 中的 licell deploy config，输出 artifact -> 阿里云目标服务 -> 访问入口 的计划与风险提示。',
+    notes: [
+      '默认会优先读取 `.licell/state.json` 里最近一次 batch bootstrap 记录的 selectedComponents；若不存在，再回退到当前 workspace 的全部 deployable components。',
+      '传 `--component` / `--include` / `--exclude` 时，会显式覆盖默认的 bootstrap selection。'
+    ],
+    examples: ['licell deploy plan', 'licell deploy plan --component web --output json', 'licell deploy plan --include web,api --output json'],
+    optionInsights: {
+      '--component': {
+        whenToUse: '只想看某一个明确 component 的部署计划时使用。',
+        cautions: ['component 必须已经存在于当前 workspace config 且配置了 deployType。']
+      },
+      '--include': {
+        whenToUse: '只想为一部分已初始化的 deploy components 生成 plan 时使用。',
+        cautions: ['值为逗号分隔 component 名；会覆盖默认 bootstrap selection。']
+      },
+      '--exclude': {
+        whenToUse: '想保留大部分 deploy components，但跳过 docs/demo/admin 等组件时使用。',
+        cautions: ['值为逗号分隔 component 名；会覆盖默认 bootstrap selection。']
+      }
+    },
+    recommendedFlow: [
+      { title: '先做 bootstrap', command: 'licell bootstrap --all-discovered --apply --output json', reason: '先让 licell 知道 repo 里哪些 component 是要部署的。' },
+      { title: '读取默认 deploy plan', command: 'licell deploy plan --output json', reason: '默认优先复用最近一次 batch bootstrap 的 selectedComponents。' },
+      { title: '只看某部分 component', command: 'licell deploy plan --include web,api --output json', reason: '对当前需要推进的 deploy units 单独评估。' }
+    ],
+    result: {
+      summary: '返回每个 component 的部署计划、预期入口和 issues[]。',
+      fields: [
+        { name: 'rootDir', description: '项目根目录。', required: true },
+        { name: 'selectionSource', description: '`bootstrap` / `workspace` / `explicit-filter`，表示本次组件选择来源。', required: true },
+        { name: 'selectedComponents[]', description: '本次实际生成 plan 的 component 列表。', required: true },
+        { name: 'skippedComponents[]', description: '因为 bootstrap selection 或 include/exclude 被跳过的 component 列表。', required: true },
+        { name: 'components[]', description: '部署计划数组。', required: true }
+      ]
+    }
+  }
+});
+
 const deployCommand = defineCliCommand({
   rawName: 'deploy',
   description: '一键极速打包部署',
   options: [
+    { rawName: '--component <name>', description: '在 workspace / monorepo 根目录显式选择要部署的 component' },
     { rawName: '--type <type>', description: '部署类型：api、static 或 task（适配 CI 非交互场景）' },
     { rawName: '--entry <entry>', description: 'FC 入口文件（Node 默认 src/index.ts；Python 默认 src/main.py）' },
     { rawName: '--dist <dist>', description: '静态站点目录（默认 dist）' },
@@ -96,6 +148,10 @@ const deployCommand = defineCliCommand({
       '--type': {
         whenToUse: '在 CI / Agent 非交互场景下显式指定 `api`、`static` 或 `task`；其中 `task` 适合 FC 异步任务执行，不暴露固定 URL。',
         cautions: ['不指定时可能依赖当前项目上下文或交互提示。', '`--type task` 的后续验证入口是 `licell task invoke` / `task info`，不是 `fn invoke`。']
+      },
+      '--component': {
+        whenToUse: '在 repo 根目录统一操作多个 deploy unit 时，显式指定要命中的 workspace component。',
+        cautions: ['component 名称必须已经存在于 workspace `.licell/project.json` 中。']
       },
       '--entry': { whenToUse: 'FC 入口不是默认的 `src/index.ts` / `src/main.py` 时使用。', cautions: ['建议先运行 `licell deploy check` 验证入口与 runtime 约束。'] },
       '--runtime': { whenToUse: '需要强制指定运行时，例如 `nodejs22`、`python3.13`、`docker`。', cautions: ['部分 runtime 有地域限制；先查看 `licell deploy spec`。'] },
@@ -347,6 +403,42 @@ export function registerDeployCommand(cli: CAC) {
       }
     });
 
+  registerCliCommand(cli, deployPlanCommand)
+    .action((options: { component?: string; include?: string; exclude?: string }) => {
+      try {
+        const snapshot = getDeployPlanSnapshot(options.component);
+        const plan = buildDeployPlan(snapshot, options);
+        if (isJsonOutput()) {
+          emitCommandResult(plan, { stage: 'deploy.plan', inferOutcome: false });
+          return;
+        }
+        showIntro(pc.bgBlue(pc.white(' Deploy Plan ')));
+        console.log(`root: ${pc.cyan(plan.rootDir)}`);
+        console.log(`selection: ${pc.cyan(plan.selectionSource)}`);
+        console.log(`selected: ${pc.cyan(plan.selectedComponents.join(', '))}`);
+        if (plan.skippedComponents.length > 0) {
+          console.log(`skipped: ${pc.gray(plan.skippedComponents.join(', '))}`);
+        }
+        for (const component of plan.components) {
+          console.log(`- ${pc.cyan(component.component)} type=${pc.gray(component.deployType || '?')} command=${pc.gray(component.command)}`);
+          if (component.expectedUrl) {
+            console.log(`  url=${pc.gray(component.expectedUrl)}`);
+          }
+          for (const issue of component.issues) {
+            console.log(`  ${issue.level === 'warn' ? pc.yellow('warn') : pc.gray('info')}: ${issue.message}`);
+          }
+        }
+        showOutro('Done.');
+      } catch (err: unknown) {
+        if (isJsonOutput()) {
+          emitCliError(err, { stage: 'deploy.plan' });
+        } else {
+          console.error(formatErrorMessage(err));
+        }
+        process.exitCode = 1;
+      }
+    });
+
   registerCliCommand(cli, deployCommand)
     .action(async (options: DeployCliOptions) => {
       if (!isJsonOutput()) {
@@ -386,6 +478,7 @@ export function registerDeployCommand(cli: CAC) {
               status: 'info',
               data: {
                 type: ctx.type,
+                component: ctx.component || null,
                 runtime: ctx.cliRuntime || ctx.projectRuntime || ctx.envRuntime || null,
                 releaseTarget: ctx.releaseTarget || null,
                 enableCdn: ctx.enableCdn,
@@ -404,23 +497,49 @@ export function registerDeployCommand(cli: CAC) {
             let fixedDomain: string | undefined;
             let previewDomain: string | undefined;
             let previewVersion: string | undefined;
+            let bucketName: string | undefined;
+            let functionResourceName: string | undefined;
+            let cdnCname: string | undefined;
             let healthCheckLogs: string[] = [];
             let asyncTaskEnabled: boolean | undefined;
             let configuredQualifiers: string[] | undefined;
             let invokeCommand: string | undefined;
+            let usedRuntime: string | undefined;
+            let usedEntry: string | undefined;
+            let usedDist: string | undefined;
 
             if (ctx.type === 'api') {
               emitCommandEvent({ stage: 'deploy.api', action: 'execute', status: 'start' });
               const result = await executeApiDeploy(ctx, s);
               if (!result) return;
               emitCommandEvent({ stage: 'deploy.api', action: 'execute', status: 'ok' });
-              ({ url, promotedVersion, fixedDomain, previewDomain, previewVersion, healthCheckLogs } = result);
+              ({
+                url,
+                runtime: usedRuntime,
+                entry: usedEntry,
+                functionName: functionResourceName,
+                cdnCname,
+                promotedVersion,
+                fixedDomain,
+                previewDomain,
+                previewVersion,
+                healthCheckLogs
+              } = result);
             } else if (ctx.type === 'static') {
               emitCommandEvent({ stage: 'deploy.static', action: 'execute', status: 'start' });
               const result = await executeStaticDeploy(ctx, s);
               if (!result) return;
               emitCommandEvent({ stage: 'deploy.static', action: 'execute', status: 'ok' });
-              ({ url, fixedDomain, previewDomain, previewVersion, healthCheckLogs } = result);
+              ({
+                url,
+                dist: usedDist,
+                bucketName,
+                cdnCname,
+                fixedDomain,
+                previewDomain,
+                previewVersion,
+                healthCheckLogs
+              } = result);
             } else {
               emitCommandEvent({ stage: 'deploy.task', action: 'execute', status: 'start' });
               const result = await executeTaskDeploy(ctx, s);
@@ -428,12 +547,15 @@ export function registerDeployCommand(cli: CAC) {
               emitCommandEvent({ stage: 'deploy.task', action: 'execute', status: 'ok' });
               ({
                 functionName,
+                runtime: usedRuntime,
+                entry: usedEntry,
                 promotedVersion,
                 healthCheckLogs,
                 asyncTask: asyncTaskEnabled,
                 configuredQualifiers,
                 invokeCommand
               } = result);
+              functionResourceName = result.functionName;
             }
 
             s.stop(pc.green('✅ 部署成功!'));
@@ -472,17 +594,40 @@ export function registerDeployCommand(cli: CAC) {
             }
             const projectPatch = buildDeployProjectPatch({
               deploySucceeded: true,
-              cliDomainSuffix: ctx.cliDomainSuffix,
-              projectDomainSuffix: ctx.projectDomainSuffix,
-              cliRuntime: ctx.cliRuntime,
-              projectRuntime: ctx.projectRuntime,
               deployType: ctx.type,
-              projectDeployType: ctx.projectDeployType,
-              persistDeployType: Boolean(ctx.cliType || ctx.projectDeployType || ctx.type === 'task')
+              appName: ctx.appName,
+              runtime: usedRuntime,
+              entry: usedEntry,
+              dist: usedDist,
+              domain: ctx.cliDomain || ctx.projectDomain,
+              domainSuffix: ctx.cliDomain || ctx.projectDomain ? undefined : ctx.domainSuffix,
+              target: ctx.releaseTarget,
+              enableCdn: ctx.type === 'task' ? undefined : ctx.enableCdn,
+              enableSSL: ctx.type === 'task' ? undefined : ctx.enableSSL,
+              useVpc: ctx.type === 'static' ? undefined : ctx.useVpc,
+              acrNamespace: ctx.cliAcrNamespace || ctx.project.acrNamespace,
+              region: ctx.project.region || ctx.auth.region,
+              bucketName,
+              functionName: functionResourceName || functionName
             });
             if (Object.keys(projectPatch).length > 0) {
-              Config.setProject(projectPatch);
+              Config.setProject(projectPatch, { component: ctx.component });
             }
+            updateLicellComponentState(buildDeployStatePatch({
+              cwd: process.cwd(),
+              deployType: ctx.type,
+              region: ctx.project.region || ctx.auth.region,
+              appName: ctx.appName,
+              bucketName,
+              functionName: functionResourceName || functionName || ctx.appName,
+              releaseTarget: ctx.releaseTarget,
+              promotedVersion,
+              url: fixedDomain ? `${ctx.enableSSL ? 'https' : 'http'}://${fixedDomain}` : url,
+              fixedDomain,
+              enableSSL: ctx.type === 'task' ? undefined : ctx.enableSSL,
+              enableCdn: ctx.type === 'task' ? undefined : ctx.enableCdn,
+              cdnCname
+            }), { cwd: process.cwd(), component: ctx.component });
             if (ctx.project.hooks?.postDeploy) {
               try {
                 runHook('postDeploy', ctx.project.hooks.postDeploy);
@@ -494,7 +639,8 @@ export function registerDeployCommand(cli: CAC) {
               if (ctx.type === 'task') {
                 emitCommandResult({
                   type: ctx.type,
-                  runtime: ctx.cliRuntime || ctx.projectRuntime || ctx.envRuntime || null,
+                  component: ctx.component || null,
+                  runtime: usedRuntime || null,
                   functionName: functionName || ctx.appName,
                   releaseTarget: ctx.releaseTarget || null,
                   promotedVersion: promotedVersion || null,
@@ -507,7 +653,8 @@ export function registerDeployCommand(cli: CAC) {
               } else {
                 emitCommandResult({
                   type: ctx.type,
-                  runtime: ctx.cliRuntime || ctx.projectRuntime || ctx.envRuntime || null,
+                  component: ctx.component || null,
+                  runtime: ctx.type === 'static' ? 'static' : (usedRuntime || null),
                   url,
                   fixedDomain: fixedDomain || null,
                   releaseTarget: ctx.releaseTarget || null,
@@ -550,5 +697,5 @@ export function registerDeployCommand(cli: CAC) {
 export const deployCommandModule = defineCommandModule({
   section: DELIVERY_SECTION,
   register: registerDeployCommand,
-  commands: [deployCommand, deploySpecCommand, deployCheckCommand]
+  commands: [deployCommand, deploySpecCommand, deployCheckCommand, deployPlanCommand]
 });

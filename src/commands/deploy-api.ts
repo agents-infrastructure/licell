@@ -24,6 +24,10 @@ import { notifyDeployProgress, runDeployProgressStep } from './deploy-progress';
 
 export interface ApiDeployResult {
   url: string;
+  runtime: string;
+  entry: string;
+  functionName: string;
+  cdnCname?: string;
   promotedVersion?: string;
   fixedDomain?: string;
   fixedDomainUrl?: string;
@@ -49,6 +53,7 @@ function formatPrecheckIssueLines(issues: Array<{ id: string; level: 'error' | '
 
 function resolveApiFixedDomain(ctx: DeployContext) {
   if (ctx.cliDomain) return ctx.cliDomain;
+  if (ctx.projectDomain) return ctx.projectDomain;
   if (ctx.domainSuffix) return `${ctx.appName}.${ctx.domainSuffix}`;
   return undefined;
 }
@@ -75,7 +80,7 @@ export async function executeApiDeploy(
     throw new Error('--acr-namespace 仅适用于 --runtime docker');
   }
   if (runtime === 'docker' && ctx.cliAcrNamespace) {
-    Config.setProject({ acrNamespace: ctx.cliAcrNamespace });
+    Config.setProject({ acrNamespace: ctx.cliAcrNamespace }, { component: ctx.component });
   }
 
   const defaultApiEntry = getRuntime(runtime).defaultEntry;
@@ -84,6 +89,8 @@ export async function executeApiDeploy(
     entry = ctx.cliEntry || '';
   } else if (ctx.cliEntry) {
     entry = toPromptValue(ctx.cliEntry, '入口文件路径');
+  } else if (ctx.projectEntry) {
+    entry = ctx.projectEntry;
   } else if (ctx.interactiveTTY) {
     entry = toPromptValue(await text({
       message: runtime.startsWith('python')
@@ -140,8 +147,8 @@ export async function executeApiDeploy(
             },
             () => ensureDefaultNetwork()
           );
-          Config.setProject({ network: defaultNetwork });
-          ctx.project = Config.getProject();
+          Config.setProject({ network: defaultNetwork }, { component: ctx.component });
+          ctx.project = Config.getProject({ component: ctx.component });
         } catch (err: unknown) {
           console.warn(pc.yellow(`⚠️ VPC 自动接入失败，回退公网模式: ${formatErrorMessage(err)}`));
         }
@@ -170,7 +177,10 @@ export async function executeApiDeploy(
           ctx.appName,
           entry,
           runtime,
-          Object.keys(deployOptions).length > 0 ? deployOptions : undefined
+          {
+            ...(Object.keys(deployOptions).length > 0 ? deployOptions : {}),
+            project: ctx.project
+          }
         )
       );
       const deployedUrl = deployResult.url;
@@ -182,6 +192,7 @@ export async function executeApiDeploy(
       let nextFixedDomainUrl: string | undefined;
       let nextPreviewDomain: string | undefined;
       let nextPreviewVersion: string | undefined;
+      let nextCdnCname: string | undefined;
 
       if (ctx.preview && ctx.domainSuffix) {
         const previewDomainSuffix = ctx.domainSuffix;
@@ -306,6 +317,7 @@ export async function executeApiDeploy(
         nextFixedDomain = domainResult.domainName;
         nextFixedDomainUrl = domainResult.finalUrl;
         if (ctx.enableCdn && domainResult.cdnCname) {
+          nextCdnCname = domainResult.cdnCname;
           notifyDeployProgress(s, {
             stage: `${stagePrefix}.domain.cdn`,
             message: `✅ CDN 加速已校准，CNAME=${domainResult.cdnCname}`,
@@ -339,6 +351,10 @@ export async function executeApiDeploy(
       }
       return {
         url: deployedUrl,
+        runtime,
+        entry,
+        functionName: ctx.appName,
+        cdnCname: nextCdnCname,
         promotedVersion: nextPromotedVersion,
         fixedDomain: nextFixedDomain,
         fixedDomainUrl: nextFixedDomainUrl,
@@ -348,7 +364,18 @@ export async function executeApiDeploy(
     }
   );
   if (!apiDeployResult) return undefined;
-  const { url, promotedVersion, fixedDomain, fixedDomainUrl, previewDomain, previewVersion } = apiDeployResult;
+  const {
+    url,
+    runtime: resolvedRuntime,
+    entry: resolvedEntry,
+    functionName,
+    cdnCname,
+    promotedVersion,
+    fixedDomain,
+    fixedDomainUrl,
+    previewDomain,
+    previewVersion
+  } = apiDeployResult;
 
   notifyDeployProgress(s, {
     stage: `${stagePrefix}.health`,
@@ -420,6 +447,10 @@ export async function executeApiDeploy(
 
   return {
     url,
+    runtime: resolvedRuntime,
+    entry: resolvedEntry,
+    functionName,
+    cdnCname,
     promotedVersion,
     fixedDomain,
     previewDomain,
