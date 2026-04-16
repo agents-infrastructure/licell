@@ -169,13 +169,16 @@ function buildProjectFromProposal(input: {
             : {})
       };
 
+  const explicitDomain = toOptionalString(options?.domain);
+  const explicitDomainSuffix = toOptionalString(options?.domainSuffix);
+  const allowInferredRouteHints = Boolean(explicitDomain || explicitDomainSuffix);
   const route: ProjectRouteConfig | undefined = deployType === 'task'
     ? undefined
     : {
-      ...(toOptionalString(options?.domain) ? { domain: normalizeCustomDomain(String(options?.domain)) } : {}),
-      ...(toOptionalString(options?.domainSuffix) ? { domainSuffix: normalizeDomainSuffix(String(options?.domainSuffix)) } : {}),
-      ...(options?.enableCdn ? { cdn: true } : proposal?.route.cdn ? { cdn: true } : {}),
-      ...(options?.ssl ? { ssl: true } : proposal?.route.ssl ? { ssl: true } : {})
+      ...(explicitDomain ? { domain: normalizeCustomDomain(explicitDomain) } : {}),
+      ...(explicitDomainSuffix ? { domainSuffix: normalizeDomainSuffix(explicitDomainSuffix) } : {}),
+      ...(options?.enableCdn ? { cdn: true } : (allowInferredRouteHints && proposal?.route.cdn) ? { cdn: true } : {}),
+      ...(options?.ssl ? { ssl: true } : (allowInferredRouteHints && proposal?.route.ssl) ? { ssl: true } : {})
     };
 
   return normalizeProject({

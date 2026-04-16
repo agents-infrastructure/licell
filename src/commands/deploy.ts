@@ -1,6 +1,7 @@
 import type { CAC } from 'cac';
 import { defineCommandModule, commandInvocation, defineCliCommand, registerCliCommand } from './module';
 import pc from 'picocolors';
+import { resolve } from 'path';
 import { Config } from '../utils/config';
 import {
   DEFAULT_FC_RUNTIME,
@@ -374,6 +375,27 @@ function runDeployCheck(options: DeployCheckOptions) {
   }
 }
 
+function resolveDeployWorkingDirectory(component?: string) {
+  const snapshot = Config.getWorkspace({ component });
+  if (snapshot?.mode === 'workspace' && snapshot.componentPath) {
+    return resolve(snapshot.rootDir, snapshot.componentPath);
+  }
+  return process.cwd();
+}
+
+async function withProcessCwd<T>(cwd: string, task: () => Promise<T>): Promise<T> {
+  const previous = process.cwd();
+  if (resolve(previous) === resolve(cwd)) {
+    return await task();
+  }
+  process.chdir(cwd);
+  try {
+    return await task();
+  } finally {
+    process.chdir(previous);
+  }
+}
+
 export function registerDeployCommand(cli: CAC) {
   registerCliCommand(cli, deploySpecCommand)
     .action((runtime: string | undefined, options: DeploySpecOptions) => {
@@ -485,187 +507,189 @@ export function registerDeployCommand(cli: CAC) {
                 enableSSL: ctx.enableSSL
               }
             });
-            if (ctx.project.hooks?.preDeploy) {
-              s.start('执行 preDeploy hook...');
-              runHook('preDeploy', ctx.project.hooks.preDeploy);
-              s.stop(pc.green('✅ preDeploy hook 完成'));
-            }
+            await withProcessCwd(resolveDeployWorkingDirectory(ctx.component), async () => {
+              if (ctx.project.hooks?.preDeploy) {
+                s.start('执行 preDeploy hook...');
+                runHook('preDeploy', ctx.project.hooks.preDeploy);
+                s.stop(pc.green('✅ preDeploy hook 完成'));
+              }
 
-            let url: string | undefined;
-            let functionName: string | undefined;
-            let promotedVersion: string | undefined;
-            let fixedDomain: string | undefined;
-            let previewDomain: string | undefined;
-            let previewVersion: string | undefined;
-            let bucketName: string | undefined;
-            let functionResourceName: string | undefined;
-            let cdnCname: string | undefined;
-            let healthCheckLogs: string[] = [];
-            let asyncTaskEnabled: boolean | undefined;
-            let configuredQualifiers: string[] | undefined;
-            let invokeCommand: string | undefined;
-            let usedRuntime: string | undefined;
-            let usedEntry: string | undefined;
-            let usedDist: string | undefined;
+              let url: string | undefined;
+              let functionName: string | undefined;
+              let promotedVersion: string | undefined;
+              let fixedDomain: string | undefined;
+              let previewDomain: string | undefined;
+              let previewVersion: string | undefined;
+              let bucketName: string | undefined;
+              let functionResourceName: string | undefined;
+              let cdnCname: string | undefined;
+              let healthCheckLogs: string[] = [];
+              let asyncTaskEnabled: boolean | undefined;
+              let configuredQualifiers: string[] | undefined;
+              let invokeCommand: string | undefined;
+              let usedRuntime: string | undefined;
+              let usedEntry: string | undefined;
+              let usedDist: string | undefined;
 
-            if (ctx.type === 'api') {
-              emitCommandEvent({ stage: 'deploy.api', action: 'execute', status: 'start' });
-              const result = await executeApiDeploy(ctx, s);
-              if (!result) return;
-              emitCommandEvent({ stage: 'deploy.api', action: 'execute', status: 'ok' });
-              ({
-                url,
-                runtime: usedRuntime,
-                entry: usedEntry,
-                functionName: functionResourceName,
-                cdnCname,
-                promotedVersion,
-                fixedDomain,
-                previewDomain,
-                previewVersion,
-                healthCheckLogs
-              } = result);
-            } else if (ctx.type === 'static') {
-              emitCommandEvent({ stage: 'deploy.static', action: 'execute', status: 'start' });
-              const result = await executeStaticDeploy(ctx, s);
-              if (!result) return;
-              emitCommandEvent({ stage: 'deploy.static', action: 'execute', status: 'ok' });
-              ({
-                url,
-                dist: usedDist,
-                bucketName,
-                cdnCname,
-                fixedDomain,
-                previewDomain,
-                previewVersion,
-                healthCheckLogs
-              } = result);
-            } else {
-              emitCommandEvent({ stage: 'deploy.task', action: 'execute', status: 'start' });
-              const result = await executeTaskDeploy(ctx, s);
-              if (!result) return;
-              emitCommandEvent({ stage: 'deploy.task', action: 'execute', status: 'ok' });
-              ({
-                functionName,
-                runtime: usedRuntime,
-                entry: usedEntry,
-                promotedVersion,
-                healthCheckLogs,
-                asyncTask: asyncTaskEnabled,
-                configuredQualifiers,
-                invokeCommand
-              } = result);
-              functionResourceName = result.functionName;
-            }
+              if (ctx.type === 'api') {
+                emitCommandEvent({ stage: 'deploy.api', action: 'execute', status: 'start' });
+                const result = await executeApiDeploy(ctx, s);
+                if (!result) return;
+                emitCommandEvent({ stage: 'deploy.api', action: 'execute', status: 'ok' });
+                ({
+                  url,
+                  runtime: usedRuntime,
+                  entry: usedEntry,
+                  functionName: functionResourceName,
+                  cdnCname,
+                  promotedVersion,
+                  fixedDomain,
+                  previewDomain,
+                  previewVersion,
+                  healthCheckLogs
+                } = result);
+              } else if (ctx.type === 'static') {
+                emitCommandEvent({ stage: 'deploy.static', action: 'execute', status: 'start' });
+                const result = await executeStaticDeploy(ctx, s);
+                if (!result) return;
+                emitCommandEvent({ stage: 'deploy.static', action: 'execute', status: 'ok' });
+                ({
+                  url,
+                  dist: usedDist,
+                  bucketName,
+                  cdnCname,
+                  fixedDomain,
+                  previewDomain,
+                  previewVersion,
+                  healthCheckLogs
+                } = result);
+              } else {
+                emitCommandEvent({ stage: 'deploy.task', action: 'execute', status: 'start' });
+                const result = await executeTaskDeploy(ctx, s);
+                if (!result) return;
+                emitCommandEvent({ stage: 'deploy.task', action: 'execute', status: 'ok' });
+                ({
+                  functionName,
+                  runtime: usedRuntime,
+                  entry: usedEntry,
+                  promotedVersion,
+                  healthCheckLogs,
+                  asyncTask: asyncTaskEnabled,
+                  configuredQualifiers,
+                  invokeCommand
+                } = result);
+                functionResourceName = result.functionName;
+              }
 
-            s.stop(pc.green('✅ 部署成功!'));
-            if (ctx.type === 'task') {
-              console.log(`\n🧩 Task Function: ${pc.cyan(functionName || ctx.appName)}\n`);
+              s.stop(pc.green('✅ 部署成功!'));
+              if (ctx.type === 'task') {
+                console.log(`\n🧩 Task Function: ${pc.cyan(functionName || ctx.appName)}\n`);
+                if (ctx.releaseTarget && promotedVersion) {
+                  console.log(`🏷️  alias=${pc.cyan(ctx.releaseTarget)} -> version=${pc.cyan(promotedVersion)}\n`);
+                }
+                if (invokeCommand) {
+                  console.log(pc.gray(`💡 调用任务：${pc.bold(invokeCommand)}\n`));
+                }
+              } else if (url) {
+                console.log(`\n🎉 Production URL: ${pc.cyan(pc.underline(url))}\n`);
+              }
+              if (previewDomain) {
+                const previewDomainUrl = `${ctx.enableSSL ? 'https' : 'http'}://${previewDomain}`;
+                console.log(`🔍 Preview URL: ${pc.cyan(pc.underline(previewDomainUrl))}`);
+                console.log(`🏷️  version=${pc.cyan(previewVersion || 'unknown')}\n`);
+                console.log(pc.gray(`💡 验证后运行 ${pc.bold(`licell release promote ${previewVersion}`)} 发布到生产。\n`));
+              }
+              if (fixedDomain) {
+                const fixedDomainUrl = `${ctx.enableSSL ? 'https' : 'http'}://${fixedDomain}`;
+                console.log(`🌐 Fixed Domain: ${pc.cyan(pc.underline(fixedDomainUrl))}\n`);
+              }
               if (ctx.releaseTarget && promotedVersion) {
                 console.log(`🏷️  alias=${pc.cyan(ctx.releaseTarget)} -> version=${pc.cyan(promotedVersion)}\n`);
               }
-              if (invokeCommand) {
-                console.log(pc.gray(`💡 调用任务：${pc.bold(invokeCommand)}\n`));
+              if (!ctx.releaseTarget && !ctx.preview && ctx.type === 'api' && !isJsonOutput()) {
+                console.log(pc.gray(`💡 代码已更新到预览环境。运行 ${pc.bold('licell release promote')} 发布到生产。\n`));
               }
-            } else if (url) {
-              console.log(`\n🎉 Production URL: ${pc.cyan(pc.underline(url))}\n`);
-            }
-            if (previewDomain) {
-              const previewDomainUrl = `${ctx.enableSSL ? 'https' : 'http'}://${previewDomain}`;
-              console.log(`🔍 Preview URL: ${pc.cyan(pc.underline(previewDomainUrl))}`);
-              console.log(`🏷️  version=${pc.cyan(previewVersion || 'unknown')}\n`);
-              console.log(pc.gray(`💡 验证后运行 ${pc.bold(`licell release promote ${previewVersion}`)} 发布到生产。\n`));
-            }
-            if (fixedDomain) {
-              const fixedDomainUrl = `${ctx.enableSSL ? 'https' : 'http'}://${fixedDomain}`;
-              console.log(`🌐 Fixed Domain: ${pc.cyan(pc.underline(fixedDomainUrl))}\n`);
-            }
-            if (ctx.releaseTarget && promotedVersion) {
-              console.log(`🏷️  alias=${pc.cyan(ctx.releaseTarget)} -> version=${pc.cyan(promotedVersion)}\n`);
-            }
-            if (!ctx.releaseTarget && !ctx.preview && ctx.type === 'api' && !isJsonOutput()) {
-              console.log(pc.gray(`💡 代码已更新到预览环境。运行 ${pc.bold('licell release promote')} 发布到生产。\n`));
-            }
-            if (!ctx.releaseTarget && ctx.type === 'task' && !isJsonOutput()) {
-              console.log(pc.gray(`💡 代码已更新到 ${pc.bold('LATEST')}。如需稳定入口，可运行 ${pc.bold('licell release promote')} 发布 alias。\n`));
-            }
-            if (healthCheckLogs.length > 0) {
-              console.log(`${healthCheckLogs.join('\n')}\n`);
-            }
-            const projectPatch = buildDeployProjectPatch({
-              deploySucceeded: true,
-              deployType: ctx.type,
-              appName: ctx.appName,
-              runtime: usedRuntime,
-              entry: usedEntry,
-              dist: usedDist,
-              domain: ctx.cliDomain || ctx.projectDomain,
-              domainSuffix: ctx.cliDomain || ctx.projectDomain ? undefined : ctx.domainSuffix,
-              target: ctx.releaseTarget,
-              enableCdn: ctx.type === 'task' ? undefined : ctx.enableCdn,
-              enableSSL: ctx.type === 'task' ? undefined : ctx.enableSSL,
-              useVpc: ctx.type === 'static' ? undefined : ctx.useVpc,
-              acrNamespace: ctx.cliAcrNamespace || ctx.project.acrNamespace,
-              region: ctx.project.region || ctx.auth.region,
-              bucketName,
-              functionName: functionResourceName || functionName
-            });
-            if (Object.keys(projectPatch).length > 0) {
-              Config.setProject(projectPatch, { component: ctx.component });
-            }
-            updateLicellComponentState(buildDeployStatePatch({
-              cwd: process.cwd(),
-              deployType: ctx.type,
-              region: ctx.project.region || ctx.auth.region,
-              appName: ctx.appName,
-              bucketName,
-              functionName: functionResourceName || functionName || ctx.appName,
-              releaseTarget: ctx.releaseTarget,
-              promotedVersion,
-              url: fixedDomain ? `${ctx.enableSSL ? 'https' : 'http'}://${fixedDomain}` : url,
-              fixedDomain,
-              enableSSL: ctx.type === 'task' ? undefined : ctx.enableSSL,
-              enableCdn: ctx.type === 'task' ? undefined : ctx.enableCdn,
-              cdnCname
-            }), { cwd: process.cwd(), component: ctx.component });
-            if (ctx.project.hooks?.postDeploy) {
-              try {
-                runHook('postDeploy', ctx.project.hooks.postDeploy);
-              } catch (err: unknown) {
-                console.warn(pc.yellow(`⚠️ postDeploy hook 执行失败，已忽略: ${formatErrorMessage(err)}`));
+              if (!ctx.releaseTarget && ctx.type === 'task' && !isJsonOutput()) {
+                console.log(pc.gray(`💡 代码已更新到 ${pc.bold('LATEST')}。如需稳定入口，可运行 ${pc.bold('licell release promote')} 发布 alias。\n`));
               }
-            }
-            if (isJsonOutput()) {
-              if (ctx.type === 'task') {
-                emitCommandResult({
-                  type: ctx.type,
-                  component: ctx.component || null,
-                  runtime: usedRuntime || null,
-                  functionName: functionName || ctx.appName,
-                  releaseTarget: ctx.releaseTarget || null,
-                  promotedVersion: promotedVersion || null,
-                  asyncTaskEnabled: asyncTaskEnabled ?? true,
-                  configuredQualifiers: configuredQualifiers || [],
-                  invokeCommand: invokeCommand || null,
-                  healthCheckLogs,
-                  ...(!ctx.releaseTarget ? { hint: '运行 licell release promote 发布 alias；运行 licell task invoke 调用任务' } : {})
-                });
+              if (healthCheckLogs.length > 0) {
+                console.log(`${healthCheckLogs.join('\n')}\n`);
+              }
+              const projectPatch = buildDeployProjectPatch({
+                deploySucceeded: true,
+                deployType: ctx.type,
+                appName: ctx.appName,
+                runtime: usedRuntime,
+                entry: usedEntry,
+                dist: usedDist,
+                domain: ctx.cliDomain || ctx.projectDomain,
+                domainSuffix: ctx.cliDomain || ctx.projectDomain ? undefined : ctx.domainSuffix,
+                target: ctx.releaseTarget,
+                enableCdn: ctx.type === 'task' ? undefined : ctx.enableCdn,
+                enableSSL: ctx.type === 'task' ? undefined : ctx.enableSSL,
+                useVpc: ctx.type === 'static' ? undefined : ctx.useVpc,
+                acrNamespace: ctx.cliAcrNamespace || ctx.project.acrNamespace,
+                region: ctx.project.region || ctx.auth.region,
+                bucketName,
+                functionName: functionResourceName || functionName
+              });
+              if (Object.keys(projectPatch).length > 0) {
+                Config.setProject(projectPatch, { component: ctx.component });
+              }
+              updateLicellComponentState(buildDeployStatePatch({
+                cwd: process.cwd(),
+                deployType: ctx.type,
+                region: ctx.project.region || ctx.auth.region,
+                appName: ctx.appName,
+                bucketName,
+                functionName: functionResourceName || functionName || ctx.appName,
+                releaseTarget: ctx.releaseTarget,
+                promotedVersion,
+                url: fixedDomain ? `${ctx.enableSSL ? 'https' : 'http'}://${fixedDomain}` : url,
+                fixedDomain,
+                enableSSL: ctx.type === 'task' ? undefined : ctx.enableSSL,
+                enableCdn: ctx.type === 'task' ? undefined : ctx.enableCdn,
+                cdnCname
+              }), { cwd: process.cwd(), component: ctx.component });
+              if (ctx.project.hooks?.postDeploy) {
+                try {
+                  runHook('postDeploy', ctx.project.hooks.postDeploy);
+                } catch (err: unknown) {
+                  console.warn(pc.yellow(`⚠️ postDeploy hook 执行失败，已忽略: ${formatErrorMessage(err)}`));
+                }
+              }
+              if (isJsonOutput()) {
+                if (ctx.type === 'task') {
+                  emitCommandResult({
+                    type: ctx.type,
+                    component: ctx.component || null,
+                    runtime: usedRuntime || null,
+                    functionName: functionName || ctx.appName,
+                    releaseTarget: ctx.releaseTarget || null,
+                    promotedVersion: promotedVersion || null,
+                    asyncTaskEnabled: asyncTaskEnabled ?? true,
+                    configuredQualifiers: configuredQualifiers || [],
+                    invokeCommand: invokeCommand || null,
+                    healthCheckLogs,
+                    ...(!ctx.releaseTarget ? { hint: '运行 licell release promote 发布 alias；运行 licell task invoke 调用任务' } : {})
+                  });
+                } else {
+                  emitCommandResult({
+                    type: ctx.type,
+                    component: ctx.component || null,
+                    runtime: ctx.type === 'static' ? 'static' : (usedRuntime || null),
+                    url,
+                    fixedDomain: fixedDomain || null,
+                    releaseTarget: ctx.releaseTarget || null,
+                    promotedVersion: promotedVersion || null,
+                    healthCheckLogs,
+                    ...(!ctx.releaseTarget && ctx.type === 'api' ? { hint: '运行 licell release promote 发布到生产' } : {})
+                  });
+                }
               } else {
-                emitCommandResult({
-                  type: ctx.type,
-                  component: ctx.component || null,
-                  runtime: ctx.type === 'static' ? 'static' : (usedRuntime || null),
-                  url,
-                  fixedDomain: fixedDomain || null,
-                  releaseTarget: ctx.releaseTarget || null,
-                  promotedVersion: promotedVersion || null,
-                  healthCheckLogs,
-                  ...(!ctx.releaseTarget && ctx.type === 'api' ? { hint: '运行 licell release promote 发布到生产' } : {})
-                });
+                showOutro('Done!');
               }
-            } else {
-              showOutro('Done!');
-            }
+            });
             return;
           } catch (err: unknown) {
             if (!recoveredAuth && detectAuthIssue(err) !== 'unknown') {

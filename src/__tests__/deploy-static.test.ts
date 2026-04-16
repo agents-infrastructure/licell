@@ -119,6 +119,13 @@ describe('executeStaticDeploy', () => {
     } as never, spinner as never);
 
     expect(result?.fixedDomain).toBe('static.example.com');
+    expect(mockProbeHttpHealth).toHaveBeenNthCalledWith(1, 'https://demo-bucket.oss-cn-hangzhou.aliyuncs.com', {
+      paths: [''],
+      maxAttempts: 5,
+      intervalMs: 1500,
+      timeoutMs: 5000,
+      allowClientError: false
+    });
     expect(mockProbeHttpHealth).toHaveBeenNthCalledWith(2, 'https://static.example.com', {
       paths: ['/'],
       maxAttempts: 20,

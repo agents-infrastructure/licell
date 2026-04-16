@@ -1011,23 +1011,30 @@ export async function uploadDirectoryToBucket(
   };
 }
 
-export async function deployOSS(appName: string, distDir: string, options?: { targetDir?: string }) {
-  const { auth } = createOssClient();
-  const bucket = `licell-${appName}-${auth.accountId.substring(0, 4)}`.toLowerCase();
+function buildStaticObjectUrl(baseUrl: string, targetDir?: string) {
+  const normalizedBaseUrl = baseUrl.replace(/\/+$/g, '');
+  const normalizedTargetDir = normalizeOssTargetDir(targetDir);
+  return normalizedTargetDir
+    ? `${normalizedBaseUrl}/${normalizedTargetDir}/index.html`
+    : `${normalizedBaseUrl}/index.html`;
+}
 
-  try {
-    await getOssBucketInfo(bucket);
-  } catch (err: unknown) {
-    if (!isNotFoundError(err)) throw err;
-    await createOssBucket(bucket, {
-      acl: 'public-read',
-      allowExisting: true,
-      allowPublicAclBlockedFallback: true
-    });
-  }
+export async function deployOSS(
+  appName: string,
+  distDir: string,
+  options?: { targetDir?: string; bucketName?: string; allowPrivateFallback?: boolean }
+) {
+  const { auth } = createOssClient();
+  const bucket = (options?.bucketName || `licell-${appName}-${auth.accountId.substring(0, 4)}`).toLowerCase();
+  await createOssBucket(bucket, {
+    acl: 'public-read',
+    ...(options?.allowPrivateFallback ? {} : { publicAccessBlock: false }),
+    allowExisting: true,
+    allowPublicAclBlockedFallback: options?.allowPrivateFallback
+  });
 
   const uploadResult = await uploadDirectoryToBucket(bucket, distDir, { targetDir: options?.targetDir });
-  return uploadResult.baseUrl;
+  return buildStaticObjectUrl(uploadResult.baseUrl, options?.targetDir);
 }
 
 export function resolveOssBucketName(appName: string) {
@@ -1097,7 +1104,7 @@ export async function createOssBucket(bucketName: string, options: CreateOssBuck
   }
 
   if (options.allowExisting || created) {
-    if (acl !== 'private' || options.allowPublicAclBlockedFallback) {
+    if (!created && (acl !== 'private' || options.allowPublicAclBlockedFallback)) {
       await withRetry(
         () => setOssBucketAclInternal(client, runtime, bucket, acl, {
           allowPublicAclBlockedFallback: options.allowPublicAclBlockedFallback

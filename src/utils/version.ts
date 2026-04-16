@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
 import { resolve } from 'path';
 
 const BUNDLED_VERSION = process.env.LICELL_VERSION;
@@ -11,6 +12,14 @@ function normalizeVersion(value: string | null | undefined): string | null {
 
 function readPackageVersion(): string | null {
   const candidates: string[] = [];
+  if (typeof import.meta.url === 'string' && import.meta.url.length > 0) {
+    try {
+      candidates.push(fileURLToPath(new URL('../../package.json', import.meta.url)));
+      candidates.push(fileURLToPath(new URL('../package.json', import.meta.url)));
+    } catch {
+      // ignore and continue with other fallbacks
+    }
+  }
   if (typeof __dirname === 'string' && __dirname.length > 0) {
     candidates.push(resolve(__dirname, '../../package.json'));
     candidates.push(resolve(__dirname, '../package.json'));

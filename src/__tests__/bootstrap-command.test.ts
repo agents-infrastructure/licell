@@ -120,7 +120,10 @@ describe('bootstrap command', () => {
     expect(project.defaultComponent).toBe('api');
     expect(Object.keys(project.components).sort()).toEqual(['api', 'web']);
     expect(project.components.web.deployType).toBe('static');
+    expect(project.components.web.enableCdn).toBeUndefined();
+    expect(project.components.web.enableSSL).toBeUndefined();
     expect(project.components.api.deployTarget.function).toContain('-api');
+    expect(project.components.api.enableSSL).toBeUndefined();
     expect(state.defaultComponent).toBe('api');
     expect(state.bootstrap).toEqual(expect.objectContaining({
       mode: 'batch',

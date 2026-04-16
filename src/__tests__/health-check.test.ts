@@ -41,6 +41,24 @@ describe('probeHttpHealth', () => {
     ]);
   });
 
+  it('supports probing the exact base url when an empty path is provided', async () => {
+    const calls: string[] = [];
+    const result = await probeHttpHealth('https://example.com/index.html', {
+      paths: [''],
+      intervalMs: 0,
+      fetchImpl: async (url) => {
+        calls.push(url);
+        return new Response('ok', { status: 200 });
+      }
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.checkedUrl).toBe('https://example.com/index.html');
+    }
+    expect(calls).toEqual(['https://example.com/index.html']);
+  });
+
   it('retries when first attempt fails and later succeeds', async () => {
     let callCount = 0;
     const result = await probeHttpHealth('https://example.com', {

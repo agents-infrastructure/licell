@@ -1,4 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { mkdtempSync, rmSync, writeFileSync } from 'fs';
+import { join } from 'path';
+import { tmpdir } from 'os';
 
 const mockPutBucketWithOptions = vi.fn();
 const mockGetBucketInfoWithOptions = vi.fn();
@@ -236,6 +239,29 @@ describe('createOssBucket', () => {
     expect(result.bucket).toBe('demo-bucket');
     expect(result.key).toBe('auth-transfer/demo.json');
     expect(result.expiresAt).toMatch(/T/);
+  });
+
+  it('returns a directly fetchable index.html URL for static deploys and clears public access block', async () => {
+    const { deployOSS } = await import('../providers/oss');
+    const root = mkdtempSync(join(tmpdir(), 'licell-oss-deploy-'));
+
+    try {
+      writeFileSync(join(root, 'index.html'), '<!doctype html><title>demo</title>\n');
+
+      const url = await deployOSS('demo-app', root);
+
+      expect(url).toBe('https://licell-demo-app-1494.oss-cn-hangzhou.aliyuncs.com/index.html');
+      expect(mockPutBucketWithOptions).toHaveBeenCalledWith(
+        'licell-demo-app-1494',
+        expect.anything(),
+        expect.objectContaining({ acl: 'public-read' }),
+        expect.anything()
+      );
+      expect(mockExecute.mock.calls.some(([params]) => params?.action === 'DeleteBucketPublicAccessBlock')).toBe(true);
+    } finally {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it('treats inaccessible conflict bucket as unavailable name', async () => {

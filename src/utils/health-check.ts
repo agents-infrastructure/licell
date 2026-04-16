@@ -41,12 +41,13 @@ function normalizeProbePaths(paths: string[] | undefined) {
   const source = paths && paths.length > 0 ? paths : DEFAULT_PATHS;
   const normalized = source
     .map((item) => item.trim())
-    .filter((item) => item.length > 0)
-    .map((item) => (item.startsWith('/') ? item : `/${item}`));
+    .filter((item) => item.length > 0 || item === '')
+    .map((item) => (item.length === 0 || item.startsWith('/') ? item : `/${item}`));
   return [...new Set(normalized)];
 }
 
 function buildProbeUrl(baseUrl: string, path: string) {
+  if (path === '') return baseUrl;
   return `${baseUrl.replace(/\/+$/g, '')}${path}`;
 }
 

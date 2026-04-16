@@ -33,6 +33,10 @@ function resolveStaticFixedDomain(ctx: DeployContext) {
   return undefined;
 }
 
+function resolveStaticBucketName(ctx: DeployContext) {
+  return ctx.project?.deployTarget?.bucket || resolveOssBucketName(ctx.appName);
+}
+
 
 export async function executeStaticDeploy(
   ctx: DeployContext,
@@ -58,7 +62,7 @@ export async function executeStaticDeploy(
     '☁️ 正在递归上传静态资源到 OSS 边缘节点...',
     '❌ 部署失败',
     async () => {
-      const bucketName = resolveOssBucketName(ctx.appName);
+      const bucketName = resolveStaticBucketName(ctx);
       const url = await runDeployProgressStep(
         s,
         {
@@ -67,7 +71,10 @@ export async function executeStaticDeploy(
           okMessage: '✅ 静态资源已上传到 OSS',
           data: { dist, bucketName }
         },
-        () => deployOSS(ctx.appName, dist)
+        () => deployOSS(ctx.appName, dist, {
+          bucketName,
+          allowPrivateFallback: Boolean(fixedDomain)
+        })
       );
       if (!fixedDomain) {
         return { url, dist, bucketName, fixedDomain: undefined };
@@ -157,7 +164,7 @@ export async function executeStaticDeploy(
       data: { url }
     },
     () => probeHttpHealth(url, {
-      paths: ['/'],
+      paths: [''],
       maxAttempts: 5,
       intervalMs: 1500,
       timeoutMs: 5000,
@@ -207,6 +214,7 @@ async function executeStaticPreviewDeploy(
 ): Promise<StaticDeployResult | undefined> {
   const stagePrefix = 'deploy.static.preview';
   const bucketName = resolveOssBucketName(ctx.appName);
+  const resolvedBucketName = resolveStaticBucketName(ctx);
 
   const staticPreviewResult = await withSpinner(
     s,
@@ -222,9 +230,9 @@ async function executeStaticPreviewDeploy(
           okMessage: (functionName) => `✅ 静态代理函数已更新: ${functionName}`,
           data: { bucketName, previewPath: '_preview/pending' }
         },
-        () => deployStaticProxyFunction(
+            () => deployStaticProxyFunction(
           ctx.appName,
-          bucketName,
+          resolvedBucketName,
           '_preview/pending',
           ctx.project.envs
         )
@@ -247,11 +255,15 @@ async function executeStaticPreviewDeploy(
         s,
         {
           stage: `${stagePrefix}.upload`,
-          message: `正在上传静态资源到 OSS (${previewPath})...`,
-          okMessage: '✅ 预览静态资源已上传到 OSS',
-          data: { dist, previewPath, bucketName }
+            message: `正在上传静态资源到 OSS (${previewPath})...`,
+            okMessage: '✅ 预览静态资源已上传到 OSS',
+          data: { dist, previewPath, bucketName: resolvedBucketName }
         },
-        () => deployOSS(ctx.appName, dist, { targetDir: previewPath })
+        () => deployOSS(ctx.appName, dist, {
+          targetDir: previewPath,
+          bucketName: resolvedBucketName,
+          allowPrivateFallback: true
+        })
       );
 
       // Step 4: Update function with correct preview path and re-publish
@@ -263,9 +275,9 @@ async function executeStaticPreviewDeploy(
           okMessage: '✅ 代理函数已切到最终预览路径',
           data: { bucketName, previewPath }
         },
-        () => deployStaticProxyFunction(
+            () => deployStaticProxyFunction(
           ctx.appName,
-          bucketName,
+          resolvedBucketName,
           previewPath,
           ctx.project.envs
         )
@@ -329,7 +341,7 @@ async function executeStaticPreviewDeploy(
       return {
         url,
         dist,
-        bucketName,
+        bucketName: resolvedBucketName,
         previewDomain: previewResult.previewDomain,
         previewVersion: versionId
       };
@@ -354,7 +366,7 @@ async function executeStaticPreviewDeploy(
       data: { url }
     },
     () => probeHttpHealth(url, {
-      paths: ['/'],
+      paths: [''],
       maxAttempts: 5,
       intervalMs: 1500,
       timeoutMs: 5000,
