@@ -123,6 +123,7 @@ const deployCommand = defineCliCommand({
     { rawName: '--domain <domain>', description: '绑定完整自定义域名（如 api.your-domain.xyz）' },
     { rawName: '--domain-suffix <suffix>', description: '自动绑定固定子域名后缀（如 your-domain.xyz）' },
     { rawName: '--enable-cdn', description: '域名绑定后自动接入 CDN 并将 DNS CNAME 切到 CDN（API 显式开启；Static 提供域名时默认开启）' },
+    { rawName: '--cdn-refresh <mode>', description: 'Static + CDN 部署后的缓存刷新策略：off / entrypoints / all（默认 entrypoints）' },
     { rawName: '--ssl', description: '启用 HTTPS（API: --domain/--enable-cdn 默认开启；Static: 提供域名时默认开启）' },
     { rawName: '--ssl-force-renew', description: '启用 HTTPS 时强制续签证书（忽略到期阈值）' },
     { rawName: '--acr-namespace <ns>', description: 'Docker 部署时使用的 ACR 命名空间（默认 licell）' },
@@ -139,7 +140,8 @@ const deployCommand = defineCliCommand({
     notes: [
       'FC 函数部署前，建议先执行 `licell deploy spec` 与 `licell deploy check`。',
       '`--type task` 成功后不会返回固定访问 URL；结果里会给出 `functionName`、`configuredQualifiers[]` 与 `invokeCommand`，后续统一通过 `licell task invoke` 发起调用。',
-      '当 `--type task --target <alias>` 一起使用时，licell 会在 alias 调用入口收敛后再写入 qualifier 级 async invoke config，保证发布后可以直接验证。'
+      '当 `--type task --target <alias>` 一起使用时，licell 会在 alias 调用入口收敛后再写入 qualifier 级 async invoke config，保证发布后可以直接验证。',
+      '当 `type=static` 且绑定固定域名走 CDN 时，deploy 默认使用 `--cdn-refresh entrypoints`，避免首页与入口清单文件被旧缓存命中。'
     ],
     safety: {
       level: 'mutating',
@@ -160,6 +162,10 @@ const deployCommand = defineCliCommand({
       '--domain': { whenToUse: '希望直接绑定完整自定义域名时使用。', cautions: ['可能联动 SSL / CDN / DNS 变更。'] },
       '--domain-suffix': { whenToUse: '希望按固定后缀自动生成子域名时使用。', cautions: ['适合标准化环境，不适合完全自定义主机名。'] },
       '--enable-cdn': { whenToUse: '希望流量走 CDN、获得缓存/加速能力时使用。', cautions: ['会改写 DNS CNAME 指向 CDN。'] },
+      '--cdn-refresh': {
+        whenToUse: '静态站点绑定固定域名并走 CDN 时，希望 deploy 后自动处理缓存一致性。',
+        cautions: ['当前仅适用于 static deploy；默认 `entrypoints` 只刷新 `/`、HTML 与 manifest / service worker 等入口文件。']
+      },
       '--ssl': { whenToUse: '需要 HTTPS 证书自动签发与绑定时使用。', cautions: ['依赖域名解析正确；必要时结合 `--ssl-force-renew`。'] },
       '--target': {
         whenToUse: 'API 或任务函数部署后需要自动发布到指定 alias（如 `prod` / `preview`）时使用。',
@@ -196,6 +202,7 @@ const deployCommand = defineCliCommand({
       'licell deploy spec nodejs22',
       'licell deploy check',
       'licell deploy --type api --entry src/index.ts',
+      'licell deploy --type static --dist dist --domain www.example.com --cdn-refresh entrypoints --output json',
       'licell deploy --type task --entry src/worker.ts',
       'licell deploy --type task --runtime nodejs22 --target preview --output json',
       'licell deploy --output json'
@@ -216,6 +223,10 @@ const deployCommand = defineCliCommand({
         { name: 'hint', description: '文本提示；通常给未发布 alias 或 task workflow 的下一步建议。' },
         { name: 'url', description: '当 `type=api|static` 时的访问 URL。' },
         { name: 'fixedDomain', description: '绑定后的固定域名；未配置时为 `null`。' },
+        { name: 'bucketName', description: '当 `type=static` 时，实际写入的 OSS Bucket 名称。' },
+        { name: 'cdnCname', description: '当启用 CDN 且已分配时，返回对应的 CDN CNAME。' },
+        { name: 'cdnRefreshMode', description: '当 `type=static` 时，部署后使用的 CDN 刷新策略：`off` / `entrypoints` / `all`。' },
+        { name: 'cdnRefreshTaskIds[]', description: '当 `type=static` 且触发 CDN 刷新时，返回提交到 CDN 的刷新任务 ID 列表。' },
         { name: 'functionName', description: '当 `type=task` 时返回的函数名。' },
         { name: 'asyncTaskEnabled', description: '当 `type=task` 时，异步任务能力是否已启用。' },
         { name: 'configuredQualifiers[]', description: '当 `type=task` 时，已经写入 async invoke config 的 qualifier 列表。' },
@@ -523,6 +534,7 @@ export function registerDeployCommand(cli: CAC) {
               let bucketName: string | undefined;
               let functionResourceName: string | undefined;
               let cdnCname: string | undefined;
+              let cdnRefreshTaskIds: string[] = [];
               let healthCheckLogs: string[] = [];
               let asyncTaskEnabled: boolean | undefined;
               let configuredQualifiers: string[] | undefined;
@@ -558,6 +570,7 @@ export function registerDeployCommand(cli: CAC) {
                   dist: usedDist,
                   bucketName,
                   cdnCname,
+                  cdnRefreshTaskIds,
                   fixedDomain,
                   previewDomain,
                   previewVersion,
@@ -627,6 +640,7 @@ export function registerDeployCommand(cli: CAC) {
                 target: ctx.releaseTarget,
                 enableCdn: ctx.type === 'task' ? undefined : ctx.enableCdn,
                 enableSSL: ctx.type === 'task' ? undefined : ctx.enableSSL,
+                cdnRefresh: ctx.type === 'static' ? ctx.cdnRefreshMode : undefined,
                 useVpc: ctx.type === 'static' ? undefined : ctx.useVpc,
                 acrNamespace: ctx.cliAcrNamespace || ctx.project.acrNamespace,
                 region: ctx.project.region || ctx.auth.region,
@@ -680,6 +694,14 @@ export function registerDeployCommand(cli: CAC) {
                     runtime: ctx.type === 'static' ? 'static' : (usedRuntime || null),
                     url,
                     fixedDomain: fixedDomain || null,
+                    ...(ctx.type === 'static' ? { bucketName: bucketName || null } : {}),
+                    ...(cdnCname !== undefined ? { cdnCname } : {}),
+                    ...(ctx.type === 'static'
+                      ? {
+                        cdnRefreshMode: ctx.cdnRefreshMode,
+                        cdnRefreshTaskIds
+                      }
+                      : {}),
                     releaseTarget: ctx.releaseTarget || null,
                     promotedVersion: promotedVersion || null,
                     healthCheckLogs,

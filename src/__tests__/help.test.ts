@@ -231,6 +231,10 @@ describe('help utils', () => {
     expect(doc?.text).toContain('创建或更新函数');
     expect(doc?.result?.fields.some((field) => field.name === 'invokeCommand')).toBe(true);
     expect(doc?.result?.fields.some((field) => field.name === 'configuredQualifiers[]')).toBe(true);
+    expect(doc?.result?.fields.some((field) => field.name === 'bucketName')).toBe(true);
+    expect(doc?.result?.fields.some((field) => field.name === 'cdnCname')).toBe(true);
+    expect(doc?.result?.fields.some((field) => field.name === 'cdnRefreshMode')).toBe(true);
+    expect(doc?.result?.fields.some((field) => field.name === 'cdnRefreshTaskIds[]')).toBe(true);
     expect(doc?.text).toContain('`--type task` 成功后不会返回固定访问 URL');
     expect(doc?.text).toContain('Structured Result:');
     expect(doc?.text).toContain('`invokeCommand` · 当 `type=task` 时，推荐直接复制执行的任务调用命令。');
@@ -422,6 +426,7 @@ describe('help utils', () => {
     expect(doc?.key).toBe('deploy');
     expect(doc?.optionInsights.some((insight) => insight.flag.includes('--preview'))).toBe(true);
     expect(doc?.optionInsights.some((insight) => insight.flag.includes('--runtime'))).toBe(true);
+    expect(doc?.optionInsights.some((insight) => insight.flag.includes('--cdn-refresh'))).toBe(true);
     expect(doc?.recommendedFlow.map((step) => step.command)).toEqual(expect.arrayContaining([
       'licell deploy spec',
       'licell deploy check',

@@ -859,6 +859,99 @@ export function assertE2eTaskInvokeResult(payload: Record<string, unknown>) {
   return readRequiredString(payload.taskId, 'task invoke.taskId');
 }
 
+export function assertE2eStaticDeployResult(
+  payload: Record<string, unknown>,
+  options: { expectedFixedDomain: string }
+) {
+  if (readRequiredString(payload.command, 'deploy static result.command') !== 'deploy') {
+    throw new Error(`deploy static 命令标识异常: ${String(payload.command || '')}`);
+  }
+  const runtime = readRequiredString(payload.runtime, 'deploy static result.runtime');
+  if (runtime !== 'static') {
+    throw new Error(`deploy static runtime 不匹配: ${runtime}`);
+  }
+  const fixedDomain = readRequiredString(payload.fixedDomain, 'deploy static result.fixedDomain');
+  if (fixedDomain !== options.expectedFixedDomain) {
+    throw new Error(`deploy static fixedDomain 不匹配: expected=${options.expectedFixedDomain} actual=${fixedDomain}`);
+  }
+  const url = readRequiredString(payload.url, 'deploy static result.url');
+  if (!url.startsWith('https://')) {
+    throw new Error(`deploy static url 不是 https 地址: ${url}`);
+  }
+  const healthCheckLogs = Array.isArray(payload.healthCheckLogs)
+    ? payload.healthCheckLogs.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+    : [];
+  if (healthCheckLogs.length === 0) {
+    throw new Error('deploy static 未返回 healthCheckLogs');
+  }
+  if (!healthCheckLogs.some((item) => item.includes('固定域名可访问'))) {
+    throw new Error(`deploy static 未确认固定域名可访问: ${healthCheckLogs.join(' | ')}`);
+  }
+}
+
+export function assertE2eStaticStateResult(
+  payload: Record<string, unknown>,
+  options: { expectedBucket: string; expectedDomain: string }
+) {
+  if (readRequiredString(payload.command, 'state show result.command') !== 'state show') {
+    throw new Error(`state show 命令标识异常: ${String(payload.command || '')}`);
+  }
+  const state = readRequiredRecord(payload.state, 'state show result.state');
+  const resources = readRequiredRecord(state.resources, 'state show result.state.resources');
+  const bucket = readRequiredRecord(resources.bucket, 'state show result.state.resources.bucket');
+  const route = readRequiredRecord(state.route, 'state show result.state.route');
+  const cdn = readRequiredRecord(resources.cdn, 'state show result.state.resources.cdn');
+  const bucketName = readRequiredString(bucket.name, 'state show result.state.resources.bucket.name');
+  if (bucketName !== options.expectedBucket) {
+    throw new Error(`state show bucket 不匹配: expected=${options.expectedBucket} actual=${bucketName}`);
+  }
+  const routeDomain = readRequiredString(route.domain, 'state show result.state.route.domain');
+  if (routeDomain !== options.expectedDomain) {
+    throw new Error(`state show route.domain 不匹配: expected=${options.expectedDomain} actual=${routeDomain}`);
+  }
+  const routeUrl = readRequiredString(route.url, 'state show result.state.route.url');
+  if (routeUrl !== `https://${options.expectedDomain}`) {
+    throw new Error(`state show route.url 不匹配: ${routeUrl}`);
+  }
+  if (route.ssl !== true) {
+    throw new Error('state show route.ssl 不是 true');
+  }
+  if (cdn.enabled !== true) {
+    throw new Error('state show resources.cdn.enabled 不是 true');
+  }
+  readRequiredString(cdn.cname, 'state show result.state.resources.cdn.cname');
+}
+
+export function assertE2eStaticDomainBindResult(
+  payload: Record<string, unknown>,
+  options: { expectedDomain: string; expectedBucket: string }
+) {
+  const workflow = readRequiredString(payload.workflow, 'domain static bind result.workflow');
+  if (workflow !== 'static') {
+    throw new Error(`domain static bind workflow 不匹配: ${workflow}`);
+  }
+  const domain = readRequiredString(payload.domain, 'domain static bind result.domain');
+  if (domain !== options.expectedDomain) {
+    throw new Error(`domain static bind domain 不匹配: expected=${options.expectedDomain} actual=${domain}`);
+  }
+  const bucket = readRequiredString(payload.bucket, 'domain static bind result.bucket');
+  if (bucket !== options.expectedBucket) {
+    throw new Error(`domain static bind bucket 不匹配: expected=${options.expectedBucket} actual=${bucket}`);
+  }
+  const finalUrl = readRequiredString(payload.finalUrl, 'domain static bind result.finalUrl');
+  if (finalUrl !== `https://${options.expectedDomain}`) {
+    throw new Error(`domain static bind finalUrl 不匹配: ${finalUrl}`);
+  }
+  if (payload.ssl !== true) {
+    throw new Error('domain static bind ssl 不是 true');
+  }
+  if (payload.httpsConfigured !== true) {
+    throw new Error('domain static bind httpsConfigured 不是 true');
+  }
+  readRequiredString(payload.originDomain, 'domain static bind result.originDomain');
+  readRequiredString(payload.cdnCname, 'domain static bind result.cdnCname');
+}
+
 function isTerminalTaskStatus(status: string | undefined) {
   return status === 'Succeeded' || status === 'Failed' || status === 'Stopped';
 }
@@ -1465,7 +1558,12 @@ async function executeE2eRun(options: E2eRunOptions) {
               const staticDeployDomain = buildE2eManagedDomain(fullSmokeRootDomain, runId, 'static-deploy');
               const staticDeployManagedDomain: E2eManagedDomainResource = { workflow: 'static', domain: staticDeployDomain };
               trackManagedDomain(ctx, staticDeployManagedDomain);
-              runStep(ctx, 'deploy-static-domain', ['deploy', '--type', 'static', '--dist', staticDistDir, '--domain', staticDeployDomain, '--ssl']);
+              runJsonStep<Record<string, unknown>>(
+                ctx,
+                'deploy-static-domain',
+                ['deploy', '--type', 'static', '--dist', staticDistDir, '--domain', staticDeployDomain, '--ssl'],
+                (payload) => assertE2eStaticDeployResult(payload, { expectedFixedDomain: staticDeployDomain })
+              );
               await runStaticDomainProbeStep(ctx, 'deploy-static-domain-probe', staticDeployDomain, `https://${staticDeployDomain}`, {
                 paths: ['/'],
                 maxAttempts: 36,
@@ -1473,13 +1571,30 @@ async function executeE2eRun(options: E2eRunOptions) {
                 timeoutMs: 10000,
                 allowClientError: false
               });
+              runJsonStep<Record<string, unknown>>(
+                ctx,
+                'state-show-static-domain',
+                ['state', 'show'],
+                (payload) => assertE2eStaticStateResult(payload, {
+                  expectedBucket: manifest.resources.staticBucket!,
+                  expectedDomain: staticDeployDomain
+                })
+              );
               runStep(ctx, 'domain-static-unbind-deploy', ['domain', 'static', 'unbind', staticDeployDomain, '--yes']);
               untrackManagedDomain(ctx, staticDeployManagedDomain);
 
               const staticBindDomain = buildE2eManagedDomain(fullSmokeRootDomain, runId, 'static-bind');
               const staticBindManagedDomain: E2eManagedDomainResource = { workflow: 'static', domain: staticBindDomain };
               trackManagedDomain(ctx, staticBindManagedDomain);
-              runStep(ctx, 'domain-static-bind', ['domain', 'static', 'bind', staticBindDomain, '--bucket', manifest.resources.staticBucket, '--ssl']);
+              runJsonStep<Record<string, unknown>>(
+                ctx,
+                'domain-static-bind',
+                ['domain', 'static', 'bind', staticBindDomain, '--bucket', manifest.resources.staticBucket, '--ssl'],
+                (payload) => assertE2eStaticDomainBindResult(payload, {
+                  expectedDomain: staticBindDomain,
+                  expectedBucket: manifest.resources.staticBucket!
+                })
+              );
               await runStaticDomainProbeStep(ctx, 'domain-static-probe', staticBindDomain, `https://${staticBindDomain}`, {
                 paths: ['/'],
                 maxAttempts: 36,

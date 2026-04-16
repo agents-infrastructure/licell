@@ -153,6 +153,22 @@ describe('normalizeProject', () => {
     expect(result.envs).toEqual({ FOO: 'bar', BAZ: 'qux' });
   });
 
+  it('normalizes cdn refresh mode from route and top-level config', () => {
+    const result = normalizeProject({
+      enableCdn: true,
+      route: {
+        cdn: true,
+        cdnRefresh: 'ENTRYPOINTS'
+      }
+    });
+    expect(result.enableCdn).toBe(true);
+    expect(result.cdnRefresh).toBe('entrypoints');
+    expect(result.route).toEqual({
+      cdn: true,
+      cdnRefresh: 'entrypoints'
+    });
+  });
+
   it('filters out non-string env values', () => {
     const result = normalizeProject({ envs: { FOO: 'bar', BAD: 123, NULL: null } });
     expect(result.envs).toEqual({ FOO: 'bar' });

@@ -2,6 +2,7 @@ import { select, text, isCancel } from '@clack/prompts';
 import { Config, type AuthConfig, type ProjectConfig } from '../utils/config';
 import { normalizeReleaseTarget } from '../utils/cli-helpers';
 import { normalizeAcrNamespace } from '../providers/cr';
+import { normalizeStaticCdnRefreshMode, type StaticCdnRefreshMode } from '../utils/static-cdn-refresh';
 import { readLicellEnv } from '../utils/env';
 import { parseDeployRuntimeOption } from '../utils/deploy-runtime';
 import {
@@ -26,6 +27,7 @@ export interface DeployCliOptions {
   domain?: string;
   domainSuffix?: string;
   enableCdn?: boolean;
+  cdnRefresh?: string;
   ssl?: boolean;
   sslForceRenew?: boolean;
   type?: string;
@@ -51,6 +53,7 @@ export interface DeployContext {
   projectDomain?: string;
   domainSuffix?: string;
   enableCdn: boolean;
+  cdnRefreshMode: StaticCdnRefreshMode;
   useVpc: boolean;
   enableSSL: boolean;
   forceSslRenew: boolean;
@@ -65,6 +68,7 @@ export interface DeployContext {
   projectTarget?: string;
   projectEnableCdn?: boolean;
   projectEnableSSL?: boolean;
+  projectCdnRefreshMode?: StaticCdnRefreshMode;
   projectUseVpc?: boolean;
   cliType?: 'api' | 'static' | 'task';
   projectDeployType?: 'api' | 'static' | 'task';
@@ -123,6 +127,11 @@ export async function resolveDeployContext(options: DeployCliOptions): Promise<D
     : undefined;
   const projectEnableCdn = typeof project.enableCdn === 'boolean' ? project.enableCdn : undefined;
   const projectEnableSSL = typeof project.enableSSL === 'boolean' ? project.enableSSL : undefined;
+  const projectCdnRefreshMode = typeof project.cdnRefresh === 'string'
+    ? normalizeStaticCdnRefreshMode(project.cdnRefresh)
+    : typeof project.route?.cdnRefresh === 'string'
+      ? normalizeStaticCdnRefreshMode(project.route.cdnRefresh)
+      : undefined;
   const projectUseVpc = typeof project.useVpc === 'boolean' ? project.useVpc : undefined;
   const projectEntry = typeof project.entry === 'string' && project.entry.trim().length > 0
     ? project.entry.trim()
@@ -185,6 +194,12 @@ export async function resolveDeployContext(options: DeployCliOptions): Promise<D
   const enableCdn = type === 'static'
     ? Boolean(options.enableCdn || projectEnableCdn || staticDomainRequested)
     : Boolean(options.enableCdn || projectEnableCdn);
+  const cliCdnRefreshMode = options.cdnRefresh !== undefined
+    ? normalizeStaticCdnRefreshMode(options.cdnRefresh)
+    : undefined;
+  const cdnRefreshMode = type === 'static' && enableCdn
+    ? (cliCdnRefreshMode || projectCdnRefreshMode || 'entrypoints')
+    : 'off';
   const enableSSL = type === 'static'
     ? Boolean(options.ssl || projectEnableSSL || staticDomainRequested || enableCdn)
     : type === 'api'
@@ -194,9 +209,13 @@ export async function resolveDeployContext(options: DeployCliOptions): Promise<D
   if (type === 'task') {
     if (cliDomain || projectDomain || cliDomainSuffix || projectDomainSuffix) throw new Error('任务函数不支持 --domain / --domain-suffix');
     if (options.enableCdn || projectEnableCdn) throw new Error('任务函数不支持 --enable-cdn');
+    if (options.cdnRefresh !== undefined || projectCdnRefreshMode !== undefined) throw new Error('任务函数不支持 --cdn-refresh');
     if (options.ssl || projectEnableSSL) throw new Error('任务函数不支持 --ssl');
     if (forceSslRenew) throw new Error('任务函数不支持 --ssl-force-renew');
     if (options.preview) throw new Error('任务函数不支持 --preview');
+  }
+  if (type === 'api' && (options.cdnRefresh !== undefined || projectCdnRefreshMode !== undefined)) {
+    throw new Error('--cdn-refresh 当前仅适用于静态站点部署');
   }
   if (cliDomain && cliDomainSuffix) throw new Error('--domain 与 --domain-suffix 不能同时使用');
   if (releaseTarget && type === 'static') throw new Error('--target 仅适用于 FC 函数部署（api / task）');
@@ -205,6 +224,9 @@ export async function resolveDeployContext(options: DeployCliOptions): Promise<D
   if (type === 'static' && options.disableVpc) throw new Error('--disable-vpc 仅适用于 FC 函数部署（api / task）');
   if (enableCdn && !resolvedDomain && !domainSuffix) {
     throw new Error('--enable-cdn 需要域名，请提供 --domain（完整域名）或 --domain-suffix');
+  }
+  if (cdnRefreshMode !== 'off' && !enableCdn) {
+    throw new Error('--cdn-refresh 需要启用 CDN，请提供 --domain / --domain-suffix，或显式使用 --enable-cdn');
   }
   if (type === 'static' && cliRuntime) throw new Error('--runtime 的 FC 运行时仅适用于 api / task；静态站请使用 --runtime static');
   if (type === 'static' && cliAcrNamespace) throw new Error('--acr-namespace 仅适用于 FC Docker 部署');
@@ -254,6 +276,7 @@ export async function resolveDeployContext(options: DeployCliOptions): Promise<D
     projectDomain,
     domainSuffix,
     enableCdn,
+    cdnRefreshMode,
     useVpc,
     enableSSL,
     forceSslRenew,
@@ -268,6 +291,7 @@ export async function resolveDeployContext(options: DeployCliOptions): Promise<D
     projectTarget,
     projectEnableCdn,
     projectEnableSSL,
+    projectCdnRefreshMode,
     projectUseVpc,
     cliType,
     projectDeployType,

@@ -5,6 +5,7 @@ const {
   mockIssueAndBindSSLWithArtifacts,
   mockBindStaticDomainWorkflow,
   mockBindFunctionPreviewDomainWorkflow,
+  mockRefreshCdnObjectCaches,
   mockProbeHttpHealth,
   mockDetectStaticDistDir,
   mockEmitCommandEvent,
@@ -15,6 +16,7 @@ const {
   mockIssueAndBindSSLWithArtifacts: vi.fn(),
   mockBindStaticDomainWorkflow: vi.fn(),
   mockBindFunctionPreviewDomainWorkflow: vi.fn(),
+  mockRefreshCdnObjectCaches: vi.fn(),
   mockProbeHttpHealth: vi.fn(),
   mockDetectStaticDistDir: vi.fn(),
   mockEmitCommandEvent: vi.fn(),
@@ -29,6 +31,10 @@ vi.mock('../providers/oss', () => ({
 
 vi.mock('../providers/ssl', () => ({
   issueAndBindSSLWithArtifacts: mockIssueAndBindSSLWithArtifacts
+}));
+
+vi.mock('../providers/cdn', () => ({
+  refreshCdnObjectCaches: mockRefreshCdnObjectCaches
 }));
 
 vi.mock('../workflows/domain', () => ({
@@ -74,6 +80,7 @@ describe('executeStaticDeploy', () => {
     mockIssueAndBindSSLWithArtifacts.mockReset();
     mockBindStaticDomainWorkflow.mockReset();
     mockBindFunctionPreviewDomainWorkflow.mockReset();
+    mockRefreshCdnObjectCaches.mockReset();
     mockProbeHttpHealth.mockReset();
     mockDetectStaticDistDir.mockReset();
     mockEmitCommandEvent.mockReset();
@@ -92,6 +99,10 @@ describe('executeStaticDeploy', () => {
       cdnCname: 'static.example.com.w.kunluncan.com',
       httpsConfigured: true,
       finalUrl: 'https://static.example.com'
+    });
+    mockRefreshCdnObjectCaches.mockResolvedValue({
+      taskIds: ['refresh-task-1'],
+      tasks: [{ taskId: 'refresh-task-1', status: 'Complete' }]
     });
     mockProbeHttpHealth
       .mockResolvedValueOnce({ ok: true, statusCode: 200, checkedUrl: 'https://demo-bucket.oss-cn-hangzhou.aliyuncs.com/' })
@@ -139,6 +150,40 @@ describe('executeStaticDeploy', () => {
       'deploy.static.domain',
       'deploy.static.health.oss',
       'deploy.static.health.fixed-domain'
+    ]));
+  });
+
+  it('refreshes CDN entrypoints after fixed-domain static deploys by default', async () => {
+    const spinner = {
+      start: vi.fn(),
+      stop: vi.fn(),
+      message: vi.fn()
+    };
+
+    const result = await executeStaticDeploy({
+      appName: 'demo-app',
+      type: 'static',
+      cliDomain: 'static.example.com',
+      cliDist: 'dist',
+      preview: false,
+      domainSuffix: undefined,
+      interactiveTTY: false,
+      enableSSL: true,
+      forceSslRenew: false,
+      enableCdn: true,
+      cdnRefreshMode: 'entrypoints'
+    } as never, spinner as never);
+
+    expect(mockRefreshCdnObjectCaches).toHaveBeenCalledWith([
+      {
+        objectType: 'File',
+        objectPath: ['https://static.example.com/']
+      }
+    ], { waitForCompletion: true });
+    expect(result?.cdnRefreshTaskIds).toEqual(['refresh-task-1']);
+    expect(result?.healthCheckLogs[0]).toContain('CDN 缓存刷新已完成');
+    expect(mockEmitCommandEvent.mock.calls.map(([event]) => event.stage)).toEqual(expect.arrayContaining([
+      'deploy.static.cdn-refresh'
     ]));
   });
 });

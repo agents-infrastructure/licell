@@ -13,6 +13,8 @@ const DEFAULT_CDN_DOMAIN_READY_TIMEOUT_MS = 15 * 60_000;
 const DEFAULT_CDN_DOMAIN_READY_INTERVAL_MS = 5_000;
 const DEFAULT_CDN_HTTPS_READY_TIMEOUT_MS = 10 * 60_000;
 const DEFAULT_CDN_HTTPS_READY_INTERVAL_MS = 3_000;
+const DEFAULT_CDN_REFRESH_READY_TIMEOUT_MS = 5 * 60_000;
+const DEFAULT_CDN_REFRESH_READY_INTERVAL_MS = 3_000;
 
 export interface CdnDomainOrigin {
   content: string;
@@ -30,10 +32,27 @@ export interface CdnDomainDetail {
   origins?: CdnDomainOrigin[];
 }
 
+export interface CdnRefreshTaskDetail {
+  taskId: string;
+  status?: string;
+  objectPath?: string;
+  objectType?: string;
+}
+
 interface CdnEnableResult {
   cdnCname: string;
   created: boolean;
   httpsConfigured?: boolean;
+}
+
+export interface CdnRefreshRequest {
+  objectPath: string[];
+  objectType: 'File' | 'Directory';
+}
+
+export interface CdnRefreshResult {
+  taskIds: string[];
+  tasks: CdnRefreshTaskDetail[];
 }
 
 export type CdnSourceType = 'domain' | 'oss';
@@ -142,7 +161,7 @@ function normalizeServerCertificateStatus(value: unknown) {
 }
 
 function resolveCdnWaitConfig(
-  kind: 'domain' | 'https',
+  kind: 'domain' | 'https' | 'refresh',
   env: NodeJS.ProcessEnv = process.env
 ): CdnWaitConfig {
   const timeoutMs = kind === 'domain'
@@ -150,19 +169,29 @@ function resolveCdnWaitConfig(
       readLicellEnv(env, 'CDN_DOMAIN_READY_TIMEOUT_MS'),
       DEFAULT_CDN_DOMAIN_READY_TIMEOUT_MS
     )
-    : parsePositiveIntEnv(
+    : kind === 'https'
+      ? parsePositiveIntEnv(
       readLicellEnv(env, 'CDN_HTTPS_READY_TIMEOUT_MS'),
       DEFAULT_CDN_HTTPS_READY_TIMEOUT_MS
-    );
+      )
+      : parsePositiveIntEnv(
+        readLicellEnv(env, 'CDN_REFRESH_READY_TIMEOUT_MS'),
+        DEFAULT_CDN_REFRESH_READY_TIMEOUT_MS
+      );
   const intervalMs = kind === 'domain'
     ? parsePositiveIntEnv(
       readLicellEnv(env, 'CDN_DOMAIN_READY_INTERVAL_MS'),
       DEFAULT_CDN_DOMAIN_READY_INTERVAL_MS
     )
-    : parsePositiveIntEnv(
+    : kind === 'https'
+      ? parsePositiveIntEnv(
       readLicellEnv(env, 'CDN_HTTPS_READY_INTERVAL_MS'),
       DEFAULT_CDN_HTTPS_READY_INTERVAL_MS
-    );
+      )
+      : parsePositiveIntEnv(
+        readLicellEnv(env, 'CDN_REFRESH_READY_INTERVAL_MS'),
+        DEFAULT_CDN_REFRESH_READY_INTERVAL_MS
+      );
   return {
     timeoutMs,
     intervalMs,
@@ -246,6 +275,74 @@ function extractPageData(body: unknown) {
   const pageData = (domains as Record<string, unknown>).PageData;
   if (!Array.isArray(pageData)) return [];
   return pageData;
+}
+
+function collectNestedRows(value: unknown, rows: Record<string, unknown>[], depth = 0): void {
+  if (depth > 8) return;
+  if (Array.isArray(value)) {
+    for (const item of value) collectNestedRows(item, rows, depth + 1);
+    return;
+  }
+  if (!value || typeof value !== 'object') return;
+  const record = value as Record<string, unknown>;
+  if (record.TaskId || record.taskId || record.ObjectPath || record.objectPath || record.Status || record.status) {
+    rows.push(record);
+  }
+  for (const nested of Object.values(record)) {
+    collectNestedRows(nested, rows, depth + 1);
+  }
+}
+
+function findNestedStringField(value: unknown, keys: string[], depth = 0): string | undefined {
+  if (depth > 8) return undefined;
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = findNestedStringField(item, keys, depth + 1);
+      if (found) return found;
+    }
+    return undefined;
+  }
+  if (!value || typeof value !== 'object') return undefined;
+  const record = value as Record<string, unknown>;
+  for (const key of keys) {
+    const raw = record[key];
+    if (typeof raw === 'string' && raw.trim()) return raw.trim();
+  }
+  for (const nested of Object.values(record)) {
+    const found = findNestedStringField(nested, keys, depth + 1);
+    if (found) return found;
+  }
+  return undefined;
+}
+
+function toCdnRefreshTaskDetail(row: unknown): CdnRefreshTaskDetail | undefined {
+  if (!row || typeof row !== 'object') return undefined;
+  const item = row as Record<string, unknown>;
+  const taskId = String(item.TaskId || item.taskId || '').trim();
+  if (!taskId) return undefined;
+  const status = String(item.Status || item.status || '').trim();
+  const objectPath = String(item.ObjectPath || item.objectPath || '').trim();
+  const objectType = String(item.ObjectType || item.objectType || '').trim();
+  return {
+    taskId,
+    ...(status ? { status } : {}),
+    ...(objectPath ? { objectPath } : {}),
+    ...(objectType ? { objectType } : {})
+  };
+}
+
+function extractRefreshTaskDetails(body: unknown) {
+  const rows: Record<string, unknown>[] = [];
+  collectNestedRows(body, rows);
+  const tasks: CdnRefreshTaskDetail[] = [];
+  const seen = new Set<string>();
+  for (const row of rows) {
+    const detail = toCdnRefreshTaskDetail(row);
+    if (!detail || seen.has(detail.taskId)) continue;
+    seen.add(detail.taskId);
+    tasks.push(detail);
+  }
+  return tasks;
 }
 
 function isCdnDomainNotReadyError(err: unknown) {
@@ -460,6 +557,21 @@ function isCdnFailedStatus(status: string | undefined) {
   return status === 'configure_failed' || status === 'check_failed';
 }
 
+function normalizeCdnRefreshTaskStatus(status: string | undefined) {
+  const normalized = String(status || '').trim().toLowerCase();
+  return normalized || undefined;
+}
+
+function isCdnRefreshTaskComplete(status: string | undefined) {
+  const normalized = normalizeCdnRefreshTaskStatus(status);
+  return normalized === 'complete' || normalized === 'completed' || normalized === 'success' || normalized === 'succeeded';
+}
+
+function isCdnRefreshTaskFailed(status: string | undefined) {
+  const normalized = normalizeCdnRefreshTaskStatus(status);
+  return normalized === 'fail' || normalized === 'failed' || normalized === 'failure' || normalized === 'canceled';
+}
+
 async function waitCdnDomainOnline(domainName: string, maxAttempts?: number, intervalMs?: number) {
   const normalizedDomain = normalizeDomain(domainName);
   const waitConfig = resolveCdnWaitConfig('domain');
@@ -506,6 +618,102 @@ async function waitCdnHttpsConfigured(domainName: string, maxAttempts?: number, 
     `CDN 边缘 HTTPS 长时间未就绪: ${normalizedDomain}${lastStatus ? ` (serverCertificateStatus=${lastStatus})` : ''}` +
     `；已等待 ${formatWaitSeconds(timeoutMs)}，可通过 LICELL_CDN_HTTPS_READY_TIMEOUT_MS / LICELL_CDN_HTTPS_READY_INTERVAL_MS 调整`
   );
+}
+
+async function waitForCdnRefreshTasks(taskIds: string[], maxAttempts?: number, intervalMs?: number) {
+  const pendingTaskIds = [...new Set(taskIds.filter((item) => item.trim().length > 0))];
+  if (pendingTaskIds.length === 0) return [];
+  const waitConfig = resolveCdnWaitConfig('refresh');
+  const resolvedMaxAttempts = maxAttempts ?? waitConfig.maxAttempts;
+  const resolvedIntervalMs = intervalMs ?? waitConfig.intervalMs;
+  const timeoutMs = resolvedMaxAttempts * resolvedIntervalMs;
+  let latestTasks: CdnRefreshTaskDetail[] = [];
+
+  for (let attempt = 1; attempt <= resolvedMaxAttempts; attempt += 1) {
+    latestTasks = await describeCdnRefreshTasks({ taskIds: pendingTaskIds });
+    const statusByTaskId = new Map(latestTasks.map((task) => [task.taskId, task.status]));
+    const failedTask = pendingTaskIds.find((taskId) => isCdnRefreshTaskFailed(statusByTaskId.get(taskId)));
+    if (failedTask) {
+      throw new Error(`CDN 缓存刷新失败: ${failedTask} (${String(statusByTaskId.get(failedTask) || 'unknown')})`);
+    }
+    const allComplete = pendingTaskIds.every((taskId) => isCdnRefreshTaskComplete(statusByTaskId.get(taskId)));
+    if (allComplete) return latestTasks;
+    await new Promise((resolve) => setTimeout(resolve, resolvedIntervalMs));
+  }
+
+  throw new Error(
+    `CDN 缓存刷新长时间未完成: ${pendingTaskIds.join(', ')}` +
+    `；已等待 ${formatWaitSeconds(timeoutMs)}，可通过 LICELL_CDN_REFRESH_READY_TIMEOUT_MS / LICELL_CDN_REFRESH_READY_INTERVAL_MS 调整`
+  );
+}
+
+export async function describeCdnRefreshTasks(filters: {
+  taskIds?: string[];
+  objectPath?: string;
+  objectType?: 'File' | 'Directory';
+  domainName?: string;
+} = {}): Promise<CdnRefreshTaskDetail[]> {
+  const taskIds = [...new Set((filters.taskIds || []).map((item) => item.trim()).filter(Boolean))];
+  if (taskIds.length <= 1) {
+    const response = await withRetry(() => callCdnRpc('DescribeRefreshTasks', {
+      ...(filters.domainName ? { DomainName: normalizeDomain(filters.domainName) } : {}),
+      ...(filters.objectPath ? { ObjectPath: filters.objectPath } : {}),
+      ...(filters.objectType ? { ObjectType: filters.objectType.toLowerCase() } : {}),
+      ...(taskIds[0] ? { TaskId: taskIds[0] } : {}),
+      PageNumber: 1,
+      PageSize: 100
+    }));
+    return extractRefreshTaskDetails(response.body);
+  }
+
+  const tasks = await Promise.all(taskIds.map(async (taskId) => {
+    const response = await withRetry(() => callCdnRpc('DescribeRefreshTasks', {
+      TaskId: taskId,
+      PageNumber: 1,
+      PageSize: 100
+    }));
+    return extractRefreshTaskDetails(response.body);
+  }));
+  return tasks.flat();
+}
+
+export async function refreshCdnObjectCaches(
+  requests: CdnRefreshRequest[],
+  options: { waitForCompletion?: boolean } = {}
+): Promise<CdnRefreshResult> {
+  const taskIds: string[] = [];
+  for (const request of requests) {
+    const objectPaths = [...new Set(request.objectPath.map((item) => item.trim()).filter(Boolean))];
+    if (objectPaths.length === 0) continue;
+    const response = await withRetry(
+      () => callCdnRpc('RefreshObjectCaches', {
+        ObjectPath: objectPaths.join('\n'),
+        ObjectType: request.objectType
+      }),
+      {
+        maxAttempts: 12,
+        baseDelayMs: 2_000,
+        shouldRetry: (err: unknown) => isTransientError(err) || isCdnDomainNotReadyError(err)
+      }
+    );
+    const taskId = findNestedStringField(response.body, ['RefreshTaskId', 'refreshTaskId', 'TaskId', 'taskId']);
+    if (!taskId) {
+      throw new Error(`CDN 刷新请求未返回 taskId (${request.objectType})`);
+    }
+    taskIds.push(taskId);
+  }
+
+  if (taskIds.length === 0) {
+    return { taskIds: [], tasks: [] };
+  }
+
+  const tasks = options.waitForCompletion === false
+    ? taskIds.map((taskId) => ({ taskId }))
+    : await waitForCdnRefreshTasks(taskIds);
+  return {
+    taskIds,
+    tasks
+  };
 }
 
 export async function ensureCdnDomain(

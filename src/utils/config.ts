@@ -82,6 +82,7 @@ export interface ProjectRouteConfig {
   domainSuffix?: string;
   cdn?: boolean;
   ssl?: boolean;
+  cdnRefresh?: 'off' | 'entrypoints' | 'all' | string;
 }
 
 export interface ProjectConfig {
@@ -97,6 +98,7 @@ export interface ProjectConfig {
   target?: string;
   enableCdn?: boolean;
   enableSSL?: boolean;
+  cdnRefresh?: 'off' | 'entrypoints' | 'all' | string;
   useVpc?: boolean;
   region?: string;
   envs: Record<string, string>;
@@ -289,13 +291,22 @@ function normalizeRouteConfig(raw: unknown): ProjectRouteConfig | undefined {
   const domainSuffix = toOptionalString(raw.domainSuffix)?.toLowerCase();
   const cdn = toOptionalBoolean(raw.cdn);
   const ssl = toOptionalBoolean(raw.ssl);
+  const cdnRefresh = normalizeProjectCdnRefreshMode(raw.cdnRefresh);
   const normalized: ProjectRouteConfig = {
     ...(domain ? { domain } : {}),
     ...(domainSuffix ? { domainSuffix } : {}),
     ...(cdn !== undefined ? { cdn } : {}),
-    ...(ssl !== undefined ? { ssl } : {})
+    ...(ssl !== undefined ? { ssl } : {}),
+    ...(cdnRefresh ? { cdnRefresh } : {})
   };
   return Object.keys(normalized).length > 0 ? normalized : undefined;
+}
+
+function normalizeProjectCdnRefreshMode(value: unknown) {
+  const normalized = toOptionalString(value)?.toLowerCase();
+  if (!normalized) return undefined;
+  if (normalized === 'off' || normalized === 'entrypoints' || normalized === 'all') return normalized;
+  return undefined;
 }
 
 function normalizeProjectLikePath(input: unknown, rootDir: string) {
@@ -439,6 +450,8 @@ export function normalizeProject(raw: unknown): ProjectConfig {
   if (enableCdn !== undefined) normalized.enableCdn = enableCdn;
   const enableSSL = toOptionalBoolean(projectRaw.enableSSL);
   if (enableSSL !== undefined) normalized.enableSSL = enableSSL;
+  const cdnRefresh = normalizeProjectCdnRefreshMode(projectRaw.cdnRefresh);
+  if (cdnRefresh) normalized.cdnRefresh = cdnRefresh;
   const useVpc = toOptionalBoolean(projectRaw.useVpc);
   if (useVpc !== undefined) normalized.useVpc = useVpc;
   const region = toOptionalString(projectRaw.region);
@@ -532,7 +545,8 @@ export function normalizeProject(raw: unknown): ProjectConfig {
     ...(normalized.domain ? { domain: normalized.domain } : {}),
     ...(normalized.domainSuffix ? { domainSuffix: normalized.domainSuffix } : {}),
     ...(normalized.enableCdn !== undefined ? { cdn: normalized.enableCdn } : {}),
-    ...(normalized.enableSSL !== undefined ? { ssl: normalized.enableSSL } : {})
+    ...(normalized.enableSSL !== undefined ? { ssl: normalized.enableSSL } : {}),
+    ...(normalized.cdnRefresh ? { cdnRefresh: normalized.cdnRefresh } : {})
   });
 
   const artifact = normalizeArtifactConfig({
@@ -589,6 +603,9 @@ export function normalizeProject(raw: unknown): ProjectConfig {
   if (normalized.enableSSL === undefined && route?.ssl !== undefined) {
     normalized.enableSSL = route.ssl;
   }
+  if (normalized.cdnRefresh === undefined && route?.cdnRefresh !== undefined) {
+    normalized.cdnRefresh = route.cdnRefresh;
+  }
 
   const {
     schemaVersion: _sv,
@@ -603,6 +620,7 @@ export function normalizeProject(raw: unknown): ProjectConfig {
     target: _target,
     enableCdn: _enableCdn,
     enableSSL: _enableSSL,
+    cdnRefresh: _cdnRefresh,
     useVpc: _useVpc,
     region: _region,
     envs: _e,

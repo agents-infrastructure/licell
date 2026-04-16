@@ -17,6 +17,7 @@ interface BuildDeployProjectPatchOptions {
   target?: string;
   enableCdn?: boolean;
   enableSSL?: boolean;
+  cdnRefresh?: 'off' | 'entrypoints' | 'all';
   useVpc?: boolean;
   acrNamespace?: string;
   region?: string;
@@ -64,6 +65,11 @@ export function buildDeployProjectPatch(options: BuildDeployProjectPatchOptions)
     patch.enableCdn = options.enableCdn;
     patch.enableSSL = options.enableSSL;
   }
+  if (options.deployType !== 'task') {
+    patch.cdnRefresh = options.cdnRefresh;
+  } else {
+    patch.cdnRefresh = undefined;
+  }
 
   if (options.acrNamespace) {
     patch.acrNamespace = options.acrNamespace;
@@ -100,7 +106,8 @@ export function buildDeployProjectPatch(options: BuildDeployProjectPatchOptions)
       ...(options.domain ? { domain: options.domain } : {}),
       ...(options.domain || !options.domainSuffix ? {} : { domainSuffix: options.domainSuffix }),
       ...(options.enableCdn !== undefined ? { cdn: options.enableCdn } : {}),
-      ...(options.enableSSL !== undefined ? { ssl: options.enableSSL } : {})
+      ...(options.enableSSL !== undefined ? { ssl: options.enableSSL } : {}),
+      ...(options.cdnRefresh ? { cdnRefresh: options.cdnRefresh } : {})
     };
 
   return patch;

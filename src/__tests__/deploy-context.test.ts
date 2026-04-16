@@ -50,6 +50,7 @@ describe('resolveDeployContext', () => {
       dist: 'build',
       domain: 'www.example.com',
       enableCdn: true,
+      cdnRefresh: 'entrypoints',
       envs: {}
     });
 
@@ -61,8 +62,29 @@ describe('resolveDeployContext', () => {
       projectDomain: 'www.example.com',
       projectDist: 'build',
       enableCdn: true,
+      cdnRefreshMode: 'entrypoints',
       enableSSL: true,
       useVpc: false
+    });
+  });
+
+  it('lets explicit static cdn refresh override persisted settings', async () => {
+    getProjectMock.mockReturnValue({
+      appName: 'demo-web',
+      deployType: 'static',
+      dist: 'build',
+      domain: 'www.example.com',
+      enableCdn: true,
+      cdnRefresh: 'entrypoints',
+      envs: {}
+    });
+
+    const ctx = await resolveDeployContext({ cdnRefresh: 'all' });
+
+    expect(ctx).toMatchObject({
+      type: 'static',
+      enableCdn: true,
+      cdnRefreshMode: 'all'
     });
   });
 
@@ -118,5 +140,17 @@ describe('resolveDeployContext', () => {
       appName: 'demo-web',
       type: 'static'
     });
+  });
+
+  it('rejects cdn refresh for api deploys', async () => {
+    getProjectMock.mockReturnValue({
+      appName: 'demo-api',
+      deployType: 'api',
+      runtime: 'nodejs22',
+      entry: 'src/index.ts',
+      envs: {}
+    });
+
+    await expect(resolveDeployContext({ cdnRefresh: 'entrypoints' })).rejects.toThrow('--cdn-refresh 当前仅适用于静态站点部署');
   });
 });

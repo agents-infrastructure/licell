@@ -17,7 +17,8 @@ describe('buildDeployProjectPatch', () => {
       dist: 'apps/web/dist',
       domainSuffix: 'example.com',
       enableCdn: true,
-      enableSSL: true
+      enableSSL: true,
+      cdnRefresh: 'entrypoints'
     })).toEqual({
       deployType: 'static',
       runtime: undefined,
@@ -29,6 +30,7 @@ describe('buildDeployProjectPatch', () => {
       domainSuffix: 'example.com',
       enableCdn: true,
       enableSSL: true,
+      cdnRefresh: 'entrypoints',
       artifact: {
         kind: 'directory',
         path: 'apps/web/dist'
@@ -39,7 +41,8 @@ describe('buildDeployProjectPatch', () => {
       route: {
         domainSuffix: 'example.com',
         cdn: true,
-        ssl: true
+        ssl: true,
+        cdnRefresh: 'entrypoints'
       }
     });
   });

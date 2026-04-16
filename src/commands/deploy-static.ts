@@ -1,10 +1,12 @@
 import { text, type spinner } from '@clack/prompts';
 import pc from 'picocolors';
+import { refreshCdnObjectCaches } from '../providers/cdn';
 import { deployOSS, resolveOssBucketName } from '../providers/oss';
 import { issueAndBindSSLWithArtifacts } from '../providers/ssl';
 import { bindStaticDomainWorkflow } from '../workflows/domain';
 import { bindFunctionPreviewDomainWorkflow } from '../workflows/preview';
 import { probeHttpHealth } from '../utils/health-check';
+import { buildStaticCdnRefreshPlan } from '../utils/static-cdn-refresh';
 import { detectStaticDistDir } from '../utils/static-dist';
 import { toPromptValue, withSpinner } from '../utils/cli-shared';
 import {
@@ -20,6 +22,7 @@ export interface StaticDeployResult {
   dist: string;
   bucketName: string;
   cdnCname?: string;
+  cdnRefreshTaskIds: string[];
   fixedDomain?: string;
   previewDomain?: string;
   previewVersion?: string;
@@ -77,7 +80,7 @@ export async function executeStaticDeploy(
         })
       );
       if (!fixedDomain) {
-        return { url, dist, bucketName, fixedDomain: undefined };
+        return { url, dist, bucketName, cdnRefreshTaskIds: [], fixedDomain: undefined };
       }
 
       let tlsArtifacts: { certificate?: string; privateKey?: string } | undefined;
@@ -144,13 +147,58 @@ export async function executeStaticDeploy(
           data: { domain: domainResult.domainName, configured: false }
         });
       }
-      return { url, dist, bucketName, fixedDomain: domainResult.domainName, cdnCname: domainResult.cdnCname };
+
+      let cdnRefreshTaskIds: string[] = [];
+      if (ctx.enableCdn && ctx.cdnRefreshMode !== 'off') {
+        const refreshPlan = buildStaticCdnRefreshPlan(domainResult.domainName, dist, ctx.cdnRefreshMode);
+        const refreshResult = await runDeployProgressStep(
+          s,
+          {
+            stage: `${stagePrefix}.cdn-refresh`,
+            message: `正在刷新 CDN 缓存 (${ctx.cdnRefreshMode})...`,
+            okMessage: (result) => `✅ CDN 缓存刷新已完成 (${ctx.cdnRefreshMode})`,
+            data: {
+              domain: domainResult.domainName,
+              mode: ctx.cdnRefreshMode,
+              requests: refreshPlan.requests.map((item) => ({
+                objectType: item.objectType,
+                count: item.objectPaths.length
+              }))
+            },
+            okData: (result) => ({
+              domain: domainResult.domainName,
+              mode: ctx.cdnRefreshMode,
+              taskIds: result.taskIds
+            })
+          },
+          () => refreshCdnObjectCaches(
+            refreshPlan.requests.map((item) => ({
+              objectType: item.objectType,
+              objectPath: item.objectPaths
+            })),
+            { waitForCompletion: true }
+          )
+        );
+        cdnRefreshTaskIds = refreshResult.taskIds;
+      }
+
+      return {
+        url,
+        dist,
+        bucketName,
+        fixedDomain: domainResult.domainName,
+        cdnCname: domainResult.cdnCname,
+        cdnRefreshTaskIds
+      };
     }
   );
   if (!staticDeployResult) return undefined;
 
   const { url } = staticDeployResult;
   const healthCheckLogs: string[] = [];
+  if (staticDeployResult.cdnRefreshTaskIds.length > 0) {
+    healthCheckLogs.push(`✅ CDN 缓存刷新已完成 (${ctx.cdnRefreshMode}; tasks=${staticDeployResult.cdnRefreshTaskIds.join(', ')})`);
+  }
   notifyDeployProgress(s, {
     stage: `${stagePrefix}.health`,
     message: '🩺 部署完成，正在做可访问性检测...'
@@ -406,6 +454,7 @@ async function executeStaticPreviewDeploy(
     url,
     dist,
     bucketName: deployedBucketName,
+    cdnRefreshTaskIds: [],
     previewDomain,
     previewVersion,
     healthCheckLogs
