@@ -64,6 +64,27 @@ licell deploy \
 Licell 监测到你是 static (静态站部署) 并且传递了 `--domain` 参数，它默认会
 **自动开启 CDN 部署，并将你的 OSS 挂载为 CDN 源站，同时全自动生成 HTTPS 证书** 并下发到 CDN 节点中；默认优先走 Let's Encrypt，命中限额时自动切换到 ZeroSSL ACME。
 
+另外，Licell 在这条静态域名 workflow 中，默认还会执行 **CDN 入口文件刷新**：
+
+- 默认策略是 `--cdn-refresh entrypoints`
+- 会自动刷新 `/`、根层 HTML、`manifest.json`、`asset-manifest.json`、`sw.js`、`service-worker.js`
+- 这样你在同一个域名上重复部署时，首页和入口清单文件不会继续命中旧缓存
+
+如果你确实需要更重的缓存失效策略，也可以显式指定：
+
+```bash
+licell deploy \
+  --type static \
+  --domain www.your-website.com \
+  --cdn-refresh all
+```
+
+其中：
+
+- `entrypoints`：适合常规前端站点，尽量只刷新入口文件
+- `all`：对根目录做目录级刷新
+- `off`：完全关闭自动刷新（仅建议在你有外部缓存治理流程时使用）
+
 <!-- BEGIN GENERATED:SCENARIO_DOMAIN_STATIC_BIND_WORKFLOW -->
 > 如果你是通过 Agent 执行这一步，推荐直接运行下面这条 CLI：
 

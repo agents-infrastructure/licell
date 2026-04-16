@@ -70,6 +70,8 @@ licell deploy --type api --runtime nodejs22 --entry src/index.ts --target previe
 
 \`\`\`bash
 licell deploy --type static --dist dist --domain-suffix example.com
+# 默认会在固定域名 + CDN 场景下执行入口文件刷新
+licell deploy --type static --dist dist --domain www.example.com --cdn-refresh entrypoints --output json
 \`\`\`
 
 ### Data + App Stack
@@ -112,6 +114,7 @@ licell logs query '*' --output json
 - 部署失败：检查 \`licell fn logs --once\` 查看错误日志
 - 应用域名冲突：使用 \`licell domain app unbind <domain>\` 清理后重试
 - 静态域名冲突：使用 \`licell domain static unbind <domain>\` 清理后重试
+- 静态站重复部署但页面仍旧命中旧缓存：检查 deploy 结果里的 \`cdnRefreshMode\` / \`cdnRefreshTaskIds[]\`，必要时改用 \`--cdn-refresh all\`
 - 版本清理：\`licell release prune --keep 5 --apply\` 清理旧版本
 - 破坏性操作（rm/prune）需要 \`--yes\` 跳过确认，或在交互模式下手动确认
 `;

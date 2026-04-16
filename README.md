@@ -385,6 +385,8 @@ licell deploy --type static --dist dist
 licell deploy --type static --dist dist --domain-suffix your-domain.xyz
 # 或
 licell deploy --type static --dist dist --domain static.your-domain.xyz
+# 如需更重的缓存失效策略，也可显式指定：
+licell deploy --type static --dist dist --domain static.your-domain.xyz --cdn-refresh all
 ```
 
 这条 workflow 会串起：
@@ -393,6 +395,15 @@ licell deploy --type static --dist dist --domain static.your-domain.xyz
 - CDN 接入
 - DNS CNAME 收敛
 - HTTPS 证书签发与 CDN 边缘证书配置
+- CDN 缓存刷新（默认 `entrypoints`，会自动刷新 `/`、HTML、manifest 与 service worker 等入口文件）
+
+### CDN Refresh 说明
+
+- 只要 static deploy 绑定了固定域名并走 CDN，Licell 默认就会执行 `--cdn-refresh entrypoints`
+- `entrypoints` 适合现代前端站点：只刷新 `/`、根层 HTML、`manifest.json`、`asset-manifest.json`、`sw.js`、`service-worker.js`
+- `all` 会对根目录做目录级刷新，适合你明确知道整站缓存都要立即失效的场景
+- `off` 会关闭自动刷新；这通常只适合你自己在外部另有缓存治理流程时使用
+- 部署完成后的结构化结果里会返回 `cdnRefreshMode` 与 `cdnRefreshTaskIds[]`，便于 Agent / CI 继续追踪
 
 ### HTTPS / ACME 说明
 
