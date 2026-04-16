@@ -1070,19 +1070,50 @@ export async function createOssBucket(bucketName: string, options: CreateOssBuck
       ...(options.dataRedundancyType ? { dataRedundancyType: options.dataRedundancyType } : {})
     })
     : undefined;
+  const createBucketRequest = new $OSS.PutBucketRequest({
+    ...(createBucketConfiguration ? { createBucketConfiguration } : {})
+  });
 
   try {
     await client.putBucketWithOptions(
       bucket,
-      new $OSS.PutBucketRequest({
-        ...(createBucketConfiguration ? { createBucketConfiguration } : {})
-      }),
+      createBucketRequest,
       new $OSS.PutBucketHeaders({ acl }),
       runtime
     );
   } catch (err: unknown) {
     if (isOssEmptyXmlResponseError(err)) {
       await assertBucketAccessible(client, bucket, runtime);
+    } else if (isPublicAcl(acl) && options.allowPublicAclBlockedFallback && isPublicBucketAclBlockedError(err)) {
+      try {
+        await client.putBucketWithOptions(
+          bucket,
+          createBucketRequest,
+          new $OSS.PutBucketHeaders({ acl: 'private' }),
+          runtime
+        );
+      } catch (fallbackErr: unknown) {
+        if (isOssEmptyXmlResponseError(fallbackErr)) {
+          await assertBucketAccessible(client, bucket, runtime);
+        } else if (isConflictError(fallbackErr) || isOssBucketNameUnavailableError(fallbackErr)) {
+          try {
+            await assertBucketAccessible(client, bucket, runtime);
+          } catch (infoErr: unknown) {
+            if (isNotFoundError(infoErr) || isOssEmptyXmlResponseError(infoErr)) {
+              const tagged = new Error(`OSS Bucket 名称不可用: ${bucket}（可能被其他账号占用，或刚删除尚未释放）`) as Error & { code?: string };
+              tagged.code = 'OssBucketNameUnavailable';
+              throw tagged;
+            }
+            throw infoErr;
+          }
+          if (!options.allowExisting) {
+            throw new Error(`OSS Bucket 已存在: ${bucket}`);
+          }
+          created = false;
+        } else {
+          throw fallbackErr;
+        }
+      }
     } else if (isConflictError(err) || isOssBucketNameUnavailableError(err)) {
       try {
         await assertBucketAccessible(client, bucket, runtime);

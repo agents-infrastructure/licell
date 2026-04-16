@@ -292,4 +292,40 @@ describe('createOssBucket', () => {
     expect(result.created).toBe(false);
     expect(mockGetBucketInfoWithOptions).toHaveBeenCalled();
   });
+
+  it('falls back to private bucket create when public acl is blocked', async () => {
+    const { createOssBucket } = await import('../providers/oss');
+    const publicAclBlocked = new Error('AccessDenied: Put public bucket acl is not allowed');
+    const conflict = new Error('BucketAlreadyExists');
+    (conflict as Error & { code?: string }).code = 'BucketAlreadyExists';
+
+    mockPutBucketWithOptions
+      .mockRejectedValueOnce(publicAclBlocked)
+      .mockRejectedValueOnce(conflict);
+    mockIsAccessDeniedError.mockImplementation((err: unknown) => String((err as Error)?.message || '').includes('AccessDenied'));
+    mockIsConflictError.mockImplementation((err: unknown) => (err as { code?: string })?.code === 'BucketAlreadyExists');
+
+    const result = await createOssBucket('demo-bucket', {
+      acl: 'public-read',
+      allowExisting: true,
+      allowPublicAclBlockedFallback: true
+    });
+
+    expect(result.created).toBe(false);
+    expect(mockPutBucketWithOptions).toHaveBeenNthCalledWith(
+      1,
+      'demo-bucket',
+      expect.anything(),
+      expect.objectContaining({ acl: 'public-read' }),
+      expect.anything()
+    );
+    expect(mockPutBucketWithOptions).toHaveBeenNthCalledWith(
+      2,
+      'demo-bucket',
+      expect.anything(),
+      expect.objectContaining({ acl: 'private' }),
+      expect.anything()
+    );
+    expect(mockGetBucketInfoWithOptions).toHaveBeenCalled();
+  });
 });
