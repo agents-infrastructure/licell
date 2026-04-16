@@ -133,7 +133,7 @@ function getSkillBody() {
 export function getGlobalSkillsDir(agent: AgentType): string {
   const home = homedir();
   if (agent === 'claude') return join(home, '.claude', 'skills', 'licell');
-  return join(home, '.agents', 'skills', 'licell');
+  return join(home, '.codex', 'skills', 'licell');
 }
 
 export function getSkillFiles(agent: AgentType): SkillFile[] {

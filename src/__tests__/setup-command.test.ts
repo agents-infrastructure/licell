@@ -80,7 +80,7 @@ describe('runInteractiveSetup', () => {
       agent: 'codex',
       scope: 'global',
       projectRoot: '/tmp/demo-project',
-      writtenFiles: ['/Users/demo/.agents/skills/licell/SKILL.md'],
+      writtenFiles: ['/Users/demo/.codex/skills/licell/SKILL.md'],
       skippedFiles: [],
       agentsMdUpdated: false
     });

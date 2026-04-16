@@ -55,8 +55,8 @@ describe('executeSkillsInit', () => {
   });
 
   it('writes global-scoped skills without updating AGENTS.md', async () => {
-    mockGetGlobalSkillFiles.mockReturnValue([{ path: '/Users/demo/.agents/skills/licell/SKILL.md', content: 'body' }]);
-    mockWriteSkillFiles.mockReturnValue({ written: ['/Users/demo/.agents/skills/licell/SKILL.md'], skipped: [] });
+    mockGetGlobalSkillFiles.mockReturnValue([{ path: '/Users/demo/.codex/skills/licell/SKILL.md', content: 'body' }]);
+    mockWriteSkillFiles.mockReturnValue({ written: ['/Users/demo/.codex/skills/licell/SKILL.md'], skipped: [] });
 
     const result = await executeSkillsInit({
       agent: 'codex',
@@ -67,13 +67,13 @@ describe('executeSkillsInit', () => {
 
     expect(mockGetGlobalSkillFiles).toHaveBeenCalledWith('codex');
     expect(mockGetSkillFiles).not.toHaveBeenCalled();
-    expect(mockWriteSkillFiles).toHaveBeenCalledWith('', [{ path: '/Users/demo/.agents/skills/licell/SKILL.md', content: 'body' }], true);
+    expect(mockWriteSkillFiles).toHaveBeenCalledWith('', [{ path: '/Users/demo/.codex/skills/licell/SKILL.md', content: 'body' }], true);
     expect(mockEnsureAgentsMdEntry).not.toHaveBeenCalled();
     expect(result).toEqual({
       agent: 'codex',
       scope: 'global',
       projectRoot: '/tmp/demo-project',
-      writtenFiles: ['/Users/demo/.agents/skills/licell/SKILL.md'],
+      writtenFiles: ['/Users/demo/.codex/skills/licell/SKILL.md'],
       skippedFiles: [],
       agentsMdUpdated: false
     });

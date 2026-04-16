@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { getSkillFiles, writeSkillFiles, ensureAgentsMdEntry } from '../utils/skills-scaffold';
+import { getGlobalSkillFiles, getSkillFiles, writeSkillFiles, ensureAgentsMdEntry } from '../utils/skills-scaffold';
 
 function makeTmpDir() {
   return mkdtempSync(join(tmpdir(), 'licell-skills-'));
@@ -62,6 +62,15 @@ describe('getSkillFiles', () => {
     expect(file.content).toContain('## SLS Query Reference');
     expect(file.content).toContain('https://help.aliyun.com/zh/sls/query-syntax/');
     expect(file.content).toContain("licell logs query '*' --output json");
+  });
+});
+
+describe('getGlobalSkillFiles', () => {
+  it('returns ~/.codex/skills/licell/SKILL.md for codex', () => {
+    const files = getGlobalSkillFiles('codex');
+    expect(files).toHaveLength(1);
+    expect(files[0].path).toMatch(/\.codex\/skills\/licell\/SKILL\.md$/);
+    expect(files[0].content).toContain('# licell CLI Skill');
   });
 });
 
