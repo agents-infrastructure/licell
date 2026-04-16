@@ -38,3 +38,4 @@ core
 # Local MCP / temp artifacts
 .mcp.json
 .tmp/
+.gdo/

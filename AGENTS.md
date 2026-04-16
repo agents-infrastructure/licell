@@ -9,6 +9,7 @@ and file path so you can open the source for full instructions when using a spec
 
 ### Available skills
 
+- licell: Deploy and manage Alibaba Cloud Serverless applications using the licell CLI. Covers deploy, release, functions, env vars, domains, DNS, logs, OSS, database, cache, and Supabase. (file: .claude/skills/licell/SKILL.md)
 - alicloud-alidns: Manage Alibaba Cloud DNS (Alidns) using the `@alicloud/alidns20150109` TypeScript SDK. Use when working with DNS domains, DNS record CRUD (A/AAAA/CNAME/MX/TXT/SRV/CAA/etc.), DNS GTM/traffic management, DNSSEC, Public DNS, and related operations. (file: .claude/skills/alicloud-alidns/SKILL.md)
 - aliyun-api-ref: Alibaba Cloud API reference for this repo. Use when adding/modifying Alibaba Cloud provider integrations and API calls, debugging errors, or aligning with project-specific SDK/auth/pagination/retry conventions. (file: .claude/skills/alicloud-api-ref/SKILL.md)
 - alicloud-cdn: Manage Alibaba Cloud CDN using the `@alicloud/cdn20180510` TypeScript SDK. Use when working with accelerated domains, domain configuration, SSL, cache refresh/prefetch, monitoring/analytics, logs, and related operations. (file: .claude/skills/alicloud-cdn/SKILL.md)

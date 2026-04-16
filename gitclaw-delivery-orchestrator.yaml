@@ -1,0 +1,50 @@
+port: 3001
+defaults:
+  runtime: tmux
+  agent: codex
+  workspace: worktree
+  workflow: code
+  notifiers: []
+projects:
+  licell:
+    name: licell
+    repo: github.com/agents-infrastructure/licell
+    path: /Users/wyattfang/work/licell
+    defaultBranch: main
+    sessionPrefix: lic
+    tools:
+      - git
+      - repo-context
+    tracker:
+      plugin: github
+      host: github.com
+    scm:
+      plugin: github
+      host: github.com
+    postCreate:
+      - bun install
+    queue:
+      enabled: true
+      maxConcurrentIssues: 2
+      issueLimit: 1000000
+      includeLabels: []
+      excludeLabels: []
+      priorityLabels:
+        - p0
+        - p1
+        - p2
+        - p3
+        - p4
+      prompt: 这是 backlog 自动开发会话。直接开始开发、提交 commit、push 分支并创建 MR。
+      assignee: "@me"
+    automation:
+      enabled: true
+      issue:
+        enabled: false
+      review:
+        enabled: true
+        workflow: generic
+      merge:
+        enabled: true
+        method: squash
+        closeIssueOnMerge: true
