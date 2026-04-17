@@ -14,6 +14,7 @@ const {
   mockPublishFunctionVersion,
   mockPromoteFunctionAlias,
   mockRemoveFnCustomDomain,
+  mockGetFnCustomDomain,
   mockResolveDefaultFcGatewayDomain,
   mockUpsertFnCustomDomain,
   mockGetLatestPublishedVersionId
@@ -31,6 +32,7 @@ const {
   mockPublishFunctionVersion: vi.fn(),
   mockPromoteFunctionAlias: vi.fn(),
   mockRemoveFnCustomDomain: vi.fn(),
+  mockGetFnCustomDomain: vi.fn(),
   mockResolveDefaultFcGatewayDomain: vi.fn(),
   mockUpsertFnCustomDomain: vi.fn(),
   mockGetLatestPublishedVersionId: vi.fn()
@@ -56,6 +58,25 @@ vi.mock('../providers/cdn', () => ({
 }));
 
 vi.mock('../providers/ssl', () => ({
+  DEFAULT_SSL_RENEW_BEFORE_DAYS: 30,
+  resolveRenewBeforeDays: (input: unknown, fallback = 30) => {
+    const parsed = Number.parseInt(String(input ?? ''), 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+  },
+  shouldIssueNewCertificate: (existingDomain: {
+    protocol?: string;
+    certConfig?: { certificate?: string };
+  } | null, options: { forceRenew: boolean; renewBeforeDays: number }) => {
+    void options.renewBeforeDays;
+    const hasHttps = typeof existingDomain?.protocol === 'string' && existingDomain.protocol.includes('HTTPS');
+    if (!existingDomain || !hasHttps) return { issue: true, message: 'issue' };
+    if (options.forceRenew) return { issue: true, message: 'force-renew' };
+    const certificate = existingDomain.certConfig?.certificate;
+    if (typeof certificate !== 'string' || certificate.trim().length === 0) {
+      return { issue: false, message: 'skip' };
+    }
+    return { issue: false, message: 'skip' };
+  },
   issueAndBindSSLWithArtifacts: mockIssueAndBindSSLWithArtifacts
 }));
 
@@ -69,6 +90,7 @@ vi.mock('../providers/fc', () => ({
   publishFunctionVersion: mockPublishFunctionVersion,
   promoteFunctionAlias: mockPromoteFunctionAlias,
   removeFnCustomDomain: mockRemoveFnCustomDomain,
+  getFnCustomDomain: mockGetFnCustomDomain,
   resolveDefaultFcGatewayDomain: mockResolveDefaultFcGatewayDomain,
   upsertFnCustomDomain: mockUpsertFnCustomDomain
 }));
@@ -95,12 +117,14 @@ describe('bindAppDomainWorkflow', () => {
     mockPublishFunctionVersion.mockReset();
     mockPromoteFunctionAlias.mockReset();
     mockRemoveFnCustomDomain.mockReset();
+    mockGetFnCustomDomain.mockReset();
     mockResolveDefaultFcGatewayDomain.mockReset();
     mockUpsertFnCustomDomain.mockReset();
     mockGetLatestPublishedVersionId.mockReset();
 
     mockGetProject.mockReturnValue({ appName: 'demo-app' });
     mockResolveDefaultFcGatewayDomain.mockReturnValue('123456.cn-hangzhou.fc.aliyuncs.com');
+    mockGetFnCustomDomain.mockResolvedValue(null);
     mockWaitForAuthoritativeCnameTarget.mockResolvedValue({
       domainName: 'api.example.com',
       nameServerHosts: [],
@@ -175,7 +199,7 @@ describe('bindAppDomainWorkflow', () => {
       spinner
     });
 
-    expect(mockEnsureDomainCname).not.toHaveBeenCalled();
+    expect(mockEnsureDomainCname).toHaveBeenCalledWith('api.example.com', '123456.cn-hangzhou.fc.aliyuncs.com');
     expect(mockPublishFunctionVersion).not.toHaveBeenCalled();
     expect(mockPromoteFunctionAlias).not.toHaveBeenCalled();
     expect(mockIssueAndBindSSLWithArtifacts).toHaveBeenCalledWith(
@@ -198,6 +222,79 @@ describe('bindAppDomainWorkflow', () => {
       httpsConfigured: true,
       finalUrl: 'https://api.example.com'
     });
+  });
+
+  it('skips fc custom-domain upsert when CDN deploy sees matching existing domain', async () => {
+    mockGetFnCustomDomain.mockResolvedValue({
+      domainName: 'api.example.com',
+      protocol: 'HTTP',
+      routes: [{ path: '/*', functionName: 'demo-app', qualifier: 'staging' }]
+    });
+
+    await bindAppDomainWorkflow('api.example.com', {
+      functionName: 'demo-app',
+      releaseTarget: 'staging',
+      ensureAlias: false,
+      enableCdn: true
+    });
+
+    expect(mockEnsureDomainCname).not.toHaveBeenCalledWith('api.example.com', '123456.cn-hangzhou.fc.aliyuncs.com');
+    expect(mockUpsertFnCustomDomain).not.toHaveBeenCalled();
+    expect(mockEnableCdnForDomain).toHaveBeenCalledWith(
+      'api.example.com',
+      '123456.cn-hangzhou.fc.aliyuncs.com',
+      { waitForOnline: true }
+    );
+  });
+
+  it('still repairs direct DNS for non-CDN bindings even when FC custom domain already matches', async () => {
+    mockGetFnCustomDomain.mockResolvedValue({
+      domainName: 'api.example.com',
+      protocol: 'HTTP',
+      routes: [{ path: '/*', functionName: 'demo-app', qualifier: 'prod' }]
+    });
+
+    await bindAppDomainWorkflow('api.example.com', {
+      functionName: 'demo-app',
+      releaseTarget: 'prod'
+    });
+
+    expect(mockEnsureDomainCname).toHaveBeenCalledWith('api.example.com', '123456.cn-hangzhou.fc.aliyuncs.com');
+    expect(mockUpsertFnCustomDomain).not.toHaveBeenCalled();
+  });
+
+  it('temporarily points DNS to FC before CDN deploy when FC HTTPS needs renewal', async () => {
+    mockGetFnCustomDomain.mockResolvedValue({
+      domainName: 'api.example.com',
+      protocol: 'HTTP,HTTPS',
+      certConfig: {
+        certificate: 'CERT',
+        privateKey: 'KEY'
+      },
+      routes: [{ path: '/*', functionName: 'demo-app', qualifier: 'staging' }]
+    });
+    mockIssueAndBindSSLWithArtifacts.mockResolvedValue({
+      url: 'https://api.example.com',
+      certificate: 'CERT',
+      privateKey: 'KEY',
+      reusedExistingCertificate: false
+    });
+
+    await bindAppDomainWorkflow('api.example.com', {
+      functionName: 'demo-app',
+      releaseTarget: 'staging',
+      ensureAlias: false,
+      enableCdn: true,
+      enableHttps: true,
+      forceSslRenew: true
+    });
+
+    expect(mockEnsureDomainCname).toHaveBeenCalledWith('api.example.com', '123456.cn-hangzhou.fc.aliyuncs.com');
+    expect(mockWaitForAuthoritativeCnameTarget).toHaveBeenCalledWith(
+      'api.example.com',
+      '123456.cn-hangzhou.fc.aliyuncs.com',
+      { maxAttempts: 36, intervalMs: 5000 }
+    );
   });
 
   it('falls back to http final url when CDN edge HTTPS is not configured', async () => {

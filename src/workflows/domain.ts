@@ -2,9 +2,15 @@ import { Config } from '../utils/config';
 import type { Spinner } from '../utils/errors';
 import { ensureDomainCname, normalizeDnsValue, removeDomainCname, waitForAuthoritativeCnameTarget } from '../providers/dns';
 import { enableCdnForDomain, removeCdnDomain } from '../providers/cdn';
-import { issueAndBindSSLWithArtifacts } from '../providers/ssl';
+import {
+  DEFAULT_SSL_RENEW_BEFORE_DAYS,
+  issueAndBindSSLWithArtifacts,
+  resolveRenewBeforeDays,
+  shouldIssueNewCertificate
+} from '../providers/ssl';
 import { getOssBucketInfo, resolveOssBucketName, resolveOssBucketOriginDomain } from '../providers/oss';
 import {
+  getFnCustomDomain,
   publishFunctionVersion,
   promoteFunctionAlias,
   removeFnCustomDomain,
@@ -12,6 +18,7 @@ import {
   upsertFnCustomDomain
 } from '../providers/fc';
 import { getLatestPublishedVersionId, isNoChangesPublishError } from '../utils/cli-shared';
+import { readLicellEnv } from '../utils/env';
 
 export interface BindCustomDomainOptions {
   skipDnsBind?: boolean;
@@ -96,6 +103,54 @@ function resolveAppDomainFunctionName(functionName?: string) {
   return projectFunctionName;
 }
 
+function normalizeExpectedRouteValue(value?: string) {
+  const normalized = value?.trim();
+  return normalized ? normalized : undefined;
+}
+
+function normalizeExpectedRoutePath(value?: string) {
+  const normalized = normalizeExpectedRouteValue(value);
+  if (!normalized) return '/*';
+  if (normalized === '*') return '/*';
+  return normalized.startsWith('/') ? normalized : `/${normalized}`;
+}
+
+function isExpectedProtocolSatisfied(existing?: string, expected?: string) {
+  if (!expected) return true;
+  if (!existing) return false;
+  const normalizedExisting = existing.trim().toUpperCase().replace(/\s+/g, '');
+  const normalizedExpected = expected.trim().toUpperCase().replace(/\s+/g, '');
+  if (normalizedExisting === normalizedExpected) return true;
+  return normalizedExpected === 'HTTP' && normalizedExisting === 'HTTP,HTTPS';
+}
+
+async function needsFnCustomDomainMutation(
+  domainName: string,
+  options: {
+    functionName: string;
+    qualifier?: string;
+    path?: string;
+    protocol?: string;
+  },
+  existingDomain?: Awaited<ReturnType<typeof getFnCustomDomain>> | null
+) {
+  const resolvedExistingDomain = existingDomain ?? await getFnCustomDomain(domainName);
+  if (!resolvedExistingDomain) return true;
+
+  const expectedPath = normalizeExpectedRoutePath(options.path);
+  const expectedFunctionName = normalizeExpectedRouteValue(options.functionName);
+  const expectedQualifier = normalizeExpectedRouteValue(options.qualifier);
+  const primaryRoute = resolvedExistingDomain.routes[0];
+
+  if (!primaryRoute) return true;
+  if (normalizeExpectedRoutePath(primaryRoute.path) !== expectedPath) return true;
+  if (normalizeExpectedRouteValue(primaryRoute.functionName) !== expectedFunctionName) return true;
+  if (normalizeExpectedRouteValue(primaryRoute.qualifier) !== expectedQualifier) return true;
+  if (!isExpectedProtocolSatisfied(resolvedExistingDomain.protocol, options.protocol)) return true;
+
+  return false;
+}
+
 export async function bindCustomDomain(
   domainName: string,
   targetFcDomain: string,
@@ -116,6 +171,16 @@ export async function bindCustomDomain(
       maxAttempts: 36,
       intervalMs: 5_000
     });
+  }
+
+  const shouldMutate = await needsFnCustomDomainMutation(normalizedDomain, {
+    functionName,
+    qualifier: aliasName,
+    path: options.path || '/*',
+    protocol: options.protocol || 'HTTP'
+  });
+  if (!shouldMutate) {
+    return `http://${normalizedDomain}`;
   }
 
   await upsertFnCustomDomain(normalizedDomain, {
@@ -147,6 +212,33 @@ export async function bindAppDomainWorkflow(
   const releaseTarget = options.releaseTarget?.trim().toLowerCase() || undefined;
   const targetFcDomain = resolveDefaultFcGatewayDomain();
   const spinner = resolveWorkflowSpinner(options.spinner);
+  const existingDomain = options.enableCdn || options.enableHttps
+    ? await getFnCustomDomain(normalizedDomain)
+    : null;
+
+  const needsRouteMutation = await needsFnCustomDomainMutation(normalizedDomain, {
+    functionName,
+    qualifier: releaseTarget,
+    path: '/*',
+    protocol: 'HTTP'
+  }, existingDomain);
+  const needsHttpsMutation = Boolean(options.enableHttps) && shouldIssueNewCertificate(existingDomain, {
+    forceRenew: Boolean(options.forceSslRenew),
+    renewBeforeDays: resolveRenewBeforeDays(
+      readLicellEnv(process.env, 'SSL_RENEW_BEFORE_DAYS'),
+      DEFAULT_SSL_RENEW_BEFORE_DAYS
+    )
+  }).issue;
+
+  if (options.enableCdn && (needsRouteMutation || needsHttpsMutation)) {
+    const normalizedTarget = normalizeDnsValue(targetFcDomain);
+    spinner.message(`正在临时校准 DNS 到 FC 网关 (${normalizedDomain})...`);
+    await ensureDomainCname(normalizedDomain, normalizedTarget);
+    await waitForAuthoritativeCnameTarget(normalizedDomain, normalizedTarget, {
+      maxAttempts: 36,
+      intervalMs: 5_000
+    });
+  }
 
   await bindCustomDomain(normalizedDomain, targetFcDomain, releaseTarget, {
     functionName,
