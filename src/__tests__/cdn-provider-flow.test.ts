@@ -302,6 +302,44 @@ describe('cdn read helpers', () => {
     });
   });
 
+  it('parses CDN certificate info from DescribeDomainCertificateInfo', async () => {
+    mockCallApi.mockImplementation(async (params: { action?: string }) => {
+      if (params.action !== 'DescribeDomainCertificateInfo') throw new Error(`unexpected action: ${params.action}`);
+      return {
+        body: {
+          CertInfos: {
+            CertInfo: [
+              {
+                DomainName: 'STATIC.EXAMPLE.COM',
+                CertName: 'cert-123',
+                CertType: 'upload',
+                CertStatus: 'success',
+                ServerCertificateStatus: 'on',
+                DomainCnameStatus: 'ok',
+                CertUpdateTime: '2026-04-17T01:00:00Z',
+                CertExpireTime: '2027-04-17T01:00:00Z',
+                CertStartTime: '2026-04-17T01:00:00Z'
+              }
+            ]
+          }
+        }
+      };
+    });
+
+    const { getCdnDomainCertificateInfo } = await import('../providers/cdn');
+    await expect(getCdnDomainCertificateInfo('static.example.com')).resolves.toEqual({
+      domainName: 'static.example.com',
+      certName: 'cert-123',
+      certType: 'upload',
+      certStatus: 'success',
+      serverCertificateStatus: 'on',
+      domainCnameStatus: 'ok',
+      certUpdateTime: '2026-04-17T01:00:00Z',
+      certExpireTime: '2027-04-17T01:00:00Z',
+      certStartTime: '2026-04-17T01:00:00Z'
+    });
+  });
+
   it('filters CDN list by prefix and normalizes nested origins', async () => {
     mockCallApi.mockImplementation(async (params: { action?: string }) => {
       if (params.action !== 'DescribeUserDomains') throw new Error(`unexpected action: ${params.action}`);

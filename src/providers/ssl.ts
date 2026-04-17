@@ -13,6 +13,7 @@ import { sleep } from '../utils/runtime';
 import { withRetry } from '../utils/retry';
 import { resolveSdkCtor } from '../utils/sdk';
 import { readLicellEnv } from '../utils/env';
+import { getCdnDomainCertificateInfo, type CdnDomainCertificateInfo } from './cdn';
 import { getFnCustomDomain, updateFnCustomDomain } from './fc/custom-domain';
 
 const LICELL_GLOBAL_DIR = join(homedir(), '.licell-cli');
@@ -107,6 +108,21 @@ interface IssueSslOptions {
   forceRenew?: boolean;
   renewBeforeDays?: number;
   bindToFcDomain?: boolean;
+}
+
+interface LocalIssuedCertificateCache {
+  domain: string;
+  certificate: string;
+  privateKey: string;
+  updatedAt: string;
+}
+
+export interface ReusableCertificateDecision {
+  source: 'cdn' | 'local-cache';
+  updatedAt?: string;
+  daysRemaining: number;
+  certificate?: string;
+  privateKey?: string;
 }
 
 export interface SslBindingArtifacts {
@@ -495,6 +511,91 @@ function writeSecureFile(filePath: string, content: string | Buffer) {
 
 function writeSecureJsonFile(filePath: string, data: unknown) {
   writeSecureFile(filePath, `${JSON.stringify(data, null, 2)}\n`);
+}
+
+export function resolveIssuedCertificateCachePath(domain: string) {
+  const normalizedDomain = normalizeAcmeIdentifierDomain(domain);
+  return join(ACME_STATE_DIR, 'issued-certs', `${hashText(normalizedDomain)}.json`);
+}
+
+function readIssuedCertificateCache(domain: string, cachePath?: string): LocalIssuedCertificateCache | null {
+  const cache = readJsonFile<LocalIssuedCertificateCache>(cachePath || resolveIssuedCertificateCachePath(domain));
+  if (!cache) return null;
+  if (typeof cache.domain !== 'string' || typeof cache.certificate !== 'string' || typeof cache.privateKey !== 'string') {
+    return null;
+  }
+  if (!cache.domain.trim() || !cache.certificate.trim() || !cache.privateKey.trim()) return null;
+  return {
+    domain: cache.domain.trim().toLowerCase(),
+    certificate: cache.certificate.trim(),
+    privateKey: cache.privateKey.trim(),
+    updatedAt: typeof cache.updatedAt === 'string' ? cache.updatedAt : ''
+  };
+}
+
+export function writeIssuedCertificateCache(
+  domain: string,
+  certificate: string,
+  privateKey: string,
+  cachePath?: string
+) {
+  const normalizedDomain = normalizeAcmeIdentifierDomain(domain);
+  writeSecureJsonFile(cachePath || resolveIssuedCertificateCachePath(normalizedDomain), {
+    domain: normalizedDomain,
+    certificate: certificate.trim(),
+    privateKey: privateKey.trim(),
+    updatedAt: new Date().toISOString()
+  } satisfies LocalIssuedCertificateCache);
+}
+
+export function resolveReusableLocalCertificate(
+  domain: string,
+  options: ResolvedIssueSslOptions,
+  nowMs = Date.now(),
+  cachePath?: string
+) {
+  if (options.forceRenew) return null;
+  const cached = readIssuedCertificateCache(domain, cachePath);
+  if (!cached) return null;
+  const daysRemaining = getCertificateDaysRemaining(cached.certificate, nowMs);
+  if (daysRemaining === null || daysRemaining <= options.renewBeforeDays) return null;
+  return {
+    source: 'local-cache' as const,
+    certificate: cached.certificate,
+    privateKey: cached.privateKey,
+    updatedAt: cached.updatedAt,
+    daysRemaining
+  };
+}
+
+function parseCertificateExpiryMs(value?: string) {
+  if (!value) return null;
+  const parsed = Date.parse(value);
+  if (!Number.isFinite(parsed)) return null;
+  return parsed;
+}
+
+function toDaysRemainingFromExpiryMs(expiryMs: number, nowMs = Date.now()) {
+  return Math.floor((expiryMs - nowMs) / DAY_MS);
+}
+
+export function resolveReusableCdnCertificate(
+  info: CdnDomainCertificateInfo | null | undefined,
+  options: ResolvedIssueSslOptions,
+  nowMs = Date.now()
+): ReusableCertificateDecision | null {
+  if (options.forceRenew) return null;
+  if (!info) return null;
+  if (info.serverCertificateStatus !== 'on' && info.serverCertificateStatus !== 'enabled') return null;
+  const expiryMs = parseCertificateExpiryMs(info.certExpireTime);
+  if (expiryMs === null) return null;
+  const daysRemaining = toDaysRemainingFromExpiryMs(expiryMs, nowMs);
+  if (daysRemaining <= options.renewBeforeDays) return null;
+  return {
+    source: 'cdn',
+    updatedAt: info.certUpdateTime,
+    daysRemaining
+  };
 }
 
 interface ResolveZeroSslExternalAccountBindingOptions {
@@ -1132,6 +1233,34 @@ export async function issueAndBindSSLWithArtifacts(
     }
   }
 
+  if (!bindToFcDomain) {
+    let reusableCertificate = null as ReusableCertificateDecision | null;
+    try {
+      reusableCertificate = resolveReusableCdnCertificate(
+        await getCdnDomainCertificateInfo(domain),
+        resolvedOptions
+      );
+    } catch {
+      // best-effort: CDN detail lookup failure should not block ACME fallback
+    }
+    if (!reusableCertificate) {
+      reusableCertificate = resolveReusableLocalCertificate(domain, resolvedOptions);
+    }
+    if (reusableCertificate) {
+      spinner.message(
+        reusableCertificate.source === 'cdn'
+          ? `🔐 CDN 边缘 HTTPS 证书仍有效（剩余 ${reusableCertificate.daysRemaining} 天），跳过重复签发。`
+          : `🔐 复用本机缓存的 CDN HTTPS 证书（剩余 ${reusableCertificate.daysRemaining} 天），跳过重复签发。`
+      );
+      return {
+        url: `https://${domain}`,
+        ...(reusableCertificate.certificate ? { certificate: reusableCertificate.certificate } : {}),
+        ...(reusableCertificate.privateKey ? { privateKey: reusableCertificate.privateKey } : {}),
+        reusedExistingCertificate: true
+      };
+    }
+  }
+
   const decision = bindToFcDomain
     ? shouldIssueNewCertificate(existingDomain, resolvedOptions)
     : {
@@ -1201,6 +1330,7 @@ export async function issueAndBindSSLWithArtifacts(
   } else {
     spinner.message('📦 证书下发成功，正在用于 CDN 边缘 HTTPS 配置...');
   }
+  writeIssuedCertificateCache(domain, cert.toString(), privateKeyPem);
   return {
     url: `https://${domain}`,
     certificate: cert.toString(),

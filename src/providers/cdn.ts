@@ -32,6 +32,21 @@ export interface CdnDomainDetail {
   origins?: CdnDomainOrigin[];
 }
 
+export interface CdnDomainCertificateInfo {
+  domainName: string;
+  certName?: string;
+  certId?: string;
+  certType?: string;
+  certStatus?: string;
+  serverCertificateStatus?: string;
+  domainCnameStatus?: string;
+  certStartTime?: string;
+  certExpireTime?: string;
+  certUpdateTime?: string;
+  certCommonName?: string;
+  certRegion?: string;
+}
+
 export interface CdnRefreshTaskDetail {
   taskId: string;
   status?: string;
@@ -160,6 +175,11 @@ function normalizeServerCertificateStatus(value: unknown) {
   return normalized || undefined;
 }
 
+function normalizeCertificateStatus(value: unknown) {
+  const normalized = String(value || '').trim().toLowerCase();
+  return normalized || undefined;
+}
+
 function resolveCdnWaitConfig(
   kind: 'domain' | 'https' | 'refresh',
   env: NodeJS.ProcessEnv = process.env
@@ -265,6 +285,51 @@ function toCdnDomainDetail(body: unknown): CdnDomainDetail | undefined {
   const root = body as Record<string, unknown>;
   const detail = root.GetDomainDetailModel || root.getDomainDetailModel;
   return toCdnDomainRow(detail);
+}
+
+function toCertificateInfoRows(body: unknown): Record<string, unknown>[] {
+  if (!body || typeof body !== 'object') return [];
+  const root = body as Record<string, unknown>;
+  const certInfos = root.CertInfos || root.certInfos;
+  if (!certInfos || typeof certInfos !== 'object') return [];
+  const rows = (certInfos as Record<string, unknown>).CertInfo || (certInfos as Record<string, unknown>).certInfo;
+  if (!Array.isArray(rows)) return [];
+  return rows.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object');
+}
+
+function toCdnDomainCertificateInfo(row: unknown): CdnDomainCertificateInfo | undefined {
+  if (!row || typeof row !== 'object') return undefined;
+  const item = row as Record<string, unknown>;
+  const domainName = String(item.DomainName || item.domainName || '').trim().toLowerCase();
+  if (!domainName) return undefined;
+  const certName = String(item.CertName || item.certName || '').trim();
+  const certId = String(item.CertId || item.certId || '').trim();
+  const certType = String(item.CertType || item.certType || '').trim().toLowerCase();
+  const certStatus = normalizeCertificateStatus(item.CertStatus || item.certStatus || item.Status || item.status);
+  const serverCertificateStatus = normalizeServerCertificateStatus(
+    item.ServerCertificateStatus || item.serverCertificateStatus || item.SslProtocol || item.sslProtocol
+  );
+  const domainCnameStatus = normalizeCertificateStatus(item.DomainCnameStatus || item.domainCnameStatus);
+  const certStartTime = String(item.CertStartTime || item.certStartTime || '').trim();
+  const certExpireTime = String(item.CertExpireTime || item.certExpireTime || '').trim();
+  const certUpdateTime = String(item.CertUpdateTime || item.certUpdateTime || '').trim();
+  const certCommonName = String(item.CertCommonName || item.certCommonName || item.CertDomainName || item.certDomainName || '').trim();
+  const certRegion = String(item.CertRegion || item.certRegion || '').trim();
+
+  return {
+    domainName,
+    ...(certName ? { certName } : {}),
+    ...(certId ? { certId } : {}),
+    ...(certType ? { certType } : {}),
+    ...(certStatus ? { certStatus } : {}),
+    ...(serverCertificateStatus ? { serverCertificateStatus } : {}),
+    ...(domainCnameStatus ? { domainCnameStatus } : {}),
+    ...(certStartTime ? { certStartTime } : {}),
+    ...(certExpireTime ? { certExpireTime } : {}),
+    ...(certUpdateTime ? { certUpdateTime } : {}),
+    ...(certCommonName ? { certCommonName } : {}),
+    ...(certRegion ? { certRegion } : {})
+  };
 }
 
 function extractPageData(body: unknown) {
@@ -381,6 +446,25 @@ export async function getCdnDomainDetail(domainName: string): Promise<CdnDomainD
       DomainName: normalizedDomain
     }));
     return toCdnDomainDetail(response.body);
+  } catch (err: unknown) {
+    if (isNotFoundError(err)) return undefined;
+    throw err;
+  }
+}
+
+export async function getCdnDomainCertificateInfo(domainName: string): Promise<CdnDomainCertificateInfo | undefined> {
+  const normalizedDomain = normalizeDomain(domainName);
+  try {
+    const response = await withRetry(() => callCdnRpc('DescribeDomainCertificateInfo', {
+      DomainName: normalizedDomain
+    }));
+    const rows = toCertificateInfoRows(response.body);
+    for (const row of rows) {
+      const info = toCdnDomainCertificateInfo(row);
+      if (!info) continue;
+      if (info.domainName === normalizedDomain) return info;
+    }
+    return undefined;
   } catch (err: unknown) {
     if (isNotFoundError(err)) return undefined;
     throw err;
