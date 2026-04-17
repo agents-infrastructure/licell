@@ -56,7 +56,7 @@ export const licellRootHelpSurface = defineCommandBundle({
         },
         {
           title: '让 AI Agent 直接操作 licell',
-          description: '优先用 onboard 一次装好全局 skills + subagent；后续 help / catalog / docs 都会走同一套命令源。',
+          description: '优先用 onboard 一次装好全局 Codex + Claude 接入；若包含 Codex，还会补上 GitLab CI subagent。',
           commands: ['licell onboard', 'licell catalog --output json']
         },
         {

@@ -32,29 +32,45 @@ describe('executeOnboard', () => {
     mockWriteSkillFiles.mockReset();
   });
 
-  it('installs global codex skills and licell-glab subagent together', async () => {
-    mockGetGlobalSkillFiles.mockReturnValue([{ path: '/Users/demo/.codex/skills/licell/SKILL.md', content: 'skill body' }]);
+  it('installs global codex and claude skills by default, plus licell-glab for codex', async () => {
+    mockGetGlobalSkillFiles.mockImplementation((agent: string) => {
+      if (agent === 'codex') return [{ path: '/Users/demo/.codex/skills/licell/SKILL.md', content: 'codex skill body' }];
+      if (agent === 'claude') return [{ path: '/Users/demo/.claude/skills/licell/SKILL.md', content: 'claude skill body' }];
+      return [];
+    });
     mockGetGlobalCodexSubagentFiles.mockReturnValue([{ path: '/Users/demo/.codex/agents/licell-glab.toml', content: 'agent body' }]);
     mockWriteSkillFiles.mockReturnValue({
-      written: ['/Users/demo/.codex/skills/licell/SKILL.md', '/Users/demo/.codex/agents/licell-glab.toml'],
+      written: [
+        '/Users/demo/.codex/skills/licell/SKILL.md',
+        '/Users/demo/.claude/skills/licell/SKILL.md',
+        '/Users/demo/.codex/agents/licell-glab.toml'
+      ],
       skipped: []
     });
 
     const result = await executeOnboard({
+      agent: 'all',
       projectRoot: '/tmp/demo-project'
     });
 
     expect(mockGetGlobalSkillFiles).toHaveBeenCalledWith('codex');
+    expect(mockGetGlobalSkillFiles).toHaveBeenCalledWith('claude');
     expect(mockGetGlobalCodexSubagentFiles).toHaveBeenCalledWith();
     expect(mockWriteSkillFiles).toHaveBeenCalledWith('', [
-      { path: '/Users/demo/.codex/skills/licell/SKILL.md', content: 'skill body' },
+      { path: '/Users/demo/.codex/skills/licell/SKILL.md', content: 'codex skill body' },
+      { path: '/Users/demo/.claude/skills/licell/SKILL.md', content: 'claude skill body' },
       { path: '/Users/demo/.codex/agents/licell-glab.toml', content: 'agent body' }
     ], false);
     expect(result).toEqual({
-      agent: 'codex',
-      subagentName: 'licell-glab',
+      agents: ['codex', 'claude'],
+      requestedAgent: 'all',
+      subagentNames: ['licell-glab'],
       projectRoot: '/tmp/demo-project',
-      writtenFiles: ['/Users/demo/.codex/skills/licell/SKILL.md', '/Users/demo/.codex/agents/licell-glab.toml'],
+      writtenFiles: [
+        '/Users/demo/.codex/skills/licell/SKILL.md',
+        '/Users/demo/.claude/skills/licell/SKILL.md',
+        '/Users/demo/.codex/agents/licell-glab.toml'
+      ],
       skippedFiles: []
     });
   });
@@ -65,10 +81,39 @@ describe('executeOnboard', () => {
     mockWriteSkillFiles.mockReturnValue({ written: [], skipped: ['/Users/demo/.codex/skills/licell/SKILL.md'] });
 
     await executeOnboard({
+      agent: 'codex',
       projectRoot: '/tmp/demo-project',
       force: true
     });
 
     expect(mockWriteSkillFiles).toHaveBeenCalledWith('', expect.any(Array), true);
+  });
+
+  it('installs claude skill only when requested', async () => {
+    mockGetGlobalSkillFiles.mockImplementation((agent: string) => {
+      if (agent === 'claude') return [{ path: '/Users/demo/.claude/skills/licell/SKILL.md', content: 'claude skill body' }];
+      return [];
+    });
+    mockWriteSkillFiles.mockReturnValue({
+      written: ['/Users/demo/.claude/skills/licell/SKILL.md'],
+      skipped: []
+    });
+
+    const result = await executeOnboard({
+      agent: 'claude',
+      projectRoot: '/tmp/demo-project'
+    });
+
+    expect(mockGetGlobalSkillFiles).toHaveBeenCalledTimes(1);
+    expect(mockGetGlobalSkillFiles).toHaveBeenCalledWith('claude');
+    expect(mockGetGlobalCodexSubagentFiles).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      agents: ['claude'],
+      requestedAgent: 'claude',
+      subagentNames: [],
+      projectRoot: '/tmp/demo-project',
+      writtenFiles: ['/Users/demo/.claude/skills/licell/SKILL.md'],
+      skippedFiles: []
+    });
   });
 });

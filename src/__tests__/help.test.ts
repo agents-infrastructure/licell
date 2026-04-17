@@ -361,11 +361,17 @@ describe('help utils', () => {
     expect(doc?.scope).toBe('command');
     expect(doc?.key).toBe('onboard');
     expect(doc?.examples).toContain('licell onboard');
+    expect(doc?.examples).toContain('licell onboard --agent codex');
     expect(doc?.text).toContain('licell-glab');
+    expect(doc?.text).toContain('Claude');
+    expect(doc?.text).toContain('--agent <agent>');
+    expect(doc?.text).toContain('默认值是 `all`');
     expect(doc?.text).toContain('$licell-glab');
     expect(doc?.text).toContain('Global Options:');
     expect(doc?.text).toContain('Structured Result:');
-    expect(doc?.result?.fields.some((field) => field.name === 'subagentName')).toBe(true);
+    expect(doc?.result?.fields.some((field) => field.name === 'requestedAgent')).toBe(true);
+    expect(doc?.result?.fields.some((field) => field.name === 'agents[]')).toBe(true);
+    expect(doc?.result?.fields.some((field) => field.name === 'subagentNames[]')).toBe(true);
   });
 
   it('builds command help for doctor with structured result guidance', () => {
