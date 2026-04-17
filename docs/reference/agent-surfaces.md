@@ -226,7 +226,8 @@
 
 面向 Agent、开发体验与 CLI 生命周期的自动化命令。
 
-- `licell skills init`、`licell catalog`、`licell completion` 都基于同一套 CLI 命令目录生成外部表面。
+- `licell skills init`、`licell onboard`、`licell catalog`、`licell completion` 都基于同一套 CLI 命令目录生成外部表面。
+- `licell onboard` 会为 Codex 全局安装 `licell` skills 与 `licell-glab` subagent。
 - `licell completion` 的候选命令同样来自共享命令目录。
 
 | 命令 | 说明 | 关键选项 |
@@ -235,6 +236,7 @@
 | `licell catalog` | 输出共享 CLI 命令目录，供 Agent / 自动化发现命令、选项和结构化契约 | `--root-command`, `--command-key` |
 | `licell ci init github` | 生成 GitHub Actions 的 deploy-only workflow（只调用 licell，不负责编译） | `--apply`, `--force`, `--workflow` |
 | `licell ci init gitlab` | 生成 GitLab CI 的 deploy-only pipeline（只调用 licell，不负责编译） | `--apply`, `--force`, `--pipeline` |
+| `licell onboard` | 全局安装 Codex 用的 licell skills 与 licell-glab subagent | `--force` |
 | `licell skills init [agent]` | 为 AI Agent 生成 licell skills（claude / codex） | `--global`, `--project-root`, `--force` |
 | `licell setup` | 安装后引导：交互式配置 AI Agent skills | `--agent`, `--global`, `--project-root` |
 | `licell state show` | 查看当前 repo 的 `.licell/state.json` | `--component` |

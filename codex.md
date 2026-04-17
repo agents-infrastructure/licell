@@ -2461,7 +2461,8 @@ Agent Tips：
 
 面向 Agent、开发体验与 CLI 生命周期的自动化命令。
 
-- `licell skills init`、`licell catalog`、`licell completion` 都基于同一套 CLI 命令目录生成外部表面。
+- `licell skills init`、`licell onboard`、`licell catalog`、`licell completion` 都基于同一套 CLI 命令目录生成外部表面。
+- `licell onboard` 会为 Codex 全局安装 `licell` skills 与 `licell-glab` subagent。
 - `licell completion` 的候选命令同样来自共享命令目录。
 
 | 命令 | 说明 | 关键选项 |
@@ -2470,6 +2471,7 @@ Agent Tips：
 | `licell catalog` | 返回 licell 共享命令目录；供 Skills、Agent 和自动化脚本发现命令、选项、help schema 与 CLI record contract。 | `--root-command`, `--command-key` |
 | `licell ci init github` | 按 project/workspace deploy config 生成 GitHub Actions workflow；workflow 只调用 licell deploy，不描述 build 过程。 | `--apply`, `--force`, `--workflow`, `--include` |
 | `licell ci init gitlab` | 按 project/workspace deploy config 生成 GitLab CI deploy-only pipeline；适合内部已有 `.gitlab-ci.yml` 主流程时，额外 include 一份 licell deploy 配置。 | `--apply`, `--force`, `--pipeline`, `--include` |
+| `licell onboard` | 为 Codex 一次性安装 licell 的全局 skills 与 `licell-glab` subagent，便于直接通过自然语言生成 GitLab CI/CD 与 licell 部署配置。 | `--force` |
 | `licell skills init [agent]` | 直接生成 licell skills；默认写入当前项目，传 `--global` 时写入用户级全局技能目录。 | `--global`, `--project-root`, `--force` |
 | `licell setup` | 安装后的交互式包装命令；底层仍调用 `skills init`，只是补充 agent / scope 选择流程。 | `--agent`, `--global`, `--project-root`, `--force` |
 | `licell state show` | 输出 repo 中版本化保存的 deploy state，用于追查当前 live 资源与访问入口。 | `--component` |
@@ -2723,6 +2725,51 @@ Agent Tips：
 | `--include <names>` | 只为这些 component 生成 GitLab deploy job（逗号分隔） |
 | `--exclude <names>` | 跳过这些 component，不生成对应 GitLab deploy job（逗号分隔） |
 | `--deploy-only` | 显式声明生成 deploy-only pipeline（当前默认行为） |
+
+#### `licell onboard`
+
+为 Codex 一次性安装 licell 的全局 skills 与 `licell-glab` subagent，便于直接通过自然语言生成 GitLab CI/CD 与 licell 部署配置。
+
+说明：
+- 该命令会写入用户级目录，而不是当前项目目录。
+- `licell-glab` 安装完成后，可在 Codex 中直接使用 `$licell-glab ...` 驱动当前 repo 的 GitLab CI/CD 生成。
+
+示例命令：
+- `licell onboard`
+- `licell onboard --force`
+- `licell onboard --output json`
+
+下一步：
+- primary · `licell onboard`：一次安装 licell skills 与 `licell-glab` subagent。
+- secondary · `licell catalog --output json`：后续执行依然统一通过 catalog / help / JSON output。
+
+决策指南：
+- Mutate：给 Codex 安装 licell GitLab CI 子助手：把全局 skills 和 `licell-glab` 一起装好，后续可直接从自然语言生成 pipeline。 起手式：`licell onboard`
+
+关键选项建议：
+- `--force`：已存在旧版 skills 或 subagent，需要显式覆盖时使用。 注意：可能覆盖你在全局目录里的手工定制内容。
+
+结构化结果：
+- 返回全局 skills 与 subagent 的安装结果。
+- `stage`：固定为 `onboard`。
+- `agent`：固定为 `codex`。
+- `subagentName`：已安装的 subagent 名称；当前为 `licell-glab`。
+- `projectRoot`：调用命令时所在的项目目录。
+- `writtenFiles`：实际写入的全局文件列表。
+- `skippedFiles`：内容相同而跳过的文件列表。
+
+推荐流程：
+- 1. 安装全局 Codex 接入 → `licell onboard`：一次安装 licell skills 与 `licell-glab` subagent。
+- 2. 让 Agent 理解 licell 命令面 → `licell catalog --output json`：后续执行依然统一通过 catalog / help / JSON output。
+- 3. 直接调用 subagent：在 Codex 中使用 `$licell-glab 帮我给当前 repo 构建 GitLab CI/CD 流水线`。
+
+Agent Tips：
+- `licell-glab` 负责把自然语言需求桥接成 `.gitlab-ci.yml` / `.gitlab-ci.licell.yml` / `.licell/*` 的落地修改。
+- 安装完成后，命令发现与实际执行仍优先使用 `licell catalog --output json`、`licell <command> --help --output json` 与 `licell ... --output json`。
+
+| 选项 | 说明 |
+|------|------|
+| `--force` | 覆盖已有文件 |
 
 #### `licell skills init [agent]`
 

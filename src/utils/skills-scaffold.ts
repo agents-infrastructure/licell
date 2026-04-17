@@ -187,12 +187,10 @@ export function writeSkillFiles(
 ): { written: string[]; skipped: string[] } {
   const written: string[] = [];
   const skipped: string[] = [];
+  const plannedWrites: Array<{ fullPath: string; file: SkillFile }> = [];
 
   for (const file of files) {
     const fullPath = isAbsolute(file.path) ? file.path : join(projectRoot, file.path);
-    const dir = dirname(fullPath);
-    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-
     if (existsSync(fullPath)) {
       const current = readFileSync(fullPath, 'utf8');
       if (current === file.content) {
@@ -204,8 +202,15 @@ export function writeSkillFiles(
       }
     }
 
-    writeFileSync(fullPath, file.content, 'utf8');
-    written.push(file.path);
+    plannedWrites.push({ fullPath, file });
+  }
+
+  for (const planned of plannedWrites) {
+    const dir = dirname(planned.fullPath);
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+
+    writeFileSync(planned.fullPath, planned.file.content, 'utf8');
+    written.push(planned.file.path);
   }
 
   return { written, skipped };

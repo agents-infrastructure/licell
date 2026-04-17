@@ -3,6 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from 'fs
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { getGlobalSkillFiles, getSkillFiles, writeSkillFiles, ensureAgentsMdEntry } from '../utils/skills-scaffold';
+import { LICELL_GLAB_SUBAGENT_NAME, getGlobalCodexSubagentFiles } from '../utils/onboard-scaffold';
 
 function makeTmpDir() {
   return mkdtempSync(join(tmpdir(), 'licell-skills-'));
@@ -44,6 +45,7 @@ describe('getSkillFiles', () => {
       'licell completion [shell]',
       'licell upgrade',
       'licell auth repair',
+      'licell onboard',
       'licell skills init [agent]'
     ];
     for (const command of commands) {
@@ -71,6 +73,18 @@ describe('getGlobalSkillFiles', () => {
     expect(files).toHaveLength(1);
     expect(files[0].path).toMatch(/\.codex\/skills\/licell\/SKILL\.md$/);
     expect(files[0].content).toContain('# licell CLI Skill');
+  });
+});
+
+describe('getGlobalCodexSubagentFiles', () => {
+  it('returns ~/.codex/agents/licell-glab.toml for codex onboard', () => {
+    const files = getGlobalCodexSubagentFiles();
+    expect(files).toHaveLength(1);
+    expect(files[0].path).toMatch(/\.codex\/agents\/licell-glab\.toml$/);
+    expect(files[0].content).toContain(`name = "${LICELL_GLAB_SUBAGENT_NAME}"`);
+    expect(files[0].content).toContain('GitLab CI/CD');
+    expect(files[0].content).toContain('API_KEY');
+    expect(files[0].content).toContain('bazhuayu.xyz');
   });
 });
 
@@ -121,6 +135,23 @@ describe('writeSkillFiles', () => {
       writeFileSync(join(dir, 'codex.md'), 'different content');
       const { written } = writeSkillFiles(dir, files, true);
       expect(written).toEqual(['codex.md']);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('does not partially write when a later file conflicts', () => {
+    const dir = makeTmpDir();
+    try {
+      const files = [
+        { path: 'new-file.txt', content: 'new content' },
+        { path: 'conflict.txt', content: 'expected content' }
+      ];
+      writeFileSync(join(dir, 'conflict.txt'), 'different content');
+
+      expect(() => writeSkillFiles(dir, files)).toThrow('--force');
+      expect(existsSync(join(dir, 'new-file.txt'))).toBe(false);
+      expect(readFileSync(join(dir, 'conflict.txt'), 'utf8')).toBe('different content');
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

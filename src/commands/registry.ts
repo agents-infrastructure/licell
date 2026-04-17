@@ -14,6 +14,7 @@ import { envCommandModule } from './env';
 import { fnCommandModule } from './fn';
 import { initCommandModule } from './init';
 import { logsCommandModule } from './logs';
+import { onboardCommandModule } from './onboard';
 import { ossCommandModule } from './oss';
 import { releaseCommandModule } from './release';
 import { shellCommandModule } from './shell';
@@ -37,6 +38,7 @@ export const licellRootHelpSurface = defineCommandBundle({
         'licell login',
         'licell init',
         'licell doctor',
+        'licell onboard',
         'licell deploy',
         'licell catalog --output json',
         'licell skills init codex',
@@ -54,8 +56,8 @@ export const licellRootHelpSurface = defineCommandBundle({
         },
         {
           title: '让 AI Agent 直接操作 licell',
-          description: '用 setup/skills/catalog 完成 Agent 接入，后续 help / catalog / docs 都会走同一套命令源。',
-          commands: ['licell setup', 'licell skills init codex', 'licell catalog --output json']
+          description: '优先用 onboard 一次装好全局 skills + subagent；后续 help / catalog / docs 都会走同一套命令源。',
+          commands: ['licell onboard', 'licell catalog --output json']
         },
         {
           title: '把命令接入自动化脚本',
@@ -91,6 +93,7 @@ export const LICELL_COMMAND_MANIFEST = defineCommandManifest({
     doctorCommandModule,
     catalogCommandModule,
     ciCommandModule,
+    onboardCommandModule,
     skillsCommandModule,
     setupCommandModule,
     stateCommandModule,

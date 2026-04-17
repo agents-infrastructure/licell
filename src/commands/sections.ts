@@ -55,7 +55,8 @@ export const AUTOMATION_SECTION: CommandSectionMembership = {
   title: 'Automation & Tooling',
   summary: '面向 Agent、开发体验与 CLI 生命周期的自动化命令。',
   notes: [
-    '`licell skills init`、`licell catalog`、`licell completion` 都基于同一套 CLI 命令目录生成外部表面。',
+    '`licell skills init`、`licell onboard`、`licell catalog`、`licell completion` 都基于同一套 CLI 命令目录生成外部表面。',
+    '`licell onboard` 会为 Codex 全局安装 `licell` skills 与 `licell-glab` subagent。',
     '`licell completion` 的候选命令同样来自共享命令目录。'
   ],
   taskHints: [
@@ -66,8 +67,8 @@ export const AUTOMATION_SECTION: CommandSectionMembership = {
     },
     {
       title: '把 licell 接入 AI Agent',
-      description: '先生成 skills，再让 Agent 通过 catalog/help/json output 直接驱动 licell CLI。',
-      commands: ['licell setup', 'licell catalog --output json']
+      description: '优先用 onboard 安装全局 Codex 接入；后续让 Agent 通过 catalog/help/json output 直接驱动 licell CLI。',
+      commands: ['licell onboard', 'licell catalog --output json']
     }
   ]
 };

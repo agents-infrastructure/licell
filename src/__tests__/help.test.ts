@@ -18,7 +18,7 @@ describe('help utils', () => {
     expect(doc?.text).toContain('Common Tasks:');
     expect(doc?.text).toContain('第一次上手 licell');
     expect(doc?.text).toContain('licell doctor');
-    expect(doc?.text).toContain('licell setup');
+    expect(doc?.text).toContain('licell onboard');
     expect(doc?.text).toContain('licell skills init codex');
     expect(doc?.text).toContain('licell deploy --output json');
   });
@@ -350,6 +350,22 @@ describe('help utils', () => {
     expect(doc?.text).toContain('默认按当前项目初始化');
     expect(doc?.text).toContain('licell setup --agent codex --output json');
     expect(doc?.text).toContain('licell setup --agent codex --global --output json');
+  });
+
+  it('builds command help for onboard with subagent guidance', () => {
+    const doc = buildHelpDocument({
+      argv: ['node', 'src/cli.ts', 'onboard', '--help'],
+      version: VERSION
+    });
+
+    expect(doc?.scope).toBe('command');
+    expect(doc?.key).toBe('onboard');
+    expect(doc?.examples).toContain('licell onboard');
+    expect(doc?.text).toContain('licell-glab');
+    expect(doc?.text).toContain('$licell-glab');
+    expect(doc?.text).toContain('Global Options:');
+    expect(doc?.text).toContain('Structured Result:');
+    expect(doc?.result?.fields.some((field) => field.name === 'subagentName')).toBe(true);
   });
 
   it('builds command help for doctor with structured result guidance', () => {
