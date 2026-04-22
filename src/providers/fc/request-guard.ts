@@ -109,6 +109,48 @@ export function createFcMutationRuntimeOptions(
   });
 }
 
+function toRequestModelName(methodName: string) {
+  const pascal = methodName
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .split(/[\s_-]+/)
+    .filter(Boolean)
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join('');
+  return `${pascal}Request`;
+}
+
+function createCompatRequestModel(methodName: string) {
+  const modelName = toRequestModelName(methodName);
+  const maybeCtor = ($FC as Record<string, unknown>)[modelName];
+  if (typeof maybeCtor === 'function') {
+    try {
+      return new (maybeCtor as new (init?: Record<string, unknown>) => unknown)({});
+    } catch {
+      // Fall through to the minimal shim below.
+    }
+  }
+  return {
+    validate() {}
+  };
+}
+
+function buildCompatWithOptionsArgs(
+  methodName: string,
+  method: unknown,
+  args: unknown[]
+) {
+  if (typeof method !== 'function') return args;
+  const expectedArgCount = method.length;
+  const providedArgCount = args.length + 2; // headers + runtime
+  const missingArgCount = expectedArgCount - providedArgCount;
+  if (missingArgCount <= 0) return args;
+
+  return [
+    ...args,
+    ...Array.from({ length: missingArgCount }, () => createCompatRequestModel(methodName))
+  ];
+}
+
 export async function callFcWithRuntime<T = any>(
   client: Record<string, unknown>,
   methodName: string,
@@ -124,7 +166,13 @@ export async function callFcWithRuntime<T = any>(
   const runtime = options.runtime || createFcRuntimeOptions(options.env);
   const withOptionsMethod = client[withOptionsMethodName];
   if (typeof withOptionsMethod === 'function') {
-    return await (withOptionsMethod as (this: unknown, ...fnArgs: unknown[]) => Promise<T>).call(client, ...args, options.headers ?? {}, runtime);
+    const compatArgs = buildCompatWithOptionsArgs(methodName, withOptionsMethod, args);
+    return await (withOptionsMethod as (this: unknown, ...fnArgs: unknown[]) => Promise<T>).call(
+      client,
+      ...compatArgs,
+      options.headers ?? {},
+      runtime
+    );
   }
   const plainMethod = client[methodName];
   if (typeof plainMethod !== 'function') {

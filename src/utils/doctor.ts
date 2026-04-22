@@ -101,6 +101,7 @@ interface LicellDoctorContext {
   project: ProjectConfig | null;
   requestedComponent: string | null;
   component: string | null;
+  componentPath: string | null;
   workspaceMode: 'single' | 'workspace' | 'missing';
   workspaceRoot: string | null;
   workspaceComponents: Array<{ name: string; path: string | null }>;
@@ -204,6 +205,7 @@ function createDoctorContext(options: LicellDoctorRunOptions = {}, selectWorkspa
   let workspaceRoot: string | null = null;
   let workspaceComponents: Array<{ name: string; path: string | null }> = [];
   let componentResolutionError: string | null = null;
+  let componentPath: string | null = null;
 
   if (projectProbe.exists && projectProbe.parseOk) {
     const snapshot = Config.getWorkspace({
@@ -227,9 +229,11 @@ function createDoctorContext(options: LicellDoctorRunOptions = {}, selectWorkspa
           if (requestedComponent && matchedRequestedComponent) {
             component = requestedComponent;
             project = matchedRequestedComponent.project;
+            componentPath = matchedRequestedComponent.path || null;
           } else if (snapshot.componentName) {
             component = snapshot.componentName;
             project = snapshot.project;
+            componentPath = snapshot.componentPath || null;
           }
         }
       } else {
@@ -275,6 +279,7 @@ function createDoctorContext(options: LicellDoctorRunOptions = {}, selectWorkspa
     project,
     requestedComponent,
     component,
+    componentPath,
     workspaceMode,
     workspaceRoot,
     workspaceComponents,
@@ -754,7 +759,9 @@ const DOCTOR_CHECKS: readonly DoctorCheckDefinition[] = [
       const result = runFcApiDeployPrecheck({
         runtime: context.effectiveRuntime.runtime,
         entry: context.entry || undefined,
-        projectRoot: context.cwd,
+        projectRoot: context.workspaceMode === 'workspace' && context.componentPath && context.workspaceRoot
+          ? resolve(context.workspaceRoot, context.componentPath)
+          : context.cwd,
         checkDockerDaemon: context.checkDockerDaemon
       });
       const errorCount = result.issues.filter((issue) => issue.level === 'error').length;

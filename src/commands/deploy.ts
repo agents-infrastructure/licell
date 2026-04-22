@@ -348,9 +348,14 @@ function runDeployCheck(options: DeployCheckOptions) {
   const runtime = resolveApiRuntimeForSpec(options.runtime);
   const runtimeSpec = getFcApiRuntimeDeploySpec(runtime);
   const entry = options.entry?.trim() || runtimeSpec.defaultEntry || undefined;
+  const workspaceSnapshot = Config.getWorkspace();
+  const projectRoot = workspaceSnapshot?.mode === 'workspace' && workspaceSnapshot.componentPath
+    ? resolve(workspaceSnapshot.rootDir, workspaceSnapshot.componentPath)
+    : process.cwd();
   const result = runFcApiDeployPrecheck({
     runtime,
     entry,
+    projectRoot,
     checkDockerDaemon: Boolean(options.dockerDaemon)
   });
 

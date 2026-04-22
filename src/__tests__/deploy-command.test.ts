@@ -9,6 +9,9 @@ const {
   resolveDeployContextMock,
   executeStaticDeployMock,
   emitCommandResultMock,
+  getFcApiRuntimeDeploySpecMock,
+  runFcApiDeployPrecheckMock,
+  getProjectMock,
   getWorkspaceMock,
   getAuthMock,
   setProjectMock,
@@ -21,6 +24,9 @@ const {
   resolveDeployContextMock: vi.fn(),
   executeStaticDeployMock: vi.fn(),
   emitCommandResultMock: vi.fn(),
+  getFcApiRuntimeDeploySpecMock: vi.fn(),
+  runFcApiDeployPrecheckMock: vi.fn(),
+  getProjectMock: vi.fn(),
   getWorkspaceMock: vi.fn(),
   getAuthMock: vi.fn(),
   setProjectMock: vi.fn(),
@@ -52,6 +58,7 @@ vi.mock('../commands/deploy-task', () => ({
 
 vi.mock('../utils/config', () => ({
   Config: {
+    getProject: getProjectMock,
     getWorkspace: getWorkspaceMock,
     getAuth: getAuthMock,
     setProject: setProjectMock
@@ -77,8 +84,8 @@ vi.mock('../utils/hooks', () => ({
 vi.mock('../providers/fc', () => ({
   DEFAULT_FC_RUNTIME: 'nodejs22',
   getFcApiDeploySpecDocument: vi.fn(),
-  getFcApiRuntimeDeploySpec: vi.fn(),
-  runFcApiDeployPrecheck: vi.fn()
+  getFcApiRuntimeDeploySpec: getFcApiRuntimeDeploySpecMock,
+  runFcApiDeployPrecheck: runFcApiDeployPrecheckMock
 }));
 
 vi.mock('../utils/deploy-plan', () => ({
@@ -128,6 +135,8 @@ function getCommandAction(cli: Awaited<ReturnType<typeof createCli>>, name: stri
 }
 
 describe('deploy command json result', () => {
+  const cwdSpy = vi.spyOn(process, 'cwd');
+
   beforeEach(() => {
     ensureAuthReadyForCommandMock.mockClear();
     ensureAuthCapabilityPreflightMock.mockClear();
@@ -136,11 +145,16 @@ describe('deploy command json result', () => {
     resolveDeployContextMock.mockReset();
     executeStaticDeployMock.mockReset();
     emitCommandResultMock.mockReset();
+    getFcApiRuntimeDeploySpecMock.mockReset();
+    runFcApiDeployPrecheckMock.mockReset();
+    getProjectMock.mockReset();
     getWorkspaceMock.mockReset();
     getAuthMock.mockReset();
     setProjectMock.mockReset();
     updateLicellComponentStateMock.mockReset();
 
+    cwdSpy.mockReturnValue('/repo');
+    getProjectMock.mockReturnValue({ runtime: 'nodejs22' });
     getWorkspaceMock.mockReturnValue(undefined);
     getAuthMock.mockReturnValue({
       accountId: '1494910986361453',
@@ -174,6 +188,16 @@ describe('deploy command json result', () => {
       fixedDomain: 'demo-web.bazhuayu.xyz',
       healthCheckLogs: ['✅ 固定域名可访问 (200 https://demo-web.bazhuayu.xyz/)']
     });
+    getFcApiRuntimeDeploySpecMock.mockReturnValue({
+      defaultEntry: 'src/index.ts'
+    });
+    runFcApiDeployPrecheckMock.mockReturnValue({
+      ok: true,
+      runtime: 'nodejs22',
+      entry: 'src/index.ts',
+      projectRoot: '/repo/apps/api',
+      issues: []
+    });
   });
 
   it('includes static bucket and cdn details in json output', async () => {
@@ -191,6 +215,28 @@ describe('deploy command json result', () => {
       cdnRefreshMode: 'entrypoints',
       cdnRefreshTaskIds: ['refresh-task-1'],
       healthCheckLogs: ['✅ 固定域名可访问 (200 https://demo-web.bazhuayu.xyz/)']
+    }));
+  });
+
+  it('resolves deploy check projectRoot to the matched workspace component path', async () => {
+    getWorkspaceMock.mockReturnValue({
+      mode: 'workspace',
+      rootDir: '/repo',
+      componentPath: 'apps/api'
+    });
+
+    const cli = await createCli();
+    await getCommandAction(cli, 'deploy check')({});
+
+    expect(runFcApiDeployPrecheckMock).toHaveBeenCalledWith(expect.objectContaining({
+      runtime: 'nodejs22',
+      entry: 'src/index.ts',
+      projectRoot: '/repo/apps/api',
+      checkDockerDaemon: false
+    }));
+    expect(emitCommandResultMock).toHaveBeenCalledWith(expect.objectContaining({
+      ok: true,
+      projectRoot: '/repo/apps/api'
     }));
   });
 });
