@@ -508,6 +508,23 @@ describe('help utils', () => {
     expect(doc?.text).toContain('bootstrap selection');
   });
 
+  it('warns about Docker runtime requirements for gitlab deploy pipelines', () => {
+    const doc = buildHelpDocument({
+      argv: ['node', 'src/cli.ts', 'ci', 'init', 'gitlab', '--help'],
+      version: VERSION
+    });
+
+    expect(doc?.key).toBe('ci init gitlab');
+    expect(doc?.notes).toEqual(expect.arrayContaining([
+      '`licell deploy --runtime docker` 依赖真实 Docker daemon；这不是纯 control-plane deploy。',
+      '在 GitLab CI 中，优先挂载宿主机 Docker socket，而不是默认切到 Docker-in-Docker。',
+      '如果必须使用嵌套 Docker / Docker-in-Docker，请确认 runner 已开启 `privileged = true`。'
+    ]));
+    expect(doc?.text).toContain('真实 Docker daemon');
+    expect(doc?.text).toContain('Docker-in-Docker');
+    expect(doc?.text).toContain('privileged = true');
+  });
+
   it('serializes help into a stable machine-facing schema', () => {
     const doc = buildHelpDocument({
       argv: ['node', 'src/cli.ts', 'domain', 'app', 'bind', '--help'],

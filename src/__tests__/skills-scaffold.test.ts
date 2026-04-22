@@ -64,6 +64,9 @@ describe('getGlobalCodexSubagentFiles', () => {
     expect(files[0].content).toContain('GitLab CI/CD');
     expect(files[0].content).toContain('API_KEY');
     expect(files[0].content).toContain('bazhuayu.xyz');
+    expect(files[0].content).toContain('real Docker daemon');
+    expect(files[0].content).toContain('host Docker socket');
+    expect(files[0].content).toContain('`privileged = true`');
   });
 });
 

@@ -123,6 +123,9 @@ describe('ci init commands', () => {
     const pipeline = readFileSync(join(root, '.gitlab-ci.licell.yml'), 'utf-8');
     expect(pipeline).toContain('# No additional licell bootstrap refinements detected from the current project config.');
     expect(pipeline).toContain("# Include this file from your main `.gitlab-ci.yml`");
+    expect(pipeline).toContain('the deploy job needs a real Docker daemon');
+    expect(pipeline).toContain('prefer mounting the host Docker socket');
+    expect(pipeline).toContain('`privileged = true`');
     expect(pipeline).toContain("deploy:web:");
     expect(pipeline).not.toContain("deploy:api:");
     expect(pipeline).toContain("when: manual");

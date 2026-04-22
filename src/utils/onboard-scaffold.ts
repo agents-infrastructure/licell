@@ -50,6 +50,9 @@ Licell and CI rules:
 - must use licell CLI for deployment orchestration
 - keep .licell/project.json and .licell/state.json checked into git
 - in GitLab CI, try licell upgrade before deploy to reduce CLI drift
+- if any component deploys with \`licell deploy --runtime docker\`, remember it needs a real Docker daemon and is not a pure control-plane deploy
+- in GitLab CI, prefer mounting the host Docker socket instead of defaulting to Docker-in-Docker
+- if nested Docker / Docker-in-Docker is unavoidable, require a runner with \`privileged = true\`
 - prefer licell catalog, help, workspace discover, bootstrap, deploy plan, deploy check, ci init gitlab, env set, deploy, and doctor instead of inventing ad-hoc flows
 - if the repo already has deploy scripts, prefer reusing them when they encode repo-specific deployment behavior better than bare licell commands
 - split deploy and verify when business acceptance can fail after infra deploy succeeds

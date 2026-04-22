@@ -212,6 +212,9 @@ const ciInitGitlabCommand = defineCliCommand({
       `默认生成独立文件 \`${GITLAB_PIPELINE_DEFAULT_PATH}\`，方便被现有主 \`.gitlab-ci.yml\` include。`,
       '只会为当前 workspace 中声明了 deployType 的 components 生成 deploy jobs。',
       '每个 deploy job 默认是 `manual`，并支持通过 GitLab CI/CD 变量 `COMPONENT` 只触发单个 component。',
+      '`licell deploy --runtime docker` 依赖真实 Docker daemon；这不是纯 control-plane deploy。',
+      '在 GitLab CI 中，优先挂载宿主机 Docker socket，而不是默认切到 Docker-in-Docker。',
+      '如果必须使用嵌套 Docker / Docker-in-Docker，请确认 runner 已开启 `privileged = true`。',
       '默认会优先读取 `.licell/state.json` 里最近一次 batch bootstrap 记录的 selectedComponents；若不存在，再回退到当前 workspace 的全部 deployable components。',
       '传 `--include` / `--exclude` 时，会显式覆盖默认的 bootstrap selection。'
     ],
