@@ -131,7 +131,7 @@ jobs:
           fi
 
       - name: Download artifacts
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v5
         with:
           pattern: licell-*
           path: dist-release
