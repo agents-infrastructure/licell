@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
+import { Readable } from 'stream';
 
 const mockPutBucketWithOptions = vi.fn();
 const mockGetBucketInfoWithOptions = vi.fn();
@@ -14,6 +15,14 @@ const mockIsConflictError = vi.fn();
 const mockIsAccessDeniedError = vi.fn();
 const mockIsNotFoundError = vi.fn();
 const mockIsTransientError = vi.fn();
+
+async function readStream(stream: Readable) {
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks).toString('utf8');
+}
 
 vi.mock('../utils/config', () => ({
   Config: {
@@ -260,6 +269,29 @@ describe('createOssBucket', () => {
       expect(mockExecute.mock.calls.some(([params]) => params?.action === 'DeleteBucketPublicAccessBlock')).toBe(true);
     } finally {
       await new Promise((resolve) => setTimeout(resolve, 0));
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps upload streams readable even after source cleanup', async () => {
+    const { deployOSS } = await import('../providers/oss');
+    const root = mkdtempSync(join(tmpdir(), 'licell-oss-deploy-'));
+    let capturedStream: Readable | undefined;
+
+    mockExecute.mockImplementation(async (_params: unknown, request: { stream?: Readable }) => {
+      capturedStream = request.stream;
+      return { body: {} };
+    });
+
+    try {
+      writeFileSync(join(root, 'index.html'), '<!doctype html><title>demo</title>\n');
+
+      await deployOSS('demo-app', root);
+      rmSync(root, { recursive: true, force: true });
+
+      expect(capturedStream).toBeTruthy();
+      await expect(readStream(capturedStream!)).resolves.toContain('<title>demo</title>');
+    } finally {
       rmSync(root, { recursive: true, force: true });
     }
   });

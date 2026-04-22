@@ -11,7 +11,7 @@ const openapiUtil = (() => {
   throw new Error('Cannot resolve @alicloud/openapi-util');
 })();
 import * as $Util from '@alicloud/tea-util';
-import { createReadStream, createWriteStream, existsSync, lstatSync, mkdirSync, readdirSync, realpathSync, rmSync, statSync } from 'fs';
+import { createReadStream, createWriteStream, existsSync, lstatSync, mkdirSync, openSync, readdirSync, realpathSync, rmSync, statSync } from 'fs';
 import { basename, dirname, isAbsolute, join, relative } from 'path';
 import { Readable } from 'stream';
 import { pipeline } from 'stream/promises';
@@ -828,6 +828,15 @@ function toOssObjectInfo(bucket: string, key: string, headers: Record<string, st
   };
 }
 
+function createStableReadStream(filePath: string) {
+  // Open the file descriptor eagerly so temp-file cleanup cannot race with the
+  // SDK consuming the stream a tick later.
+  return createReadStream(filePath, {
+    fd: openSync(filePath, 'r'),
+    autoClose: true
+  });
+}
+
 async function putOssObjectWithContentType(
   client: InstanceType<typeof OssClientCtor>,
   runtime: $Util.RuntimeOptions,
@@ -842,7 +851,7 @@ async function putOssObjectWithContentType(
       headers: {
         'content-type': contentType
       },
-      stream: createReadStream(sourceFile)
+      stream: createStableReadStream(sourceFile)
     });
     const params = new $OpenApi.Params({
       action: 'PutObject',
