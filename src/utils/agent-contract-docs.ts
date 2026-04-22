@@ -7,18 +7,51 @@ import { LICELL_HELP_KIND, LICELL_HELP_SCHEMA_VERSION } from './help';
 import { LICELL_CLI_RECORD_KIND, LICELL_CLI_RECORD_SCHEMA_VERSION, LICELL_JSON_PREFIX } from './output';
 import { renderStructuredResultLines } from './structured-result-render';
 
-export function renderStructuredDescriptorMarkdown(result: ResolvedCommandResultDescriptor) {
+type ContractLocale = 'zh' | 'en';
+
+export function renderStructuredDescriptorMarkdown(
+  result: ResolvedCommandResultDescriptor,
+  locale: ContractLocale = 'zh'
+) {
   return renderStructuredResultLines(result, {
-    separator: '：',
-    optionalLabel: '（可选）'
+    separator: locale === 'en' ? ': ' : '：',
+    optionalLabel: locale === 'en' ? ' (optional)' : '（可选）'
   });
 }
 
-export function renderAgentContractMarkdown(options?: { headingLevel?: 2 | 3 | 4 }) {
+export function renderAgentContractMarkdown(options?: { headingLevel?: 2 | 3 | 4; locale?: ContractLocale }) {
   const headingLevel = options?.headingLevel || 2;
+  const locale = options?.locale || 'zh';
   const heading = `${'#'.repeat(headingLevel)} Schema Contracts`;
   const catalog = buildAgentCommandCatalog();
-  const cliRecord = getCliRecordContractDocument();
+  const cliRecord = getCliRecordContractDocument(locale);
+
+  if (locale === 'en') {
+    return [
+      heading,
+      '',
+      `- Raw CLI JSON output is emitted line-by-line with the \`${LICELL_JSON_PREFIX}\` prefix. Each record currently conforms to \`${LICELL_CLI_RECORD_KIND}@${LICELL_CLI_RECORD_SCHEMA_VERSION}\`, then branches by \`type=event|result|error\`.`,
+      `- For \`licell <command> --help --output json\`, read \`help.kind\` and \`help.schemaVersion\`; the current contract is \`${LICELL_HELP_KIND}@${LICELL_HELP_SCHEMA_VERSION}\`.`,
+      `- For \`licell catalog --output json\`, read \`kind\` and \`schemaVersion\`; the current catalog contract is \`${catalog.kind}@${catalog.schemaVersion}\`.`,
+      `- \`licell catalog --output json\` also declares the help schema and CLI record schema explicitly: \`${catalog.schemas.help.kind}@${catalog.schemas.help.schemaVersion}\` / \`${catalog.schemas.cliRecord.kind}@${catalog.schemas.cliRecord.schemaVersion}\`.`,
+      '- Agents should prefer `nextActions[]` as the stable next-step surface; `recommendedFlow`, `decisionGuide`, and `remediation[]` are supporting guidance layers.',
+      '- For command-specific business payloads, keep reading the command help/catalog `result` descriptor; the three sections below only describe the shared CLI record envelope.',
+      '',
+      `### CLI Event Record · ${cliRecord.kind}@${cliRecord.schemaVersion}`,
+      '',
+      ...renderStructuredDescriptorMarkdown(cliRecord.event, locale),
+      '',
+      '### CLI Result Record Envelope',
+      '',
+      ...renderStructuredDescriptorMarkdown(cliRecord.result, locale),
+      '',
+      '### CLI Error Record',
+      '',
+      ...renderStructuredDescriptorMarkdown(cliRecord.error, locale),
+      '',
+      '- When parsing strictly, match `kind` first and then verify `schemaVersion`; if a higher unknown version appears, fall back to a compatibility path instead of assuming the old shape.'
+    ].join('\n');
+  }
 
   return [
     heading,
@@ -32,15 +65,15 @@ export function renderAgentContractMarkdown(options?: { headingLevel?: 2 | 3 | 4
     '',
     `### CLI Event Record · ${cliRecord.kind}@${cliRecord.schemaVersion}`,
     '',
-    ...renderStructuredDescriptorMarkdown(cliRecord.event),
+    ...renderStructuredDescriptorMarkdown(cliRecord.event, locale),
     '',
     '### CLI Result Record Envelope',
     '',
-    ...renderStructuredDescriptorMarkdown(cliRecord.result),
+    ...renderStructuredDescriptorMarkdown(cliRecord.result, locale),
     '',
     '### CLI Error Record',
     '',
-    ...renderStructuredDescriptorMarkdown(cliRecord.error),
+    ...renderStructuredDescriptorMarkdown(cliRecord.error, locale),
     '',
     '- Agent 侧做强约束解析时，先匹配 `kind`，再检查 `schemaVersion`；未知更高版本应走兼容分支或降级为文本解析。'
   ].join('\n');

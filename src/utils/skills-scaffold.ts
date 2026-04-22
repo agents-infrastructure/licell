@@ -1,9 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { dirname, isAbsolute, join } from 'path';
 import { homedir } from 'os';
-import { renderSkillCommandReference } from './command-reference';
-import { renderSkillAgentUsageGuide } from './agent-surface-docs';
-import { renderSkillUpgradeNotes } from './install-upgrade-docs';
+import { renderAgentContractMarkdown } from './agent-contract-docs';
 
 export type AgentType = 'claude' | 'codex';
 
@@ -28,105 +26,51 @@ metadata:
 
 # licell CLI Skill
 
-Deploy and manage Alibaba Cloud Serverless (FC 3.0) applications from the command line.
+Use the \`licell\` CLI as a structured deployment and operations tool for Alibaba Cloud.
 
-## Prerequisites
+## Scope
 
-- \`licell\` CLI installed and on PATH
-- Authenticated via \`licell login\` (credentials stored in \`~/.licell-cli/auth.json\`)
-- Project initialized via \`licell init\` (config in \`.licell/project.json\`)
+- This file teaches an agent how to drive \`licell\` safely.
+- It is not the canonical command reference.
+- If a detail can be discovered from CLI help or catalog output, prefer the CLI over this file.
 
-## Install / Upgrade Notes
+## Operating Contract
 
-${renderSkillUpgradeNotes().trim()}
+- Do not guess command names, flags, argument order, or result fields.
+- Discover commands with \`licell catalog --output json\`.
+- Read per-command usage with \`licell <command> --help --output json\`.
+- Execute real work with \`licell <command> --output json\`.
+- For streamed output, parse only lines prefixed with \`@@LICELL_JSON@@\`.
+- Prefer structured fields like \`nextActions[]\`, \`result\`, \`error\`, and \`details\` over human-readable console text.
+- If the task is mutating or destructive, inspect help first and follow the command's structured guidance.
+- Verify \`kind\` before trusting a record shape, and then verify \`schemaVersion\`.
+- Do not scrape plain-text terminal output when \`--output json\` is available.
+- Do not assume one command's result shape applies to another; read the command's help contract first.
 
-## Quick Start Workflow
+## Preconditions
+
+- \`licell\` is installed and on PATH.
+- Authentication is configured, usually via \`licell login\`.
+- If the command operates on a project, run it inside the target repo or initialized workspace.
+
+## Canonical Invocation Sequence
 
 \`\`\`bash
-licell login                                          # 配置阿里云凭证
-licell init                                           # 初始化项目（脚手架 + 配置）
-licell catalog --output json                          # 发现命令目录与结构化契约
-licell deploy --type api --target preview             # 部署到 preview
-licell release promote --target prod                  # 发布到生产
+licell catalog --output json
+licell <command> --help --output json
+licell <command> --output json
 \`\`\`
+
+Use the first command for discovery, the second for contract lookup, and the third for execution.
 
 <!-- PLACEHOLDER_COMMAND_REFERENCE -->
 `;
 }
 
-function getWorkflowAppendix(): string {
-  return `
-## Recommended Patterns
-
-### FC API Deploy
-
-\`\`\`bash
-licell deploy spec nodejs22
-licell deploy check --runtime nodejs22 --entry src/index.ts
-licell deploy --type api --runtime nodejs22 --entry src/index.ts --target preview
-\`\`\`
-
-### Static Site Deploy
-
-\`\`\`bash
-licell deploy --type static --dist dist --domain-suffix example.com
-# 默认会在固定域名 + CDN 场景下执行入口文件刷新
-licell deploy --type static --dist dist --domain www.example.com --cdn-refresh entrypoints --output json
-\`\`\`
-
-### Data + App Stack
-
-\`\`\`bash
-licell db add --type postgres
-licell cache add --type redis
-licell deploy --type api --target preview --enable-vpc
-\`\`\`
-
-### Supabase Stack
-
-\`\`\`bash
-licell supa add --name my-app
-licell supa connect <instanceName>
-licell deploy --type api --target preview --enable-vpc
-\`\`\`
-
-## SLS Query Reference
-
-- \`licell logs query\` / \`licell logs tail\` 会把 \`query\` 原样透传给阿里云 SLS \`GetLogs.query\`；Licell 不会把别的 skill / DSL 语法自动翻译成 SLS 查询。
-- 官方语法参考：<https://help.aliyun.com/zh/sls/query-syntax/>
-- 开始排查时，优先用 \`*\` 获取原始日志，再在本地做聚合或过滤：
-
-\`\`\`bash
-licell logs query '*' --output json
-\`\`\`
-
-- 常见 SLS 查询语法（前提：目标 Logstore 已建立索引）：
-  - 全量：\`*\`
-  - 全文检索：\`GET or POST\`
-  - 字段检索：\`request_method:GET\`
-  - 数值过滤：\`request_time_msec>50\`
-  - 查询 + 分析：\`request_method:GET | select count(*) as total\`
-- 如果 \`field:value\` 看起来没生效，优先检查目标字段是否已建索引、类型是否正确；不确定时回退到 \`*\` + \`--output json\`。
-
-## Error Handling
-
-- 认证失败：运行 \`licell login\` 重新配置凭证
-- 部署失败：检查 \`licell fn logs --once\` 查看错误日志
-- 应用域名冲突：使用 \`licell domain app unbind <domain>\` 清理后重试
-- 静态域名冲突：使用 \`licell domain static unbind <domain>\` 清理后重试
-- 静态站重复部署但页面仍旧命中旧缓存：检查 deploy 结果里的 \`cdnRefreshMode\` / \`cdnRefreshTaskIds[]\`，必要时改用 \`--cdn-refresh all\`
-- 版本清理：\`licell release prune --keep 5 --apply\` 清理旧版本
-- 破坏性操作（rm/prune）需要 \`--yes\` 跳过确认，或在交互模式下手动确认
-`;
-}
-
 function getSkillBody() {
   return getSkillContent().replace('<!-- PLACEHOLDER_COMMAND_REFERENCE -->\n', '')
-    + renderSkillAgentUsageGuide()
-    + '\n'
-    + renderSkillCommandReference()
-    + '\n'
-    + getWorkflowAppendix();
+    + renderAgentContractMarkdown({ headingLevel: 2, locale: 'en' })
+    + '\n';
 }
 
 

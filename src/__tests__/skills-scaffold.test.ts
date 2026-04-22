@@ -15,7 +15,7 @@ describe('getSkillFiles', () => {
     expect(files).toHaveLength(1);
     expect(files[0].path).toBe('.claude/skills/licell/SKILL.md');
     expect(files[0].content).toContain('# licell CLI Skill');
-    expect(files[0].content).toContain('## Command Reference');
+    expect(files[0].content).toContain('## Operating Contract');
   });
 
   it('returns codex.md for codex', () => {
@@ -25,45 +25,24 @@ describe('getSkillFiles', () => {
     expect(files[0].content).toContain('# licell CLI Skill');
   });
 
-  it('content follows the shared command catalog', () => {
+  it('content is contract-first and points agents back to CLI help', () => {
     const [file] = getSkillFiles('claude');
-    const sections = [
-      '### Setup & Identity',
-      '### Delivery Workflow',
-      '### Data Services',
-      '### Automation & Tooling'
-    ];
-    for (const section of sections) {
-      expect(file.content).toContain(section);
-    }
-
-    const commands = [
-      'licell login',
-      'licell catalog',
-      'licell deploy spec [runtime]',
-      'licell deploy check',
-      'licell completion [shell]',
-      'licell upgrade',
-      'licell auth repair',
-      'licell onboard',
-      'licell skills init [agent]'
-    ];
-    for (const command of commands) {
-      expect(file.content).toContain(command);
-    }
-
-    expect(file.content).toContain('follows the current installation source');
-    expect(file.content).toContain('project-local `node_modules`');
-    expect(file.content).toContain('`licell upgrade --dry-run`');
-    expect(file.content).toContain('licell CLI 注册表自动生成');
-    expect(file.content).toContain('## Agent Usage');
-    expect(file.content).toContain('### Schema Contracts');
-    expect(file.content).toContain('licell-help@1.0');
+    expect(file.content).toContain('## Scope');
+    expect(file.content).toContain('## Operating Contract');
+    expect(file.content).toContain('## Canonical Invocation Sequence');
+    expect(file.content).toContain('Do not guess command names, flags, argument order, or result fields.');
     expect(file.content).toContain('`licell catalog --output json`');
+    expect(file.content).toContain('`licell <command> --help --output json`');
+    expect(file.content).toContain('`licell <command> --output json`');
+    expect(file.content).toContain('## Schema Contracts');
+    expect(file.content).toContain('licell-help@1.0');
     expect(file.content).toContain('CLI Event Record');
-    expect(file.content).toContain('## SLS Query Reference');
-    expect(file.content).toContain('https://help.aliyun.com/zh/sls/query-syntax/');
-    expect(file.content).toContain("licell logs query '*' --output json");
+    expect(file.content).not.toContain('## Command Reference');
+    expect(file.content).not.toContain('### Delivery Workflow');
+    expect(file.content).not.toContain('## Recommended Patterns');
+    expect(file.content).not.toContain('## SLS Query Reference');
+    expect(file.content).not.toContain('## What Not To Do');
+    expect(file.content).not.toContain('## Agent Usage');
   });
 });
 

@@ -19,8 +19,9 @@ describe('renderSkillAgentUsageGuide', () => {
     expect(output).toContain('`licell catalog --output json`');
     expect(output).toContain('`licell <command> --help --output json`');
     expect(output).toContain('`nextActions[]`');
-    expect(output).toContain('\n- `kind`：固定为 `licell-cli-record`。');
-    expect(output).not.toContain('\n  - `kind`：固定为 `licell-cli-record`。');
+    expect(output).toContain('\n- `kind`: Fixed to `licell-cli-record`.');
+    expect(output).not.toContain('\n  - `kind`: Fixed to `licell-cli-record`.');
+    expect(output).not.toContain('命令发现');
   });
 });
 

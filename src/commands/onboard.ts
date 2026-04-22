@@ -39,13 +39,13 @@ function resolveInstalledAgents(agent: OnboardAgent): InstalledAgent[] {
 
 const onboardCommand = defineCliCommand({
   rawName: 'onboard',
-  description: '全局安装 licell 的 Agent 接入；默认同时安装 Codex 与 Claude',
+  description: '全局安装 licell 的 agent-facing skill contract；默认同时安装 Codex 与 Claude',
   options: [
     { rawName: '--agent <agent>', description: '安装目标：codex / claude / all（默认 all）' },
     { rawName: '--force', description: '覆盖已有文件' }
   ],
   descriptor: {
-    summary: '一次性安装 licell 的全局 Agent 接入：默认同时安装 Codex 与 Claude skills；若包含 Codex，还会额外安装 `licell-glab` subagent。',
+    summary: '一次性安装 licell 的全局 agent-facing skill contract：默认同时安装 Codex 与 Claude；若包含 Codex，还会额外安装 `licell-glab` subagent。',
     notes: [
       '该命令会写入用户级目录，而不是当前项目目录。',
       '默认行为是 `--agent all`。',
@@ -73,7 +73,7 @@ const onboardCommand = defineCliCommand({
       }
     },
     recommendedFlow: [
-      { title: '安装默认全局 Agent 接入', command: 'licell onboard', reason: '默认一次安装 Codex + Claude skills，并给 Codex 补上 `licell-glab`。' },
+      { title: '安装默认全局 Agent 接入', command: 'licell onboard', reason: '默认一次安装 Codex + Claude 的 licell skill contract，并给 Codex 补上 `licell-glab`。' },
       { title: '只装某一个 Agent', command: 'licell onboard --agent codex', reason: '当你只想维护单一宿主的全局接入时显式指定。' },
       { title: '让 Agent 理解 licell 命令面', command: 'licell catalog --output json', reason: '后续执行依然统一通过 catalog / help / JSON output。' },
       { title: '直接调用 subagent', reason: '在 Codex 中使用 `$licell-glab 帮我给当前 repo 构建 GitLab CI/CD 流水线`。' }
@@ -82,12 +82,12 @@ const onboardCommand = defineCliCommand({
       {
         phase: 'mutate',
         title: '给当前机器安装 licell 的全局 Agent 接入',
-        description: '默认把 Codex + Claude skills 都装好，并给 Codex 额外补上 `licell-glab` 子助手。',
+        description: '默认把 Codex + Claude 的 licell skill contract 都装好，并给 Codex 额外补上 `licell-glab` 子助手。',
         commands: ['licell onboard']
       }
     ],
     result: {
-      summary: '返回全局 skills 与 subagent 的安装结果。',
+      summary: '返回全局 skill contract 与 subagent 的安装结果。',
       outcomeKey: 'writtenFiles',
       fields: [
         { name: 'stage', description: '固定为 `onboard`。', required: true },
@@ -151,7 +151,7 @@ export function registerOnboardCommand(cli: CAC) {
         const s = createSpinner();
         const spinnerTarget = requestedAgent === 'all' ? 'Codex + Claude' : requestedAgent;
         if (!jsonMode) {
-          s.start(`正在安装全局 ${spinnerTarget} Agent 接入...`);
+          s.start(`正在安装全局 ${spinnerTarget} skill contract...`);
         }
 
         const result = await executeOnboard({
@@ -180,7 +180,7 @@ export function registerOnboardCommand(cli: CAC) {
             console.log(`  1. 在 Codex 中执行：$${result.subagentNames[0]} 帮我给当前 repo 构建 GitLab CI/CD 流水线`);
             console.log(`  2. 需要命令发现时执行：licell catalog --output json`);
           } else {
-            console.log('  1. Claude 侧已安装全局 licell skill，可直接在对话里调用 licell 能力');
+            console.log('  1. Claude 侧已安装全局 licell skill contract，可直接按 catalog/help/json output 契约驱动 licell');
             console.log('  2. 需要命令发现时执行：licell catalog --output json');
           }
           showOutro('Done.');

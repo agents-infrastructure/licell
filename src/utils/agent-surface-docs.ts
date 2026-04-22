@@ -48,12 +48,12 @@ export function renderSkillAgentUsageGuide() {
   return [
     '## Agent Usage',
     '',
-    '- 命令发现：先执行 `licell catalog --output json`。',
-    '- 单命令细节：再执行 `licell <command> --help --output json`。',
-    '- 真正执行：统一执行 `licell ... --output json`，并过滤 `@@LICELL_JSON@@` 前缀逐行解析。',
-    '- 成功结果看 `type=result`；失败看 `type=error` 的 `nextActions[]`；过程事件看 `type=event`。',
+    '- Discovery: run `licell catalog --output json` first.',
+    '- Per-command contract lookup: run `licell <command> --help --output json` next.',
+    '- Real execution: run `licell ... --output json` and parse only lines prefixed with `@@LICELL_JSON@@`.',
+    '- Successful outcomes should be read from `type=result`; failures should be read from `type=error` and especially `nextActions[]`; progress signals come from `type=event`.',
     '',
-    renderAgentContractMarkdown({ headingLevel: 3 })
+    renderAgentContractMarkdown({ headingLevel: 3, locale: 'en' })
   ].join('\n').trim() + '\n';
 }
 

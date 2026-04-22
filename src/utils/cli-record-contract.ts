@@ -14,6 +14,8 @@ export interface CliRecordContractDocument {
   error: ResolvedCommandResultDescriptor;
 }
 
+type ContractLocale = 'zh' | 'en';
+
 function defineRecordContract(
   summary: string,
   fields: ResolvedCommandResultFieldDescriptor[]
@@ -25,7 +27,7 @@ function defineRecordContract(
   };
 }
 
-const EVENT_FIELDS: ResolvedCommandResultFieldDescriptor[] = [
+const EVENT_FIELDS_ZH: ResolvedCommandResultFieldDescriptor[] = [
   { name: 'kind', description: '固定为 `licell-cli-record`。', required: true },
   { name: 'schemaVersion', description: 'CLI record schema 版本；当前为 `1.0`。', required: true },
   { name: 'type', description: '固定为 `event`。', required: true },
@@ -42,7 +44,24 @@ const EVENT_FIELDS: ResolvedCommandResultFieldDescriptor[] = [
   { name: 'data.stream', description: '当 `action=stdout|stderr` 时给出流类型。', required: false }
 ];
 
-const RESULT_FIELDS: ResolvedCommandResultFieldDescriptor[] = [
+const EVENT_FIELDS_EN: ResolvedCommandResultFieldDescriptor[] = [
+  { name: 'kind', description: 'Fixed to `licell-cli-record`.', required: true },
+  { name: 'schemaVersion', description: 'CLI record schema version; currently `1.0`.', required: true },
+  { name: 'type', description: 'Fixed to `event`.', required: true },
+  { name: 'ts', description: 'Event timestamp in ISO 8601 format.', required: true },
+  { name: 'command', description: 'Current command key, such as `deploy` or `oss upload`.', required: true },
+  { name: 'stage', description: 'Stable stage identifier, such as `deploy`, `deploy.api`, or `auth.restore`.', required: true },
+  { name: 'action', description: 'Stable action identifier, such as `run`, `execute`, or `stdout`.', required: true },
+  { name: 'status', description: '`start` / `ok` / `failed` / `skipped` / `info`.', required: true },
+  { name: 'source', description: '`command` / `console` / `stream`.', required: true },
+  { name: 'terminal', description: 'Whether this event marks the terminal state of the current action.', required: true },
+  { name: 'ok', description: 'Present only on terminal success/failure events; `true` means success and `false` means failure.', required: false },
+  { name: 'message', description: 'Human-readable supplemental message.', required: false },
+  { name: 'data', description: 'Additional structured context object.', required: false },
+  { name: 'data.stream', description: 'Stream type when `action=stdout|stderr`.', required: false }
+];
+
+const RESULT_FIELDS_ZH: ResolvedCommandResultFieldDescriptor[] = [
   { name: 'kind', description: '固定为 `licell-cli-record`。', required: true },
   { name: 'schemaVersion', description: 'CLI record schema 版本；当前为 `1.0`。', required: true },
   { name: 'type', description: '固定为 `result`。', required: true },
@@ -52,7 +71,17 @@ const RESULT_FIELDS: ResolvedCommandResultFieldDescriptor[] = [
   { name: 'ok', description: '固定为 `true`。', required: true }
 ];
 
-const ERROR_FIELDS: ResolvedCommandResultFieldDescriptor[] = [
+const RESULT_FIELDS_EN: ResolvedCommandResultFieldDescriptor[] = [
+  { name: 'kind', description: 'Fixed to `licell-cli-record`.', required: true },
+  { name: 'schemaVersion', description: 'CLI record schema version; currently `1.0`.', required: true },
+  { name: 'type', description: 'Fixed to `result`.', required: true },
+  { name: 'ts', description: 'Result timestamp in ISO 8601 format.', required: true },
+  { name: 'command', description: 'Current command key.', required: true },
+  { name: 'stage', description: 'Command stage identifier; usually aligned with the command key or sub-stage.', required: true },
+  { name: 'ok', description: 'Fixed to `true`.', required: true }
+];
+
+const ERROR_FIELDS_ZH: ResolvedCommandResultFieldDescriptor[] = [
   { name: 'kind', description: '固定为 `licell-cli-record`。', required: true },
   { name: 'schemaVersion', description: 'CLI record schema 版本；当前为 `1.0`。', required: true },
   { name: 'type', description: '固定为 `error`。', required: true },
@@ -99,29 +128,94 @@ const ERROR_FIELDS: ResolvedCommandResultFieldDescriptor[] = [
   { name: 'nextActions[].source', description: '动作来源，例如 `error-remediation`。', required: true }
 ];
 
-const CLI_RECORD_CONTRACTS: CliRecordContractDocument = {
-  kind: LICELL_CLI_RECORD_KIND,
-  schemaVersion: LICELL_CLI_RECORD_SCHEMA_VERSION,
-  event: defineRecordContract(
-    'CLI 流式事件 record；适合驱动 Agent 的进度感知、日志桥接和阶段判断。',
-    EVENT_FIELDS
-  ),
-  result: defineRecordContract(
-    'CLI 成功结果 record；公共包络固定，命令自定义 payload 字段请继续读取对应命令 help/catalog 中的 `result`。',
-    RESULT_FIELDS
-  ),
-  error: defineRecordContract(
-    'CLI 错误结果 record；同时提供兼容层 remediation/nextCommands 和首选的 nextActions。',
-    ERROR_FIELDS
-  )
+const ERROR_FIELDS_EN: ResolvedCommandResultFieldDescriptor[] = [
+  { name: 'kind', description: 'Fixed to `licell-cli-record`.', required: true },
+  { name: 'schemaVersion', description: 'CLI record schema version; currently `1.0`.', required: true },
+  { name: 'type', description: 'Fixed to `error`.', required: true },
+  { name: 'ts', description: 'Error timestamp in ISO 8601 format.', required: true },
+  { name: 'command', description: 'Current command key.', required: true },
+  { name: 'stage', description: 'Error stage, such as `parse`, `runtime`, or `deploy`.', required: true },
+  { name: 'ok', description: 'Fixed to `false`.', required: true },
+  { name: 'error', description: 'Stable error object.', required: true },
+  { name: 'error.code', description: 'Stable error code, such as `CLI_INVALID_INPUT` or `AUTH_MISSING_CREDENTIAL`.', required: true },
+  { name: 'error.category', description: '`auth` / `permission` / `input` / `network` / `quota` / `conflict` / `not_found` / `internal`.', required: true },
+  { name: 'error.message', description: 'Primary error message.', required: true },
+  { name: 'error.retryable', description: 'Whether the error is suitable for direct retry.', required: true },
+  { name: 'provider', description: 'Alibaba Cloud provider-side context.', required: false },
+  { name: 'provider.service', description: 'Cloud product name, such as `fc`, `oss`, or `alidns`.', required: false },
+  { name: 'provider.action', description: 'Cloud API action name.', required: false },
+  { name: 'provider.code', description: 'Original cloud-side error code.', required: false },
+  { name: 'provider.requestId', description: 'Cloud-side requestId.', required: false },
+  { name: 'provider.httpStatus', description: 'Cloud-side HTTP status code.', required: false },
+  { name: 'provider.endpoint', description: 'Resolved cloud API endpoint.', required: false },
+  { name: 'details', description: 'Additional structured error context.', required: false },
+  { name: 'remediation[]', description: 'Compatibility remediation suggestions.', required: true },
+  { name: 'remediation[].type', description: 'Suggestion type, such as `note` or `command`.', required: true },
+  { name: 'remediation[].title', description: 'Remediation title.', required: true },
+  { name: 'remediation[].reason', description: 'Why this action is recommended.', required: true },
+  { name: 'remediation[].commandTemplate', description: 'Suggested command template.', required: true },
+  { name: 'remediation[].commandKey', description: 'Stable command key when the command can be matched from the CLI registry.', required: false },
+  { name: 'remediation[].commandDescription', description: 'Matched command description.', required: false },
+  { name: 'remediation[].phase', description: 'Remediation phase, such as `inspect`, `mutate`, or `verify`.', required: true },
+  { name: 'remediation[].priority', description: '`primary` / `secondary`.', required: true },
+  { name: 'remediation[].order', description: 'Stable sort order.', required: true },
+  { name: 'nextCommands[]', description: 'Compatibility command suggestions.', required: true },
+  { name: 'nextCommands[].commandTemplate', description: 'Suggested command template.', required: true },
+  { name: 'nextCommands[].commandKey', description: 'Stable command key when the command can be matched from the CLI registry.', required: false },
+  { name: 'nextCommands[].description', description: 'Command suggestion description.', required: false },
+  { name: 'nextCommands[].intent', description: 'Command intent, such as `inspect`, `repair`, or `bind`.', required: true },
+  { name: 'nextCommands[].priority', description: '`primary` / `secondary`.', required: true },
+  { name: 'nextActions[]', description: 'Preferred unified next-step suggestions.', required: true },
+  { name: 'nextActions[].title', description: 'Next action title.', required: true },
+  { name: 'nextActions[].description', description: 'Why this action is recommended.', required: true },
+  { name: 'nextActions[].commandTemplate', description: 'Suggested command template.', required: true },
+  { name: 'nextActions[].commandKey', description: 'Stable command key when the command can be matched from the CLI registry.', required: false },
+  { name: 'nextActions[].phase', description: 'Action phase, such as `inspect`, `verify`, or `mutate`.', required: true },
+  { name: 'nextActions[].priority', description: '`primary` / `secondary`.', required: true },
+  { name: 'nextActions[].source', description: 'Action source, such as `error-remediation`.', required: true }
+];
+
+const CLI_RECORD_CONTRACTS: Record<ContractLocale, CliRecordContractDocument> = {
+  zh: {
+    kind: LICELL_CLI_RECORD_KIND,
+    schemaVersion: LICELL_CLI_RECORD_SCHEMA_VERSION,
+    event: defineRecordContract(
+      'CLI 流式事件 record；适合驱动 Agent 的进度感知、日志桥接和阶段判断。',
+      EVENT_FIELDS_ZH
+    ),
+    result: defineRecordContract(
+      'CLI 成功结果 record；公共包络固定，命令自定义 payload 字段请继续读取对应命令 help/catalog 中的 `result`。',
+      RESULT_FIELDS_ZH
+    ),
+    error: defineRecordContract(
+      'CLI 错误结果 record；同时提供兼容层 remediation/nextCommands 和首选的 nextActions。',
+      ERROR_FIELDS_ZH
+    )
+  },
+  en: {
+    kind: LICELL_CLI_RECORD_KIND,
+    schemaVersion: LICELL_CLI_RECORD_SCHEMA_VERSION,
+    event: defineRecordContract(
+      'Streaming CLI event record for progress tracking, log bridging, and stage-aware automation.',
+      EVENT_FIELDS_EN
+    ),
+    result: defineRecordContract(
+      'Successful CLI result envelope; command-specific payload fields should still be read from the corresponding help/catalog `result` descriptor.',
+      RESULT_FIELDS_EN
+    ),
+    error: defineRecordContract(
+      'CLI error envelope with compatibility remediation/nextCommands plus the preferred `nextActions` surface.',
+      ERROR_FIELDS_EN
+    )
+  }
 };
 
-export function getCliRecordContractDocument(): CliRecordContractDocument {
+export function getCliRecordContractDocument(locale: ContractLocale = 'zh'): CliRecordContractDocument {
   return {
-    kind: CLI_RECORD_CONTRACTS.kind,
-    schemaVersion: CLI_RECORD_CONTRACTS.schemaVersion,
-    event: cloneResolvedCommandResultDescriptor(CLI_RECORD_CONTRACTS.event)!,
-    result: cloneResolvedCommandResultDescriptor(CLI_RECORD_CONTRACTS.result)!,
-    error: cloneResolvedCommandResultDescriptor(CLI_RECORD_CONTRACTS.error)!
+    kind: CLI_RECORD_CONTRACTS[locale].kind,
+    schemaVersion: CLI_RECORD_CONTRACTS[locale].schemaVersion,
+    event: cloneResolvedCommandResultDescriptor(CLI_RECORD_CONTRACTS[locale].event)!,
+    result: cloneResolvedCommandResultDescriptor(CLI_RECORD_CONTRACTS[locale].result)!,
+    error: cloneResolvedCommandResultDescriptor(CLI_RECORD_CONTRACTS[locale].error)!
   };
 }

@@ -16,7 +16,7 @@ const SUPPORTED_AGENTS = new Set<AgentType>(['claude', 'codex']);
 
 const setupCommand = defineCliCommand({
   rawName: 'setup',
-  description: '安装后引导：交互式配置 AI Agent skills',
+  description: '安装后引导：交互式配置 AI Agent 的 licell skill contract',
   options: [
     { rawName: '--agent <agent>', description: '目标 Agent（claude / codex）' },
     { rawName: '--global', description: '全局配置（所有项目生效）' },
@@ -46,12 +46,12 @@ const setupCommand = defineCliCommand({
     },
     optionInsights: {
       '--agent': { whenToUse: '非交互模式下必须显式指定目标 Agent。', cautions: ['当前仅支持 `claude` / `codex`。'] },
-      '--global': { whenToUse: '希望 skills 对所有项目生效时使用。', cautions: ['会写入用户级全局技能目录。', '未传时默认是 project scope。'] },
+      '--global': { whenToUse: '希望 licell skill contract 对所有项目生效时使用。', cautions: ['会写入用户级全局技能目录。', '未传时默认是 project scope。'] },
       '--project-root': { whenToUse: '要为指定项目而不是当前目录生成配置时使用。', cautions: ['仅 project scope 生效。'] },
       '--force': { whenToUse: '目标文件已存在但需要覆盖时使用。', cautions: ['可能覆盖已有定制内容。'] }
     },
     recommendedFlow: [
-      { title: '运行引导', command: 'licell setup', reason: '以交互方式完成 skills 初始化。' },
+      { title: '运行引导', command: 'licell setup', reason: '以交互方式完成 licell skill contract 初始化。' },
       { title: '非交互初始化当前项目', command: 'licell setup --agent codex --output json', reason: '默认 project scope，避免误写全局目录。' },
       { title: '需要全局时显式指定', command: 'licell setup --agent codex --global --output json', reason: '只在确定要对所有项目生效时再写全局。' },
       { title: '让 Agent 发现命令目录', command: 'licell catalog --output json', reason: '后续统一走 catalog / help / JSON output。' }
@@ -60,7 +60,7 @@ const setupCommand = defineCliCommand({
       {
         phase: 'mutate',
         title: '给当前环境快速接入 Agent',
-        description: '一条 setup 引导完成 skills 的主流程配置。',
+        description: '一条 setup 引导完成 licell skill contract 的主流程配置。',
         commands: ['licell setup']
       },
       {
@@ -151,7 +151,7 @@ export async function runInteractiveSetup(options: SetupOptions = {}) {
 
     const s = createSpinner();
     if (!jsonMode) {
-      s.start(`正在生成${scope === 'global' ? '全局' : '项目'} Skills...`);
+      s.start(`正在写入${scope === 'global' ? '全局' : '项目'} skill contract...`);
     }
 
     const result = await executeSkillsInit({
@@ -162,7 +162,7 @@ export async function runInteractiveSetup(options: SetupOptions = {}) {
     });
 
     if (!jsonMode) {
-      s.stop(pc.green('✅ Skills 生成完成'));
+      s.stop(pc.green('✅ Skill contract 写入完成'));
     }
 
     if (!jsonMode) {

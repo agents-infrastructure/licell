@@ -36,17 +36,18 @@ export interface SkillsInitExecutionResult {
 
 const skillsInitCommand = defineCliCommand({
   rawName: 'skills init [agent]',
-  description: '为 AI Agent 生成 licell skills（claude / codex）',
+  description: '为 AI Agent 写入 licell skill contract（claude / codex）',
   options: [
     { rawName: '--global', description: '全局配置（所有项目生效）' },
     { rawName: '--project-root <path>', description: '目标项目目录（默认当前目录）' },
     { rawName: '--force', description: '覆盖已有文件' }
   ],
   descriptor: {
-    summary: '直接生成 licell skills；默认写入当前项目，传 `--global` 时写入用户级全局技能目录。',
+    summary: '直接写入 licell 的 agent-facing skill contract 文件；默认写入当前项目，传 `--global` 时写入用户级全局技能目录。',
     notes: [
       '未传 `[agent]` 且处于交互终端时，会提示选择 `claude` 或 `codex`。',
-      '`licell setup` 是它的交互式包装；真正的 skills 写入逻辑与结果字段保持一致。'
+      '`licell setup` 是它的交互式包装；真正的 skill contract 写入逻辑与结果字段保持一致。',
+      '这些文件用于指导 Agent 通过 `licell catalog --output json`、`licell <command> --help --output json`、`licell ... --output json` 使用 Licell，而不是复制整份命令参考。'
     ],
     examples: [
       'licell skills init codex',
@@ -68,11 +69,11 @@ const skillsInitCommand = defineCliCommand({
     },
     optionInsights: {
       '--global': {
-        whenToUse: '希望 skills 对所有项目生效时使用。',
+        whenToUse: '希望 licell skill contract 对所有项目生效时使用。',
         cautions: ['会写入用户级全局技能目录，不会更新当前项目 `AGENTS.md`。']
       },
       '--project-root': {
-        whenToUse: '需要把 skills 写入其它项目目录时使用。',
+        whenToUse: '需要把 agent-facing skill contract 写入其它项目目录时使用。',
         cautions: ['仅 project 模式生效；会写入目标项目的技能文件与 AGENTS 入口。']
       },
       '--force': {
@@ -81,13 +82,13 @@ const skillsInitCommand = defineCliCommand({
       }
     },
     recommendedFlow: [
-      { title: '项目内初始化 skills', command: 'licell skills init codex', reason: '默认把 skills 与 AGENTS 入口写入当前项目。' },
+      { title: '项目内写入 skill contract', command: 'licell skills init codex', reason: '默认把 agent-facing skill 文件与 AGENTS 入口写入当前项目。' },
       { title: '需要全局生效时显式指定', command: 'licell skills init codex --global', reason: '避免 project/global scope 被误判。' },
-      { title: '检查写入结果', reason: '确认 skills 文件与 AGENTS 入口写入到了预期目录。' },
+      { title: '检查写入结果', reason: '确认 skill contract 文件与 AGENTS 入口写入到了预期目录。' },
       { title: '读取共享命令目录', command: 'licell catalog --output json', reason: '让 Agent 统一通过 catalog / help / JSON output 理解 licell。' }
     ],
     result: {
-      summary: '返回 skills 脚手架写入结果。',
+      summary: '返回 agent-facing skill contract 的写入结果。',
       outcomeKey: 'writtenFiles',
       fields: [
         { name: 'stage', description: '固定为 `skills`。', required: true },
@@ -100,7 +101,7 @@ const skillsInitCommand = defineCliCommand({
       ]
     },
     agentTips: [
-      'skills 只负责把 licell 的使用模式注入给 Agent；命令发现与执行统一走 `licell catalog --output json`、`licell <command> --help --output json`、`licell ... --output json`。',
+      'skill contract 只负责把 licell 的使用契约注入给 Agent；命令发现与执行统一走 `licell catalog --output json`、`licell <command> --help --output json`、`licell ... --output json`。',
       '自动化调用时，project/global scope 最好显式传清楚，不要依赖外部包装命令的默认行为。'
     ]
   }
@@ -158,7 +159,7 @@ export function registerSkillsCommands(cli: CAC) {
           const selected = await select({
             message: '选择目标 Agent:',
             options: [
-              { value: 'claude', label: 'Claude Code (.claude/skills/ + AGENTS.md)' },
+              { value: 'claude', label: 'Claude Code (.claude/skills/licell/SKILL.md + AGENTS.md)' },
               { value: 'codex', label: 'OpenAI Codex (codex.md + AGENTS.md)' }
             ]
           });
@@ -174,7 +175,7 @@ export function registerSkillsCommands(cli: CAC) {
         const scope: SkillsScope = options.global ? 'global' : 'project';
 
         const s = createSpinner();
-        s.start(`正在生成 ${scope === 'global' ? '全局' : '项目'} ${agent} skills...`);
+        s.start(`正在写入 ${scope === 'global' ? '全局' : '项目'} ${agent} skill contract...`);
 
         const result = await executeSkillsInit({
           agent,
@@ -183,7 +184,7 @@ export function registerSkillsCommands(cli: CAC) {
           force: options.force
         });
 
-        s.stop(pc.green('✅ Skills 生成完成'));
+        s.stop(pc.green('✅ Skill contract 写入完成'));
 
         console.log(`agent:    ${pc.cyan(agent)}`);
         console.log(`scope:    ${pc.cyan(scope)}`);
@@ -229,7 +230,7 @@ export const skillsCommandModule = defineCommandModule({
   register: registerSkillsCommands,
   namespaces: {
     skills: {
-      summary: '为 Claude / Codex 生成 licell skills 与 AGENTS 接入文件。',
+      summary: '为 Claude / Codex 写入 licell 的 agent-facing skill contract 与项目 AGENTS 入口。',
       examples: ['licell skills init codex', 'licell skills init codex --global', 'licell skills init claude']
     }
   },
