@@ -102,6 +102,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     permissions:
+      actions: read
       contents: write
     steps:
       - name: Checkout
@@ -131,11 +132,11 @@ jobs:
           fi
 
       - name: Download artifacts
-        uses: actions/download-artifact@v5
-        with:
-          pattern: licell-*
-          path: dist-release
-          merge-multiple: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run download "${{ github.run_id }}" --pattern 'licell-*' --dir dist-release
+          find dist-release -mindepth 2 -type f -name '*.tar.gz' -exec mv {} dist-release/ \;
 
       - name: Generate checksums
         run: |
