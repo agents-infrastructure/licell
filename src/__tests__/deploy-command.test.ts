@@ -14,6 +14,7 @@ const {
   getProjectMock,
   getWorkspaceMock,
   getAuthMock,
+  emitCliErrorMock,
   setProjectMock,
   updateLicellComponentStateMock
 } = vi.hoisted(() => ({
@@ -29,6 +30,7 @@ const {
   getProjectMock: vi.fn(),
   getWorkspaceMock: vi.fn(),
   getAuthMock: vi.fn(),
+  emitCliErrorMock: vi.fn(),
   setProjectMock: vi.fn(),
   updateLicellComponentStateMock: vi.fn()
 }));
@@ -114,7 +116,7 @@ vi.mock('../utils/cli-shared', () => ({
 }));
 
 vi.mock('../utils/output', () => ({
-  emitCliError: vi.fn(),
+  emitCliError: emitCliErrorMock,
   emitCliEvent: vi.fn(),
   emitCommandEvent: vi.fn(),
   emitCommandResult: emitCommandResultMock,
@@ -150,6 +152,7 @@ describe('deploy command json result', () => {
     getProjectMock.mockReset();
     getWorkspaceMock.mockReset();
     getAuthMock.mockReset();
+    emitCliErrorMock.mockReset();
     setProjectMock.mockReset();
     updateLicellComponentStateMock.mockReset();
 
@@ -204,6 +207,11 @@ describe('deploy command json result', () => {
     const cli = await createCli();
     await getCommandAction(cli, 'deploy')({ component: 'web' });
 
+    expect(ensureAuthCapabilityPreflightMock).toHaveBeenCalledWith(expect.objectContaining({
+      requiredCapabilities: expect.arrayContaining(['oss', 'cdn'])
+    }));
+    const [preflightInput] = ensureAuthCapabilityPreflightMock.mock.calls.at(0) as unknown as [{ requiredCapabilities?: string[] }];
+    expect(preflightInput?.requiredCapabilities).not.toContain('logs');
     expect(executeStaticDeployMock).toHaveBeenCalledTimes(1);
     expect(emitCommandResultMock).toHaveBeenCalledWith(expect.objectContaining({
       type: 'static',
@@ -215,6 +223,34 @@ describe('deploy command json result', () => {
       cdnRefreshMode: 'entrypoints',
       cdnRefreshTaskIds: ['refresh-task-1'],
       healthCheckLogs: ['✅ 固定域名可访问 (200 https://demo-web.bazhuayu.xyz/)']
+    }));
+  });
+
+  it('requires logs capability for static preview deploys because they create FC proxy functions', async () => {
+    resolveDeployContextMock.mockResolvedValueOnce({
+      component: 'web',
+      appName: 'demo-web',
+      type: 'static',
+      releaseTarget: undefined,
+      cliDomain: undefined,
+      projectDomain: undefined,
+      domainSuffix: 'bazhuayu.xyz',
+      enableCdn: true,
+      cdnRefreshMode: 'entrypoints',
+      useVpc: false,
+      enableSSL: true,
+      forceSslRenew: false,
+      preview: true,
+      interactiveTTY: false,
+      auth: { region: 'cn-hangzhou' },
+      project: { envs: {}, region: 'cn-hangzhou' }
+    });
+
+    const cli = await createCli();
+    await getCommandAction(cli, 'deploy')({ component: 'web', preview: true });
+
+    expect(ensureAuthCapabilityPreflightMock).toHaveBeenCalledWith(expect.objectContaining({
+      requiredCapabilities: expect.arrayContaining(['oss', 'fc', 'logs'])
     }));
   });
 
@@ -238,5 +274,46 @@ describe('deploy command json result', () => {
       ok: true,
       projectRoot: '/repo/apps/api'
     }));
+  });
+
+  it('resolves deploy check component option to the selected workspace component', async () => {
+    getProjectMock.mockReturnValue({ runtime: 'nodejs22', entry: 'src/server.ts' });
+    getWorkspaceMock.mockReturnValue({
+      mode: 'workspace',
+      rootDir: '/repo',
+      componentName: 'agent-api',
+      componentPath: 'services/agent-api'
+    });
+
+    const cli = await createCli();
+    await getCommandAction(cli, 'deploy check')({ component: 'agent-api' });
+
+    expect(getProjectMock).toHaveBeenCalledWith({ component: 'agent-api' });
+    expect(getWorkspaceMock).toHaveBeenCalledWith({ component: 'agent-api' });
+    expect(runFcApiDeployPrecheckMock).toHaveBeenCalledWith(expect.objectContaining({
+      runtime: 'nodejs22',
+      entry: 'src/server.ts',
+      projectRoot: '/repo/services/agent-api',
+      checkDockerDaemon: false
+    }));
+  });
+
+  it('fails deploy check when the explicit workspace component is missing', async () => {
+    getWorkspaceMock.mockReturnValue({
+      mode: 'workspace',
+      rootDir: '/repo',
+      componentName: 'web',
+      componentPath: 'apps/web'
+    });
+
+    const previousExitCode = process.exitCode;
+    process.exitCode = undefined;
+    const cli = await createCli();
+    await getCommandAction(cli, 'deploy check')({ component: 'agent-api' });
+
+    expect(runFcApiDeployPrecheckMock).not.toHaveBeenCalled();
+    expect(emitCliErrorMock).toHaveBeenCalledWith(expect.any(Error), { stage: 'deploy.check' });
+    expect(process.exitCode).toBe(1);
+    process.exitCode = previousExitCode;
   });
 });

@@ -127,7 +127,12 @@ export const LICELL_POLICY_ACTIONS = [
   'cr:CreateNamespace',
   'cr:CreateRepository',
   'cr:GetAuthorizationToken',
-  // SLS (Log Service, read-only)
+  // SLS (Log Service)
+  'log:ListProject',
+  'log:ListLogStores',
+  'log:CreateProject',
+  'log:CreateLogStore',
+  'log:CreateIndex',
   'log:GetLogs',
   // RAM (pass role to FC for service role + SLR creation)
   'ram:GetUser',

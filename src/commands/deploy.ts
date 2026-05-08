@@ -51,13 +51,20 @@ const deployCheckCommand = defineCliCommand({
   rawName: 'deploy check',
   description: '本地预检 FC API 入口与 runtime 约束（建议 deploy 前执行）',
   options: [
+    { rawName: '--component <name>', description: '在 workspace / monorepo 根目录显式选择要预检的 component' },
     { rawName: '--runtime <runtime>', description: 'FC runtime：nodejs20/nodejs22/python3.12/python3.13/docker' },
     { rawName: '--entry <entry>', description: '入口文件路径（默认按 runtime 推断）' },
     { rawName: '--docker-daemon', description: 'runtime=docker 时额外检测本机 Docker daemon 可用性' }
   ],
   descriptor: {
     title: 'Precheck FC API deploy readiness',
-    examples: ['licell deploy check', 'licell deploy check --output json']
+    examples: ['licell deploy check', 'licell deploy check --component api --output json', 'licell deploy check --output json'],
+    optionInsights: {
+      '--component': {
+        whenToUse: '在 workspace / monorepo 根目录只想预检某个 API 或 task component 时使用。',
+        cautions: ['component 名称必须已经存在于 workspace `.licell/project.json` 中。']
+      }
+    }
   }
 });
 
@@ -241,6 +248,7 @@ interface DeploySpecOptions {
 }
 
 interface DeployCheckOptions {
+  component?: string;
   runtime?: string;
   entry?: string;
   dockerDaemon?: boolean;
@@ -255,22 +263,28 @@ function resolveDeployRequiredCapabilities(ctx: {
   cliDomain?: string;
   domainSuffix?: string;
   enableCdn: boolean;
+  preview?: boolean;
 }): AuthCapability[] {
   const capabilities: AuthCapability[] = [];
   if (ctx.type === 'api' || ctx.type === 'task') {
     capabilities.push('fc');
+    capabilities.push('logs');
     const runtime = (ctx.cliRuntime || ctx.projectRuntime || ctx.envRuntime || '').trim().toLowerCase();
     if (runtime === 'docker') capabilities.push('cr');
     if (ctx.useVpc) capabilities.push('vpc');
   } else {
     capabilities.push('oss');
+    if (ctx.preview) {
+      capabilities.push('fc');
+      capabilities.push('logs');
+    }
   }
   if (ctx.cliDomain || ctx.domainSuffix) capabilities.push('dns');
   if (ctx.enableCdn) capabilities.push('cdn');
   return [...new Set(capabilities)];
 }
 
-function resolveApiRuntimeForSpec(input: string | undefined) {
+function resolveApiRuntimeForSpec(input: string | undefined, component?: string) {
   if (input && input.trim()) {
     const parsed = parseDeployRuntimeOption(input);
     if (parsed.deployTypeHint === 'static') {
@@ -279,7 +293,7 @@ function resolveApiRuntimeForSpec(input: string | undefined) {
     if (parsed.runtime) return parsed.runtime;
     throw new Error(`无法解析 runtime: ${input}`);
   }
-  const projectRuntime = tryNormalizeFcRuntime(Config.getProject().runtime);
+  const projectRuntime = tryNormalizeFcRuntime(Config.getProject(component ? { component } : undefined).runtime);
   const envRuntime = tryNormalizeFcRuntime(readLicellEnv(process.env, 'FC_RUNTIME'));
   return projectRuntime || envRuntime || DEFAULT_FC_RUNTIME;
 }
@@ -345,10 +359,15 @@ function printDeploySpec(runtimeInput: string | undefined, includeAll: boolean |
 }
 
 function runDeployCheck(options: DeployCheckOptions) {
-  const runtime = resolveApiRuntimeForSpec(options.runtime);
+  const component = options.component?.trim() || undefined;
+  const workspaceSnapshot = Config.getWorkspace(component ? { component } : undefined);
+  if (component && workspaceSnapshot?.mode === 'workspace' && workspaceSnapshot.componentName !== component) {
+    throw new Error(`workspace 中未找到 component: ${component}`);
+  }
+  const project = Config.getProject(component ? { component } : undefined);
+  const runtime = resolveApiRuntimeForSpec(options.runtime, component);
   const runtimeSpec = getFcApiRuntimeDeploySpec(runtime);
-  const entry = options.entry?.trim() || runtimeSpec.defaultEntry || undefined;
-  const workspaceSnapshot = Config.getWorkspace();
+  const entry = options.entry?.trim() || project.entry || runtimeSpec.defaultEntry || undefined;
   const projectRoot = workspaceSnapshot?.mode === 'workspace' && workspaceSnapshot.componentPath
     ? resolve(workspaceSnapshot.rootDir, workspaceSnapshot.componentPath)
     : process.cwd();

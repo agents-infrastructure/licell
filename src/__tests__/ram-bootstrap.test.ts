@@ -35,7 +35,13 @@ describe('ram bootstrap helpers', () => {
       'fc:DeleteTrigger',
       'fc:DeleteAlias',
       'vpc:DescribeZones',
-      'vpc:CreateVpc'
+      'vpc:CreateVpc',
+      'log:CreateProject',
+      'log:CreateLogStore',
+      'log:CreateIndex',
+      'log:ListProject',
+      'log:ListLogStores',
+      'log:GetLogs'
     ]));
   });
 

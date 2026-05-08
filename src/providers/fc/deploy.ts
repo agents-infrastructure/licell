@@ -8,6 +8,7 @@ import { Config, type ProjectConfig, type ProjectNetworkConfig, type ProjectReso
 import { isConflictError, isNotFoundError, isTransientError } from '../../utils/alicloud-error';
 import { formatErrorMessage } from '../../utils/errors';
 import { createFcClient } from './client';
+import { ensureDefaultFcSlsLogConfig } from '../logs';
 import { computeDeploymentMarker, LICELL_INTERNAL_DEPLOY_MARKER_ENV } from './deployment-probe';
 import { ensureFunctionHttpUrl } from './http';
 import { validateRuntimeEntrypoint } from './runtime-utils';
@@ -149,6 +150,21 @@ function normalizeCustomContainerConfig(input: unknown) {
   };
 }
 
+function normalizeLogConfig(input: unknown) {
+  const config = input as {
+    project?: unknown;
+    logstore?: unknown;
+    enableRequestMetrics?: unknown;
+    enableInstanceMetrics?: unknown;
+  } | null | undefined;
+  return {
+    project: typeof config?.project === 'string' ? config.project : undefined,
+    logstore: typeof config?.logstore === 'string' ? config.logstore : undefined,
+    enableRequestMetrics: typeof config?.enableRequestMetrics === 'boolean' ? config.enableRequestMetrics : undefined,
+    enableInstanceMetrics: typeof config?.enableInstanceMetrics === 'boolean' ? config.enableInstanceMetrics : undefined
+  };
+}
+
 function buildComparableFunctionState(body: Record<string, unknown>) {
   return {
     runtime: typeof body.runtime === 'string' ? body.runtime : undefined,
@@ -161,7 +177,8 @@ function buildComparableFunctionState(body: Record<string, unknown>) {
     environmentVariables: normalizeStringRecord(body.environmentVariables),
     vpcConfig: normalizeVpcConfig(body.vpcConfig),
     customRuntimeConfig: normalizeCustomRuntimeConfig(body.customRuntimeConfig),
-    customContainerConfig: normalizeCustomContainerConfig(body.customContainerConfig)
+    customContainerConfig: normalizeCustomContainerConfig(body.customContainerConfig),
+    logConfig: normalizeLogConfig(body.logConfig)
   };
 }
 
@@ -179,7 +196,8 @@ function buildObservedFunctionState(fn: $FC.Function) {
     environmentVariables: normalizeStringRecord(fn.environmentVariables),
     vpcConfig: normalizeVpcConfig((fn as { vpcConfig?: unknown }).vpcConfig),
     customRuntimeConfig: normalizeCustomRuntimeConfig((fn as { customRuntimeConfig?: unknown }).customRuntimeConfig),
-    customContainerConfig: normalizeCustomContainerConfig((fn as { customContainerConfig?: unknown }).customContainerConfig)
+    customContainerConfig: normalizeCustomContainerConfig((fn as { customContainerConfig?: unknown }).customContainerConfig),
+    logConfig: normalizeLogConfig((fn as { logConfig?: unknown }).logConfig)
   };
 }
 
@@ -382,6 +400,7 @@ export async function deployFC(appName: string, entryFile: string, runtime: FcRu
   }
   const targetNetwork = options.network === undefined ? project.network : options.network || undefined;
   const vpcConfig = await resolveFunctionVpcConfig(targetNetwork);
+  const logConfig = await ensureDefaultFcSlsLogConfig();
 
   let code: { zipFile: string } | undefined;
   if (!runtimeConfig.skipCodePackaging) {
@@ -411,7 +430,8 @@ export async function deployFC(appName: string, entryFile: string, runtime: FcRu
     diskSize: DEFAULT_DISK_SIZE,
     timeout,
     environmentVariables,
-    vpcConfig
+    vpcConfig,
+    logConfig
   };
   updateBody.cpu = cpu;
   if (resources.instanceConcurrency !== undefined) updateBody.instanceConcurrency = resources.instanceConcurrency;

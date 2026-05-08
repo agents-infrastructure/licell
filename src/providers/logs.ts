@@ -5,6 +5,8 @@ import pc from 'picocolors';
 import { sleep } from '../utils/runtime';
 import { resolveSdkCtor } from '../utils/sdk';
 import { formatErrorMessage } from '../utils/errors';
+import { isConflictError, isNotFoundError, isTransientError } from '../utils/alicloud-error';
+import { getFunctionInfo } from './fc/function-ops';
 
 const SlsClientCtor = resolveSdkCtor<SLS>(SLS, '@alicloud/sls20201230');
 const DEFAULT_FC_LOGSTORE = 'function-log';
@@ -18,6 +20,7 @@ const DEFAULT_SLS_CONNECT_TIMEOUT_MS = 15_000;
 const DEFAULT_SLS_READ_TIMEOUT_MS = 180_000;
 const MAX_SLS_PROJECT_PAGES = 5;
 const SLS_PROJECT_PAGE_SIZE = 100;
+const DEFAULT_SLS_INDEX_TOKENS = [',', ' ', "'", '"', ';', '=', '(', ')', '[', ']', '{', '}', '?', '@', '&', '<', '>', '/', ':', '\n', '\t'] as const;
 const defaultFcSlsTargetCache = new Map<string, Promise<SlsTailTarget[]>>();
 
 export function sanitizeQueryValue(value: string): string {
@@ -64,6 +67,13 @@ export interface SlsTailTarget {
   project: string;
   logstore: string;
   topic?: string;
+}
+
+export interface FcDefaultLogConfig {
+  project: string;
+  logstore: string;
+  enableRequestMetrics: boolean;
+  enableInstanceMetrics: boolean;
 }
 
 export interface SlsResolvedTimeRange {
@@ -357,6 +367,103 @@ function createSlsClient(auth: Pick<AuthConfig, 'ak' | 'sk'>, region: string) {
   }));
 }
 
+async function createSlsProjectIfMissing(client: SLS, project: string) {
+  try {
+    await client.createProject(new $SLS.CreateProjectRequest({
+      projectName: project,
+      description: 'Licell default Function Compute logs'
+    }));
+  } catch (err: unknown) {
+    if (isConflictError(err)) return;
+    throw err;
+  }
+}
+
+async function createSlsLogstoreIfMissing(client: SLS, project: string, logstore: string) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      await client.createLogStore(project, new $SLS.CreateLogStoreRequest({
+        logstoreName: logstore,
+        ttl: 30,
+        shardCount: 2,
+        autoSplit: true,
+        maxSplitShard: 16
+      }));
+      return;
+    } catch (err: unknown) {
+      if (isConflictError(err)) return;
+      if ((isNotFoundError(err) || isTransientError(err)) && attempt < 2) {
+        await sleep(1000 * (attempt + 1));
+        continue;
+      }
+      throw err;
+    }
+  }
+}
+
+function buildDefaultFcSlsIndexRequest() {
+  const textField = new $SLS.KeysValue({
+    type: 'text',
+    token: [...DEFAULT_SLS_INDEX_TOKENS],
+    caseSensitive: false,
+    chn: false,
+    docValue: true
+  });
+  const keywordField = new $SLS.KeysValue({
+    type: 'text',
+    token: [...DEFAULT_SLS_INDEX_TOKENS],
+    caseSensitive: false,
+    chn: false,
+    docValue: true
+  });
+  return new $SLS.CreateIndexRequest({
+    line: new $SLS.CreateIndexRequestLine({
+      token: [...DEFAULT_SLS_INDEX_TOKENS],
+      caseSensitive: false,
+      chn: false
+    }),
+    keys: {
+      functionName: keywordField,
+      qualifier: keywordField,
+      requestId: keywordField,
+      level: keywordField,
+      message: textField,
+      content: textField
+    }
+  });
+}
+
+async function createSlsIndexIfMissing(client: SLS, project: string, logstore: string) {
+  try {
+    await client.createIndex(project, logstore, buildDefaultFcSlsIndexRequest());
+  } catch (err: unknown) {
+    if (isConflictError(err)) return;
+    throw err;
+  }
+}
+
+export async function ensureDefaultFcSlsLogConfig(
+  auth: Pick<AuthConfig, 'accountId' | 'ak' | 'sk' | 'region'> = Config.requireAuth()
+): Promise<FcDefaultLogConfig> {
+  const region = auth.region;
+  const project = resolveDefaultFcSlsProject({ accountId: auth.accountId, region });
+  const logstore = DEFAULT_FC_LOGSTORE;
+  const client = createSlsClient(auth, region);
+
+  await createSlsProjectIfMissing(client, project);
+  await createSlsLogstoreIfMissing(client, project, logstore);
+  await createSlsIndexIfMissing(client, project, logstore);
+
+  defaultFcSlsTargetCache.delete(`${auth.accountId}:${region}`);
+
+  return {
+    project,
+    logstore,
+    enableRequestMetrics: true,
+    enableInstanceMetrics: true
+  };
+}
+
 async function fetchSlsLogs(
   client: SLS,
   target: SlsTailTarget,
@@ -376,6 +483,20 @@ async function fetchSlsLogs(
     })
   );
   return (response.body as LogEntry[] | undefined) || [];
+}
+
+async function resolveFunctionLogTarget(functionName: string): Promise<SlsTailTarget | undefined> {
+  try {
+    const fn = await getFunctionInfo(functionName);
+    const logConfig = (fn as { logConfig?: { project?: unknown; logstore?: unknown } }).logConfig;
+    const project = toOptionalString(logConfig?.project);
+    const logstore = toOptionalString(logConfig?.logstore);
+    if (!project || !logstore) return undefined;
+    const auth = Config.requireAuth();
+    return makeSlsTarget(auth.region, project, logstore);
+  } catch {
+    return undefined;
+  }
 }
 
 export async function tailSlsLogs(options: SlsTailOptions = {}): Promise<SlsTailOnceResult | void> {
@@ -508,7 +629,11 @@ export async function tailSlsLogs(options: SlsTailOptions = {}): Promise<SlsTail
 }
 
 export async function tailLogs(appName: string, options: TailLogsOptions = {}) {
+  const target = await resolveFunctionLogTarget(appName);
   return tailSlsLogs({
+    project: target?.project,
+    logstore: target?.logstore,
+    region: target?.region,
     functionName: appName,
     once: options.once,
     windowSeconds: options.windowSeconds,

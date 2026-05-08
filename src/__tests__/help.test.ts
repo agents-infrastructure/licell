@@ -125,6 +125,19 @@ describe('help utils', () => {
     expect(doc?.text).toContain('\n  - `requestedMode` · 请求的创建模式：`classic` 或 `serverless`。');
   });
 
+  it('builds deploy check help with workspace component selection', () => {
+    const doc = buildHelpDocument({
+      argv: ['node', 'src/cli.ts', 'deploy', 'check', '--help'],
+      version: VERSION
+    });
+
+    expect(doc?.scope).toBe('command');
+    expect(doc?.key).toBe('deploy check');
+    expect(doc?.options.some((option) => option.primaryFlag === '--component')).toBe(true);
+    expect(doc?.examples).toContain('licell deploy check --component api --output json');
+    expect(doc?.text).toContain('--component <name>');
+  });
+
   it('builds nested namespace help for oss object', () => {
     const doc = buildHelpDocument({
       argv: ['node', 'src/cli.ts', 'oss', 'object', '--help'],

@@ -5,6 +5,7 @@ import { isAccessDeniedError } from '../../utils/alicloud-error';
 import { withRetry } from '../../utils/retry';
 import { createFcClient } from './client';
 import { packageCodeAsBase64 } from './deploy';
+import { ensureDefaultFcSlsLogConfig } from '../logs';
 import { mkdirSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -230,6 +231,7 @@ async function deployWithRoleFallback(
   fcRole: string,
   auth: { ak: string; sk: string; accountId: string; region: string }
 ): Promise<string> {
+  const logConfig = await ensureDefaultFcSlsLogConfig(auth);
   // Build base config shared by both attempts
   const baseConfig = {
     runtime: 'nodejs20' as const,
@@ -239,6 +241,7 @@ async function deployWithRoleFallback(
     cpu: DEFAULT_CPU,
     diskSize: 512,
     instanceConcurrency: 10,
+    logConfig,
     code: new $FC.InputCodeLocation({ zipFile: codeBase64 })
   };
 

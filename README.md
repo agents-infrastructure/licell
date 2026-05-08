@@ -650,7 +650,7 @@ licell e2e cleanup <runId>
 | 命令 | 说明 | 关键选项 |
 |------|------|----------|
 | `licell deploy` | 一键极速打包部署 | `--component`, `--type`, `--entry` |
-| `licell deploy check` | 本地预检 FC API 入口与 runtime 约束（建议 deploy 前执行） | `--runtime`, `--entry`, `--docker-daemon` |
+| `licell deploy check` | 本地预检 FC API 入口与 runtime 约束（建议 deploy 前执行） | `--component`, `--runtime`, `--entry` |
 | `licell deploy plan` | 基于 `.licell/project.json` 生成部署计划（不执行云端变更） | `--component`, `--include`, `--exclude` |
 | `licell deploy spec [runtime]` | 查看 FC API 部署规格（给 Agent/开发者在 deploy 前对照） | `--all` |
 | `licell task config [name]` | 查看任务函数的异步调用配置 | `--component`, `--target` |

@@ -50,7 +50,7 @@ const CAPABILITY_ACTIONS: Record<AuthCapability, string[]> = {
   cdn: ['cdn:DescribeUserDomains', 'cdn:AddCdnDomain', 'cdn:BatchSetCdnDomainConfig'],
   vpc: ['vpc:DescribeVpcs', 'vpc:CreateVpc', 'vpc:CreateVSwitch'],
   cr: ['cr:ListInstance', 'cr:CreateNamespace', 'cr:CreateRepository'],
-  logs: ['log:GetLogs']
+  logs: ['log:GetLogs', 'log:ListProject', 'log:ListLogStores', 'log:CreateProject', 'log:CreateLogStore', 'log:CreateIndex']
 };
 
 const preflightPrompted = new Set<string>();

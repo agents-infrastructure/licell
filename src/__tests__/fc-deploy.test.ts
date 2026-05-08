@@ -12,6 +12,7 @@ const {
   mockPrepareBootFile,
   mockResolveFunctionVpcConfig,
   mockResolveRuntimeConfig,
+  mockEnsureDefaultFcSlsLogConfig,
   mockCallFcWithGuard,
   mockWaitForFcFunctionReadable
 } = vi.hoisted(() => ({
@@ -22,6 +23,7 @@ const {
   mockPrepareBootFile: vi.fn(),
   mockResolveFunctionVpcConfig: vi.fn(),
   mockResolveRuntimeConfig: vi.fn(),
+  mockEnsureDefaultFcSlsLogConfig: vi.fn(),
   mockCallFcWithGuard: vi.fn(),
   mockWaitForFcFunctionReadable: vi.fn()
 }));
@@ -53,6 +55,10 @@ vi.mock('../providers/fc/runtime', () => ({
   resolveRuntimeConfig: mockResolveRuntimeConfig
 }));
 
+vi.mock('../providers/logs', () => ({
+  ensureDefaultFcSlsLogConfig: mockEnsureDefaultFcSlsLogConfig
+}));
+
 vi.mock('../providers/fc/request-guard', () => ({
   callFcWithGuard: mockCallFcWithGuard,
   isFcOperationTimeoutError: (err: unknown) => Boolean(err && typeof err === 'object' && (err as { name?: unknown }).name === 'FcOperationTimeoutError'),
@@ -67,6 +73,12 @@ const expectedDeploymentMarker = computeDeploymentMarker(JSON.stringify({
   customRuntimeConfig: null,
   customContainerConfig: null
 }));
+const expectedLogConfig = {
+  project: 'aliyun-fc-cn-hangzhou-123456',
+  logstore: 'function-log',
+  enableRequestMetrics: true,
+  enableInstanceMetrics: true
+};
 
 describe('deployFC', () => {
   let originalCwd = '';
@@ -86,6 +98,7 @@ describe('deployFC', () => {
     mockValidateRuntimeEntrypoint.mockReturnValue(undefined);
     mockPrepareBootFile.mockResolvedValue(join(workdir, '.licell/dist/index.mjs'));
     mockResolveFunctionVpcConfig.mockResolvedValue(undefined);
+    mockEnsureDefaultFcSlsLogConfig.mockResolvedValue(expectedLogConfig);
     mockResolveRuntimeConfig.mockResolvedValue({
       runtime: 'nodejs22',
       handler: 'index.handler',
@@ -147,6 +160,47 @@ describe('deployFC', () => {
     expect(mockWaitForFcFunctionReadable).toHaveBeenCalledTimes(1);
   });
 
+  it('enables default FC SLS logs when creating a function', async () => {
+    mockCallFcWithGuard.mockImplementation(async (_client: unknown, methodName: string, args: any[]) => {
+      if (methodName === 'getFunction') {
+        const err = new Error('function missing');
+        (err as Error & { code?: string }).code = 'FunctionNotFound';
+        throw err;
+      }
+      if (methodName === 'createFunction') {
+        const createBody = args[0]?.body as Record<string, unknown>;
+        expect(createBody.logConfig).toEqual(expectedLogConfig);
+        return { body: {} };
+      }
+      throw new Error(`unexpected method: ${methodName}`);
+    });
+
+    await deployFC('demo-app', 'src/index.ts', 'nodejs22');
+
+    expect(mockEnsureDefaultFcSlsLogConfig).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps default FC SLS logs enabled when updating a function', async () => {
+    mockCallFcWithGuard.mockImplementation(async (_client: unknown, methodName: string, args: any[]) => {
+      if (methodName === 'getFunction') {
+        return {
+          body: {
+            functionName: 'demo-app',
+            lastModifiedTime: '1'
+          }
+        };
+      }
+      if (methodName === 'updateFunction') {
+        const updateBody = args[1]?.body as Record<string, unknown>;
+        expect(updateBody.logConfig).toEqual(expectedLogConfig);
+        return { body: {} };
+      }
+      throw new Error(`unexpected method: ${methodName}`);
+    });
+
+    await deployFC('demo-app', 'src/index.ts', 'nodejs22');
+  });
+
   it('recovers createFunction EPIPE by reading converged function state', async () => {
     let readableCalls = 0;
     mockCallFcWithGuard.mockImplementation(async (_client: unknown, methodName: string) => {
@@ -177,7 +231,8 @@ describe('deployFC', () => {
           environmentVariables: {
             NODE_ENV: 'production',
             [LICELL_INTERNAL_DEPLOY_MARKER_ENV]: expectedDeploymentMarker
-          }
+          },
+          logConfig: expectedLogConfig
         };
       }
       return {
@@ -227,7 +282,8 @@ describe('deployFC', () => {
         environmentVariables: {
           NODE_ENV: 'production',
           [LICELL_INTERNAL_DEPLOY_MARKER_ENV]: expectedDeploymentMarker
-        }
+        },
+        logConfig: expectedLogConfig
       };
     }
     return {
@@ -243,7 +299,8 @@ describe('deployFC', () => {
         environmentVariables: {
           NODE_ENV: 'production',
           [LICELL_INTERNAL_DEPLOY_MARKER_ENV]: expectedDeploymentMarker
-        }
+        },
+        logConfig: expectedLogConfig
       };
     });
 

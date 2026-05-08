@@ -1,4 +1,8 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+const mocks = vi.hoisted(() => ({
+  getFunctionInfo: vi.fn()
+}));
 import {
   appendSlsSearchCondition,
   buildFunctionLogQuery,
@@ -7,6 +11,55 @@ import {
   resolveSlsTimeRange,
   sanitizeQueryValue
 } from '../providers/logs';
+
+vi.mock('../providers/fc/function-ops', () => ({
+  getFunctionInfo: mocks.getFunctionInfo
+}));
+
+vi.mock('../utils/config', () => ({
+  Config: {
+    requireAuth: vi.fn(() => ({
+      accountId: '123456',
+      ak: 'ak',
+      sk: 'sk',
+      region: 'cn-hangzhou'
+    }))
+  }
+}));
+
+vi.mock('@alicloud/sls20201230', () => {
+  class ConfigValue {
+    constructor(input?: Record<string, unknown>) {
+      Object.assign(this, input || {});
+    }
+  }
+
+  class MockSlsClient {
+    static getLogsMock = vi.fn();
+
+    getLogs(project: string, logstore: string, request: { query?: string }) {
+      return MockSlsClient.getLogsMock(project, logstore, request);
+    }
+  }
+
+  return {
+    default: MockSlsClient,
+    ListLogStoresRequest: ConfigValue,
+    ListProjectRequest: ConfigValue,
+    CreateProjectRequest: ConfigValue,
+    CreateLogStoreRequest: ConfigValue,
+    CreateIndexRequest: ConfigValue,
+    CreateIndexRequestLine: ConfigValue,
+    GetLogsRequest: ConfigValue,
+    KeysValue: ConfigValue
+  };
+});
+
+beforeEach(async () => {
+  mocks.getFunctionInfo.mockReset();
+  const sls = await import('@alicloud/sls20201230');
+  (sls.default as unknown as { getLogsMock: ReturnType<typeof vi.fn> }).getLogsMock.mockReset();
+});
 
 describe('sanitizeQueryValue', () => {
   it('returns normal string unchanged', () => {
@@ -186,5 +239,34 @@ describe('resolveDefaultFcSlsProject', () => {
   it('formats project name from region and account id', () => {
     expect(resolveDefaultFcSlsProject({ accountId: '123456', region: 'cn-hangzhou' }))
       .toBe('aliyun-fc-cn-hangzhou-123456');
+  });
+});
+
+describe('tailLogs', () => {
+  it('queries the function configured logConfig before default discovery', async () => {
+    mocks.getFunctionInfo.mockResolvedValue({
+      functionName: 'demo-api',
+      logConfig: {
+        project: 'aliyun-fc-cn-hangzhou-123456',
+        logstore: 'function-log'
+      }
+    });
+    const sls = await import('@alicloud/sls20201230');
+    const getLogsMock = (sls.default as unknown as { getLogsMock: ReturnType<typeof vi.fn> }).getLogsMock;
+    getLogsMock.mockResolvedValue({
+      body: [
+        { __time__: '1700000000', message: 'hello', functionName: 'demo-api' }
+      ]
+    });
+
+    const { tailLogs } = await import('../providers/logs');
+    const result = await tailLogs('demo-api', { once: true, silent: true, windowSeconds: 10 });
+
+    expect(getLogsMock).toHaveBeenCalledWith(
+      'aliyun-fc-cn-hangzhou-123456',
+      'function-log',
+      expect.objectContaining({ query: 'functionName: "demo-api"' })
+    );
+    expect(result && 'logs' in result ? result.logs : []).toHaveLength(1);
   });
 });
