@@ -134,12 +134,38 @@ function createCompatRequestModel(methodName: string) {
   };
 }
 
+const FC_METHODS_WITH_RESOURCE_NAME_AND_REQUEST = new Set([
+  'deleteAsyncInvokeConfig',
+  'deleteConcurrencyConfig',
+  'deleteCustomDomain',
+  'deleteFunction',
+  'deleteProvisionConfig',
+  'deleteScalingConfig',
+  'getAsyncInvokeConfig',
+  'getConcurrencyConfig',
+  'getCustomDomain',
+  'getFunction',
+  'getFunctionCode',
+  'getLayerVersionByArn',
+  'getProvisionConfig',
+  'getScalingConfig'
+]);
+
+function shouldAppendCompatRequestByMethodName(methodName: string, args: unknown[]) {
+  if (!FC_METHODS_WITH_RESOURCE_NAME_AND_REQUEST.has(methodName)) return false;
+  if (args.length !== 1) return false;
+  return typeof args[0] === 'string';
+}
+
 function buildCompatWithOptionsArgs(
   methodName: string,
   method: unknown,
   args: unknown[]
 ) {
   if (typeof method !== 'function') return args;
+  if (shouldAppendCompatRequestByMethodName(methodName, args)) {
+    return [...args, createCompatRequestModel(methodName)];
+  }
   const expectedArgCount = method.length;
   const providedArgCount = args.length + 2; // headers + runtime
   const missingArgCount = expectedArgCount - providedArgCount;

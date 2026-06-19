@@ -107,6 +107,36 @@ describe('fc request guard', () => {
     expect(attempts).toBe(1);
   });
 
+  it('injects the request model for FC resource read APIs even when function length is unreliable', async () => {
+    let attempts = 0;
+    const client = {
+      getCustomDomainWithOptions: async (...args: unknown[]) => {
+        attempts += 1;
+        const [domainName, request] = args as [string, { validate?: () => void }];
+        expect(domainName).toBe('api.example.com');
+        expect(typeof request.validate).toBe('function');
+        return {
+          body: {
+            domainName: 'api.example.com'
+          }
+        };
+      }
+    } as unknown as Record<string, unknown>;
+
+    const response = await callFcWithGuard<$FC.GetCustomDomainResponse>(
+      client,
+      'getCustomDomain',
+      ['api.example.com'],
+      {
+        operation: 'getCustomDomain(api.example.com)',
+        maxAttempts: 1
+      }
+    );
+
+    expect(response.body?.domainName).toBe('api.example.com');
+    expect(attempts).toBe(1);
+  });
+
   it('uses mutation profile with longer connect timeout', async () => {
     let attempts = 0;
     let seenConnectTimeout = 0;
