@@ -369,8 +369,7 @@ export const dockerHandler: RuntimeHandler = {
     dockerLogin(creds.endpoint, creds.userName, creds.password);
     dockerPush(pushUri);
 
-    const vpcUri = buildImageUri(acrInfo, tag, true);
-    return vpcUri;
+    return pushUri;
   },
 
   async resolveConfig(_outdir: string, bootFile: string): Promise<ResolvedRuntimeConfig> {

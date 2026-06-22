@@ -135,8 +135,8 @@ describe('deployFC', () => {
 
     expect(result.url).toBe('https://demo-app.fcapp.run');
     expect(result.deploymentMarker).toMatch(/^[a-f0-9]{24}$/);
-    expect(mockCallFcWithGuard.mock.calls.map((call) => call[1])).toEqual(['getFunction', 'updateFunction']);
-    expect(mockWaitForFcFunctionReadable).toHaveBeenCalledTimes(2);
+    expect(mockCallFcWithGuard.mock.calls.map((call) => call[1])).toEqual(['getFunction', 'getFunction', 'updateFunction']);
+    expect(mockWaitForFcFunctionReadable).toHaveBeenCalledTimes(1);
   });
 
   it('creates a function when it does not exist yet', async () => {
@@ -308,7 +308,18 @@ describe('deployFC', () => {
 
     expect(result.url).toBe('https://demo-app.fcapp.run');
     expect(result.deploymentMarker).toMatch(/^[a-f0-9]{24}$/);
-    expect(mockCallFcWithGuard.mock.calls.map((call) => call[1])).toEqual(['getFunction', 'updateFunction']);
+    expect(mockCallFcWithGuard.mock.calls.map((call) => call[1])).toEqual([
+      'getFunction',
+      'getFunction',
+      'updateFunction',
+      'updateFunction'
+    ]);
+    expect(mockWaitForFcFunctionReadable).toHaveBeenCalledTimes(2);
+    expect(mockWaitForFcFunctionReadable).toHaveBeenCalledWith(
+      'demo-app',
+      {},
+      { profile: 'mutation' }
+    );
   });
 
   it('skips HTTP url provisioning when ensureHttpUrl is disabled', async () => {

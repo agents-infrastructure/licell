@@ -51,6 +51,11 @@ function buildProbeUrl(baseUrl: string, path: string) {
   return `${baseUrl.replace(/\/+$/g, '')}${path}`;
 }
 
+function isSuccessfulProbeStatus(status: number, allowClientError: boolean | undefined) {
+  if (status === 412) return false;
+  return status < (allowClientError === false ? 400 : 500);
+}
+
 function formatProbeError(err: unknown) {
   if (err instanceof Error) {
     if (err.name === 'AbortError') return '请求超时';
@@ -235,7 +240,6 @@ export async function probeHttpHealth(baseUrl: string, options: ProbeHttpHealthO
   const maxAttempts = Math.max(1, Math.floor(options.maxAttempts ?? DEFAULT_MAX_ATTEMPTS));
   const intervalMs = Math.max(0, Math.floor(options.intervalMs ?? DEFAULT_INTERVAL_MS));
   const timeoutMs = Math.max(1000, Math.floor(options.timeoutMs ?? DEFAULT_TIMEOUT_MS));
-  const successStatusUpperBoundExclusive = options.allowClientError === false ? 400 : 500;
   let lastError = '未知错误';
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
@@ -243,7 +247,7 @@ export async function probeHttpHealth(baseUrl: string, options: ProbeHttpHealthO
       const checkedUrl = buildProbeUrl(target, path);
       try {
         const status = await readProbeStatus(checkedUrl, timeoutMs, fetchImpl);
-        if (status < successStatusUpperBoundExclusive) {
+        if (isSuccessfulProbeStatus(status, options.allowClientError)) {
           if (path === '/healthz' && status === 404 && paths.includes('/')) {
             lastError = `GET ${checkedUrl} 返回 404`;
             continue;

@@ -345,6 +345,16 @@ function shouldRetryQualifierRead(err: unknown) {
   return isNotFoundError(err) || isTransientError(err) || isFcOperationTimeoutError(err);
 }
 
+function getFcFunctionState(fn: $FC.Function | undefined): string | undefined {
+  const state = (fn as { state?: unknown } | undefined)?.state;
+  return typeof state === 'string' ? state : undefined;
+}
+
+function isFcFunctionActive(fn: $FC.Function | undefined) {
+  const state = getFcFunctionState(fn);
+  return !state || state.toLowerCase() === 'active';
+}
+
 function resolveFcReadableTimeoutMs(
   config: FcGuardConfig,
   profile: FcRetryProfile,
@@ -391,10 +401,14 @@ export async function waitForFcFunctionReadable(
       );
       const fn = response.body;
       if (fn?.functionName) {
-        trace(operation, 'ready', env);
-        return fn;
+        if (isFcFunctionActive(fn)) {
+          trace(operation, 'ready', env);
+          return fn;
+        }
+        lastError = new Error(`函数 ${functionName} 仍在 ${getFcFunctionState(fn)} 状态`);
+      } else {
+        lastError = new Error(`函数 ${functionName} 未返回有效详情`);
       }
-      lastError = new Error(`函数 ${functionName} 未返回有效详情`);
     } catch (err: unknown) {
       lastError = err;
       if (!shouldRetryQualifierRead(err)) throw err;
