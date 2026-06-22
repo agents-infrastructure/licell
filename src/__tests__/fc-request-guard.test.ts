@@ -107,14 +107,18 @@ describe('fc request guard', () => {
     expect(attempts).toBe(1);
   });
 
-  it('injects the request model for FC resource read APIs even when function length is unreliable', async () => {
+  it('does not inject a request model for older FC SDK read APIs without a request parameter', async () => {
     let attempts = 0;
     const client = {
-      getCustomDomainWithOptions: async (...args: unknown[]) => {
+      async getCustomDomainWithOptions(
+        domainName: string,
+        headers: Record<string, string>,
+        _runtime: unknown
+      ) {
         attempts += 1;
-        const [domainName, request] = args as [string, { validate?: () => void }];
         expect(domainName).toBe('api.example.com');
-        expect(typeof request.validate).toBe('function');
+        expect(headers).toEqual({});
+        expect('validate' in headers).toBe(false);
         return {
           body: {
             domainName: 'api.example.com'
@@ -135,6 +139,62 @@ describe('fc request guard', () => {
 
     expect(response.body?.domainName).toBe('api.example.com');
     expect(attempts).toBe(1);
+  });
+
+  it('injects the request model for FC resource read APIs even when function length is unreliable', async () => {
+    let attempts = 0;
+    const client = {
+      getFunctionWithOptions: async (...args: unknown[]) => {
+        attempts += 1;
+        const [functionName, request] = args as [string, { validate?: () => void }];
+        expect(functionName).toBe('demo-fn');
+        expect(typeof request.validate).toBe('function');
+        return {
+          body: {
+            functionName: 'demo-fn'
+          }
+        };
+      }
+    } as unknown as Record<string, unknown>;
+
+    const response = await callFcWithGuard<$FC.GetFunctionResponse>(
+      client,
+      'getFunction',
+      ['demo-fn'],
+      {
+        operation: 'getFunction(demo-fn)',
+        maxAttempts: 1
+      }
+    );
+
+    expect(response.body?.functionName).toBe('demo-fn');
+    expect(attempts).toBe(1);
+  });
+
+  it('uses a non-enumerable validate fallback for compat request shims', async () => {
+    const client = {
+      async deleteScalingConfigWithOptions(
+        functionName: string,
+        request: { validate?: () => void },
+        _headers: unknown,
+        _runtime: unknown
+      ) {
+        expect(functionName).toBe('demo-fn');
+        expect(typeof request.validate).toBe('function');
+        expect(Object.keys(request)).toEqual([]);
+        return { body: {} };
+      }
+    } as unknown as Record<string, unknown>;
+
+    await callFcWithGuard(
+      client,
+      'deleteScalingConfig',
+      ['demo-fn'],
+      {
+        operation: 'deleteScalingConfig(demo-fn)',
+        maxAttempts: 1
+      }
+    );
   });
 
   it('uses mutation profile with longer connect timeout', async () => {

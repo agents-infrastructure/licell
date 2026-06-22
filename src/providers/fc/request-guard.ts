@@ -119,19 +119,29 @@ function toRequestModelName(methodName: string) {
   return `${pascal}Request`;
 }
 
-function createCompatRequestModel(methodName: string) {
+function getRequestModelCtor(methodName: string) {
   const modelName = toRequestModelName(methodName);
   const maybeCtor = ($FC as Record<string, unknown>)[modelName];
-  if (typeof maybeCtor === 'function') {
+  return typeof maybeCtor === 'function'
+    ? maybeCtor as new (init?: Record<string, unknown>) => unknown
+    : null;
+}
+
+function createCompatRequestModel(methodName: string) {
+  const RequestModelCtor = getRequestModelCtor(methodName);
+  if (RequestModelCtor) {
     try {
-      return new (maybeCtor as new (init?: Record<string, unknown>) => unknown)({});
+      return new RequestModelCtor({});
     } catch {
       // Fall through to the minimal shim below.
     }
   }
-  return {
-    validate() {}
-  };
+  const shim: Record<string, unknown> = {};
+  Object.defineProperty(shim, 'validate', {
+    value() {},
+    enumerable: false
+  });
+  return shim;
 }
 
 const FC_METHODS_WITH_RESOURCE_NAME_AND_REQUEST = new Set([
@@ -151,10 +161,11 @@ const FC_METHODS_WITH_RESOURCE_NAME_AND_REQUEST = new Set([
   'getScalingConfig'
 ]);
 
-function shouldAppendCompatRequestByMethodName(methodName: string, args: unknown[]) {
+function canAppendCompatRequestForUnreliableArity(methodName: string, args: unknown[]) {
   if (!FC_METHODS_WITH_RESOURCE_NAME_AND_REQUEST.has(methodName)) return false;
   if (args.length !== 1) return false;
-  return typeof args[0] === 'string';
+  if (typeof args[0] !== 'string') return false;
+  return Boolean(getRequestModelCtor(methodName));
 }
 
 function buildCompatWithOptionsArgs(
@@ -163,11 +174,11 @@ function buildCompatWithOptionsArgs(
   args: unknown[]
 ) {
   if (typeof method !== 'function') return args;
-  if (shouldAppendCompatRequestByMethodName(methodName, args)) {
-    return [...args, createCompatRequestModel(methodName)];
-  }
   const expectedArgCount = method.length;
   const providedArgCount = args.length + 2; // headers + runtime
+  if (expectedArgCount === 0 && canAppendCompatRequestForUnreliableArity(methodName, args)) {
+    return [...args, createCompatRequestModel(methodName)];
+  }
   const missingArgCount = expectedArgCount - providedArgCount;
   if (missingArgCount <= 0) return args;
 
