@@ -1,6 +1,6 @@
 {
   "name": "licell",
-  "version": "0.14.8",
+  "version": "0.14.9",
   "description": "Deploy and manage Alibaba Cloud Serverless applications — FC, OSS, ACR, DNS, SSL, CDN in one CLI",
   "type": "module",
   "bin": {
