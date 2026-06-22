@@ -36,9 +36,29 @@ vi.mock('@alicloud/sls20201230', () => {
 
   class MockSlsClient {
     static getLogsMock = vi.fn();
+    static createProjectMock = vi.fn();
+    static createLogStoreMock = vi.fn();
+    static createIndexMock = vi.fn();
+    static updateIndexMock = vi.fn();
 
     getLogs(project: string, logstore: string, request: { query?: string }) {
       return MockSlsClient.getLogsMock(project, logstore, request);
+    }
+
+    createProject(request: unknown) {
+      return MockSlsClient.createProjectMock(request);
+    }
+
+    createLogStore(project: string, request: unknown) {
+      return MockSlsClient.createLogStoreMock(project, request);
+    }
+
+    createIndex(project: string, logstore: string, request: unknown) {
+      return MockSlsClient.createIndexMock(project, logstore, request);
+    }
+
+    updateIndex(project: string, logstore: string, request: unknown) {
+      return MockSlsClient.updateIndexMock(project, logstore, request);
     }
   }
 
@@ -50,6 +70,8 @@ vi.mock('@alicloud/sls20201230', () => {
     CreateLogStoreRequest: ConfigValue,
     CreateIndexRequest: ConfigValue,
     CreateIndexRequestLine: ConfigValue,
+    UpdateIndexRequest: ConfigValue,
+    UpdateIndexRequestLine: ConfigValue,
     GetLogsRequest: ConfigValue,
     KeysValue: ConfigValue
   };
@@ -58,7 +80,22 @@ vi.mock('@alicloud/sls20201230', () => {
 beforeEach(async () => {
   mocks.getFunctionInfo.mockReset();
   const sls = await import('@alicloud/sls20201230');
-  (sls.default as unknown as { getLogsMock: ReturnType<typeof vi.fn> }).getLogsMock.mockReset();
+  const mockSls = sls.default as unknown as {
+    getLogsMock: ReturnType<typeof vi.fn>;
+    createProjectMock: ReturnType<typeof vi.fn>;
+    createLogStoreMock: ReturnType<typeof vi.fn>;
+    createIndexMock: ReturnType<typeof vi.fn>;
+    updateIndexMock: ReturnType<typeof vi.fn>;
+  };
+  mockSls.getLogsMock.mockReset();
+  mockSls.createProjectMock.mockReset();
+  mockSls.createProjectMock.mockResolvedValue({});
+  mockSls.createLogStoreMock.mockReset();
+  mockSls.createLogStoreMock.mockResolvedValue({});
+  mockSls.createIndexMock.mockReset();
+  mockSls.createIndexMock.mockResolvedValue({});
+  mockSls.updateIndexMock.mockReset();
+  mockSls.updateIndexMock.mockResolvedValue({});
 });
 
 describe('sanitizeQueryValue', () => {
@@ -243,6 +280,75 @@ describe('resolveDefaultFcSlsProject', () => {
 });
 
 describe('tailLogs', () => {
+  it('updates the default FC SLS index when it already exists', async () => {
+    const sls = await import('@alicloud/sls20201230');
+    const mockSls = sls.default as unknown as {
+      createIndexMock: ReturnType<typeof vi.fn>;
+      updateIndexMock: ReturnType<typeof vi.fn>;
+    };
+    const conflict = new Error('index already exists');
+    (conflict as Error & { code?: string }).code = 'Conflict';
+    mockSls.createIndexMock.mockRejectedValue(conflict);
+
+    const { ensureDefaultFcSlsLogConfig } = await import('../providers/logs');
+    await expect(ensureDefaultFcSlsLogConfig()).resolves.toMatchObject({
+      project: 'aliyun-fc-cn-hangzhou-123456',
+      logstore: 'function-log'
+    });
+
+    expect(mockSls.updateIndexMock).toHaveBeenCalledWith(
+      'aliyun-fc-cn-hangzhou-123456',
+      'function-log',
+      expect.objectContaining({
+        keys: expect.objectContaining({
+          functionName: expect.any(Object),
+          requestId: expect.any(Object),
+          message: expect.any(Object)
+        }),
+        line: expect.any(Object)
+      })
+    );
+  });
+
+  it('repairs invalid SLS index config and retries one-shot log queries', async () => {
+    mocks.getFunctionInfo.mockResolvedValue({
+      functionName: 'demo-api',
+      logConfig: {
+        project: 'aliyun-fc-cn-hangzhou-123456',
+        logstore: 'function-log'
+      }
+    });
+    const sls = await import('@alicloud/sls20201230');
+    const mockSls = sls.default as unknown as {
+      getLogsMock: ReturnType<typeof vi.fn>;
+      createIndexMock: ReturnType<typeof vi.fn>;
+      updateIndexMock: ReturnType<typeof vi.fn>;
+    };
+    const invalidIndex = new Error('logStore config is invalid');
+    (invalidIndex as Error & { code?: string }).code = 'InvalidLogStoreIndexConfig';
+    const conflict = new Error('index already exists');
+    (conflict as Error & { code?: string }).code = 'Conflict';
+    mockSls.createIndexMock.mockRejectedValue(conflict);
+    mockSls.getLogsMock
+      .mockRejectedValueOnce(invalidIndex)
+      .mockResolvedValueOnce({
+        body: [
+          { __time__: '1700000000', message: 'hello', functionName: 'demo-api' }
+        ]
+      });
+
+    const { tailLogs } = await import('../providers/logs');
+    const result = await tailLogs('demo-api', { once: true, silent: true, windowSeconds: 10 });
+
+    expect(mockSls.updateIndexMock).toHaveBeenCalledWith(
+      'aliyun-fc-cn-hangzhou-123456',
+      'function-log',
+      expect.any(Object)
+    );
+    expect(mockSls.getLogsMock).toHaveBeenCalledTimes(2);
+    expect(result && 'logs' in result ? result.logs : []).toHaveLength(1);
+  });
+
   it('queries the function configured logConfig before default discovery', async () => {
     mocks.getFunctionInfo.mockResolvedValue({
       functionName: 'demo-api',

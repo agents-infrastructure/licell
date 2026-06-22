@@ -119,6 +119,18 @@ function shouldIgnoreLogsBootstrapError(err: unknown) {
   return message.includes('projectnotexist') || message.includes('logstorenotexist');
 }
 
+function isInvalidLogStoreIndexConfigError(err: unknown) {
+  const error = err as {
+    code?: unknown;
+    data?: { Code?: unknown; code?: unknown };
+  };
+  const code = String(error.code || error.data?.Code || error.data?.code || '').toLowerCase();
+  const message = formatErrorMessage(err).toLowerCase();
+  return code === 'invalidlogstoreindexconfig'
+    || message.includes('invalidlogstoreindexconfig')
+    || message.includes('logstore config is invalid');
+}
+
 export function resolveLegacyFcSlsProject(auth: Pick<AuthConfig, 'accountId' | 'region'>) {
   return `aliyun-fc-${auth.region}-${auth.accountId}`;
 }
@@ -401,7 +413,7 @@ async function createSlsLogstoreIfMissing(client: SLS, project: string, logstore
   }
 }
 
-function buildDefaultFcSlsIndexRequest() {
+function buildDefaultFcSlsIndexKeys() {
   const textField = new $SLS.KeysValue({
     type: 'text',
     token: [...DEFAULT_SLS_INDEX_TOKENS],
@@ -416,20 +428,35 @@ function buildDefaultFcSlsIndexRequest() {
     chn: false,
     docValue: true
   });
+  return {
+    functionName: keywordField,
+    qualifier: keywordField,
+    requestId: keywordField,
+    level: keywordField,
+    message: textField,
+    content: textField
+  };
+}
+
+function buildDefaultFcSlsIndexRequest() {
   return new $SLS.CreateIndexRequest({
     line: new $SLS.CreateIndexRequestLine({
       token: [...DEFAULT_SLS_INDEX_TOKENS],
       caseSensitive: false,
       chn: false
     }),
-    keys: {
-      functionName: keywordField,
-      qualifier: keywordField,
-      requestId: keywordField,
-      level: keywordField,
-      message: textField,
-      content: textField
-    }
+    keys: buildDefaultFcSlsIndexKeys()
+  });
+}
+
+function buildDefaultFcSlsUpdateIndexRequest() {
+  return new $SLS.UpdateIndexRequest({
+    line: new $SLS.UpdateIndexRequestLine({
+      token: [...DEFAULT_SLS_INDEX_TOKENS],
+      caseSensitive: false,
+      chn: false
+    }),
+    keys: buildDefaultFcSlsIndexKeys()
   });
 }
 
@@ -437,7 +464,10 @@ async function createSlsIndexIfMissing(client: SLS, project: string, logstore: s
   try {
     await client.createIndex(project, logstore, buildDefaultFcSlsIndexRequest());
   } catch (err: unknown) {
-    if (isConflictError(err)) return;
+    if (isConflictError(err)) {
+      await client.updateIndex(project, logstore, buildDefaultFcSlsUpdateIndexRequest());
+      return;
+    }
     throw err;
   }
 }
@@ -514,14 +544,24 @@ export async function tailSlsLogs(options: SlsTailOptions = {}): Promise<SlsTail
     for (const currentTarget of targets) {
       const currentClient = createSlsClient(auth, currentTarget.region);
       try {
-        const logs = await fetchSlsLogs(currentClient, currentTarget, {
+        const fetchOptions = {
           from: range.from,
           to: range.to,
           query,
           lineLimit,
           reverse: options.reverse,
           powerSql: options.powerSql
-        });
+        };
+        let logs: LogEntry[];
+        try {
+          logs = await fetchSlsLogs(currentClient, currentTarget, fetchOptions);
+        } catch (err: unknown) {
+          if (!isInvalidLogStoreIndexConfigError(err)) {
+            throw err;
+          }
+          await createSlsIndexIfMissing(currentClient, currentTarget.project, currentTarget.logstore);
+          logs = await fetchSlsLogs(currentClient, currentTarget, fetchOptions);
+        }
         if (logs.length === 0) {
           firstEmptyResult = firstEmptyResult || {
             mode: 'once',

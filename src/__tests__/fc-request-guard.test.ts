@@ -394,4 +394,30 @@ describe('fc request guard', () => {
     expect(fn.functionName).toBe('demo-fn');
     expect(mutationProbe.getAttempts()).toBe(3);
   });
+
+  it('waits for pending functions to become active before reporting readiness', async () => {
+    let attempts = 0;
+    const client = {
+      async getFunctionWithOptions() {
+        attempts += 1;
+        return {
+          body: {
+            functionName: 'demo-fn',
+            state: attempts < 3 ? 'Pending' : 'Active'
+          }
+        };
+      }
+    } as unknown as FC20230330;
+
+    const fn = await waitForFcFunctionReadable('demo-fn', client, {
+      env: {
+        LICELL_FC_MUTATION_READY_TIMEOUT_MS: '100',
+        LICELL_FC_QUALIFIER_READY_INTERVAL_MS: '1'
+      },
+      profile: 'mutation'
+    });
+
+    expect(fn.functionName).toBe('demo-fn');
+    expect(attempts).toBe(3);
+  });
 });

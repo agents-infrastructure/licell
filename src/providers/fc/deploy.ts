@@ -315,10 +315,10 @@ async function callUpdateFunction(
   request: $FC.UpdateFunctionRequest,
   expectedBody: Record<string, unknown>
 ) {
-  const before = await waitForFcFunctionReadable(appName, client);
+  const before = await getFunctionIfExists(appName, client);
   const recoverUpdateOutcome = async () => {
     const after = await waitForFcFunctionReadable(appName, client, { profile: 'mutation' });
-    const changed = after.lastModifiedTime && before.lastModifiedTime
+    const changed = after.lastModifiedTime && before?.lastModifiedTime
       ? after.lastModifiedTime !== before.lastModifiedTime
       : true;
     return changed && functionStateMatches(after, expectedBody);

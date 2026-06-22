@@ -107,6 +107,20 @@ describe('probeHttpHealth', () => {
     }
   });
 
+  it('treats FC pending 412 as failure even when client errors are allowed', async () => {
+    const result = await probeHttpHealth('https://example.com', {
+      maxAttempts: 1,
+      intervalMs: 0,
+      allowClientError: true,
+      fetchImpl: async () => new Response('function is pending state', { status: 412 })
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain('返回 412');
+    }
+  });
+
   it('returns timeout when fetch hangs without honoring abort', async () => {
     const startedAt = Date.now();
     const result = await probeHttpHealth('https://example.com', {
