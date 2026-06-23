@@ -399,12 +399,18 @@ export async function deployFC(appName: string, entryFile: string, runtime: FcRu
     const resolvedPrebuiltDir = resolve(prebuiltDir);
     if (!existsSync(resolvedPrebuiltDir)) throw new Error(`artifact.prebuiltDir 不存在: ${prebuiltDir}`);
 
-    // Copy prebuilt directory contents into outdir, then generate bootstrap on top
+    // Copy prebuilt directory contents into outdir
     const { cpSync } = await import('fs');
     cpSync(resolvedPrebuiltDir, outdir, { recursive: true });
 
-    // entryRelative is relative to cwd, but inside outdir it will be at the same relative path
-    bootFile = await prepareBootFile(entryRelative, outdir, runtime, project);
+    // Strip the prebuiltDir prefix from entryRelative so the path is relative to outdir.
+    // e.g. entryRelative=".output/server/index.mjs", prebuiltDir=".output" → "server/index.mjs"
+    const prebuiltDirRelative = relative(process.cwd(), resolvedPrebuiltDir).replace(/\\/g, '/');
+    const entryInOutdir = entryRelative.startsWith(prebuiltDirRelative + '/')
+      ? entryRelative.slice(prebuiltDirRelative.length + 1)
+      : entryRelative;
+
+    bootFile = await prepareBootFile(entryInOutdir, outdir, runtime, project);
     runtimeConfig = await resolveRuntimeConfig(runtime, outdir, bootFile, project);
   } else {
     bootFile = await prepareBootFile(entryRelative, outdir, runtime, project);

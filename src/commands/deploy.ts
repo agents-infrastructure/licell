@@ -669,7 +669,8 @@ export function registerDeployCommand(cli: CAC) {
                 acrNamespace: ctx.cliAcrNamespace || ctx.project.acrNamespace,
                 region: ctx.project.region || ctx.auth.region,
                 bucketName,
-                functionName: functionResourceName || functionName
+                functionName: functionResourceName || functionName,
+                existingArtifact: ctx.project.artifact
               });
               if (Object.keys(projectPatch).length > 0) {
                 Config.setProject(projectPatch, { component: ctx.component });
