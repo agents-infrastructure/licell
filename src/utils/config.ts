@@ -62,9 +62,13 @@ export interface ProjectHooksConfig {
 }
 
 export interface ProjectArtifactConfig {
-  kind?: 'directory' | 'source' | string;
+  kind?: 'directory' | 'source' | 'prebuilt' | string;
   path?: string;
   entry?: string;
+  // For kind='prebuilt': path to a directory containing already-built output.
+  // licell will zip this directory as-is and upload it, skipping bun bundling.
+  // The entry file (e.g. server/index.mjs) must exist inside prebuiltDir.
+  prebuiltDir?: string;
 }
 
 export interface ProjectDeployTargetConfig {
@@ -256,10 +260,12 @@ function normalizeArtifactConfig(raw: unknown): ProjectArtifactConfig | undefine
   const kind = toOptionalString(raw.kind)?.toLowerCase();
   const path = toOptionalString(raw.path);
   const entry = toOptionalString(raw.entry);
+  const prebuiltDir = toOptionalString(raw.prebuiltDir);
   const normalized: ProjectArtifactConfig = {
     ...(kind ? { kind } : {}),
     ...(path ? { path } : {}),
-    ...(entry ? { entry } : {})
+    ...(entry ? { entry } : {}),
+    ...(prebuiltDir ? { prebuiltDir } : {})
   };
   return Object.keys(normalized).length > 0 ? normalized : undefined;
 }

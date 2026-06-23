@@ -1,5 +1,5 @@
 import * as $FC from '@alicloud/fc20230330';
-import { mkdirSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import { dirname, join, relative } from 'path';
 import { buildEntrypointWithBun } from '../../../utils/runtime';
 import {
@@ -195,6 +195,12 @@ export const nodejs22Handler: RuntimeHandler = {
   supportsInternalDeploymentProbe: true,
 
   async prepareBootFile(entryFile: string, outdir: string) {
+    // If the entry file already exists inside outdir (prebuilt mode), skip bun bundling.
+    const entryInOutdir = join(outdir, entryFile);
+    if (existsSync(entryInOutdir)) {
+      return entryFile;
+    }
+
     const buildResult = await buildEntrypointWithBun(entryFile, outdir);
     if (!buildResult.success) {
       const logs = buildResult.logs.map((log) => log.message).join('\n');

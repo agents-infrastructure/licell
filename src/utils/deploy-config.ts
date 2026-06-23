@@ -1,4 +1,4 @@
-import type { ProjectConfig } from './config';
+import type { ProjectArtifactConfig, ProjectConfig } from './config';
 import type { DeployType } from './cli-shared';
 
 export interface DeployProjectPatch extends Partial<ProjectConfig> {
@@ -23,6 +23,8 @@ interface BuildDeployProjectPatchOptions {
   region?: string;
   bucketName?: string;
   functionName?: string;
+  // Preserve existing artifact config when kind is 'prebuilt' so licell doesn't overwrite it
+  existingArtifact?: ProjectArtifactConfig;
 }
 
 export function buildDeployProjectPatch(options: BuildDeployProjectPatchOptions): DeployProjectPatch {
@@ -80,10 +82,12 @@ export function buildDeployProjectPatch(options: BuildDeployProjectPatchOptions)
       kind: 'directory',
       ...(options.dist ? { path: options.dist } : {})
     }
-    : {
-      kind: 'source',
-      ...(options.entry ? { entry: options.entry } : {})
-    };
+    : options.existingArtifact?.kind === 'prebuilt'
+      ? options.existingArtifact
+      : {
+        kind: 'source',
+        ...(options.entry ? { entry: options.entry } : {})
+      };
 
   patch.deployTarget = options.deployType === 'static'
     ? {
