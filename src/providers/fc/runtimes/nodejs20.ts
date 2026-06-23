@@ -1,4 +1,5 @@
-import { relative } from 'path';
+import { existsSync } from 'fs';
+import { join, relative } from 'path';
 import { buildEntrypointWithBun } from '../../../utils/runtime';
 import { findFirstJsOutput } from '../runtime-utils';
 import type { RuntimeHandler, ResolvedRuntimeConfig } from '../runtime-handler';
@@ -9,6 +10,12 @@ export const nodejs20Handler: RuntimeHandler = {
   unsupportedMessage: '当前地域暂不支持 runtime=nodejs20。请确认 nodejs20 在目标地域可用后重试。',
 
   async prepareBootFile(entryFile: string, outdir: string) {
+    // If the entry file already exists inside outdir (prebuilt mode), skip bun bundling.
+    const entryInOutdir = join(outdir, entryFile);
+    if (existsSync(entryInOutdir)) {
+      return entryFile;
+    }
+
     const buildResult = await buildEntrypointWithBun(entryFile, outdir);
     if (!buildResult.success) {
       const logs = buildResult.logs.map((log) => log.message).join('\n');

@@ -375,6 +375,7 @@ export async function deployFC(appName: string, entryFile: string, runtime: FcRu
   mkdirSync(outdir, { recursive: true });
 
   const isDocker = runtime === 'docker';
+  const isPrebuilt = project.artifact?.kind === 'prebuilt';
 
   if (!isDocker) {
     const resolvedEntry = resolve(entryFile);
@@ -388,8 +389,27 @@ export async function deployFC(appName: string, entryFile: string, runtime: FcRu
   }
 
   const entryRelative = isDocker ? entryFile : relative(process.cwd(), resolve(entryFile)).replace(/\\/g, '/');
-  const bootFile = await prepareBootFile(entryRelative, outdir, runtime, project);
-  const runtimeConfig = await resolveRuntimeConfig(runtime, outdir, bootFile, project);
+
+  let bootFile: string;
+  let runtimeConfig: Awaited<ReturnType<typeof resolveRuntimeConfig>>;
+
+  if (isPrebuilt) {
+    const prebuiltDir = project.artifact?.prebuiltDir;
+    if (!prebuiltDir) throw new Error('artifact.kind=prebuilt 需要指定 artifact.prebuiltDir');
+    const resolvedPrebuiltDir = resolve(prebuiltDir);
+    if (!existsSync(resolvedPrebuiltDir)) throw new Error(`artifact.prebuiltDir 不存在: ${prebuiltDir}`);
+
+    // Copy prebuilt directory contents into outdir, then generate bootstrap on top
+    const { cpSync } = await import('fs');
+    cpSync(resolvedPrebuiltDir, outdir, { recursive: true });
+
+    // entryRelative is relative to cwd, but inside outdir it will be at the same relative path
+    bootFile = await prepareBootFile(entryRelative, outdir, runtime, project);
+    runtimeConfig = await resolveRuntimeConfig(runtime, outdir, bootFile, project);
+  } else {
+    bootFile = await prepareBootFile(entryRelative, outdir, runtime, project);
+    runtimeConfig = await resolveRuntimeConfig(runtime, outdir, bootFile, project);
+  }
 
   const environmentVariables: Record<string, string> = { NODE_ENV: 'production' };
   for (const [key, value] of Object.entries(project.envs)) {
