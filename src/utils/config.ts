@@ -51,6 +51,7 @@ export interface ProjectDatabaseConfig {
 
 export interface ProjectResourcesConfig {
   memorySize?: number;
+  diskSize?: number;
   timeout?: number;
   cpu?: number;
   instanceConcurrency?: number;
@@ -465,11 +466,13 @@ export function normalizeProject(raw: unknown): ProjectConfig {
   const resourcesRaw = isRecord(projectRaw.resources) ? projectRaw.resources : null;
   if (resourcesRaw) {
     const memorySize = toPositiveInt(resourcesRaw.memorySize);
+    const diskSize = toPositiveInt(resourcesRaw.diskSize);
     const timeout = toPositiveInt(resourcesRaw.timeout);
     const cpu = toPositiveNumber(resourcesRaw.cpu);
     const instanceConcurrency = toPositiveInt(resourcesRaw.instanceConcurrency);
     const resources: ProjectResourcesConfig = {
       ...(memorySize !== undefined ? { memorySize } : {}),
+      ...(diskSize !== undefined ? { diskSize } : {}),
       ...(timeout !== undefined ? { timeout } : {}),
       ...(cpu !== undefined ? { cpu } : {}),
       ...(instanceConcurrency !== undefined ? { instanceConcurrency } : {})

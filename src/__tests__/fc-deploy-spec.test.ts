@@ -25,6 +25,8 @@ describe('fc deploy spec', () => {
     expect(runtimes).toContain('python3.13');
     expect(runtimes).toContain('docker');
     expect(doc.resources.defaults.memoryMb).toBe(512);
+    expect(doc.resources.defaults.diskSizeMb).toBe(512);
+    expect(doc.resources.constraints.diskSizeMb).toEqual([512, 10240]);
     expect(doc.resources.constraints.memoryToVcpuRatio.expression).toContain('[1, 4]');
     const node22 = doc.runtimes.find((item) => item.runtime === 'nodejs22');
     expect(node22?.handlerContract.kind).toBe('function');

@@ -137,6 +137,7 @@ const deployCommand = defineCliCommand({
     { rawName: '--enable-vpc', description: 'API 部署时启用 VPC 接入（默认启用）' },
     { rawName: '--disable-vpc', description: 'API 部署时禁用 VPC 接入（使用公网模式）' },
     { rawName: '--memory <mb>', description: '函数内存大小（MB，默认 512）' },
+    { rawName: '--disk-size <mb>', description: '函数磁盘大小（MB，支持 512 或 10240，默认 512）' },
     { rawName: '--vcpu <n>', description: '函数 vCPU 核数（如 0.5 / 1 / 2，默认 0.5）' },
     { rawName: '--instance-concurrency <n>', description: '单实例并发数（默认自动，通常起始 10）' },
     { rawName: '--timeout <seconds>', description: '函数超时时间（秒，默认 30）' }
@@ -312,9 +313,10 @@ function printDeploySpec(runtimeInput: string | undefined, includeAll: boolean |
     console.log(`${pc.bold('FC API Deploy Spec')}`);
     console.log(`runtime: ${doc.runtimes.map((item) => item.runtime).join(', ')}`);
     console.log(
-      `defaults: memory=${doc.resources.defaults.memoryMb}MB, vcpu=${doc.resources.defaults.vcpu}, ` +
+      `defaults: memory=${doc.resources.defaults.memoryMb}MB, disk=${doc.resources.defaults.diskSizeMb}MB, vcpu=${doc.resources.defaults.vcpu}, ` +
       `timeout=${doc.resources.defaults.timeoutSeconds}s, instanceConcurrency=${doc.resources.defaults.instanceConcurrency}`
     );
+    console.log(`disk: ${doc.resources.constraints.diskSizeMb.join('MB / ')}MB`);
     console.log(`constraint: ${doc.resources.constraints.memoryToVcpuRatio.expression}`);
     for (const item of doc.runtimes) {
       console.log(`\n- runtime=${pc.cyan(item.runtime)} (${item.mode})`);
@@ -353,8 +355,9 @@ function printDeploySpec(runtimeInput: string | undefined, includeAll: boolean |
   }
   console.log(
     `resources: default memory=${doc.resources.defaults.memoryMb}MB, ` +
-    `vcpu=${doc.resources.defaults.vcpu}, timeout=${doc.resources.defaults.timeoutSeconds}s`
+    `disk=${doc.resources.defaults.diskSizeMb}MB, vcpu=${doc.resources.defaults.vcpu}, timeout=${doc.resources.defaults.timeoutSeconds}s`
   );
+  console.log(`disk: ${doc.resources.constraints.diskSizeMb.join('MB / ')}MB`);
   console.log(`constraints: ${doc.resources.constraints.memoryToVcpuRatio.expression}`);
 }
 

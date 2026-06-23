@@ -4,13 +4,16 @@ import { getRuntime, getSupportedRuntimeNames } from './runtime-handler';
 import { validateRuntimeEntrypoint } from './runtime-utils';
 import { detectProjectType } from '../../utils/dockerfile';
 import { checkDockerAvailable } from '../../utils/docker';
-
-export const FC_DEFAULT_MEMORY_MB = 512;
-export const FC_DEFAULT_VCPU = 0.5;
-export const FC_DEFAULT_TIMEOUT_SECONDS = 30;
-export const FC_DEFAULT_INSTANCE_CONCURRENCY = 10;
-export const FC_MEMORY_VCPU_RATIO_MIN = 1;
-export const FC_MEMORY_VCPU_RATIO_MAX = 4;
+import {
+  FC_DEFAULT_DISK_SIZE_MB,
+  FC_DEFAULT_INSTANCE_CONCURRENCY,
+  FC_DEFAULT_MEMORY_MB,
+  FC_DEFAULT_TIMEOUT_SECONDS,
+  FC_DEFAULT_VCPU,
+  FC_MEMORY_VCPU_RATIO_MAX,
+  FC_MEMORY_VCPU_RATIO_MIN,
+  FC_SUPPORTED_DISK_SIZE_MB
+} from './resources';
 
 export interface FcApiRuntimeDeploySpec {
   runtime: string;
@@ -52,6 +55,7 @@ export interface FcApiRuntimeDeploySpec {
 export interface FcApiDeployResourceSpec {
   defaults: {
     memoryMb: number;
+    diskSizeMb: number;
     vcpu: number;
     timeoutSeconds: number;
     instanceConcurrency: number;
@@ -62,6 +66,7 @@ export interface FcApiDeployResourceSpec {
       max: number;
       expression: 'memoryGb / vcpu in [1, 4]';
     };
+    diskSizeMb: readonly number[];
   };
 }
 
@@ -550,6 +555,7 @@ const RUNTIME_SPECS: FcApiRuntimeDeploySpec[] = [
 const RESOURCE_SPEC: FcApiDeployResourceSpec = {
   defaults: {
     memoryMb: FC_DEFAULT_MEMORY_MB,
+    diskSizeMb: FC_DEFAULT_DISK_SIZE_MB,
     vcpu: FC_DEFAULT_VCPU,
     timeoutSeconds: FC_DEFAULT_TIMEOUT_SECONDS,
     instanceConcurrency: FC_DEFAULT_INSTANCE_CONCURRENCY
@@ -559,7 +565,8 @@ const RESOURCE_SPEC: FcApiDeployResourceSpec = {
       min: FC_MEMORY_VCPU_RATIO_MIN,
       max: FC_MEMORY_VCPU_RATIO_MAX,
       expression: 'memoryGb / vcpu in [1, 4]'
-    }
+    },
+    diskSizeMb: FC_SUPPORTED_DISK_SIZE_MB
   }
 };
 
@@ -613,7 +620,8 @@ export function getFcApiDeploySpecDocument(): FcApiDeploySpecDocument {
     resources: {
       defaults: { ...RESOURCE_SPEC.defaults },
       constraints: {
-        memoryToVcpuRatio: { ...RESOURCE_SPEC.constraints.memoryToVcpuRatio }
+        memoryToVcpuRatio: { ...RESOURCE_SPEC.constraints.memoryToVcpuRatio },
+        diskSizeMb: [...RESOURCE_SPEC.constraints.diskSizeMb]
       }
     }
   };

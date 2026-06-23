@@ -296,6 +296,7 @@ describe('normalizeProject', () => {
     const result = normalizeProject({
       resources: {
         memorySize: '512',
+        diskSize: '10240',
         timeout: 60,
         cpu: '1.5',
         instanceConcurrency: '10'
@@ -307,6 +308,7 @@ describe('normalizeProject', () => {
     });
     expect(result.resources).toEqual({
       memorySize: 512,
+      diskSize: 10240,
       timeout: 60,
       cpu: 1.5,
       instanceConcurrency: 10
@@ -321,6 +323,7 @@ describe('normalizeProject', () => {
     const result = normalizeProject({
       resources: {
         memorySize: 0,
+        diskSize: -1,
         timeout: 'NaN',
         cpu: -1,
         instanceConcurrency: 'abc'
