@@ -5,6 +5,8 @@ import { Config, type AuthConfig } from '../utils/config';
 import { resolveSdkCtor } from '../utils/sdk';
 import { isConflictError } from '../utils/errors';
 import { randomStrongPassword } from '../utils/crypto';
+import { withRetry } from '../utils/retry';
+import { sleep as defaultSleep } from '../utils/runtime';
 
 const CRClientCtor = resolveSdkCtor<CR>(CR, '@alicloud/cr20181201');
 
@@ -51,8 +53,25 @@ function createCrClient(auth?: AuthConfig) {
   }));
 }
 
+const ACR_RETRY_OPTIONS = {
+  maxAttempts: 5,
+  baseDelayMs: 1000
+};
+let acrRetrySleep = defaultSleep;
+
+export function setAcrRetrySleepForTest(fn: ((ms: number) => Promise<void>) | null) {
+  acrRetrySleep = fn || defaultSleep;
+}
+
+function callCrWithRetry<T>(task: () => Promise<T>): Promise<T> {
+  return withRetry(task, {
+    ...ACR_RETRY_OPTIONS,
+    sleep: acrRetrySleep
+  });
+}
+
 async function findEnterpriseInstance(client: CR): Promise<{ instanceId: string; instanceName: string } | null> {
-  const resp = await client.listInstance(new $CR.ListInstanceRequest({ instanceStatus: 'RUNNING', pageNo: 1, pageSize: 30 }));
+  const resp = await callCrWithRetry(() => client.listInstance(new $CR.ListInstanceRequest({ instanceStatus: 'RUNNING', pageNo: 1, pageSize: 30 })));
   const instances = resp.body?.instances || [];
   if (instances.length === 0) return null;
   const inst = instances[0];
@@ -62,7 +81,7 @@ async function findEnterpriseInstance(client: CR): Promise<{ instanceId: string;
 
 async function ensureNamespace(client: CR, instanceId: string, namespaceName: string) {
   try {
-    await client.createNamespace(new $CR.CreateNamespaceRequest({ instanceId, namespaceName, autoCreateRepo: true, defaultRepoType: 'PRIVATE' }));
+    await callCrWithRetry(() => client.createNamespace(new $CR.CreateNamespaceRequest({ instanceId, namespaceName, autoCreateRepo: true, defaultRepoType: 'PRIVATE' })));
   } catch (err) {
     if (!isConflictError(err) && !isNamespaceExistsError(err)) throw err;
   }
@@ -70,13 +89,13 @@ async function ensureNamespace(client: CR, instanceId: string, namespaceName: st
 
 async function ensureRepository(client: CR, instanceId: string, namespaceName: string, repoName: string) {
   try {
-    await client.createRepository(new $CR.CreateRepositoryRequest({
+    await callCrWithRetry(() => client.createRepository(new $CR.CreateRepositoryRequest({
       instanceId,
       repoNamespaceName: namespaceName,
       repoName,
       repoType: 'PRIVATE',
       summary: `licell deploy: ${repoName}`
-    }));
+    })));
   } catch (err) {
     if (!isConflictError(err) && !isRepoExistsError(err)) throw err;
   }
@@ -114,7 +133,7 @@ export function buildAcrPersonalUserPayload(password = randomStrongPassword(20))
 }
 
 async function doLegacyRoaRequest(client: CR, action: string, method: string, path: string, request?: $OpenApi.OpenApiRequest) {
-  return client.doROARequest(
+  return callCrWithRetry(() => client.doROARequest(
     action,
     LEGACY_CR_API_VERSION,
     'HTTPS',
@@ -124,7 +143,7 @@ async function doLegacyRoaRequest(client: CR, action: string, method: string, pa
     'json',
     request || new $OpenApi.OpenApiRequest({}),
     new $Util.RuntimeOptions({})
-  );
+  ));
 }
 
 async function registerPersonalUserForAcr(client: CR) {
@@ -234,7 +253,7 @@ export async function getDockerLoginCredentials(acrInfo: AcrInfo, auth?: AuthCon
 
   if (acrInfo.instanceId) {
     const client = createCrClient(resolved);
-    const resp = await client.getAuthorizationToken(new $CR.GetAuthorizationTokenRequest({ instanceId: acrInfo.instanceId }));
+    const resp = await callCrWithRetry(() => client.getAuthorizationToken(new $CR.GetAuthorizationTokenRequest({ instanceId: acrInfo.instanceId })));
     if (!resp.body?.tempUsername || !resp.body?.authorizationToken) {
       throw new Error('获取 ACR 企业版临时凭证失败，请检查实例状态');
     }
