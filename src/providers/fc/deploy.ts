@@ -108,6 +108,10 @@ export interface ResolvedFunctionResources {
   instanceConcurrency?: number;
 }
 
+type FunctionResourceKey = keyof ResolvedFunctionResources;
+type ExpectedFunctionResourceState = Partial<Record<FunctionResourceKey, number>>;
+const FUNCTION_RESOURCE_KEYS: FunctionResourceKey[] = ['memorySize', 'diskSize', 'timeout', 'cpu', 'instanceConcurrency'];
+
 export function resolveFunctionResources(
   projectResources?: ProjectResourcesConfig,
   overrideResources?: ProjectResourcesConfig
@@ -131,6 +135,56 @@ export function resolveFunctionResources(
     ...(cpu !== undefined ? { cpu } : {}),
     instanceConcurrency: resources.instanceConcurrency ?? inferredInstanceConcurrency
   };
+}
+
+function hasOwnDefinedResource(
+  resources: ProjectResourcesConfig | undefined,
+  key: keyof ProjectResourcesConfig
+) {
+  return Boolean(
+    resources
+      && Object.prototype.hasOwnProperty.call(resources, key)
+      && resources[key] !== undefined
+  );
+}
+
+function isFunctionResourceExplicitlyConfigured(
+  key: FunctionResourceKey,
+  projectResources?: ProjectResourcesConfig,
+  overrideResources?: ProjectResourcesConfig
+) {
+  return hasOwnDefinedResource(projectResources, key) || hasOwnDefinedResource(overrideResources, key);
+}
+
+function buildExpectedExplicitFunctionResourceState(
+  resources: ResolvedFunctionResources,
+  projectResources?: ProjectResourcesConfig,
+  overrideResources?: ProjectResourcesConfig
+): ExpectedFunctionResourceState {
+  const expected: ExpectedFunctionResourceState = {};
+  for (const key of FUNCTION_RESOURCE_KEYS) {
+    if (isFunctionResourceExplicitlyConfigured(key, projectResources, overrideResources)) {
+      const value = resources[key];
+      if (value !== undefined) expected[key] = value;
+    }
+  }
+  return expected;
+}
+
+function assertFunctionResourcesConverged(
+  fn: $FC.Function,
+  expected: ExpectedFunctionResourceState,
+  operation: string
+) {
+  for (const [key, expectedValue] of Object.entries(expected)) {
+    const observedRaw = (fn as Record<string, unknown>)[key];
+    const observedValue = observedRaw === undefined ? undefined : Number(observedRaw);
+    if (observedValue !== expectedValue) {
+      throw new Error(
+        `FC 函数资源未收敛: ${operation} ${key} expected=${expectedValue}, observed=${observedRaw === undefined ? 'undefined' : observedValue}`
+      );
+    }
+  }
 }
 
 function normalizeStringRecord(input: unknown) {
@@ -183,20 +237,23 @@ function normalizeLogConfig(input: unknown) {
 }
 
 function buildComparableFunctionState(body: Record<string, unknown>) {
-  return {
-    runtime: typeof body.runtime === 'string' ? body.runtime : undefined,
-    handler: typeof body.handler === 'string' ? body.handler : undefined,
-    memorySize: typeof body.memorySize === 'number' ? body.memorySize : Number(body.memorySize),
-    diskSize: typeof body.diskSize === 'number' ? body.diskSize : Number(body.diskSize),
-    timeout: typeof body.timeout === 'number' ? body.timeout : Number(body.timeout),
-    cpu: body.cpu === undefined ? undefined : Number(body.cpu),
-    instanceConcurrency: body.instanceConcurrency === undefined ? undefined : Number(body.instanceConcurrency),
-    environmentVariables: normalizeStringRecord(body.environmentVariables),
-    vpcConfig: normalizeVpcConfig(body.vpcConfig),
-    customRuntimeConfig: normalizeCustomRuntimeConfig(body.customRuntimeConfig),
-    customContainerConfig: normalizeCustomContainerConfig(body.customContainerConfig),
-    logConfig: normalizeLogConfig(body.logConfig)
-  };
+  const hasOwn = (key: string) => Object.prototype.hasOwnProperty.call(body, key);
+  const state: Record<string, unknown> = {};
+  if (hasOwn('runtime')) state.runtime = typeof body.runtime === 'string' ? body.runtime : undefined;
+  if (hasOwn('handler')) state.handler = typeof body.handler === 'string' ? body.handler : undefined;
+  if (hasOwn('memorySize')) state.memorySize = typeof body.memorySize === 'number' ? body.memorySize : Number(body.memorySize);
+  if (hasOwn('diskSize')) state.diskSize = typeof body.diskSize === 'number' ? body.diskSize : Number(body.diskSize);
+  if (hasOwn('timeout')) state.timeout = typeof body.timeout === 'number' ? body.timeout : Number(body.timeout);
+  if (hasOwn('cpu')) state.cpu = body.cpu === undefined ? undefined : Number(body.cpu);
+  if (hasOwn('instanceConcurrency')) {
+    state.instanceConcurrency = body.instanceConcurrency === undefined ? undefined : Number(body.instanceConcurrency);
+  }
+  if (hasOwn('environmentVariables')) state.environmentVariables = normalizeStringRecord(body.environmentVariables);
+  if (hasOwn('vpcConfig')) state.vpcConfig = normalizeVpcConfig(body.vpcConfig);
+  if (hasOwn('customRuntimeConfig')) state.customRuntimeConfig = normalizeCustomRuntimeConfig(body.customRuntimeConfig);
+  if (hasOwn('customContainerConfig')) state.customContainerConfig = normalizeCustomContainerConfig(body.customContainerConfig);
+  if (hasOwn('logConfig')) state.logConfig = normalizeLogConfig(body.logConfig);
+  return state;
 }
 
 function buildObservedFunctionState(fn: $FC.Function) {
@@ -219,7 +276,12 @@ function buildObservedFunctionState(fn: $FC.Function) {
 }
 
 function functionStateMatches(fn: $FC.Function, expectedBody: Record<string, unknown>) {
-  return JSON.stringify(buildObservedFunctionState(fn)) === JSON.stringify(buildComparableFunctionState(expectedBody));
+  const expectedState = buildComparableFunctionState(expectedBody);
+  const observedState = buildObservedFunctionState(fn) as Record<string, unknown>;
+  const comparableObservedState = Object.fromEntries(
+    Object.keys(expectedState).map((key) => [key, observedState[key]])
+  );
+  return JSON.stringify(comparableObservedState) === JSON.stringify(expectedState);
 }
 
 function shouldRetryFunctionRead(err: unknown) {
@@ -277,7 +339,8 @@ async function callCreateFunction(
   appName: string,
   client: ReturnType<typeof createFcClient>['client'],
   request: $FC.CreateFunctionRequest,
-  expectedBody: Record<string, unknown>
+  expectedBody: Record<string, unknown>,
+  expectedResources: ExpectedFunctionResourceState
 ): Promise<CreateFunctionOutcome> {
   const recoverCreateOutcome = async () => {
     const observed = await waitForFunctionIfExists(appName, client, 'mutation', 60_000);
@@ -295,7 +358,8 @@ async function callCreateFunction(
         profile: 'mutation'
       }
     );
-    await waitForFcFunctionReadable(appName, client, { profile: 'mutation' });
+    const observed = await waitForFcFunctionReadable(appName, client, { profile: 'mutation' });
+    assertFunctionResourcesConverged(observed, expectedResources, `createFunction(${appName})`);
     return 'created';
   } catch (err: unknown) {
     if (isConflictError(err)) return 'existing';
@@ -312,7 +376,8 @@ async function callCreateFunction(
             profile: 'mutation'
           }
         );
-        await waitForFcFunctionReadable(appName, client, { profile: 'mutation' });
+        const observed = await waitForFcFunctionReadable(appName, client, { profile: 'mutation' });
+        assertFunctionResourcesConverged(observed, expectedResources, `createFunction(${appName})#retry`);
         return 'created';
       } catch (retryErr: unknown) {
         if (isConflictError(retryErr)) return 'existing';
@@ -330,7 +395,8 @@ async function callUpdateFunction(
   appName: string,
   client: ReturnType<typeof createFcClient>['client'],
   request: $FC.UpdateFunctionRequest,
-  expectedBody: Record<string, unknown>
+  expectedBody: Record<string, unknown>,
+  expectedResources: ExpectedFunctionResourceState
 ) {
   const before = await getFunctionIfExists(appName, client);
   const recoverUpdateOutcome = async () => {
@@ -350,7 +416,8 @@ async function callUpdateFunction(
         profile: 'mutation'
       }
     );
-    await waitForFcFunctionReadable(appName, client, { profile: 'mutation' });
+    const observed = await waitForFcFunctionReadable(appName, client, { profile: 'mutation' });
+    assertFunctionResourcesConverged(observed, expectedResources, `updateFunction(${appName})`);
     return;
   } catch (err: unknown) {
     if (isRecoverableFunctionMutationError(err)) {
@@ -461,6 +528,11 @@ export async function deployFC(appName: string, entryFile: string, runtime: FcRu
   environmentVariables[LICELL_INTERNAL_DEPLOY_MARKER_ENV] = deploymentMarker;
 
   const resources = resolveFunctionResources(project.resources, options.resources);
+  const expectedExplicitResources = buildExpectedExplicitFunctionResourceState(
+    resources,
+    project.resources,
+    options.resources
+  );
   const memorySize = resources.memorySize;
   const diskSize = resources.diskSize;
   const timeout = resources.timeout;
@@ -471,12 +543,17 @@ export async function deployFC(appName: string, entryFile: string, runtime: FcRu
     runtime: runtimeConfig.runtime,
     handler: runtimeConfig.handler,
     memorySize,
-    diskSize,
     timeout,
     environmentVariables,
     vpcConfig,
     logConfig
   };
+  // Updating an existing function with an implicit default would reset manually
+  // enlarged disks back to 512MB. Only send diskSize on update when the user
+  // configured it through project resources or CLI overrides.
+  if (isFunctionResourceExplicitlyConfigured('diskSize', project.resources, options.resources)) {
+    updateBody.diskSize = diskSize;
+  }
   updateBody.cpu = cpu;
   if (resources.instanceConcurrency !== undefined) updateBody.instanceConcurrency = resources.instanceConcurrency;
   if (code) updateBody.code = code;
@@ -485,7 +562,8 @@ export async function deployFC(appName: string, entryFile: string, runtime: FcRu
 
   const createBody: Record<string, unknown> = {
     functionName: appName,
-    ...updateBody
+    ...updateBody,
+    diskSize
   };
 
   const req = new $FC.CreateFunctionRequest({
@@ -497,7 +575,7 @@ export async function deployFC(appName: string, entryFile: string, runtime: FcRu
     ? true
     : await (async () => {
         try {
-          const createOutcome = await callCreateFunction(appName, client, req, createBody);
+          const createOutcome = await callCreateFunction(appName, client, req, createBody, expectedExplicitResources);
           return createOutcome === 'existing';
         } catch (err: unknown) {
           if (isInvalidRuntimeValueError(err)) {
@@ -511,7 +589,7 @@ export async function deployFC(appName: string, entryFile: string, runtime: FcRu
     try {
       await callUpdateFunction(appName, client, new $FC.UpdateFunctionRequest({
         body: new $FC.UpdateFunctionInput(updateBody)
-      }), updateBody);
+      }), updateBody, expectedExplicitResources);
     } catch (updateErr: unknown) {
       if (isInvalidRuntimeValueError(updateErr)) {
         throw new Error(buildUnsupportedRuntimeMessage(runtime));
