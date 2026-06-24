@@ -5,6 +5,7 @@ describe('resolveFunctionResources', () => {
   it('uses defaults when both project and cli resources are empty', () => {
     expect(resolveFunctionResources(undefined, undefined)).toEqual({
       memorySize: 512,
+      diskSize: 512,
       timeout: 30,
       instanceConcurrency: 10
     });
@@ -13,11 +14,13 @@ describe('resolveFunctionResources', () => {
   it('uses project resources when cli does not override', () => {
     expect(resolveFunctionResources({
       memorySize: 512,
+      diskSize: 10240,
       timeout: 90,
       cpu: 1,
       instanceConcurrency: 20
     }, {})).toEqual({
       memorySize: 512,
+      diskSize: 10240,
       timeout: 90,
       cpu: 1,
       instanceConcurrency: 20
@@ -33,6 +36,7 @@ describe('resolveFunctionResources', () => {
       timeout: 120
     })).toEqual({
       memorySize: 512,
+      diskSize: 512,
       timeout: 120,
       cpu: 1,
       instanceConcurrency: 10
@@ -44,6 +48,7 @@ describe('resolveFunctionResources', () => {
       memorySize: 1024
     }, {})).toEqual({
       memorySize: 1024,
+      diskSize: 512,
       timeout: 30,
       instanceConcurrency: 20
     });
@@ -55,9 +60,14 @@ describe('resolveFunctionResources', () => {
       cpu: 1.5
     }, {})).toEqual({
       memorySize: 512,
+      diskSize: 512,
       timeout: 30,
       cpu: 1.5,
       instanceConcurrency: 15
     });
+  });
+
+  it('rejects unsupported FC disk sizes', () => {
+    expect(() => resolveFunctionResources({ diskSize: 2048 }, {})).toThrow(/512MB.*10240MB/);
   });
 });

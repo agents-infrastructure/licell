@@ -38,6 +38,7 @@ export interface DeployCliOptions {
   enableVpc?: boolean;
   disableVpc?: boolean;
   memory?: string;
+  diskSize?: string;
   vcpu?: string;
   instanceConcurrency?: string;
   timeout?: string;
@@ -58,7 +59,7 @@ export interface DeployContext {
   enableSSL: boolean;
   forceSslRenew: boolean;
   preview: boolean;
-  cliResources?: { memorySize?: number; timeout?: number; cpu?: number; instanceConcurrency?: number };
+  cliResources?: { memorySize?: number; diskSize?: number; timeout?: number; cpu?: number; instanceConcurrency?: number };
   cliAcrNamespace?: string;
   interactiveTTY: boolean;
   auth: AuthConfig;
@@ -248,12 +249,14 @@ export async function resolveDeployContext(options: DeployCliOptions): Promise<D
   }
 
   const cliMemorySize = parseOptionalPositiveInt(options.memory, '--memory');
+  const cliDiskSize = parseOptionalPositiveInt(options.diskSize, '--disk-size');
   const cliCpu = parseOptionalPositiveNumber(options.vcpu, '--vcpu');
   const cliInstanceConcurrency = parseOptionalPositiveInt(options.instanceConcurrency, '--instance-concurrency');
   const cliTimeout = parseOptionalPositiveInt(options.timeout, '--timeout');
-  const cliResources = (cliMemorySize !== undefined || cliTimeout !== undefined || cliCpu !== undefined || cliInstanceConcurrency !== undefined)
+  const cliResources = (cliMemorySize !== undefined || cliDiskSize !== undefined || cliTimeout !== undefined || cliCpu !== undefined || cliInstanceConcurrency !== undefined)
     ? {
       ...(cliMemorySize !== undefined ? { memorySize: cliMemorySize } : {}),
+      ...(cliDiskSize !== undefined ? { diskSize: cliDiskSize } : {}),
       ...(cliCpu !== undefined ? { cpu: cliCpu } : {}),
       ...(cliInstanceConcurrency !== undefined ? { instanceConcurrency: cliInstanceConcurrency } : {}),
       ...(cliTimeout !== undefined ? { timeout: cliTimeout } : {})

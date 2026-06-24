@@ -27,6 +27,14 @@ import {
   type FcReadableProfile
 } from './request-guard';
 import { DEFAULT_FC_RUNTIME, type FcRuntime } from './types';
+import {
+  FC_DEFAULT_DISK_SIZE_MB,
+  FC_DEFAULT_INSTANCE_CONCURRENCY,
+  FC_DEFAULT_MEMORY_MB,
+  FC_DEFAULT_TIMEOUT_SECONDS,
+  FC_DEFAULT_VCPU,
+  FC_SUPPORTED_DISK_SIZE_MB
+} from './resources';
 
 export function packageCodeAsBase64(outdir: string) {
   const zipPath = join(tmpdir(), `licell-code-${Date.now()}-${process.pid}.zip`);
@@ -51,11 +59,7 @@ export function packageCodeAsBase64(outdir: string) {
   }
 }
 
-const DEFAULT_MEMORY_SIZE = 512;
-const DEFAULT_TIMEOUT = 30;
-const DEFAULT_DISK_SIZE = 512;
-const DEFAULT_INSTANCE_CONCURRENCY = 10;
-const DEFAULT_CPU = 0.5;
+const ALLOWED_DISK_SIZES = new Set<number>(FC_SUPPORTED_DISK_SIZE_MB);
 
 function validateCpuMemoryRatio(memorySizeMb: number, cpu: number) {
   if (!Number.isFinite(memorySizeMb) || memorySizeMb <= 0) {
@@ -75,6 +79,15 @@ function validateCpuMemoryRatio(memorySizeMb: number, cpu: number) {
   }
 }
 
+function validateDiskSize(diskSizeMb: number) {
+  if (!Number.isFinite(diskSizeMb) || !Number.isInteger(diskSizeMb)) {
+    throw new Error(`无效的 diskSize: ${String(diskSizeMb)}`);
+  }
+  if (!ALLOWED_DISK_SIZES.has(diskSizeMb)) {
+    throw new Error('FC 磁盘规格仅支持 512MB 或 10240MB。请调整 resources.diskSize 或 --disk-size。');
+  }
+}
+
 export interface DeployFCOptions {
   resources?: ProjectResourcesConfig;
   network?: ProjectNetworkConfig | null;
@@ -89,6 +102,7 @@ export interface DeployFCResult {
 
 export interface ResolvedFunctionResources {
   memorySize: number;
+  diskSize: number;
   timeout: number;
   cpu?: number;
   instanceConcurrency?: number;
@@ -99,17 +113,20 @@ export function resolveFunctionResources(
   overrideResources?: ProjectResourcesConfig
 ): ResolvedFunctionResources {
   const resources = { ...(projectResources || {}), ...(overrideResources || {}) };
-  const memorySize = resources.memorySize ?? DEFAULT_MEMORY_SIZE;
-  const timeout = resources.timeout ?? DEFAULT_TIMEOUT;
+  const memorySize = resources.memorySize ?? FC_DEFAULT_MEMORY_MB;
+  const diskSize = resources.diskSize ?? FC_DEFAULT_DISK_SIZE_MB;
+  const timeout = resources.timeout ?? FC_DEFAULT_TIMEOUT_SECONDS;
   const cpu = resources.cpu;
+  validateDiskSize(diskSize);
   const inferredInstanceConcurrency = (() => {
     if (cpu !== undefined) return Math.max(1, Math.min(100, Math.round(cpu * 10)));
     if (memorySize >= 2048) return 40;
     if (memorySize >= 1024) return 20;
-    return DEFAULT_INSTANCE_CONCURRENCY;
+    return FC_DEFAULT_INSTANCE_CONCURRENCY;
   })();
   return {
     memorySize,
+    diskSize,
     timeout,
     ...(cpu !== undefined ? { cpu } : {}),
     instanceConcurrency: resources.instanceConcurrency ?? inferredInstanceConcurrency
@@ -445,15 +462,16 @@ export async function deployFC(appName: string, entryFile: string, runtime: FcRu
 
   const resources = resolveFunctionResources(project.resources, options.resources);
   const memorySize = resources.memorySize;
+  const diskSize = resources.diskSize;
   const timeout = resources.timeout;
-  const cpu = resources.cpu ?? DEFAULT_CPU;
+  const cpu = resources.cpu ?? FC_DEFAULT_VCPU;
   validateCpuMemoryRatio(memorySize, cpu);
 
   const updateBody: Record<string, unknown> = {
     runtime: runtimeConfig.runtime,
     handler: runtimeConfig.handler,
     memorySize,
-    diskSize: DEFAULT_DISK_SIZE,
+    diskSize,
     timeout,
     environmentVariables,
     vpcConfig,

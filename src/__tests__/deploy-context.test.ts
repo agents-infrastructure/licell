@@ -153,4 +153,18 @@ describe('resolveDeployContext', () => {
 
     await expect(resolveDeployContext({ cdnRefresh: 'entrypoints' })).rejects.toThrow('--cdn-refresh 当前仅适用于静态站点部署');
   });
+
+  it('parses explicit function disk size into cli resources', async () => {
+    getProjectMock.mockReturnValue({
+      appName: 'demo-api',
+      deployType: 'api',
+      runtime: 'nodejs22',
+      entry: 'src/index.ts',
+      envs: {}
+    });
+
+    const ctx = await resolveDeployContext({ diskSize: '10240' });
+
+    expect(ctx.cliResources).toEqual({ diskSize: 10240 });
+  });
 });

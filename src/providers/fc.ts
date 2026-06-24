@@ -22,17 +22,22 @@ export { deployFC, type DeployFCResult } from './fc/deploy';
 export { waitForFunctionDeploymentMarker } from './fc/deployment-probe';
 
 export {
+  FC_DEFAULT_DISK_SIZE_MB,
+  FC_DEFAULT_INSTANCE_CONCURRENCY,
+  FC_DEFAULT_MEMORY_MB,
+  FC_DEFAULT_TIMEOUT_SECONDS,
+  FC_DEFAULT_VCPU,
+  FC_MEMORY_VCPU_RATIO_MAX,
+  FC_MEMORY_VCPU_RATIO_MIN,
+  FC_SUPPORTED_DISK_SIZE_MB
+} from './fc/resources';
+
+export {
   getFcApiDeploySpecDocument,
   getFcApiRuntimeDeploySpec,
   listFcApiRuntimeDeploySpecs,
   runFcApiDeployPrecheck,
   createFcApiDeployPrecheckError,
-  FC_DEFAULT_MEMORY_MB,
-  FC_DEFAULT_VCPU,
-  FC_DEFAULT_TIMEOUT_SECONDS,
-  FC_DEFAULT_INSTANCE_CONCURRENCY,
-  FC_MEMORY_VCPU_RATIO_MIN,
-  FC_MEMORY_VCPU_RATIO_MAX,
   type FcApiDeploySpecDocument,
   type FcApiRuntimeDeploySpec,
   type FcApiDeployPrecheckIssue,

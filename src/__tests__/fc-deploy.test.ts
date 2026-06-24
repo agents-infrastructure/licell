@@ -201,6 +201,29 @@ describe('deployFC', () => {
     await deployFC('demo-app', 'src/index.ts', 'nodejs22');
   });
 
+  it('uses configured FC disk size in function updates', async () => {
+    mockCallFcWithGuard.mockImplementation(async (_client: unknown, methodName: string, args: any[]) => {
+      if (methodName === 'getFunction') {
+        return {
+          body: {
+            functionName: 'demo-app',
+            lastModifiedTime: '1'
+          }
+        };
+      }
+      if (methodName === 'updateFunction') {
+        const updateBody = args[1]?.body as Record<string, unknown>;
+        expect(updateBody.diskSize).toBe(10240);
+        return { body: {} };
+      }
+      throw new Error(`unexpected method: ${methodName}`);
+    });
+
+    await deployFC('demo-app', 'src/index.ts', 'nodejs22', {
+      resources: { diskSize: 10240 }
+    });
+  });
+
   it('recovers createFunction EPIPE by reading converged function state', async () => {
     let readableCalls = 0;
     mockCallFcWithGuard.mockImplementation(async (_client: unknown, methodName: string) => {
