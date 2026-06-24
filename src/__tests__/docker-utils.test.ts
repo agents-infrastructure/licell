@@ -43,4 +43,3 @@ describe('docker utils retry behavior', () => {
     expect(sleeps).toEqual([1000, 2000]);
   });
 });
-

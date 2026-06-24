@@ -60,4 +60,3 @@ describe('ACR retry behavior', () => {
     expect(sleeps).toHaveLength(1);
   });
 });
-
