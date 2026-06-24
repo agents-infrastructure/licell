@@ -13,6 +13,7 @@ export interface RetryOptions {
   baseDelayMs?: number;
   shouldRetry?: (err: unknown) => boolean;
   onRetry?: (err: unknown, context: RetryContext) => void | Promise<void>;
+  sleep?: (ms: number) => Promise<void>;
 }
 
 const DEFAULT_MAX_ATTEMPTS = 3;
@@ -25,6 +26,7 @@ export async function withRetry<T>(
   const maxAttempts = options.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
   const baseDelayMs = options.baseDelayMs ?? DEFAULT_BASE_DELAY_MS;
   const shouldRetry = options.shouldRetry ?? isTransientError;
+  const sleepFn = options.sleep ?? sleep;
 
   let lastError: unknown;
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
@@ -40,7 +42,7 @@ export async function withRetry<T>(
         maxAttempts,
         delayMs
       });
-      await sleep(delayMs);
+      await sleepFn(delayMs);
     }
   }
   throw lastError;
