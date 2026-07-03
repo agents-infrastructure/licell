@@ -367,8 +367,8 @@ CAPABILITY_PROBES.ecs calls listEcsInstances({ limit: 1 }) or an equivalent read
 5. **ecs-filter-contract-tests** — 补强过滤与错误合同测试，锁定 tag/privateIp/publicIp/eip/name/namePrefix/status/region 参数映射、CLI input 错误分类和 JSON result 字段稳定性。
    - 所属模块：ECS Provider, ECS CLI Command
    - 依赖：ecs-list-command, ecs-info-command
-   - 状态：planned
-   - 对应 feature：未启动
+   - 状态：done
+   - 对应 feature：2026-07-03-ecs-filter-contract-tests
    - 备注：这条不新增用户命令；目标是防止过滤支持在后续操控命令扩展时漂移。
 
 6. **ecs-command-surface-docs** — 同步命令 metadata、README generated block、agent surface reference、skills scaffold 和 shell completion，证明 Agent 可按 catalog/help/json flow 发现 ECS 查询。

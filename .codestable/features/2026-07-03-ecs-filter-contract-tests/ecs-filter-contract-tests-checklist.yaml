@@ -4,72 +4,72 @@ created: 2026-07-03
 steps:
   - action: "Provider filter contract：补齐 SDK request shape 和 no post-filter tests"
     exit_signal: "provider tests 覆盖 region/instanceIds/name/namePrefix/status/tag/privateIp/publicIp/eip/vpc/vsw/zone/type/charge request shape；mock 不匹配实例时 provider 原样返回"
-    status: pending
+    status: done
   - action: "Command parser contract：补齐 CLI options 到 provider options tests"
     exit_signal: "command tests 覆盖 --region、--limit、--status 原样透传、--name/--name-prefix 互斥、repeatable --tag、IP 三拆、instance-id 逗号分隔"
-    status: pending
+    status: done
   - action: "Error classification contract：锁定 input/not-found JSON error"
     exit_signal: "非法 tag、name/namePrefix 互斥、空 instanceId 归 input；ecs info provider not-found 归 not_found"
-    status: pending
+    status: done
   - action: "JSON payload / sensitive whitelist contract：锁定 list/info result 字段"
     exit_signal: "ecs list/info --output json payload 包含 roadmap 字段；provider mock SDK response 注入 rawAttribute/userData/vncUrl/consoleOutput/password/keyPairPrivateKey 时，summary/detail、JSON 与文本输出均不包含这些字段"
-    status: pending
+    status: done
   - action: "Validation cleanup：运行验证并确认 scope 未漂移"
     exit_signal: "typecheck、ecs provider/command tests、CLI JSON tests、checklist yaml 校验通过，diff 不包含新命令/auth/RAM/doctor/generated docs 或真实云调用"
-    status: pending
+    status: done
 
 checks:
   - item: "不注册或修改 licell ecs 用户命令"
     source: 范围守护
-    status: pending
+    status: passed
   - item: "不新增 provider filter 或改变已有 filter 语义"
     source: 范围守护
-    status: pending
+    status: passed
   - item: "不修改 auth/RAM/doctor capability"
     source: 范围守护
-    status: pending
+    status: passed
   - item: "不手改 README generated block 或 docs/reference/agent-surfaces.md"
     source: 范围守护
-    status: pending
+    status: passed
   - item: "测试不打真实阿里云，不依赖真实 AK/SK 或用户 home auth"
     source: 范围守护
-    status: pending
+    status: passed
   - item: "provider request shape 覆盖 tag/privateIp/publicIp/eip/name/namePrefix/status/region 等 roadmap filters"
     source: 名词契约
-    status: pending
+    status: passed
   - item: "publicIp/eip/namePrefix 等断言以 provider 最终 surface 为准；若前置 provider 删除或改名，对应断言同步删除或改名，不用本地过滤补偿"
     source: 名词契约
-    status: pending
+    status: passed
   - item: "command parser 覆盖 repeatable --tag key=value，多个 tag 保持 AND 语义"
     source: 名词契约
-    status: pending
+    status: passed
   - item: "--status 原样透传，不做别名/大小写归一"
     source: 流程级约束
-    status: pending
+    status: passed
   - item: "--name-prefix 在 command 层保持 namePrefix，provider 层转 SDK instanceName=prefix*"
     source: 流程级约束
-    status: pending
+    status: passed
   - item: "provider 不做分页后本地 filtering；mock 不匹配 filter 的实例时原样返回"
     source: 流程级约束
-    status: pending
+    status: passed
   - item: "非法 tag、name/namePrefix 互斥、空 instanceId 的 JSON error category=input"
     source: 验收场景
-    status: pending
+    status: passed
   - item: "ecs info not-found 的 JSON error category=not_found，且不触发跨 region fallback"
     source: 验收场景
-    status: pending
+    status: passed
   - item: "ecs list JSON payload 包含 regionId/count/limit/totalCount/truncated/filters/instances[]"
     source: 验收场景
-    status: pending
+    status: passed
   - item: "ecs info JSON payload 包含 regionId/instanceId/detail.summary"
     source: 验收场景
-    status: pending
+    status: passed
   - item: "provider mock SDK response 注入 rawAttribute/userData/vncUrl/consoleOutput/password/keyPairPrivateKey 时，summary/detail、list/info JSON 和文本均不包含这些字段"
     source: 验收场景
-    status: pending
+    status: passed
   - item: "不新增 src/__tests__/ecs-filter-contract.test.ts；若实现期确需新增文件，必须先更新 CMD-002 验证命令"
     source: DoD 守护
-    status: pending
+    status: passed
 
 dod:
   commands:

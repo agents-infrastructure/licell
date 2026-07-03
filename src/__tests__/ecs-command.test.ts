@@ -209,9 +209,38 @@ describe('ecs commands', () => {
       limit: 20,
       totalCount: 1,
       truncated: false,
+      filters: {},
       instances: expect.arrayContaining([expect.objectContaining({ instanceId: 'i-demo' })])
     }));
+    expect(Object.keys(emitCommandResultMock.mock.calls[0]?.[0] || {})).toEqual(expect.arrayContaining([
+      'regionId',
+      'filters',
+      'totalCount',
+      'count',
+      'limit',
+      'truncated',
+      'instances'
+    ]));
     expect(setProjectMock).not.toHaveBeenCalled();
+  });
+
+  it('preserves ecs list status casing and exact name in provider options', async () => {
+    const cli = await createCli();
+    await cli.parse([
+      'node',
+      'src/cli.ts',
+      'ecs list',
+      '--status',
+      'rUnNiNg',
+      '--name',
+      'Prod-API-01'
+    ]);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(listEcsInstancesMock).toHaveBeenCalledWith(expect.objectContaining({
+      status: 'rUnNiNg',
+      name: 'Prod-API-01'
+    }));
   });
 
   it('rejects mutually exclusive name filters before calling provider', async () => {
@@ -228,12 +257,20 @@ describe('ecs commands', () => {
   });
 
   it('routes invalid tag filters through command parsing without calling provider', async () => {
+    const {
+      emitCliError,
+      extractJsonRecordsFromOutput,
+      initOutputContext
+    } = await import('../utils/output');
+    const stdoutWriteSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
     let caughtError: unknown;
     executeWithAuthRecoveryMock.mockImplementationOnce(async (_options: unknown, task: () => Promise<unknown>) => {
       try {
         await task();
       } catch (err) {
         caughtError = err;
+        initOutputContext('json', ['node', 'src/cli.ts', 'ecs', 'list', '--tag', 'env=']);
+        emitCliError(err, { stage: 'ecs.list' });
       }
     });
     const cli = await createCli();
@@ -241,8 +278,45 @@ describe('ecs commands', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(caughtError).toEqual(expect.objectContaining({ message: expect.stringMatching(/不能为空|empty/i) }));
+    const output = stdoutWriteSpy.mock.calls.map((call) => String(call[0])).join('');
+    const records = extractJsonRecordsFromOutput(output) as Array<Record<string, any>>;
+    expect(records[0]?.error).toMatchObject({
+      category: 'input',
+      code: 'CLI_INVALID_INPUT'
+    });
     expect(listEcsInstancesMock).not.toHaveBeenCalled();
     expect(emitCommandResultMock).not.toHaveBeenCalled();
+    stdoutWriteSpy.mockRestore();
+  });
+
+  it('routes mutually exclusive list name filters to input JSON error category', async () => {
+    const {
+      emitCliError,
+      extractJsonRecordsFromOutput,
+      initOutputContext
+    } = await import('../utils/output');
+    const stdoutWriteSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    executeWithAuthRecoveryMock.mockImplementationOnce(async (_options: unknown, task: () => Promise<unknown>) => {
+      try {
+        await task();
+      } catch (err) {
+        initOutputContext('json', ['node', 'src/cli.ts', 'ecs', 'list']);
+        emitCliError(err, { stage: 'ecs.list' });
+      }
+    });
+
+    const cli = await createCli();
+    cli.parse(['node', 'src/cli.ts', 'ecs list', '--name', 'prod-api', '--name-prefix', 'prod-']);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const output = stdoutWriteSpy.mock.calls.map((call) => String(call[0])).join('');
+    const records = extractJsonRecordsFromOutput(output) as Array<Record<string, any>>;
+    expect(records[0]?.error).toMatchObject({
+      category: 'input',
+      code: 'CLI_INVALID_INPUT'
+    });
+    expect(listEcsInstancesMock).not.toHaveBeenCalled();
+    stdoutWriteSpy.mockRestore();
   });
 
   it('prints a compact text list in non-json mode', async () => {
@@ -367,7 +441,7 @@ describe('ecs commands', () => {
       extractJsonRecordsFromOutput,
       initOutputContext
     } = await import('../utils/output');
-    const notFound = new Error('ECS instance i-missing not exist in region cn-hangzhou');
+    const notFound = new Error('ECS instance not exist: i-missing');
     getEcsInstanceDetailMock.mockRejectedValue(notFound);
     const stdoutWriteSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
 
@@ -378,7 +452,7 @@ describe('ecs commands', () => {
       } catch (err) {
         caughtError = err;
         initOutputContext('json', ['node', 'src/cli.ts', 'ecs', 'info', 'i-missing']);
-        emitCliError(err, { stage: 'ecs.info' });
+        emitCliError(err, { stage: 'runtime' });
       }
     });
     const cli = await createCli();
@@ -392,7 +466,7 @@ describe('ecs commands', () => {
       category: 'not_found',
       code: 'RESOURCE_NOT_FOUND'
     });
-    expect(records[0]?.stage).toBe('ecs.info');
+    expect(records[0]?.stage).toBe('runtime');
     stdoutWriteSpy.mockRestore();
   });
 });

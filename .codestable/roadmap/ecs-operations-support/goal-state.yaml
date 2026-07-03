@@ -3,7 +3,7 @@ status: ready-to-dispatch
 baseline_ref: "dca9ccc346ab8902836db108cc976fca542282ee"
 driver_kind: paseo
 driver_id: "f4d19caf-73e4-41a5-ab3b-a52d46776849"
-current_feature_index: 4
+current_feature_index: 5
 features:
   - slug: "ecs-readonly-provider"
     roadmap_item: "ecs-readonly-provider"
@@ -49,7 +49,7 @@ features:
     review: ".codestable/features/2026-07-03-ecs-filter-contract-tests/ecs-filter-contract-tests-review.md"
     qa: ".codestable/features/2026-07-03-ecs-filter-contract-tests/ecs-filter-contract-tests-qa.md"
     acceptance: ".codestable/features/2026-07-03-ecs-filter-contract-tests/ecs-filter-contract-tests-acceptance.md"
-    status: pending
+    status: accepted
   - slug: "ecs-command-surface-docs"
     roadmap_item: "ecs-command-surface-docs"
     feature_dir: ".codestable/features/2026-07-03-ecs-command-surface-docs"

@@ -143,6 +143,29 @@ describe('ecs readonly provider', () => {
     expect(result.instances[0]?.instanceId).toBe('i-unmatched');
   });
 
+  it('maps exact instance name and preserves status casing in provider request', async () => {
+    const { listEcsInstances } = await import('../providers/ecs');
+    describeInstancesMock.mockResolvedValueOnce({
+      body: {
+        totalCount: 0,
+        instances: { instance: [] }
+      }
+    });
+
+    await listEcsInstances({
+      regionId: 'cn-hangzhou',
+      name: 'Prod-API-01',
+      status: 'rUnNiNg',
+      limit: 10
+    });
+
+    expect(describeInstancesMock.mock.calls[0]?.[0]).toMatchObject({
+      regionId: 'cn-hangzhou',
+      instanceName: 'Prod-API-01',
+      status: 'rUnNiNg'
+    });
+  });
+
   it('rejects mutually exclusive name filters with classifiable input error', async () => {
     const { listEcsInstances } = await import('../providers/ecs');
 
@@ -180,7 +203,9 @@ describe('ecs readonly provider', () => {
                 tags: { tag: [{ tagKey: 'env', tagValue: 'prod' }] },
                 creationTime: '2026-01-01T00:00Z',
                 expiredTime: '2027-01-01T00:00Z',
+                rawAttribute: 'secret',
                 userData: 'secret',
+                consoleOutput: 'secret',
                 password: 'secret',
                 vncUrl: 'secret',
                 keyPairPrivateKey: 'secret'
@@ -245,7 +270,7 @@ describe('ecs readonly provider', () => {
       securityGroupIds: [],
       tags: []
     });
-    expect(JSON.stringify(result.instances)).not.toMatch(/userData|password|vncUrl|keyPairPrivateKey/);
+    expect(JSON.stringify(result.instances)).not.toMatch(/rawAttribute|userData|consoleOutput|password|vncUrl|keyPairPrivateKey/);
   });
 
   it('marks list results as truncated when limit is lower than totalCount', async () => {
