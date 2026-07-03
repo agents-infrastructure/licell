@@ -4,69 +4,69 @@ created: 2026-07-03
 steps:
   - action: "Command registration：在既有 ECS module 追加 ecs info，并保持 registry/section 不漂移"
     exit_signal: "manifest diagnostics 为空，ecs namespace 同时包含 ecs list 与 ecs info；section 顺序仍为 data -> infra -> automation；未新增第二个 ecs module"
-    status: pending
+    status: done
   - action: "Execution path：接通 auth recovery、instanceId/region parse、provider detail 和 spinner"
     exit_signal: "command test mock provider，断言 requiredCapabilities=['ecs']、getEcsInstanceDetail('i-xxx', { regionId })、空 instanceId 报 input error"
-    status: pending
+    status: done
   - action: "JSON/text output + not-found：实现 result payload、文本展示和 not_found 分类"
     exit_signal: "JSON result 包含 regionId/instanceId/detail.summary；provider not-found 透传后 CLI error category=not_found；not-found 测试使用 i-xxx 形态干净 ID，region 引导不作为 nextActions 硬断言；文本和 JSON 不包含敏感字段"
-    status: pending
+    status: done
   - action: "Metadata：补 ecs info descriptor 与 namespace flow"
     exit_signal: "help/catalog metadata 测试能看到 preferredOutput=json、safe safety、result fields、--region option insight，examples/recommendedFlow 不含 lifecycle 命令"
-    status: pending
+    status: done
   - action: "Validation cleanup：运行核心验证并确认 scope 未漂移"
     exit_signal: "typecheck、ecs-command test、manifest/help metadata tests、checklist yaml 校验通过，diff 不包含 provider/auth/docs generated 手改或 lifecycle command"
-    status: pending
+    status: done
 
 checks:
   - item: "不修改 ECS provider 查询实现，只调用 getEcsInstanceDetail(instanceId, { regionId })"
     source: 范围守护
-    status: pending
+    status: passed
   - item: "不修改 auth/RAM/doctor capability，只消费 requiredCapabilities=['ecs']"
     source: 范围守护
-    status: pending
+    status: passed
   - item: "不改变 ecs list parser、filters、文本输出或 JSON payload"
     source: 范围守护
-    status: pending
+    status: passed
   - item: "不注册 start、stop、reboot、delete、rm、runInstances 等 lifecycle 命令"
     source: 范围守护
-    status: pending
+    status: passed
   - item: "不手改 README generated block 或 docs/reference/agent-surfaces.md"
     source: 范围守护
-    status: pending
+    status: passed
   - item: "ecs info 复用既有 ECS command module，不新增第二个拥有 ecs root 的 module"
     source: 挂载点
-    status: pending
+    status: passed
   - item: "ecs info 支持 --region <regionId>，未传时不跨 region 搜索"
     source: 名词契约
-    status: pending
+    status: passed
   - item: "ecs info JSON payload 包含 regionId、instanceId、detail.summary"
     source: 名词契约
-    status: pending
+    status: passed
   - item: "detail.summary 只包含 roadmap 白名单基础字段"
     source: 名词契约
-    status: pending
+    status: passed
   - item: "JSON/text 输出不包含 rawAttribute、userData、vncUrl、consoleOutput、password、keyPairPrivateKey"
     source: 流程级约束
-    status: pending
+    status: passed
   - item: "provider not-found 错误不得被命令层改写掉 not exist/notfound/no such token，JSON error category=not_found；测试使用不含 invalid/无效/不支持 等 input token 的干净 instanceId"
     source: 流程级约束
-    status: pending
+    status: passed
   - item: "空 instanceId 报 input error，message 含 不能为空 或 invalid 等可分类 token"
     source: 流程级约束
-    status: pending
+    status: passed
   - item: "ecs info 通过 executeWithAuthRecovery 使用 requiredCapabilities=['ecs']"
     source: 编排骨架
-    status: pending
+    status: passed
   - item: "ecs info 无副作用，不写 .licell/project.json、.licell/state.json 或 workspace component 配置"
     source: 验收场景
-    status: pending
+    status: passed
   - item: "ecs info --help --output json 暴露 preferredOutput=json、safe safety、result fields、--region option insight"
     source: 验收场景
-    status: pending
+    status: passed
   - item: "ecs namespace descriptor 的 examples / recommendedFlow 不包含 lifecycle 半成品命令"
     source: 范围守护
-    status: pending
+    status: passed
 
 dod:
   commands:

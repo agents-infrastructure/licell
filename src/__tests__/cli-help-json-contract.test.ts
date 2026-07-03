@@ -134,4 +134,27 @@ describe('cli help json contract', () => {
     expect(record?.help?.result?.fields.some((field: { name?: string }) => field.name === 'filters')).toBe(true);
     expect(record?.help?.renderedText).toContain('`instances[]`');
   }, 10000);
+
+  it('locks ecs info help json contract for agent discovery', () => {
+    const result = runCliHelpJson(['ecs', 'info']);
+    const records = extractJsonRecordsFromOutput(result.stdout) as Array<Record<string, any>>;
+
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(records).toHaveLength(1);
+
+    const record = records[0];
+    expect(record?.stage).toBe('help');
+    expect(record?.key).toBe('ecs info');
+    expect(record?.help?.kind).toBe('licell-help');
+    expect(record?.help?.scope).toBe('command');
+    expect(record?.help?.automation?.preferredOutput).toBe('json');
+    expect(record?.help?.safety?.level).toBe('safe');
+    expect(record?.help?.options.map((option: { rawName?: string }) => option.rawName)).toContain('--region <regionId>');
+    expect(record?.help?.result?.fields.some((field: { name?: string }) => field.name === 'detail.summary')).toBe(true);
+    expect(record?.help?.result?.fields.some((field: { name?: string }) => field.name === 'detail.summary.securityGroupIds[]')).toBe(true);
+    expect(record?.help?.renderedText).toContain('`detail.summary`');
+    expect(record?.help?.result?.fields.map((field: { name?: string }) => field.name).join(' ')).not.toMatch(/rawAttribute|userData|vncUrl|consoleOutput|password|keyPairPrivateKey/);
+  }, 10000);
 });

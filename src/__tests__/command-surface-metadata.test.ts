@@ -121,8 +121,28 @@ describe('command surface metadata', () => {
     expect(surface.result?.fields.some((field) => field.name === 'filters')).toBe(true);
   });
 
-  it('keeps ecs namespace guidance limited to registered commands', () => {
-    const subcommands = ['ecs list']
+  it('exposes ecs info metadata for agent-safe JSON automation', () => {
+    const ecsInfo = catalog.commandsByKey['ecs info']!;
+    const surface = buildCommandSurfaceMetadata({
+      scope: 'command',
+      key: 'ecs info',
+      command: ecsInfo,
+      subcommands: [],
+      descriptor: getCommandDescriptor('ecs info'),
+      extraTokens: []
+    });
+
+    expect(surface.automation?.preferredOutput).toBe('json');
+    expect(surface.safety?.level).toBe('safe');
+    expect(surface.examples).toContain('licell ecs info i-xxx --output json');
+    expect(surface.optionInsights?.some((item) => item.flag === '--region <regionId>')).toBe(true);
+    expect(surface.result?.fields.some((field) => field.name === 'detail.summary')).toBe(true);
+    expect(surface.result?.fields.some((field) => field.name === 'detail.summary.securityGroupIds[]')).toBe(true);
+    expect(surface.result?.fields.map((field) => field.name).join(' ')).not.toMatch(/rawAttribute|userData|vncUrl|consoleOutput|password|keyPairPrivateKey/);
+  });
+
+  it('keeps ecs namespace guidance limited to registered inspect commands', () => {
+    const subcommands = ['ecs list', 'ecs info']
       .map((key) => catalog.commandsByKey[key]!)
       .map((command) => ({
         key: command.key,
@@ -139,12 +159,14 @@ describe('command surface metadata', () => {
     });
 
     expect(surface.examples).toContain('licell ecs list --output json');
-    expect(JSON.stringify(surface)).not.toContain('ecs info');
+    expect(surface.examples).toContain('licell ecs info <instanceId> --output json');
     expect(JSON.stringify(surface)).not.toContain('ecs start');
     expect(JSON.stringify(surface)).not.toContain('ecs stop');
+    expect(JSON.stringify(surface)).not.toContain('ecs reboot');
+    expect(JSON.stringify(surface)).not.toContain('ecs rm');
     expect(surface.recommendedFlow.map((step) => step.command)).toEqual([
       'licell ecs list --output json',
-      'licell ecs list --tag env=prod --output json',
+      'licell ecs info <instanceId> --output json',
       'licell auth repair'
     ]);
   });

@@ -29,7 +29,7 @@ items:
   - slug: ecs-info-command
     description: 新增 licell ecs info 命令，返回单台 ECS 的基础详情并处理 not found/input 错误
     depends_on: [ecs-readonly-provider, ecs-auth-read-permissions, ecs-list-command]
-    status: pending
+    status: done
     feature: 2026-07-03-ecs-info-command
     minimal_loop: false
     notes: 默认只查当前 Licell region，不跨 region 自动搜索；只返回 roadmap 白名单中的基础字段；若 DescribeInstanceAttribute 不可用，仍应通过 DescribeInstances instanceIds 查询返回基础 summary；不得返回 rawAttribute、userData、VNC、Cloud Assistant 输出或密钥材料；空结果必须抛 not-found 错误并在 JSON error 中归类为 not_found；无副作用不写项目状态
@@ -37,7 +37,7 @@ items:
   - slug: ecs-filter-contract-tests
     description: 补强过滤与错误合同测试，锁定 tag/privateIp/publicIp/eip/name/namePrefix/status/region 参数映射、CLI input 错误分类和 JSON result 字段稳定性
     depends_on: [ecs-list-command, ecs-info-command]
-    status: in-progress
+    status: pending
     feature: 2026-07-03-ecs-filter-contract-tests
     minimal_loop: false
     notes: 这条不新增用户命令；目标是防止过滤支持在后续操控命令扩展时漂移

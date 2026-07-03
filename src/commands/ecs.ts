@@ -1,6 +1,13 @@
 import type { CAC } from 'cac';
 import pc from 'picocolors';
-import { listEcsInstances, type EcsListInstancesOptions, type EcsInstanceSummary, type EcsInstanceTagFilter } from '../providers/ecs';
+import {
+  getEcsInstanceDetail,
+  listEcsInstances,
+  type EcsInstanceDetail,
+  type EcsInstanceSummary,
+  type EcsInstanceTagFilter,
+  type EcsListInstancesOptions
+} from '../providers/ecs';
 import {
   createSpinner,
   ensureAuthOrExit,
@@ -8,6 +15,7 @@ import {
   parseListLimit,
   showOutro,
   toOptionalString,
+  toPromptValue,
   withSpinner
 } from '../utils/cli-shared';
 import { executeWithAuthRecovery } from '../utils/auth-recovery';
@@ -104,6 +112,73 @@ const ecsListCommand = defineCliCommand({
         { name: 'truncated', description: '结果是否因 limit 或 provider 分页上限被截断。', required: true },
         { name: 'filters', description: '归一化后的 provider 查询过滤条件。', required: true },
         { name: 'instances[]', description: 'ECS 实例摘要数组。', required: true }
+      ]
+    }
+  }
+});
+
+const ecsInfoCommand = defineCliCommand({
+  rawName: 'ecs info <instanceId>',
+  description: '查看 ECS 实例基础详情',
+  options: [
+    { rawName: '--region <regionId>', description: '查询地域；不传则使用当前 licell 默认 region，不跨 region 搜索' }
+  ],
+  descriptor: {
+    title: 'Show ECS instance detail',
+    summary: '查看单台 ECS 实例的基础详情；默认只查询当前 licell region。',
+    examples: [
+      'licell ecs info i-xxx --output json',
+      'licell ecs info i-xxx --region cn-hangzhou --output json'
+    ],
+    related: ['ecs list', 'auth repair'],
+    agentTips: [
+      '自动化调用优先使用 `licell ecs info <instanceId> --output json`，读取 `detail.summary`。',
+      '未传 `--region` 时只查询当前 licell auth region；查不到时先确认实例所在 region。',
+      '本命令只返回基础白名单字段，不返回 raw attribute、userData、VNC 或密钥材料。'
+    ],
+    automation: {
+      preferredOutput: 'json',
+      explicitInputs: ['instanceId', '--region']
+    },
+    safety: {
+      level: 'safe',
+      reason: '只调用 ECS 只读详情查询，不修改云端资源或项目状态。',
+      confirmFlags: []
+    },
+    optionInsights: {
+      '--region': {
+        whenToUse: '实例不在当前 licell 默认 region 时显式指定。',
+        cautions: ['不会跨 region 自动搜索；只影响本次查询，不修改全局默认 region。']
+      }
+    },
+    recommendedFlow: [
+      { title: '先列出实例', command: 'licell ecs list --output json', reason: '获取实例 ID 和实际 region。' },
+      { title: '查看详情', command: 'licell ecs info <instanceId> --output json', reason: '读取单台 ECS 的基础详情。' },
+      { title: '指定地域查看详情', command: 'licell ecs info <instanceId> --region cn-hangzhou --output json', reason: '实例不在默认 region 时显式查询。' }
+    ],
+    result: {
+      summary: '返回 ECS 实例基础详情，detail.summary 仅包含白名单摘要字段。',
+      fields: [
+        { name: 'regionId', description: '实际查询到的 ECS region。', required: true },
+        { name: 'instanceId', description: '查询到的 ECS instanceId。', required: true },
+        { name: 'detail.summary', description: 'ECS 实例基础摘要。', required: true },
+        { name: 'detail.summary.instanceId', description: '实例 ID。', required: true },
+        { name: 'detail.summary.instanceName', description: '实例名称。' },
+        { name: 'detail.summary.status', description: 'ECS 原生状态。' },
+        { name: 'detail.summary.regionId', description: '实例所属 region。', required: true },
+        { name: 'detail.summary.zoneId', description: '实例所属可用区。' },
+        { name: 'detail.summary.instanceType', description: '实例规格。' },
+        { name: 'detail.summary.osName', description: '操作系统名称。' },
+        { name: 'detail.summary.chargeType', description: '付费类型。' },
+        { name: 'detail.summary.vpcId', description: 'VPC ID。' },
+        { name: 'detail.summary.vSwitchId', description: 'VSwitch ID。' },
+        { name: 'detail.summary.privateIpAddresses[]', description: '私网 IP 列表。' },
+        { name: 'detail.summary.publicIpAddresses[]', description: '公网 IP 列表。' },
+        { name: 'detail.summary.eipAddress', description: 'EIP 地址。' },
+        { name: 'detail.summary.securityGroupIds[]', description: '安全组 ID 列表。' },
+        { name: 'detail.summary.tags[]', description: '标签列表。' },
+        { name: 'detail.summary.createdAt', description: '创建时间。' },
+        { name: 'detail.summary.expiredAt', description: '过期时间。' }
       ]
     }
   }
@@ -210,6 +285,60 @@ function printEcsInstances(instances: EcsInstanceSummary[]) {
   }
 }
 
+function formatTagList(tags: EcsInstanceSummary['tags']) {
+  return tags.length > 0
+    ? tags.map((tag) => tag.value ? `${tag.key}=${tag.value}` : tag.key).join(',')
+    : '-';
+}
+
+function buildEcsInfoResult(detail: EcsInstanceDetail) {
+  const summary = detail.summary;
+  return {
+    regionId: summary.regionId,
+    instanceId: summary.instanceId,
+    detail: {
+      summary: {
+        instanceId: summary.instanceId,
+        ...(summary.instanceName ? { instanceName: summary.instanceName } : {}),
+        ...(summary.status ? { status: summary.status } : {}),
+        regionId: summary.regionId,
+        ...(summary.zoneId ? { zoneId: summary.zoneId } : {}),
+        ...(summary.instanceType ? { instanceType: summary.instanceType } : {}),
+        ...(summary.osName ? { osName: summary.osName } : {}),
+        ...(summary.chargeType ? { chargeType: summary.chargeType } : {}),
+        ...(summary.vpcId ? { vpcId: summary.vpcId } : {}),
+        ...(summary.vSwitchId ? { vSwitchId: summary.vSwitchId } : {}),
+        privateIpAddresses: summary.privateIpAddresses,
+        publicIpAddresses: summary.publicIpAddresses,
+        ...(summary.eipAddress ? { eipAddress: summary.eipAddress } : {}),
+        securityGroupIds: summary.securityGroupIds,
+        tags: summary.tags,
+        ...(summary.createdAt ? { createdAt: summary.createdAt } : {}),
+        ...(summary.expiredAt ? { expiredAt: summary.expiredAt } : {})
+      }
+    }
+  };
+}
+
+function printEcsInstanceDetail(detail: EcsInstanceDetail) {
+  const { summary } = detail;
+  console.log(`\ninstanceId:     ${pc.cyan(summary.instanceId)}`);
+  console.log(`name:           ${pc.cyan(summary.instanceName || '-')}`);
+  console.log(`status:         ${pc.cyan(summary.status || '-')}`);
+  console.log(`region/zone:    ${pc.cyan(`${summary.regionId} / ${summary.zoneId || '-'}`)}`);
+  console.log(`type:           ${pc.cyan(summary.instanceType || '-')}`);
+  if (summary.osName) console.log(`os:             ${pc.cyan(summary.osName)}`);
+  if (summary.chargeType) console.log(`chargeType:     ${pc.cyan(summary.chargeType)}`);
+  console.log(`vpc/vsw:        ${pc.cyan(`${summary.vpcId || '-'} / ${summary.vSwitchId || '-'}`)}`);
+  console.log(`privateIp:      ${pc.cyan(formatAddressList(summary.privateIpAddresses))}`);
+  console.log(`publicIp:       ${pc.cyan(formatAddressList(summary.publicIpAddresses))}`);
+  console.log(`eip:            ${pc.cyan(summary.eipAddress || '-')}`);
+  console.log(`securityGroups: ${pc.cyan(formatAddressList(summary.securityGroupIds))}`);
+  console.log(`tags:           ${pc.cyan(formatTagList(summary.tags))}`);
+  if (summary.createdAt) console.log(`createdAt:      ${pc.cyan(summary.createdAt)}`);
+  if (summary.expiredAt) console.log(`expiredAt:      ${pc.cyan(summary.expiredAt)}`);
+}
+
 export function registerEcsCommands(cli: CAC) {
   registerCliCommand(cli, ecsListCommand)
     .action(async (options: Parameters<typeof parseEcsListOptions>[0]) => {
@@ -250,29 +379,61 @@ export function registerEcsCommands(cli: CAC) {
         }
       );
     });
+
+  registerCliCommand(cli, ecsInfoCommand)
+    .action(async (instanceId: string, options: { region?: unknown }) => {
+      await executeWithAuthRecovery(
+        {
+          commandLabel: commandInvocation(ecsInfoCommand),
+          interactiveTTY: isInteractiveTTY(),
+          requiredCapabilities: ['ecs']
+        },
+        async () => {
+          ensureAuthOrExit();
+          const normalizedId = toPromptValue(instanceId, 'instanceId');
+          const regionId = toOptionalString(options.region);
+          const s = createSpinner();
+          const detail = await withSpinner(
+            s,
+            `正在拉取 ECS 实例 ${normalizedId} 详情...`,
+            '❌ 获取 ECS 实例详情失败',
+            () => getEcsInstanceDetail(normalizedId, regionId ? { regionId } : undefined)
+          );
+          if (!detail) return;
+          if (isJsonOutput()) {
+            emitCommandResult(buildEcsInfoResult(detail));
+            return;
+          }
+          s.stop(pc.green('✅ 获取成功'));
+          printEcsInstanceDetail(detail);
+          console.log('');
+          showOutro('Done.');
+        }
+      );
+    });
 }
 
 export const ecsCommandModule = defineCommandModule({
   section: INFRA_SECTION,
-  commands: [ecsListCommand],
+  commands: [ecsListCommand, ecsInfoCommand],
   register: registerEcsCommands,
   namespaces: {
     ecs: {
       title: 'ECS instances',
-      summary: '查询 ECS 云服务器实例，后续详情和生命周期命令会按安全设计逐步开放。',
+      summary: '查询 ECS 云服务器实例，后续生命周期命令会按安全设计逐步开放。',
       examples: [
         'licell ecs list --output json',
-        'licell ecs list --status Running --output json',
-        'licell ecs list --tag env=prod --output json'
+        'licell ecs list --tag env=prod --output json',
+        'licell ecs info <instanceId> --output json'
       ],
       agentTips: [
-        '当前 ECS namespace 只开放只读 list 命令。',
-        '需要结构化结果时使用 `licell ecs list --output json`。',
+        '当前 ECS namespace 只开放只读 list/info 命令。',
+        '需要结构化结果时使用 `licell ecs list --output json` 或 `licell ecs info <instanceId> --output json`。',
         '不要假设未出现在 catalog/help 中的 ECS 子命令已经可用。'
       ],
       recommendedFlow: [
         { title: '列出实例', command: 'licell ecs list --output json', reason: '读取当前 region ECS 实例摘要。' },
-        { title: '过滤实例', command: 'licell ecs list --tag env=prod --output json', reason: '用服务端过滤缩小实例范围。' },
+        { title: '查看详情', command: 'licell ecs info <instanceId> --output json', reason: '读取单台 ECS 的基础详情。' },
         { title: '修复权限', command: 'licell auth repair', reason: '如果 list 返回 ECS 读权限不足，补齐 RAM policy。' }
       ],
       automation: {

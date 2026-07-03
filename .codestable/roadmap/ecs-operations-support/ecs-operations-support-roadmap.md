@@ -360,8 +360,8 @@ CAPABILITY_PROBES.ecs calls listEcsInstances({ limit: 1 }) or an equivalent read
 4. **ecs-info-command** — 新增 `licell ecs info <instanceId>` 命令，返回单台 ECS 的基础详情并处理 not found/input 错误。
    - 所属模块：ECS CLI Command, ECS Provider
    - 依赖：ecs-readonly-provider, ecs-auth-read-permissions
-   - 状态：planned
-   - 对应 feature：未启动
+   - 状态：done
+   - 对应 feature：2026-07-03-ecs-info-command
    - 备注：默认只查当前 Licell region，不跨 region 自动搜索；只返回本 roadmap 白名单中的基础字段；若 `DescribeInstanceAttribute` 不可用，仍应通过 `DescribeInstances(instanceIds=[id])` 返回基础 summary；不得返回 rawAttribute 或敏感诊断字段。空结果必须抛 not-found 错误并在 JSON error 中归类为 `not_found`；无副作用不写项目状态。
 
 5. **ecs-filter-contract-tests** — 补强过滤与错误合同测试，锁定 tag/privateIp/publicIp/eip/name/namePrefix/status/region 参数映射、CLI input 错误分类和 JSON result 字段稳定性。
