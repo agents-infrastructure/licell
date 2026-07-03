@@ -4,75 +4,75 @@ created: 2026-07-03
 steps:
   - action: "Lifecycle seed document：写后续 feature 种子"
     exit_signal: "seed 文档包含 phase split、common preflight、future command safety/confirm/dry-run/RAM 表、确认 helper 文案 caveat、confirmFlags 自动收集边界、明确当前不实现"
-    status: pending
+    status: done
   - action: "Command surface negative guards：锁定只读 surface"
     exit_signal: "catalog/help/reference/completion tests 断言 ECS 当前只有 list/info，不含 start/stop/reboot/rm/delete/run/create"
-    status: pending
+    status: done
   - action: "Auth/RAM negative guards：锁定只读权限"
     exit_signal: "前置 ecs-auth-read-permissions 已合入；auth/RAM tests 断言 CAPABILITY_ACTIONS.ecs 等于只读 Describe 白名单，bootstrap policy 不含 ECS mutating action 黑名单"
-    status: pending
+    status: done
   - action: "Future design notes quality pass：检查 seed 可被后续 cs-feat 消费"
     exit_signal: "seed 文档每条 future command 有 scope、safety、confirm、dry-run、precheck、RAM、tests；无当前用户执行说明"
-    status: pending
+    status: done
   - action: "Validation cleanup：运行验证并确认 scope 未漂移"
     exit_signal: "typecheck、surface/auth tests、YAML 校验通过；diff 不包含 production lifecycle command/provider wrapper/generated docs 手改"
-    status: pending
+    status: done
 
 checks:
   - item: "不注册 licell ecs start/stop/reboot/rm/delete/run/create 等 lifecycle 命令"
     source: 范围守护
-    status: pending
+    status: passed
   - item: "不新增 ECS provider lifecycle API wrapper"
     source: 范围守护
-    status: pending
+    status: passed
   - item: "不修改 AuthCapability ecs 的只读 action list"
     source: 范围守护
-    status: pending
+    status: passed
   - item: "实现前置：ecs-auth-read-permissions、ecs-filter-contract-tests、ecs-command-surface-docs 已合入或其 surface 可验证"
     source: 编排约束
-    status: pending
+    status: passed
   - item: "不把 ecs:StartInstance/StopInstance/RebootInstance/DeleteInstance/RunInstances 加入 LICELL_POLICY_ACTIONS"
     source: 范围守护
-    status: pending
+    status: passed
   - item: "不修改 doctor ECS probe 的只读行为"
     source: 范围守护
-    status: pending
+    status: passed
   - item: "seed 文档存在于 .codestable/roadmap/ecs-operations-support/ecs-lifecycle-command-seeds.md"
     source: 交付物
-    status: pending
+    status: passed
   - item: "seed 文档覆盖 start/reboot/stop/rm/delete/run 的 phase split、安全等级、confirm、dry-run、precheck、verify、RAM action"
     source: 名词契约
-    status: pending
+    status: passed
   - item: "future start/reboot 标为 mutating 或 high-impact，并要求 dry-run"
     source: 名词契约
-    status: pending
+    status: passed
   - item: "future stop 标为业务中断风险，必须要求 dry-run 和显式确认策略"
     source: 名词契约
-    status: pending
+    status: passed
   - item: "future rm/delete 标为 destructive，必须要求 --yes 和双确认"
     source: 名词契约
-    status: pending
+    status: passed
   - item: "seed 文档覆盖 ensureDestructiveActionConfirmed 删除语义 caveat，stop/reboot 不得复用删除文案"
     source: 名词契约
-    status: pending
+    status: passed
   - item: "seed 文档覆盖 confirmFlags 自动收集只支持 --yes/--apply/--force；新增确认 flag 需同步 surface metadata 或显式 descriptor"
     source: 名词契约
-    status: pending
+    status: passed
   - item: "future run/create 单独拆 feature，不混入 lifecycle scaffold"
     source: 范围守护
-    status: pending
+    status: passed
   - item: "catalog/help/reference/completion 不暴露 ECS lifecycle 半命令"
     source: 验收场景
-    status: pending
+    status: passed
   - item: "auth tests 断言 CAPABILITY_ACTIONS.ecs 等于 ecs:DescribeInstances / ecs:DescribeInstanceAttribute 只读白名单"
     source: 验收场景
-    status: pending
+    status: passed
   - item: "RAM tests 包含 ECS mutating action 黑名单负向断言"
     source: 验收场景
-    status: pending
+    status: passed
   - item: "seed 文档不写成当前用户指南，不给出可执行 lifecycle 命令示例"
     source: 清洁度
-    status: pending
+    status: passed
 
 dod:
   commands:

@@ -3,6 +3,8 @@ import { spawnSync } from 'child_process';
 import { resolve } from 'path';
 import { extractJsonRecordsFromOutput } from '../utils/output';
 
+const ECS_LIFECYCLE_HELP_PATTERN = /(?:licell )?ecs (start|stop|reboot|delete|rm|run|create)\b|ecs:(StartInstance|StopInstance|RebootInstance|DeleteInstance|RunInstances)/;
+
 beforeAll(() => {
   const warmup = spawnSync('bun', ['x', 'tsx', '--version'], {
     cwd: process.cwd(),
@@ -45,6 +47,28 @@ function runCliHelpJson(args: string[]) {
 }
 
 describe('cli help json contract', () => {
+  it('keeps ecs namespace help limited to readonly inspect commands', () => {
+    const result = runCliHelpJson(['ecs']);
+    const records = extractJsonRecordsFromOutput(result.stdout) as Array<Record<string, any>>;
+
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(records).toHaveLength(1);
+
+    const record = records[0];
+    expect(record?.stage).toBe('help');
+    expect(record?.key).toBe('ecs');
+    expect(record?.help?.kind).toBe('licell-help');
+    expect(record?.help?.scope).toBe('namespace');
+    expect(record?.help?.safety?.level).toBe('safe');
+    expect(record?.help?.subcommands.map((command: { key?: string }) => command.key)).toEqual([
+      'ecs info',
+      'ecs list'
+    ]);
+    expect(JSON.stringify(record)).not.toMatch(ECS_LIFECYCLE_HELP_PATTERN);
+  }, 10000);
+
   it('locks deploy help json contract for task-aware result schema', () => {
     const result = runCliHelpJson(['deploy']);
     const records = extractJsonRecordsFromOutput(result.stdout) as Array<Record<string, any>>;
@@ -144,7 +168,7 @@ describe('cli help json contract', () => {
       'instances[]'
     ]));
     expect(record?.help?.renderedText).toContain('`instances[]`');
-    expect(JSON.stringify(record)).not.toMatch(/ecs (start|stop|reboot|delete|rm)|runInstances/);
+    expect(JSON.stringify(record)).not.toMatch(ECS_LIFECYCLE_HELP_PATTERN);
   }, 10000);
 
   it('locks ecs info help json contract for agent discovery', () => {
@@ -170,6 +194,6 @@ describe('cli help json contract', () => {
     expect(record?.help?.result?.fields.some((field: { name?: string }) => field.name === 'detail.summary.securityGroupIds[]')).toBe(true);
     expect(record?.help?.renderedText).toContain('`detail.summary`');
     expect(record?.help?.result?.fields.map((field: { name?: string }) => field.name).join(' ')).not.toMatch(/rawAttribute|userData|vncUrl|consoleOutput|password|keyPairPrivateKey/);
-    expect(JSON.stringify(record)).not.toMatch(/ecs (start|stop|reboot|delete|rm)|runInstances/);
+    expect(JSON.stringify(record)).not.toMatch(ECS_LIFECYCLE_HELP_PATTERN);
   }, 10000);
 });

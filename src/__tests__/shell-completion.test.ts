@@ -6,6 +6,8 @@ import {
   resolveCompletionCandidates
 } from '../utils/shell-completion';
 
+const ECS_LIFECYCLE_COMPLETIONS = ['start', 'stop', 'reboot', 'delete', 'rm', 'run', 'create'];
+
 describe('resolveCompletionCandidates', () => {
   it('suggests top-level commands from partial token', () => {
     const candidates = resolveCompletionCandidates({
@@ -34,7 +36,7 @@ describe('resolveCompletionCandidates', () => {
       compCur: ''
     });
     expect(ecsCandidates).toEqual(expect.arrayContaining(['list', 'info']));
-    for (const lifecycleCommand of ['start', 'stop', 'reboot', 'delete', 'rm']) {
+    for (const lifecycleCommand of ECS_LIFECYCLE_COMPLETIONS) {
       expect(ecsCandidates).not.toContain(lifecycleCommand);
     }
   });

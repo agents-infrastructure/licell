@@ -7,6 +7,14 @@ import {
 } from '../providers/ram';
 import { resolveAuthCapabilityActions, type AuthCapability } from '../utils/auth-recovery';
 
+const ECS_MUTATING_ACTIONS = [
+  'ecs:StartInstance',
+  'ecs:StopInstance',
+  'ecs:RebootInstance',
+  'ecs:DeleteInstance',
+  'ecs:RunInstances'
+];
+
 describe('ram bootstrap helpers', () => {
   it('normalizes default user/policy names', () => {
     expect(normalizeRamUserName()).toBe('licell-operator');
@@ -47,15 +55,11 @@ describe('ram bootstrap helpers', () => {
       'ecs:DescribeInstanceAttribute',
       'ecs:DescribeInstances'
     ]));
-    const mutatingEcsActions = [
-      'ecs:StartInstance',
-      'ecs:StopInstance',
-      'ecs:RebootInstance',
-      'ecs:DeleteInstance',
-      'ecs:RunInstances'
-    ];
-    for (const action of mutatingEcsActions) {
+    for (const action of ECS_MUTATING_ACTIONS) {
       expect(doc.Statement[0].Action).not.toContain(action);
+    }
+    for (const action of ECS_MUTATING_ACTIONS) {
+      expect(LICELL_POLICY_ACTIONS).not.toContain(action);
     }
   });
 

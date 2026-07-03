@@ -53,7 +53,7 @@ items:
   - slug: ecs-lifecycle-command-scaffold
     description: 为后续 start/stop/reboot/rm 等 ECS 操控命令补一层安全设计与空实现/设计占位，不开放实际 mutating 行为
     depends_on: [ecs-filter-contract-tests, ecs-command-surface-docs]
-    status: in-progress
+    status: done
     feature: 2026-07-03-ecs-lifecycle-command-scaffold
     minimal_loop: false
     notes: 产出可执行的后续 feature 种子或 design note，明确 safety level、confirm flags、dry-run 策略、RAM action 边界；不注册会误导用户的半成品命令

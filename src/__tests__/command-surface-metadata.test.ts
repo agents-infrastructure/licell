@@ -9,6 +9,7 @@ import { getCommandCatalog } from '../utils/command-catalog';
 import { getCommandDescriptor } from '../utils/command-metadata';
 
 const catalog = getCommandCatalog();
+const ECS_LIFECYCLE_COMMANDS = ['ecs start', 'ecs stop', 'ecs reboot', 'ecs delete', 'ecs rm', 'ecs run', 'ecs create'];
 
 describe('command surface metadata', () => {
   it('shares invocation helpers across surfaces', () => {
@@ -160,10 +161,10 @@ describe('command surface metadata', () => {
 
     expect(surface.examples).toContain('licell ecs list --output json');
     expect(surface.examples).toContain('licell ecs info <instanceId> --output json');
-    expect(JSON.stringify(surface)).not.toContain('ecs start');
-    expect(JSON.stringify(surface)).not.toContain('ecs stop');
-    expect(JSON.stringify(surface)).not.toContain('ecs reboot');
-    expect(JSON.stringify(surface)).not.toContain('ecs rm');
+    const serialized = JSON.stringify(surface);
+    for (const command of ECS_LIFECYCLE_COMMANDS) {
+      expect(serialized).not.toContain(command);
+    }
     expect(surface.recommendedFlow.map((step) => step.command)).toEqual([
       'licell ecs list --output json',
       'licell ecs info <instanceId> --output json',

@@ -3,7 +3,7 @@ status: ready-to-dispatch
 baseline_ref: "dca9ccc346ab8902836db108cc976fca542282ee"
 driver_kind: paseo
 driver_id: "f4d19caf-73e4-41a5-ab3b-a52d46776849"
-current_feature_index: 6
+current_feature_index: 7
 features:
   - slug: "ecs-readonly-provider"
     roadmap_item: "ecs-readonly-provider"
@@ -67,4 +67,4 @@ features:
     review: ".codestable/features/2026-07-03-ecs-lifecycle-command-scaffold/ecs-lifecycle-command-scaffold-review.md"
     qa: ".codestable/features/2026-07-03-ecs-lifecycle-command-scaffold/ecs-lifecycle-command-scaffold-qa.md"
     acceptance: ".codestable/features/2026-07-03-ecs-lifecycle-command-scaffold/ecs-lifecycle-command-scaffold-acceptance.md"
-    status: pending
+    status: accepted
