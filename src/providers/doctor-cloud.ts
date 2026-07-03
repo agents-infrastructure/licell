@@ -8,6 +8,7 @@ import { getFunctionInfo, listFunctions } from './fc/function-ops';
 import { listFnCustomDomains, resolveDefaultFcGatewayDomain, type FnCustomDomainState } from './fc/custom-domain';
 import { listFunctionAliases, listFunctionVersions } from './fc/release';
 import { getCdnDomainDetail, listCdnDomains, type CdnDomainDetail } from './cdn';
+import { listEcsInstances } from './ecs';
 import { listDatabaseInstances } from './infra/query';
 import { getOssBucketInfo, listOssBuckets, listOssObjects, resolveOssBucketName, resolveOssBucketOriginDomain } from './oss';
 import { listCacheInstances } from './redis/query';
@@ -39,7 +40,7 @@ const CrClientCtor = resolveSdkCtor<CR>(CR, '@alicloud/cr20181201');
 const SlsClientCtor = resolveSdkCtor<SLS>(SLS, '@alicloud/sls20201230');
 
 const CLOUD_PROBE_TIMEOUT_MS = 8_000;
-const DOCTOR_CAPABILITY_ORDER: readonly AuthCapability[] = ['fc', 'oss', 'dns', 'cdn', 'vpc', 'cr', 'rds', 'redis', 'rdsai', 'logs'];
+const DOCTOR_CAPABILITY_ORDER: readonly AuthCapability[] = ['fc', 'oss', 'dns', 'cdn', 'vpc', 'ecs', 'cr', 'rds', 'redis', 'rdsai', 'logs'];
 
 export interface DoctorCloudCheckResult {
   status: 'ok' | 'warn' | 'error' | 'skip';
@@ -1191,6 +1192,18 @@ async function probeLogsCapability(auth: AuthConfig): Promise<DoctorCloudCapabil
   }
 }
 
+async function probeEcsCapability(): Promise<DoctorCloudCapabilityProbe> {
+  await withTimeout(listEcsInstances({ limit: 1 }), 'ECS capability');
+  return {
+    capability: 'ecs',
+    label: AUTH_CAPABILITY_LABELS.ecs,
+    required: false,
+    status: 'ok',
+    summary: 'ECS 读权限与 region endpoint 可用。',
+    details: ['probe: DescribeInstances(limit=1)']
+  };
+}
+
 const CAPABILITY_PROBES: Record<AuthCapability, (auth: AuthConfig) => Promise<DoctorCloudCapabilityProbe>> = {
   fc: async (auth) => {
     void auth;
@@ -1216,10 +1229,14 @@ const CAPABILITY_PROBES: Record<AuthCapability, (auth: AuthConfig) => Promise<Do
     void auth;
     return probeRedisCapability();
   },
-  logs: probeLogsCapability
+  logs: probeLogsCapability,
+  ecs: async (auth) => {
+    void auth;
+    return probeEcsCapability();
+  }
 };
 
-async function runCapabilityProbe(auth: AuthConfig, capability: AuthCapability, required: boolean): Promise<DoctorCloudCapabilityProbe> {
+export async function runCapabilityProbe(auth: AuthConfig, capability: AuthCapability, required: boolean): Promise<DoctorCloudCapabilityProbe> {
   const label = AUTH_CAPABILITY_LABELS[capability];
   try {
     const probe = await CAPABILITY_PROBES[capability](auth);

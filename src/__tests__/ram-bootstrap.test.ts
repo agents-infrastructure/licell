@@ -41,12 +41,26 @@ describe('ram bootstrap helpers', () => {
       'log:CreateIndex',
       'log:ListProject',
       'log:ListLogStores',
-      'log:GetLogs'
+      'log:GetLogs',
+      'ecs:DescribeSecurityGroups',
+      'ecs:CreateSecurityGroup',
+      'ecs:DescribeInstanceAttribute',
+      'ecs:DescribeInstances'
     ]));
+    const mutatingEcsActions = [
+      'ecs:StartInstance',
+      'ecs:StopInstance',
+      'ecs:RebootInstance',
+      'ecs:DeleteInstance',
+      'ecs:RunInstances'
+    ];
+    for (const action of mutatingEcsActions) {
+      expect(doc.Statement[0].Action).not.toContain(action);
+    }
   });
 
   it('covers all auth capability action hints in licell policy actions', () => {
-    const capabilities: AuthCapability[] = ['fc', 'dns', 'oss', 'rds', 'redis', 'cdn', 'vpc', 'cr', 'logs'];
+    const capabilities: AuthCapability[] = ['fc', 'dns', 'oss', 'rds', 'redis', 'cdn', 'vpc', 'cr', 'logs', 'ecs'];
     const hintedActions = resolveAuthCapabilityActions(capabilities);
     for (const action of hintedActions) {
       expect(LICELL_POLICY_ACTIONS).toContain(action);

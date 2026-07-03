@@ -7,7 +7,7 @@ import { Config, DEFAULT_ALI_REGION, type AuthConfig } from './config';
 import { readEnvWithFallback } from './env';
 
 export type AuthIssueKind = 'missing_auth' | 'access_denied' | 'invalid_credentials' | 'unknown';
-export type AuthCapability = 'fc' | 'dns' | 'oss' | 'rds' | 'rdsai' | 'redis' | 'cdn' | 'vpc' | 'cr' | 'logs';
+export type AuthCapability = 'fc' | 'dns' | 'oss' | 'rds' | 'rdsai' | 'redis' | 'cdn' | 'vpc' | 'cr' | 'logs' | 'ecs';
 
 export const AUTH_CAPABILITY_LABELS: Record<AuthCapability, string> = {
   fc: '函数计算',
@@ -19,7 +19,8 @@ export const AUTH_CAPABILITY_LABELS: Record<AuthCapability, string> = {
   cdn: 'CDN',
   vpc: 'VPC',
   cr: '容器镜像仓库 CR',
-  logs: '日志服务 SLS'
+  logs: '日志服务 SLS',
+  ecs: 'ECS'
 };
 
 const CAPABILITY_ACTIONS: Record<AuthCapability, string[]> = {
@@ -50,7 +51,8 @@ const CAPABILITY_ACTIONS: Record<AuthCapability, string[]> = {
   cdn: ['cdn:DescribeUserDomains', 'cdn:AddCdnDomain', 'cdn:BatchSetCdnDomainConfig'],
   vpc: ['vpc:DescribeVpcs', 'vpc:CreateVpc', 'vpc:CreateVSwitch'],
   cr: ['cr:ListInstance', 'cr:CreateNamespace', 'cr:CreateRepository'],
-  logs: ['log:GetLogs', 'log:ListProject', 'log:ListLogStores', 'log:CreateProject', 'log:CreateLogStore', 'log:CreateIndex']
+  logs: ['log:GetLogs', 'log:ListProject', 'log:ListLogStores', 'log:CreateProject', 'log:CreateLogStore', 'log:CreateIndex'],
+  ecs: ['ecs:DescribeInstanceAttribute', 'ecs:DescribeInstances']
 };
 
 const preflightPrompted = new Set<string>();

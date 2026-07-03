@@ -346,8 +346,8 @@ CAPABILITY_PROBES.ecs calls listEcsInstances({ limit: 1 }) or an equivalent read
 2. **ecs-auth-read-permissions** — 把 ECS 只读查询纳入 auth recovery capability、bootstrap RAM policy 和 doctor cloud capability probe，并增加缺失权限检查测试。
    - 所属模块：Auth & Safety
    - 依赖：ecs-readonly-provider
-   - 状态：planned
-   - 对应 feature：未启动
+   - 状态：done
+   - 对应 feature：2026-07-03-ecs-auth-read-permissions
    - 备注：先新增 `AuthCapability='ecs'`、`AUTH_CAPABILITY_LABELS.ecs`、`CAPABILITY_ACTIONS.ecs`、`LICELL_POLICY_ACTIONS` 和 doctor probe，供命令层消费；接受 ECS 进入全员 doctor optional 探测，每次 doctor 多一次 `limit=1` 只读云调用，存量 bootstrap operator 在重新 `auth repair` 前会出现 ECS 权限 warn；只加入 `DescribeInstances` / `DescribeInstanceAttribute`，不加入生命周期 mutating action。必须扩展 `auth-recovery` / `ram-bootstrap` / doctor 相关测试，并断言 label/actions/probe 非空。
 
 3. **ecs-list-command** — 新增 `licell ecs list` 命令，把 provider 查询暴露为文本输出和结构化 JSON result。
