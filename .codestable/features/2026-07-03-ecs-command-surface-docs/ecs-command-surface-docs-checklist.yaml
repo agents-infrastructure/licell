@@ -1,0 +1,103 @@
+feature: 2026-07-03-ecs-command-surface-docs
+created: 2026-07-03
+
+steps:
+  - action: "Command metadata completeness：只读验证 ecs namespace/list/info descriptor"
+    exit_signal: "前置 ecs-list-command / ecs-info-command 已合入；catalog/help JSON tests 看到 ecs list/info 的 safe safety、preferredOutput=json、result fields、examples/recommendedFlow，且不含 lifecycle 半命令；若 metadata 缺失，回前置 feature 修复"
+    status: pending
+  - action: "Skill scaffold sync：同步 skill 描述与 scaffold"
+    exit_signal: "skills-scaffold.ts 的 getSkillContent description 与 AGENTS_MD_LICELL_ENTRY、.claude/skills/licell/SKILL.md 描述均包含 ECS queries；skills-scaffold.test.ts 断言 committed SKILL.md 与 getSkillFiles('claude')[0].content 一致；操作合同仍要求先查 catalog/help"
+    status: pending
+  - action: "Generated docs sync：运行 docs 生成并验证"
+    exit_signal: "bun run docs:sync 后 README generated block 与 docs/reference/agent-surfaces.md 含 Cloud Infrastructure / ECS 查询命令，bun run docs:check 通过"
+    status: pending
+  - action: "Surface discovery tests：补 catalog/reference/completion tests"
+    exit_signal: "section 顺序 data → infra → automation 被断言；completion root/subcommand/options 候选包含 ECS；test-only skill command reference renderer / README / agent surface 不含 lifecycle 半命令"
+    status: pending
+  - action: "Validation cleanup：跑验证并确认 scope 未漂移"
+    exit_signal: "typecheck、surface/docs/completion tests、docs:check、YAML 校验通过；diff 不包含 provider/auth/RAM/doctor 行为或手改 generated 内容"
+    status: pending
+
+checks:
+  - item: "registry/descriptor 是 catalog、help、README、agent surface、test-only skill command reference renderer、completion 的唯一命令事实源"
+    source: 关键决策
+    status: pending
+  - item: "README generated blocks 和 docs/reference/agent-surfaces.md 只通过 bun run docs:sync 更新"
+    source: 关键决策
+    status: pending
+  - item: "README 顶部 ECS 能力 bullet 如有改动，只发生在非生成区，不复制命令表"
+    source: 关键决策
+    status: pending
+  - item: "src/utils/skills-scaffold.ts 的 getSkillContent description 与 AGENTS_MD_LICELL_ENTRY、.claude/skills/licell/SKILL.md 描述包含 ECS queries 且保持 catalog/help 优先操作合同"
+    source: 名词契约
+    status: pending
+  - item: "src/__tests__/skills-scaffold.test.ts 断言 committed .claude/skills/licell/SKILL.md 等于 getSkillFiles('claude')[0].content"
+    source: 名词契约
+    status: pending
+  - item: "catalog/help JSON 中 ecs list/info 为 sectionId=infra、safety=safe、automation.preferredOutput=json"
+    source: 验收场景
+    status: pending
+  - item: "ecs list result fields 覆盖 regionId/count/limit/totalCount/truncated/filters/instances[]"
+    source: 验收场景
+    status: pending
+  - item: "ecs info result fields 覆盖 regionId/instanceId/detail.summary"
+    source: 验收场景
+    status: pending
+  - item: "Cloud Infrastructure section 在 command reference / generated docs 中位于 Data Services 与 Automation & Tooling 之间"
+    source: 验收场景
+    status: pending
+  - item: "README generated block 与 docs/reference/agent-surfaces.md 含 licell ecs list 和 licell ecs info <instanceId>"
+    source: 验收场景
+    status: pending
+  - item: "renderSkillCommandReference() 作为 test-only renderer 含 ECS 查询命令，不含 ECS lifecycle 半命令"
+    source: 验收场景
+    status: pending
+  - item: "resolveCompletionCandidates() 在 root/ecs/ecs list 三层返回 ECS root、list/info 子命令和 --region/--limit/--tag/--name-prefix/--private-ip/--public-ip/--eip 等关键 options"
+    source: 验收场景
+    status: pending
+  - item: "catalog/help/docs/test-only skill command reference/completion 不把 ecs start/stop/reboot/delete/rm/runInstances 暴露为当前可执行命令"
+    source: 范围守护
+    status: pending
+  - item: "不修改 ECS provider/auth/RAM/doctor 行为"
+    source: 范围守护
+    status: pending
+  - item: "不引入真实云调用或真实凭证依赖"
+    source: 范围守护
+    status: pending
+
+dod:
+  commands:
+    - id: CMD-001
+      command: "bun run typecheck"
+      core: true
+      failure_handling: fix-or-block
+    - id: CMD-002
+      command: "bun x vitest run src/__tests__/command-reference.test.ts src/__tests__/readme-docs.test.ts src/__tests__/agent-surface-docs.test.ts src/__tests__/skills-scaffold.test.ts"
+      core: true
+      failure_handling: fix-or-block
+    - id: CMD-003
+      command: "bun x vitest run src/__tests__/command-surface-metadata.test.ts src/__tests__/cli-help-json-contract.test.ts"
+      core: true
+      failure_handling: fix-or-block
+    - id: CMD-004
+      command: "bun x vitest run src/__tests__/shell-completion.test.ts"
+      core: true
+      failure_handling: fix-or-block
+    - id: CMD-005
+      command: "bun run docs:sync"
+      core: true
+      failure_handling: fix-or-block
+    - id: CMD-006
+      command: "bun run docs:check"
+      core: true
+      failure_handling: fix-or-block
+    - id: CMD-007
+      command: "python3 .codestable/tools/validate-yaml.py --file .codestable/features/2026-07-03-ecs-command-surface-docs/ecs-command-surface-docs-checklist.yaml --yaml-only"
+      core: false
+      failure_handling: fix-or-block
+  evidence_required: [command_output, diff_summary, docs_sync_output, docs_check_output, review_report, qa_report, acceptance_report]
+  cleanliness:
+    debug_output: forbidden
+    todo_comments: forbidden
+    commented_code: forbidden
+    unused_imports: forbidden
