@@ -353,8 +353,8 @@ CAPABILITY_PROBES.ecs calls listEcsInstances({ limit: 1 }) or an equivalent read
 3. **ecs-list-command** — 新增 `licell ecs list` 命令，把 provider 查询暴露为文本输出和结构化 JSON result。
    - 所属模块：ECS CLI Command
    - 依赖：ecs-readonly-provider, ecs-auth-read-permissions
-   - 状态：planned
-   - 对应 feature：未启动
+   - 状态：done
+   - 对应 feature：2026-07-03-ecs-list-command
    - 备注：负责创建/复用 `INFRA_SECTION` 并注册 `ecs` 命令族；必须验证 `--region` 覆盖 auth region、`--limit` 默认 20 / 上限 200、不做全量导出、`--status` 仅透传 ECS 原生值且不做别名/大小写归一、多个 `--tag key=value` 为 AND、非法 tag 格式报 input error、`--name-prefix` 转通配、`--name` 与 `--name-prefix` 互斥、`--private-ip` / `--public-ip` / `--eip`、`--output json` payload、auth recovery capability 和无副作用不写项目状态。
 
 4. **ecs-info-command** — 新增 `licell ecs info <instanceId>` 命令，返回单台 ECS 的基础详情并处理 not found/input 错误。

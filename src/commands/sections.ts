@@ -50,6 +50,19 @@ export const DATA_SECTION: CommandSectionMembership = {
   ]
 };
 
+export const INFRA_SECTION: CommandSectionMembership = {
+  id: 'infra',
+  title: 'Cloud Infrastructure',
+  summary: '云服务器、网络与基础设施资源的查询和运维命令。',
+  taskHints: [
+    {
+      title: '查询云服务器资源',
+      description: '先按 region 和 filters 查看 ECS 实例，再查看单台实例详情。',
+      commands: ['licell ecs list --output json']
+    }
+  ]
+};
+
 export const AUTOMATION_SECTION: CommandSectionMembership = {
   id: 'automation',
   title: 'Automation & Tooling',

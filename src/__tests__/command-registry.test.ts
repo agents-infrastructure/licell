@@ -33,4 +33,14 @@ describe('LICELL_COMMAND_MANIFEST', () => {
     const catalog = getCommandCatalog();
     expect(catalog.commandsByKey['catalog']).toBeDefined();
   });
+
+  it('registers ecs list in the infrastructure section only', () => {
+    const catalog = getCommandCatalog();
+    expect(catalog.commandsByKey['ecs list']).toBeDefined();
+    expect(catalog.commandsByKey['ecs info']).toBeUndefined();
+    expect(catalog.commandsByKey['ecs start']).toBeUndefined();
+    expect(catalog.commandsByKey['ecs stop']).toBeUndefined();
+    expect(catalog.commandsByKey['ecs reboot']).toBeUndefined();
+    expect(catalog.commandsByKey['ecs rm']).toBeUndefined();
+  });
 });

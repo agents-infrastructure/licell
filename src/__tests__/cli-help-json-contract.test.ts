@@ -104,4 +104,34 @@ describe('cli help json contract', () => {
     expect(record?.help?.renderedText).toContain('`tasks[]` · 异步任务摘要数组。');
     expect(record?.help?.renderedText).toContain('`nextToken` · 服务端下一页游标；若为 `null` 代表没有更多结果。');
   }, 10000);
+
+  it('locks ecs list help json contract for agent discovery', () => {
+    const result = runCliHelpJson(['ecs', 'list']);
+    const records = extractJsonRecordsFromOutput(result.stdout) as Array<Record<string, any>>;
+
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(records).toHaveLength(1);
+
+    const record = records[0];
+    expect(record?.stage).toBe('help');
+    expect(record?.key).toBe('ecs list');
+    expect(record?.help?.kind).toBe('licell-help');
+    expect(record?.help?.scope).toBe('command');
+    expect(record?.help?.automation?.preferredOutput).toBe('json');
+    expect(record?.help?.safety?.level).toBe('safe');
+    expect(record?.help?.options.map((option: { rawName?: string }) => option.rawName)).toEqual(expect.arrayContaining([
+      '--region <regionId>',
+      '--limit <n>',
+      '--tag <key=value>',
+      '--name-prefix <prefix>',
+      '--private-ip <ip>',
+      '--public-ip <ip>',
+      '--eip <ip>'
+    ]));
+    expect(record?.help?.result?.fields.some((field: { name?: string }) => field.name === 'instances[]')).toBe(true);
+    expect(record?.help?.result?.fields.some((field: { name?: string }) => field.name === 'filters')).toBe(true);
+    expect(record?.help?.renderedText).toContain('`instances[]`');
+  }, 10000);
 });
