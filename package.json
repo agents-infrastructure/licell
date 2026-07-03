@@ -33,7 +33,7 @@
     "docs:sync": "./scripts/sync-docs.sh",
     "typecheck": "bun x tsc --noEmit",
     "test": "vitest run",
-    "test:ci": "vitest run --exclude src/__tests__/cli-help.integration.test.ts",
+    "test:ci": "vitest run --no-file-parallelism --exclude src/__tests__/cli-help.integration.test.ts",
     "test:integration": "vitest run src/__tests__/cli-help.integration.test.ts",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
