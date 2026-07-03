@@ -31,6 +31,7 @@ Licell 当前覆盖的核心能力包括：
 - 自定义域名、HTTPS、CDN、DNS
 - ACR / Docker 镜像部署
 - Serverless 数据库与缓存辅助能力
+- ECS 实例只读查询与详情诊断
 - 面向 Agent 的 Skills / catalog / JSON 输出 / 文档共源生成
 
 ---
@@ -736,6 +737,15 @@ licell e2e cleanup <runId>
 | `licell supa start <instanceName>` | 启动 Supabase 实例 | — |
 | `licell supa stop <instanceName>` | 暂停 Supabase 实例 | — |
 | `licell supa whitelist <instanceName>` | 查看/修改 Supabase IP 白名单 | `--set`, `--add`, `--remove` |
+
+#### Cloud Infrastructure
+
+云服务器、网络与基础设施资源的查询和运维命令。
+
+| 命令 | 说明 | 关键选项 |
+|------|------|----------|
+| `licell ecs info <instanceId>` | 查看 ECS 实例基础详情 | `--region` |
+| `licell ecs list` | 查看 ECS 实例列表 | `--region`, `--limit`, `--status` |
 
 #### Automation & Tooling
 

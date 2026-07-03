@@ -1,0 +1,52 @@
+{
+  "gate_id": "scope-gate",
+  "stage": "acceptance.before_commit",
+  "status": "passed",
+  "blocking": [],
+  "warnings": [],
+  "evidence": [
+    {
+      "changed_files": [
+        ".claude/skills/licell/SKILL.md",
+        ".codestable/features/2026-07-03-ecs-command-surface-docs/ecs-command-surface-docs-checklist.yaml",
+        ".codestable/roadmap/ecs-operations-support/ecs-operations-support-items.yaml",
+        ".codestable/roadmap/ecs-operations-support/goal-state.yaml",
+        "README.md",
+        "docs/reference/agent-surfaces.md",
+        "src/__tests__/agent-surface-docs.test.ts",
+        "src/__tests__/cli-help-json-contract.test.ts",
+        "src/__tests__/command-reference.test.ts",
+        "src/__tests__/readme-docs.test.ts",
+        "src/__tests__/shell-completion.test.ts",
+        "src/__tests__/skills-scaffold.test.ts",
+        "src/utils/skills-scaffold.ts",
+        ".codestable/features/2026-07-03-ecs-command-surface-docs/ecs-command-surface-docs-acceptance.md",
+        ".codestable/features/2026-07-03-ecs-command-surface-docs/ecs-command-surface-docs-dod-after-review.json",
+        ".codestable/features/2026-07-03-ecs-command-surface-docs/ecs-command-surface-docs-dod-before-review.json",
+        ".codestable/features/2026-07-03-ecs-command-surface-docs/ecs-command-surface-docs-evidence.json",
+        ".codestable/features/2026-07-03-ecs-command-surface-docs/ecs-command-surface-docs-qa.md",
+        ".codestable/features/2026-07-03-ecs-command-surface-docs/ecs-command-surface-docs-review.md",
+        ".codestable/features/2026-07-03-ecs-command-surface-docs/ecs-command-surface-docs-scope-after-review.json",
+        ".codestable/features/2026-07-03-ecs-command-surface-docs/ecs-command-surface-docs-scope-before-review.json"
+      ],
+      "ignored_machine_artifacts": [],
+      "allowed_prefixes": [
+        ".codestable/features/2026-07-03-ecs-command-surface-docs",
+        ".codestable/features/2026-07-03-ecs-command-surface-docs",
+        ".codestable/roadmap/ecs-operations-support/goal-state.yaml",
+        ".codestable/roadmap/ecs-operations-support/ecs-operations-support-items.yaml",
+        ".claude/skills/licell/SKILL.md",
+        "README.md",
+        "docs/reference/agent-surfaces.md",
+        "src/utils/skills-scaffold.ts",
+        "src/__tests__/agent-surface-docs.test.ts",
+        "src/__tests__/cli-help-json-contract.test.ts",
+        "src/__tests__/command-reference.test.ts",
+        "src/__tests__/readme-docs.test.ts",
+        "src/__tests__/shell-completion.test.ts",
+        "src/__tests__/skills-scaffold.test.ts"
+      ]
+    }
+  ],
+  "providers": {}
+}

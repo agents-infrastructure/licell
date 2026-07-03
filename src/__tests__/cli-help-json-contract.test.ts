@@ -130,9 +130,21 @@ describe('cli help json contract', () => {
       '--public-ip <ip>',
       '--eip <ip>'
     ]));
+    expect(record?.help?.examples).toContain('licell ecs list --output json');
+    expect(record?.help?.recommendedFlow.map((step: { command?: string }) => step.command)).toContain('licell ecs list --output json');
     expect(record?.help?.result?.fields.some((field: { name?: string }) => field.name === 'instances[]')).toBe(true);
     expect(record?.help?.result?.fields.some((field: { name?: string }) => field.name === 'filters')).toBe(true);
+    expect(record?.help?.result?.fields.map((field: { name?: string }) => field.name)).toEqual(expect.arrayContaining([
+      'regionId',
+      'count',
+      'limit',
+      'totalCount',
+      'truncated',
+      'filters',
+      'instances[]'
+    ]));
     expect(record?.help?.renderedText).toContain('`instances[]`');
+    expect(JSON.stringify(record)).not.toMatch(/ecs (start|stop|reboot|delete|rm)|runInstances/);
   }, 10000);
 
   it('locks ecs info help json contract for agent discovery', () => {
@@ -152,9 +164,12 @@ describe('cli help json contract', () => {
     expect(record?.help?.automation?.preferredOutput).toBe('json');
     expect(record?.help?.safety?.level).toBe('safe');
     expect(record?.help?.options.map((option: { rawName?: string }) => option.rawName)).toContain('--region <regionId>');
+    expect(record?.help?.examples).toContain('licell ecs info i-xxx --output json');
+    expect(record?.help?.recommendedFlow.map((step: { command?: string }) => step.command)).toContain('licell ecs info <instanceId> --output json');
     expect(record?.help?.result?.fields.some((field: { name?: string }) => field.name === 'detail.summary')).toBe(true);
     expect(record?.help?.result?.fields.some((field: { name?: string }) => field.name === 'detail.summary.securityGroupIds[]')).toBe(true);
     expect(record?.help?.renderedText).toContain('`detail.summary`');
     expect(record?.help?.result?.fields.map((field: { name?: string }) => field.name).join(' ')).not.toMatch(/rawAttribute|userData|vncUrl|consoleOutput|password|keyPairPrivateKey/);
+    expect(JSON.stringify(record)).not.toMatch(/ecs (start|stop|reboot|delete|rm)|runInstances/);
   }, 10000);
 });

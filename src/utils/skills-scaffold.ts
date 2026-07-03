@@ -11,14 +11,14 @@ export interface SkillFile {
 }
 
 const AGENTS_MD_LICELL_ENTRY =
-  '- licell: Deploy and manage Alibaba Cloud Serverless applications using the licell CLI. Covers deploy, release, functions, env vars, domains, DNS, logs, OSS, database, cache, and Supabase. (file: .claude/skills/licell/SKILL.md)';
+  '- licell: Deploy and manage Alibaba Cloud Serverless applications using the licell CLI. Covers deploy, release, functions, env vars, domains, DNS, logs, OSS, database, cache, Supabase, and ECS queries. (file: .claude/skills/licell/SKILL.md)';
 
 function getSkillContent(): string {
   return `---
 name: licell
 description: >-
   Deploy and manage Alibaba Cloud Serverless applications using the licell CLI.
-  Covers deploy, release, functions, env vars, domains, DNS, logs, OSS, database, cache, and Supabase.
+  Covers deploy, release, functions, env vars, domains, DNS, logs, OSS, database, cache, Supabase, and ECS queries.
 metadata:
   author: licell
   version: "1.0"

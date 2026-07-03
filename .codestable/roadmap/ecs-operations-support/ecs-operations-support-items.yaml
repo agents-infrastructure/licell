@@ -45,7 +45,7 @@ items:
   - slug: ecs-command-surface-docs
     description: 同步命令 metadata、README generated block、agent surface reference、skills scaffold 和 shell completion，证明 Agent 可按 catalog/help/json flow 发现 ECS 查询
     depends_on: [ecs-list-command, ecs-info-command, ecs-auth-read-permissions]
-    status: pending
+    status: done
     feature: 2026-07-03-ecs-command-surface-docs
     minimal_loop: false
     notes: 运行 bun run docs:sync、bun run docs:check，并覆盖 catalog/help JSON tests
