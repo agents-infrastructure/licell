@@ -7,10 +7,13 @@ import {
 } from '../providers/ram';
 import { resolveAuthCapabilityActions, type AuthCapability } from '../utils/auth-recovery';
 
-const ECS_MUTATING_ACTIONS = [
+const ECS_LIFECYCLE_ALLOWED_ACTIONS = [
   'ecs:StartInstance',
+  'ecs:RebootInstance'
+];
+
+const ECS_LIFECYCLE_FORBIDDEN_ACTIONS = [
   'ecs:StopInstance',
-  'ecs:RebootInstance',
   'ecs:DeleteInstance',
   'ecs:RunInstances'
 ];
@@ -53,12 +56,18 @@ describe('ram bootstrap helpers', () => {
       'ecs:DescribeSecurityGroups',
       'ecs:CreateSecurityGroup',
       'ecs:DescribeInstanceAttribute',
-      'ecs:DescribeInstances'
+      'ecs:DescribeInstances',
+      'ecs:StartInstance',
+      'ecs:RebootInstance'
     ]));
-    for (const action of ECS_MUTATING_ACTIONS) {
+    for (const action of ECS_LIFECYCLE_ALLOWED_ACTIONS) {
+      expect(doc.Statement[0].Action).toContain(action);
+      expect(LICELL_POLICY_ACTIONS).toContain(action);
+    }
+    for (const action of ECS_LIFECYCLE_FORBIDDEN_ACTIONS) {
       expect(doc.Statement[0].Action).not.toContain(action);
     }
-    for (const action of ECS_MUTATING_ACTIONS) {
+    for (const action of ECS_LIFECYCLE_FORBIDDEN_ACTIONS) {
       expect(LICELL_POLICY_ACTIONS).not.toContain(action);
     }
   });

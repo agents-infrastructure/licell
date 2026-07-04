@@ -6,8 +6,12 @@ export type {
   EcsListInstancesOptions,
   EcsInstanceSummary,
   EcsListInstancesResult,
-  EcsInstanceDetail
+  EcsInstanceDetail,
+  EcsLifecycleAction,
+  EcsStatusClass,
+  EcsLifecycleActionResult
 } from './ecs/types';
 
 export { createEcsClient } from './ecs/client';
 export { listEcsInstances, getEcsInstanceDetail } from './ecs/query';
+export { startEcsInstance, rebootEcsInstance } from './ecs/lifecycle';

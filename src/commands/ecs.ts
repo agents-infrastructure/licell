@@ -22,7 +22,9 @@ import { executeWithAuthRecovery } from '../utils/auth-recovery';
 import { emitCommandResult, isJsonOutput } from '../utils/output';
 import { commandInvocation, defineCliCommand, defineCommandModule, registerCliCommand } from './module';
 import { INFRA_SECTION } from './sections';
+import { ecsStartCommand, ecsRebootCommand, registerEcsLifecycleCommands } from './ecs-lifecycle';
 
+// Original list command
 const ecsListCommand = defineCliCommand({
   rawName: 'ecs list',
   description: '查看 ECS 实例列表',
@@ -84,7 +86,7 @@ const ecsListCommand = defineCliCommand({
         cautions: ['不能与 --name-prefix 同时使用。']
       },
       '--name-prefix': {
-        whenToUse: '按实例名前缀过滤，由 provider 映射到 ECS namePrefix 语义。',
+        whenToUse: '按实例名前缀过滤，由 provider 映射为 ECS namePrefix 语义。',
         cautions: ['不能与 --name 同时使用；命令层不做本地过滤。']
       },
       '--private-ip': {
@@ -117,11 +119,12 @@ const ecsListCommand = defineCliCommand({
   }
 });
 
+// Original info command
 const ecsInfoCommand = defineCliCommand({
   rawName: 'ecs info <instanceId>',
   description: '查看 ECS 实例基础详情',
   options: [
-    { rawName: '--region <regionId>', description: '查询地域；不传则使用当前 licell 默认 region，不跨 region 搜索' }
+    { rawName: '--region <regionId>', description: '查询地域；不传则使用当前 licell 默认 region，不跨 region 查询' }
   ],
   descriptor: {
     title: 'Show ECS instance detail',
@@ -130,7 +133,7 @@ const ecsInfoCommand = defineCliCommand({
       'licell ecs info i-xxx --output json',
       'licell ecs info i-xxx --region cn-hangzhou --output json'
     ],
-    related: ['ecs list', 'auth repair'],
+    related: ['ecs list', 'ecs start', 'ecs reboot', 'auth repair'],
     agentTips: [
       '自动化调用优先使用 `licell ecs info <instanceId> --output json`，读取 `detail.summary`。',
       '未传 `--region` 时只查询当前 licell auth region；查不到时先确认实例所在 region。',
@@ -142,7 +145,7 @@ const ecsInfoCommand = defineCliCommand({
     },
     safety: {
       level: 'safe',
-      reason: '只调用 ECS 只读详情查询，不修改云端资源或项目状态。',
+      reason: '只调用 ECS DescribeInstances 读取详情，不修改云端资源或项目状态。',
       confirmFlags: []
     },
     optionInsights: {
@@ -154,13 +157,13 @@ const ecsInfoCommand = defineCliCommand({
     recommendedFlow: [
       { title: '先列出实例', command: 'licell ecs list --output json', reason: '获取实例 ID 和实际 region。' },
       { title: '查看详情', command: 'licell ecs info <instanceId> --output json', reason: '读取单台 ECS 的基础详情。' },
-      { title: '指定地域查看详情', command: 'licell ecs info <instanceId> --region cn-hangzhou --output json', reason: '实例不在默认 region 时显式查询。' }
+      { title: '修复权限', command: 'licell auth repair', reason: '若 ECS 读权限不足，补齐 RAM policy。' }
     ],
     result: {
       summary: '返回 ECS 实例基础详情，detail.summary 仅包含白名单摘要字段。',
       fields: [
         { name: 'regionId', description: '实际查询到的 ECS region。', required: true },
-        { name: 'instanceId', description: '查询到的 ECS instanceId。', required: true },
+        { name: 'instanceId', description: '实例 ID。', required: true },
         { name: 'detail.summary', description: 'ECS 实例基础摘要。', required: true },
         { name: 'detail.summary.instanceId', description: '实例 ID。', required: true },
         { name: 'detail.summary.instanceName', description: '实例名称。' },
@@ -184,6 +187,7 @@ const ecsInfoCommand = defineCliCommand({
   }
 });
 
+// Original parse functions
 function normalizeCsv(value: unknown) {
   const input = toOptionalString(value);
   if (!input) return undefined;
@@ -272,6 +276,7 @@ export function parseEcsListOptions(options: {
   };
 }
 
+// Original print functions
 function formatAddressList(values: string[]) {
   return values.length > 0 ? values.join(',') : '-';
 }
@@ -322,7 +327,8 @@ function buildEcsInfoResult(detail: EcsInstanceDetail) {
 
 function printEcsInstanceDetail(detail: EcsInstanceDetail) {
   const { summary } = detail;
-  console.log(`\ninstanceId:     ${pc.cyan(summary.instanceId)}`);
+  console.log('');
+  console.log(`instanceId:     ${pc.cyan(summary.instanceId)}`);
   console.log(`name:           ${pc.cyan(summary.instanceName || '-')}`);
   console.log(`status:         ${pc.cyan(summary.status || '-')}`);
   console.log(`region/zone:    ${pc.cyan(`${summary.regionId} / ${summary.zoneId || '-'}`)}`);
@@ -411,38 +417,43 @@ export function registerEcsCommands(cli: CAC) {
         }
       );
     });
+
+  registerEcsLifecycleCommands(cli);
 }
 
 export const ecsCommandModule = defineCommandModule({
   section: INFRA_SECTION,
-  commands: [ecsListCommand, ecsInfoCommand],
+  commands: [ecsListCommand, ecsInfoCommand, ecsStartCommand, ecsRebootCommand],
   register: registerEcsCommands,
   namespaces: {
     ecs: {
       title: 'ECS instances',
-      summary: '查询 ECS 云服务器实例，后续生命周期命令会按安全设计逐步开放。',
+      summary: '查询、启动和重启 ECS 云服务器实例。停止和删除命令会按安全设计在后续发布。',
       examples: [
         'licell ecs list --output json',
-        'licell ecs list --tag env=prod --output json',
-        'licell ecs info <instanceId> --output json'
+        'licell ecs info <instanceId> --output json',
+        'licell ecs start <instanceId> --dry-run --output json',
+        'licell ecs reboot <instanceId> --dry-run --output json'
       ],
       agentTips: [
-        '当前 ECS namespace 只开放只读 list/info 命令。',
-        '需要结构化结果时使用 `licell ecs list --output json` 或 `licell ecs info <instanceId> --output json`。',
-        '不要假设未出现在 catalog/help 中的 ECS 子命令已经可用。'
+        'Start 免确认直接执行；Reboot 非交互必须显式 --yes。',
+        '过渡态（Starting/Stopping/Rebooting）下不允许操作，提示稍后重试。',
+        '建议先 --dry-run 确认 plan.willExecute 与 plan.requiresConfirmation。',
+        'ECS Start/Reboot/Stop/Delete 会使用独立的 StartInstance/RebootInstance/StopInstance/DeleteInstance API。'
       ],
       recommendedFlow: [
-        { title: '列出实例', command: 'licell ecs list --output json', reason: '读取当前 region ECS 实例摘要。' },
-        { title: '查看详情', command: 'licell ecs info <instanceId> --output json', reason: '读取单台 ECS 的基础详情。' },
-        { title: '修复权限', command: 'licell auth repair', reason: '如果 list 返回 ECS 读权限不足，补齐 RAM policy。' }
+        { title: '列出实例', command: 'licell ecs list --output json', reason: '读取当前 region ECS 实例摘要与状态。' },
+        { title: '先查看实例状态', command: 'licell ecs info <instanceId> --output json', reason: '确认当前实例状态是否符合操作条件。' },
+        { title: 'Dry run 确认计划', command: 'licell ecs start <instanceId> --dry-run --output json', reason: '确认计划与前置条件。' },
+        { title: '执行操作', command: 'licell ecs start <instanceId>', reason: '实际执行并轮询验证到达目标状态。' }
       ],
       automation: {
         preferredOutput: 'json',
         explicitInputs: ['--region', '--limit']
       },
       safety: {
-        level: 'safe',
-        reason: '当前 ECS namespace 只注册只读查询命令。',
+        level: 'mutating',
+        reason: 'ECS namespace 包含只读查询命令（safe）和启动/重启命令（mutating）。',
         confirmFlags: []
       }
     }

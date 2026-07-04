@@ -1,0 +1,107 @@
+feature: 2026-07-03-ecs-lifecycle-start-reboot
+created: 2026-07-03
+
+steps:
+  - action: "微重构：新增 src/commands/ecs-lifecycle.ts 导出 start/reboot descriptors+register helper+harness；ecs.ts 只导入/合并 commands/调用注册，list/info 不搬或机械移动（只搬不改行为）"
+    exit_signal: "typecheck 绿；现有 ecs-command/ecs-provider 测试全通过；list/info 行为无变化；diff 显示 harness/命令为新文件而非塞进 ecs.ts"
+    status: done
+  - action: "provider wrapper 契约：新增 src/providers/ecs/lifecycle.ts 的 startEcsInstance/rebootEcsInstance 并 barrel 导出"
+    exit_signal: "单测 mock client 断言各只发对应 Start/Reboot 单实例 request、instanceId/region 映射、requestId 提取；未发批量或其它 API"
+    status: done
+  - action: "harness 编排：EcsLifecycleAction 按 roadmap 完整 union 定义（start/stop/reboot/delete），本 feature 只实现 start/reboot；plan 构造 + EcsStatusClass 归一 + per-action 语义表 precheck/幂等 + dry-run 分流 + bounded polling verify"
+    exit_signal: "单测覆盖 dry-run willExecute=false 且 mutating 未被调用（含 reboot --dry-run 无 --yes 不确认不 mutating）、start precheck stopped-like/已 running 幂等、reboot precheck running-like 为可执行态非幂等、transitional 超时 timedOut=true 非失败；stop/delete 分支标 not-implemented 不注册命令"
+    status: done
+  - action: "确认 helper：新增 ensureHighImpactActionConfirmed（非删除文案）"
+    exit_signal: "单测断言文案不含删除语义、非交互无 --yes 抛错并指明 flag、交互确认路径"
+    status: done
+  - action: "命令与 descriptor：注册 ecs start / ecs reboot，safety 显式（start=mutating 免确认、reboot=mutating confirmFlags=['--yes']），recommendedFlow 覆盖 dry-run→execute→verify"
+    exit_signal: "命令测试断言 requiredCapabilities=['ecs']、start 非交互直接执行、reboot 非交互需 --yes、JSON result 含 plan/execution/verify；help/catalog metadata 正确"
+    status: done
+  - action: "RAM 与 guard：CAPABILITY_ACTIONS.ecs 与 LICELL_POLICY_ACTIONS 追加 Start/Reboot；更新 guard 断言为含 start/reboot 仍不含 stop/delete"
+    exit_signal: "auth-recovery/ram-bootstrap 测试断言含 StartInstance/RebootInstance 不含 Stop/Delete；manifest/help/completion guard 更新为暴露 start/reboot 不暴露 stop/delete/rm/run/create"
+    status: done
+  - action: "验证收口：跑核心验证并确认 scope 未漂移"
+    exit_signal: "typecheck、ecs-lifecycle tests、manifest/help/completion/auth/ram tests、checklist yaml 校验通过；diff 无 generated docs 手改、无 stop/delete/run/create 命令注册"
+    status: done
+
+checks:
+  - item: "provider wrapper 只发对应单实例 mutating API，不批量、不隐式重试 mutating 调用"
+    source: 名词契约
+    status: passed
+  - item: "dry-run 时 willExecute=false 且不调用任何 mutating provider 函数"
+    source: 流程级约束
+    status: passed
+  - item: "start precheck 要求 stopped-like、reboot precheck 要求 running-like；已在目标态按幂等处理"
+    source: 流程级约束
+    status: passed
+  - item: "verify 用 bounded polling + EcsStatusClass，transitional 未超时继续、超时 timedOut=true 且命令非失败告警"
+    source: 流程级约束
+    status: passed
+  - item: "reboot 走 ensureHighImpactActionConfirmed，文案不含删除语义；非交互无 --yes 抛错"
+    source: 流程级约束
+    status: passed
+  - item: "start 非交互免确认可直接执行；reboot/stop 才需确认"
+    source: 流程级约束
+    status: passed
+  - item: "不引入 --confirm-stop 等新 flag，统一复用 --yes（collectConfirmFlags 已识别）"
+    source: 范围守护
+    status: passed
+  - item: "不实现 stop/delete/run/create provider wrapper 或命令"
+    source: 范围守护
+    status: passed
+  - item: "不手改 README generated block 或 docs/reference/agent-surfaces.md"
+    source: 范围守护
+    status: passed
+  - item: "不改只读 query.ts 的 list/info 行为"
+    source: 范围守护
+    status: passed
+  - item: "RAM 只追加 ecs:StartInstance / ecs:RebootInstance，不含 Stop/Delete/Run"
+    source: 挂载点
+    status: passed
+  - item: "catalog/help/completion 暴露 ecs start/reboot，不暴露 stop/delete/rm/run/create"
+    source: 验收场景
+    status: passed
+  - item: "start.confirmFlags=[]、reboot.confirmFlags=['--yes']；safety.level=mutating"
+    source: 名词契约
+    status: passed
+  - item: "EcsLifecycleAction 按 roadmap 完整 union 定义，不窄化为 start/reboot"
+    source: 名词契约
+    status: passed
+  - item: "reboot --dry-run 无 --yes 时 requiresConfirmation=true/willExecute=false，不调确认与 mutating"
+    source: 流程级约束
+    status: passed
+  - item: "help JSON result.fields 覆盖 plan.currentStatusClass/requiresConfirmation/willExecute、execution.requestId、verify.statusClass/reachedTarget/timedOut；dry-run 与 execute plan/verify 形状稳定仅 execution 可缺省"
+    source: 验收场景
+    status: passed
+  - item: "not-found 实例抛 not_found 错误并在 JSON error 归类 not_found"
+    source: 验收场景
+    status: passed
+
+dod:
+  commands:
+    - id: CMD-001
+      command: "bun run typecheck"
+      core: true
+      failure_handling: fix-or-block
+    - id: CMD-002
+      command: "bun x vitest run src/__tests__/ecs-lifecycle-command.test.ts src/__tests__/ecs-lifecycle-provider.test.ts"
+      core: true
+      failure_handling: fix-or-block
+    - id: CMD-003
+      command: "bun x vitest run src/__tests__/command-manifest.test.ts src/__tests__/cli-help-json-contract.test.ts src/__tests__/shell-completion.test.ts"
+      core: true
+      failure_handling: fix-or-block
+    - id: CMD-004
+      command: "bun x vitest run src/__tests__/auth-recovery.test.ts src/__tests__/ram-bootstrap.test.ts"
+      core: true
+      failure_handling: fix-or-block
+    - id: CMD-005
+      command: "python3 .codestable/tools/validate-yaml.py --file .codestable/features/2026-07-03-ecs-lifecycle-start-reboot/ecs-lifecycle-start-reboot-checklist.yaml --yaml-only"
+      core: false
+      failure_handling: fix-or-block
+  evidence_required: [command_output, diff_summary, review_report, qa_report, acceptance_report]
+  cleanliness:
+    debug_output: forbidden
+    todo_comments: forbidden
+    commented_code: forbidden
+    unused_imports: forbidden

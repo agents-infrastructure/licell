@@ -66,3 +66,14 @@ export interface EcsListInstancesResult {
 export interface EcsInstanceDetail {
   summary: EcsInstanceSummary;
 }
+
+export type EcsLifecycleAction = 'start' | 'stop' | 'reboot' | 'delete';
+
+export type EcsStatusClass = 'running-like' | 'stopped-like' | 'transitional' | 'unknown';
+
+export interface EcsLifecycleActionResult {
+  action: EcsLifecycleAction;
+  regionId: string;
+  instanceId: string;
+  requestId?: string;
+}
