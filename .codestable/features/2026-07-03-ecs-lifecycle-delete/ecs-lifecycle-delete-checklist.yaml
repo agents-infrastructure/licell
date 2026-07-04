@@ -1,0 +1,92 @@
+feature: 2026-07-03-ecs-lifecycle-delete
+created: 2026-07-03
+
+steps:
+  - action: "provider：新增 getEcsInstanceReleaseFacts（只读）与 deleteEcsInstance（只发 DeleteInstance），barrel 导出"
+    exit_signal: "单测断言 release facts 读取、DeleteInstance request shape、requestId 提取、事实不可读时抛可分类错误"
+    status: pending
+  - action: "harness 扩 delete：EcsLifecycleAction 加 'delete'，precheck 读 releaseFacts，事实不可读或 deletionProtection=true 阻断，verify 以 not-found 为终态"
+    exit_signal: "单测覆盖 dry-run 不调 delete、releaseFacts 不可读阻断、deletionProtection 阻断、verify notFound=true 终态成功"
+    status: pending
+  - action: "命令与 descriptor：注册 ecs rm/ecs delete（别名同 action），safety.level=destructive、confirmFlags=['--yes']，走 ensureDestructiveActionConfirmed 双确认"
+    exit_signal: "命令测试断言非交互无 --yes 抛错、双确认路径、rm 与 delete 行为一致、plan.releaseFacts 出现在 JSON result"
+    status: pending
+  - action: "RAM 与 guard：追加 ecs:DeleteInstance(+DescribeDisks)；guard 更新为暴露 start/reboot/stop/delete/rm 不暴露 run/create"
+    exit_signal: "auth-recovery/ram-bootstrap 测试含 DeleteInstance 不含 RunInstances；manifest/help/completion guard 更新"
+    status: pending
+  - action: "验证收口"
+    exit_signal: "typecheck、ecs-lifecycle tests、manifest/help/completion/auth/ram tests、checklist yaml 校验通过；diff 无 generated docs 手改、无 run/create 注册"
+    status: pending
+
+checks:
+  - item: "deleteEcsInstance 只发 DeleteInstance 单实例 API，不批量"
+    source: 名词契约
+    status: pending
+  - item: "delete dry-run willExecute=false 且不调 DeleteInstance"
+    source: 流程级约束
+    status: pending
+  - item: "releaseFacts 不可读时阻断执行而非默认放行"
+    source: 流程级约束
+    status: pending
+  - item: "deletionProtection=true 时阻断并提示关保护，命令不代关"
+    source: 流程级约束
+    status: pending
+  - item: "delete 走 ensureDestructiveActionConfirmed：--yes 跳过交互确认；无 --yes 且交互 TTY 才双 prompt；非交互无 --yes 阻断"
+    source: 流程级约束
+    status: pending
+  - item: "verify 读到 not-found 视为删除终态成功"
+    source: 流程级约束
+    status: pending
+  - item: "ecs rm 与 ecs delete 是同一 action 别名，行为一致"
+    source: 名词契约
+    status: pending
+  - item: "不改 harness 已冻结对外契约（只加 delete 分支与 releaseFacts 消费）"
+    source: 范围守护
+    status: pending
+  - item: "不实现 run/create provider 或命令"
+    source: 范围守护
+    status: pending
+  - item: "不跑 docs:sync、不手改 generated docs；README/agent-surfaces 收口留给 surface-harden，本 feature 只保证 registry/catalog/help/completion 测试绿"
+    source: 范围守护
+    status: pending
+  - item: "RAM 只追加 ecs:DeleteInstance(+只读 DescribeDisks)，不含 RunInstances"
+    source: 挂载点
+    status: pending
+  - item: "catalog/help/completion 暴露 start/reboot/stop/delete/rm，不暴露 run/create"
+    source: 验收场景
+    status: pending
+  - item: "delete.confirmFlags=['--yes']、safety.level=destructive"
+    source: 名词契约
+    status: pending
+  - item: "not-found 实例抛 not_found 错误"
+    source: 验收场景
+    status: pending
+
+dod:
+  commands:
+    - id: CMD-001
+      command: "bun run typecheck"
+      core: true
+      failure_handling: fix-or-block
+    - id: CMD-002
+      command: "bun x vitest run src/__tests__/ecs-lifecycle-command.test.ts src/__tests__/ecs-lifecycle-provider.test.ts"
+      core: true
+      failure_handling: fix-or-block
+    - id: CMD-003
+      command: "bun x vitest run src/__tests__/command-manifest.test.ts src/__tests__/cli-help-json-contract.test.ts src/__tests__/shell-completion.test.ts"
+      core: true
+      failure_handling: fix-or-block
+    - id: CMD-004
+      command: "bun x vitest run src/__tests__/auth-recovery.test.ts src/__tests__/ram-bootstrap.test.ts"
+      core: true
+      failure_handling: fix-or-block
+    - id: CMD-005
+      command: "python3 .codestable/tools/validate-yaml.py --file .codestable/features/2026-07-03-ecs-lifecycle-delete/ecs-lifecycle-delete-checklist.yaml --yaml-only"
+      core: false
+      failure_handling: fix-or-block
+  evidence_required: [command_output, diff_summary, review_report, qa_report, acceptance_report]
+  cleanliness:
+    debug_output: forbidden
+    todo_comments: forbidden
+    commented_code: forbidden
+    unused_imports: forbidden
