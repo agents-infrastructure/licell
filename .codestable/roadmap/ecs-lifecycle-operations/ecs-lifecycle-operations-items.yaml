@@ -13,7 +13,7 @@ items:
   - slug: ecs-lifecycle-stop
     description: 落地 ecs stop 命令，复用 harness 与高危确认 helper，扩展 StopInstance provider 与 RAM action
     depends_on: [ecs-lifecycle-start-reboot]
-    status: in-progress
+    status: done
     feature: 2026-07-03-ecs-lifecycle-stop
     minimal_loop: false
     notes: safety.level=destructive；precheck running-like 并提示业务中断；非交互需显式确认 flag；dry-run plan shape 稳定；RAM 只加 StopInstance

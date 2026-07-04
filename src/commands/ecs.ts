@@ -22,7 +22,7 @@ import { executeWithAuthRecovery } from '../utils/auth-recovery';
 import { emitCommandResult, isJsonOutput } from '../utils/output';
 import { commandInvocation, defineCliCommand, defineCommandModule, registerCliCommand } from './module';
 import { INFRA_SECTION } from './sections';
-import { ecsStartCommand, ecsRebootCommand, registerEcsLifecycleCommands } from './ecs-lifecycle';
+import { ecsStartCommand, ecsRebootCommand, ecsStopCommand, registerEcsLifecycleCommands } from './ecs-lifecycle';
 
 // Original list command
 const ecsListCommand = defineCliCommand({
@@ -423,23 +423,24 @@ export function registerEcsCommands(cli: CAC) {
 
 export const ecsCommandModule = defineCommandModule({
   section: INFRA_SECTION,
-  commands: [ecsListCommand, ecsInfoCommand, ecsStartCommand, ecsRebootCommand],
+  commands: [ecsListCommand, ecsInfoCommand, ecsStartCommand, ecsRebootCommand, ecsStopCommand],
   register: registerEcsCommands,
   namespaces: {
     ecs: {
       title: 'ECS instances',
-      summary: '查询、启动和重启 ECS 云服务器实例。停止和删除命令会按安全设计在后续发布。',
+      summary: '查询、启动、重启和停止 ECS 云服务器实例。删除命令会按安全设计在后续发布。',
       examples: [
         'licell ecs list --output json',
         'licell ecs info <instanceId> --output json',
         'licell ecs start <instanceId> --dry-run --output json',
-        'licell ecs reboot <instanceId> --dry-run --output json'
+        'licell ecs reboot <instanceId> --dry-run --output json',
+        'licell ecs stop <instanceId> --dry-run --output json'
       ],
       agentTips: [
-        'Start 免确认直接执行；Reboot 非交互必须显式 --yes。',
+        'Start 免确认直接执行；Reboot 与 Stop 非交互必须显式 --yes。',
         '过渡态（Starting/Stopping/Rebooting）下不允许操作，提示稍后重试。',
         '建议先 --dry-run 确认 plan.willExecute 与 plan.requiresConfirmation。',
-        'ECS Start/Reboot/Stop/Delete 会使用独立的 StartInstance/RebootInstance/StopInstance/DeleteInstance API。'
+        'Start/Reboot/Stop 会使用独立的单实例 ECS API，各自单独确认与验证。'
       ],
       recommendedFlow: [
         { title: '列出实例', command: 'licell ecs list --output json', reason: '读取当前 region ECS 实例摘要与状态。' },

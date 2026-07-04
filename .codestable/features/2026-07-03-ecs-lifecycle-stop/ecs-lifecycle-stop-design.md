@@ -108,6 +108,17 @@ feature1 已把 lifecycle 落到 `src/commands/ecs-lifecycle.ts`；stop 加入�
 - 证据：command_output、diff_summary、review_report、qa_report、acceptance_report
 - 清洁度：禁调试输出/TODO/注释代码/死 import
 
+Validation Commands（核心性 core 与失败处理 failure_handling 详见 checklist `dod.commands`）：
+
+- CMD-001 `bun run typecheck` — core=true，failure_handling=fix-or-block
+- CMD-002 `bun x vitest run src/__tests__/ecs-lifecycle-command.test.ts src/__tests__/ecs-lifecycle-provider.test.ts` — core=true，failure_handling=fix-or-block
+- CMD-003 `bun x vitest run src/__tests__/command-manifest.test.ts src/__tests__/cli-help-json-contract.test.ts src/__tests__/shell-completion.test.ts` — core=true，failure_handling=fix-or-block
+- CMD-004 `bun x vitest run src/__tests__/auth-recovery.test.ts src/__tests__/ram-bootstrap.test.ts` — core=true，failure_handling=fix-or-block
+- CMD-005 `validate-yaml.py --file <checklist> --yaml-only` — core=false，failure_handling=fix-or-block
+
+Required Artifacts: `src/providers/ecs/lifecycle.ts`（+stopEcsInstance）、`src/commands/ecs-lifecycle.ts`（+ecs stop 命令/action）、`src/utils/auth-recovery.ts`、`src/providers/ram.ts`（+ecs:StopInstance）、`src/__tests__/ecs-lifecycle-command.test.ts`、`src/__tests__/ecs-lifecycle-provider.test.ts` 及更新的 guard 测试
+
+
 ## 执行风险与证据计划
 - **Top 3 风险**：确认被绕过（S3/S4 缓解）；dry-run 触发 stop（S1 缓解）；stop 复用删除文案（S4 缓解）。
 - **非显然依赖**：依赖 feature1 harness/helper 已合入；SDK StopInstance 参数名（residual）。

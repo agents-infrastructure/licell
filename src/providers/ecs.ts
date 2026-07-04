@@ -14,4 +14,4 @@ export type {
 
 export { createEcsClient } from './ecs/client';
 export { listEcsInstances, getEcsInstanceDetail } from './ecs/query';
-export { startEcsInstance, rebootEcsInstance } from './ecs/lifecycle';
+export { startEcsInstance, rebootEcsInstance, stopEcsInstance } from './ecs/lifecycle';

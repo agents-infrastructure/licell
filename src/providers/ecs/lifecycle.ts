@@ -34,3 +34,24 @@ export async function rebootEcsInstance(input: { instanceId: string; regionId?: 
     ...(response.body?.requestId ? { requestId: response.body.requestId } : {})
   };
 }
+
+export async function stopEcsInstance(input: {
+  instanceId: string;
+  regionId?: string;
+  forceStop?: boolean;
+  stoppedMode?: 'StopCharging' | 'KeepCharging';
+}): Promise<EcsLifecycleActionResult> {
+  const instanceId = normalizeInstanceId(input.instanceId);
+  const { regionId, client } = createEcsClient(input.regionId);
+  const response = await client.stopInstance(new $Ecs.StopInstanceRequest({
+    instanceId,
+    ...(input.forceStop !== undefined ? { forceStop: input.forceStop } : {}),
+    ...(input.stoppedMode ? { stoppedMode: input.stoppedMode } : {})
+  }));
+  return {
+    action: 'stop',
+    regionId,
+    instanceId,
+    ...(response.body?.requestId ? { requestId: response.body.requestId } : {})
+  };
+}

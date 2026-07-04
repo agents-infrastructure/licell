@@ -9,11 +9,11 @@ import { resolveAuthCapabilityActions, type AuthCapability } from '../utils/auth
 
 const ECS_LIFECYCLE_ALLOWED_ACTIONS = [
   'ecs:StartInstance',
-  'ecs:RebootInstance'
+  'ecs:RebootInstance',
+  'ecs:StopInstance'
 ];
 
 const ECS_LIFECYCLE_FORBIDDEN_ACTIONS = [
-  'ecs:StopInstance',
   'ecs:DeleteInstance',
   'ecs:RunInstances'
 ];
@@ -58,7 +58,8 @@ describe('ram bootstrap helpers', () => {
       'ecs:DescribeInstanceAttribute',
       'ecs:DescribeInstances',
       'ecs:StartInstance',
-      'ecs:RebootInstance'
+      'ecs:RebootInstance',
+      'ecs:StopInstance'
     ]));
     for (const action of ECS_LIFECYCLE_ALLOWED_ACTIONS) {
       expect(doc.Statement[0].Action).toContain(action);

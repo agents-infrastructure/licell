@@ -3,10 +3,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const {
   startInstanceMock,
   rebootInstanceMock,
+  stopInstanceMock,
   createdConfigs
 } = vi.hoisted(() => ({
   startInstanceMock: vi.fn(),
   rebootInstanceMock: vi.fn(),
+  stopInstanceMock: vi.fn(),
   createdConfigs: [] as Array<Record<string, unknown>>
 }));
 
@@ -25,6 +27,7 @@ vi.mock('@alicloud/ecs20140526', () => ({
   default: class MockEcsClient {
     startInstance = startInstanceMock;
     rebootInstance = rebootInstanceMock;
+    stopInstance = stopInstanceMock;
   },
   StartInstanceRequest: class StartInstanceRequest {
     constructor(input: unknown) {
@@ -32,6 +35,11 @@ vi.mock('@alicloud/ecs20140526', () => ({
     }
   },
   RebootInstanceRequest: class RebootInstanceRequest {
+    constructor(input: unknown) {
+      Object.assign(this, input);
+    }
+  },
+  StopInstanceRequest: class StopInstanceRequest {
     constructor(input: unknown) {
       Object.assign(this, input);
     }
@@ -55,6 +63,7 @@ describe('ecs lifecycle provider wrapper', () => {
   beforeEach(() => {
     startInstanceMock.mockReset();
     rebootInstanceMock.mockReset();
+    stopInstanceMock.mockReset();
     createdConfigs.length = 0;
   });
 
@@ -143,11 +152,44 @@ describe('ecs lifecycle provider wrapper', () => {
   });
 
   it('rejects empty instanceId before calling provider', async () => {
-    const { startEcsInstance, rebootEcsInstance } = await import('../providers/ecs');
+    const { startEcsInstance, rebootEcsInstance, stopEcsInstance } = await import('../providers/ecs');
 
     await expect(startEcsInstance({ instanceId: '' })).rejects.toThrow(/不能为空|invalid/);
     await expect(rebootEcsInstance({ instanceId: '' })).rejects.toThrow(/不能为空|invalid/);
+    await expect(stopEcsInstance({ instanceId: '' })).rejects.toThrow(/不能为空|invalid/);
     expect(startInstanceMock).not.toHaveBeenCalled();
     expect(rebootInstanceMock).not.toHaveBeenCalled();
+    expect(stopInstanceMock).not.toHaveBeenCalled();
+  });
+
+  it('stopEcsInstance sends StopInstance request and returns EcsLifecycleActionResult', async () => {
+    stopInstanceMock.mockResolvedValueOnce({ body: { requestId: 'req-stop-1' } });
+
+    const { stopEcsInstance } = await import('../providers/ecs');
+    const result = await stopEcsInstance({ instanceId: 'i-abc123', regionId: 'cn-shanghai' });
+
+    expect(stopInstanceMock).toHaveBeenCalledTimes(1);
+    expect(stopInstanceMock.mock.calls[0][0]).toEqual(expect.objectContaining({ instanceId: 'i-abc123' }));
+    expect(result).toEqual({
+      action: 'stop',
+      regionId: 'cn-shanghai',
+      instanceId: 'i-abc123',
+      requestId: 'req-stop-1'
+    });
+    expect(startInstanceMock).not.toHaveBeenCalled();
+    expect(rebootInstanceMock).not.toHaveBeenCalled();
+  });
+
+  it('stopEcsInstance passes forceStop and stoppedMode through to the request', async () => {
+    stopInstanceMock.mockResolvedValueOnce({ body: { requestId: 'req-stop-2' } });
+
+    const { stopEcsInstance } = await import('../providers/ecs');
+    await stopEcsInstance({ instanceId: 'i-abc123', forceStop: true, stoppedMode: 'StopCharging' });
+
+    expect(stopInstanceMock.mock.calls[0][0]).toEqual(expect.objectContaining({
+      instanceId: 'i-abc123',
+      forceStop: true,
+      stoppedMode: 'StopCharging'
+    }));
   });
 });

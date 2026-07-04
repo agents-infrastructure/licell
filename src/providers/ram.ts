@@ -119,13 +119,14 @@ export const LICELL_POLICY_ACTIONS = [
   'vpc:DescribeVSwitches',
   'vpc:CreateVpc',
   'vpc:CreateVSwitch',
-  // ECS (security group + instance read + lifecycle start/reboot)
+  // ECS (security group + instance read + lifecycle start/reboot/stop)
   'ecs:DescribeSecurityGroups',
   'ecs:CreateSecurityGroup',
   'ecs:DescribeInstanceAttribute',
   'ecs:DescribeInstances',
   'ecs:StartInstance',
   'ecs:RebootInstance',
+  'ecs:StopInstance',
   // CR (Container Registry)
   'cr:ListInstance',
   'cr:CreateNamespace',

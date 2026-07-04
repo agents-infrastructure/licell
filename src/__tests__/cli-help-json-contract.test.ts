@@ -3,7 +3,7 @@ import { spawnSync } from 'child_process';
 import { resolve } from 'path';
 import { extractJsonRecordsFromOutput } from '../utils/output';
 
-const ECS_LIFECYCLE_HELP_PATTERN = /(?:licell )?ecs (stop|delete|rm|run|create)\b|ecs:(StopInstance|DeleteInstance|RunInstances)/;
+const ECS_LIFECYCLE_HELP_PATTERN = /(?:licell )?ecs (delete|rm|run|create)\b|ecs:(DeleteInstance|RunInstances)/;
 
 beforeAll(() => {
   const warmup = spawnSync('bun', ['x', 'tsx', '--version'], {
@@ -47,7 +47,7 @@ function runCliHelpJson(args: string[]) {
 }
 
 describe('cli help json contract', () => {
-  it('keeps ecs namespace help includes start/reboot but excludes stop/delete/rm/run/create', () => {
+  it('keeps ecs namespace help includes start/reboot/stop but excludes delete/rm/run/create', () => {
     const result = runCliHelpJson(['ecs']);
     const records = extractJsonRecordsFromOutput(result.stdout) as Array<Record<string, any>>;
 
@@ -66,9 +66,10 @@ describe('cli help json contract', () => {
       'ecs info',
       'ecs list',
       'ecs start',
-      'ecs reboot'
+      'ecs reboot',
+      'ecs stop'
     ]));
-    expect(record?.help?.subcommands).toHaveLength(4);
+    expect(record?.help?.subcommands).toHaveLength(5);
     expect(JSON.stringify(record)).not.toMatch(ECS_LIFECYCLE_HELP_PATTERN);
   }, 10000);
 

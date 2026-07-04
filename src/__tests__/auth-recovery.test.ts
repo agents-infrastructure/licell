@@ -3,11 +3,11 @@ import { AUTH_CAPABILITY_LABELS, detectAuthIssue, resolveAuthCapabilityActions }
 
 const ECS_LIFECYCLE_ALLOWED_ACTIONS = [
   'ecs:StartInstance',
-  'ecs:RebootInstance'
+  'ecs:RebootInstance',
+  'ecs:StopInstance'
 ];
 
 const ECS_LIFECYCLE_FORBIDDEN_ACTIONS = [
-  'ecs:StopInstance',
   'ecs:DeleteInstance',
   'ecs:RunInstances'
 ];
@@ -56,7 +56,8 @@ describe('resolveAuthCapabilityActions', () => {
       'ecs:DescribeInstanceAttribute',
       'ecs:DescribeInstances',
       'ecs:RebootInstance',
-      'ecs:StartInstance'
+      'ecs:StartInstance',
+      'ecs:StopInstance'
     ]);
     for (const action of ECS_LIFECYCLE_ALLOWED_ACTIONS) {
       expect(actions).toContain(action);
