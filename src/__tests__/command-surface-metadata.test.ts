@@ -9,7 +9,7 @@ import { getCommandCatalog } from '../utils/command-catalog';
 import { getCommandDescriptor } from '../utils/command-metadata';
 
 const catalog = getCommandCatalog();
-const ECS_LIFECYCLE_COMMANDS = ['ecs start', 'ecs stop', 'ecs reboot', 'ecs delete', 'ecs rm', 'ecs run', 'ecs create'];
+const ECS_FORBIDDEN_COMMANDS = ['ecs run', 'ecs create'];
 
 describe('command surface metadata', () => {
   it('shares invocation helpers across surfaces', () => {
@@ -142,8 +142,8 @@ describe('command surface metadata', () => {
     expect(surface.result?.fields.map((field) => field.name).join(' ')).not.toMatch(/rawAttribute|userData|vncUrl|consoleOutput|password|keyPairPrivateKey/);
   });
 
-  it('keeps ecs namespace guidance limited to registered inspect commands', () => {
-    const subcommands = ['ecs list', 'ecs info']
+  it('exposes ecs namespace guidance across inspect and lifecycle commands, excluding run/create', () => {
+    const subcommands = ['ecs list', 'ecs info', 'ecs start', 'ecs reboot', 'ecs stop', 'ecs delete', 'ecs rm']
       .map((key) => catalog.commandsByKey[key]!)
       .map((command) => ({
         key: command.key,
@@ -161,14 +161,16 @@ describe('command surface metadata', () => {
 
     expect(surface.examples).toContain('licell ecs list --output json');
     expect(surface.examples).toContain('licell ecs info <instanceId> --output json');
+    expect(surface.examples).toContain('licell ecs start <instanceId> --dry-run --output json');
     const serialized = JSON.stringify(surface);
-    for (const command of ECS_LIFECYCLE_COMMANDS) {
+    for (const command of ECS_FORBIDDEN_COMMANDS) {
       expect(serialized).not.toContain(command);
     }
     expect(surface.recommendedFlow.map((step) => step.command)).toEqual([
       'licell ecs list --output json',
       'licell ecs info <instanceId> --output json',
-      'licell auth repair'
+      'licell ecs start <instanceId> --dry-run --output json',
+      'licell ecs start <instanceId>'
     ]);
   });
 });

@@ -7,7 +7,7 @@ import {
 } from '../utils/command-reference';
 import { buildHelpSemanticDocument } from '../utils/help';
 
-const ECS_LIFECYCLE_SURFACE_PATTERN = /(?:licell )?ecs (start|stop|reboot|delete|rm|run|create)\b|ecs:(StartInstance|StopInstance|RebootInstance|DeleteInstance|RunInstances)/;
+const ECS_FORBIDDEN_SURFACE_PATTERN = /(?:licell )?ecs (run|create)\b|ecs:(RunInstances)/;
 
 describe('buildCommandReferenceSections', () => {
   it('groups commands into stable sections', () => {
@@ -28,7 +28,15 @@ describe('buildCommandReferenceSections', () => {
 
     const infra = sections.find((section) => section.id === 'infra');
     expect(infra?.title).toBe('Cloud Infrastructure');
-    expect(infra?.commands.map((command) => command.key)).toEqual(['ecs info', 'ecs list']);
+    expect(infra?.commands.map((command) => command.key)).toEqual([
+      'ecs delete',
+      'ecs info',
+      'ecs list',
+      'ecs reboot',
+      'ecs rm',
+      'ecs start',
+      'ecs stop'
+    ]);
   });
 });
 
@@ -84,7 +92,7 @@ describe('buildAgentCommandCatalog', () => {
       'instanceId',
       'detail.summary'
     ]));
-    expect(JSON.stringify(catalog)).not.toMatch(ECS_LIFECYCLE_SURFACE_PATTERN);
+    expect(JSON.stringify(catalog)).not.toMatch(ECS_FORBIDDEN_SURFACE_PATTERN);
 
     const deploy = catalog.commands.find((command) => command.key === 'deploy');
     const deployHelp = buildHelpSemanticDocument({
@@ -225,6 +233,11 @@ describe('renderSkillCommandReference', () => {
     expect(markdown.indexOf('### Cloud Infrastructure')).toBeLessThan(markdown.indexOf('### Automation & Tooling'));
     expect(markdown).toContain('licell ecs list');
     expect(markdown).toContain('licell ecs info <instanceId>');
+    expect(markdown).toContain('licell ecs start <instanceId>');
+    expect(markdown).toContain('licell ecs reboot <instanceId>');
+    expect(markdown).toContain('licell ecs stop <instanceId>');
+    expect(markdown).toContain('licell ecs delete <instanceId>');
+    expect(markdown).toContain('licell ecs rm <instanceId>');
     expect(markdown).toContain('`instances[]`：ECS 实例摘要数组。');
     expect(markdown).toContain('licell doctor');
     expect(markdown).toContain('licell completion [shell]');
@@ -264,7 +277,7 @@ describe('renderSkillCommandReference', () => {
     expect(markdown).toContain('推荐流程：');
     expect(markdown).toContain('licell deploy spec');
     expect(markdown.indexOf('下一步：')).toBeLessThan(markdown.indexOf('决策指南：'));
-    expect(markdown).not.toMatch(ECS_LIFECYCLE_SURFACE_PATTERN);
+    expect(markdown).not.toMatch(ECS_FORBIDDEN_SURFACE_PATTERN);
   });
 });
 
