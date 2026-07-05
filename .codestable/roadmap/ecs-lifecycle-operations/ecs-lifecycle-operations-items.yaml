@@ -21,7 +21,7 @@ items:
   - slug: ecs-lifecycle-delete
     description: 落地 ecs rm/delete 命令，复用 harness，接 ensureDestructiveActionConfirmed 双确认，扩展 DeleteInstance provider 与 RAM action
     depends_on: [ecs-lifecycle-start-reboot]
-    status: in-progress
+    status: done
     feature: 2026-07-03-ecs-lifecycle-delete
     minimal_loop: false
     notes: safety.level=destructive；--yes + 双确认；delete preflight 必须调 getEcsInstanceReleaseFacts 读删除保护/磁盘/释放行为，事实不可读时阻断执行而非放行（RMR-001）；plan.releaseFacts 显式；verify 以 not-found 为删除终态；RAM DeleteInstance（+ 只读 DescribeDisks 等）与 start/reboot 分开 review

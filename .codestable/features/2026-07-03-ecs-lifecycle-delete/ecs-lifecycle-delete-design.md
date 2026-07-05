@@ -129,6 +129,17 @@ delete 逻辑加入 `src/commands/ecs-lifecycle.ts`（命令）与 `src/provider
 - 证据：command_output、diff_summary、review_report、qa_report、acceptance_report
 - 清洁度：禁调试输出/TODO/注释代码/死 import
 
+Validation Commands（核心性 core 与失败处理 failure_handling 详见 checklist `dod.commands`）：
+
+- CMD-001 `bun run typecheck` — core=true，failure_handling=fix-or-block
+- CMD-002 `bun x vitest run src/__tests__/ecs-lifecycle-command.test.ts src/__tests__/ecs-lifecycle-provider.test.ts` — core=true，failure_handling=fix-or-block
+- CMD-003 `bun x vitest run src/__tests__/command-manifest.test.ts src/__tests__/cli-help-json-contract.test.ts src/__tests__/shell-completion.test.ts` — core=true，failure_handling=fix-or-block
+- CMD-004 `bun x vitest run src/__tests__/auth-recovery.test.ts src/__tests__/ram-bootstrap.test.ts` — core=true，failure_handling=fix-or-block
+- CMD-005 `validate-yaml.py --file <checklist> --yaml-only` — core=false，failure_handling=fix-or-block
+
+Required Artifacts: `src/providers/ecs/lifecycle.ts`（+deleteEcsInstance/getEcsInstanceReleaseFacts）、`src/providers/ecs/types.ts`（+EcsInstanceReleaseFacts）、`src/commands/ecs-lifecycle.ts`（+ecs delete/rm 命令/action + releaseFacts 阻断 + not-found verify）、`src/utils/auth-recovery.ts`、`src/providers/ram.ts`（+ecs:DeleteInstance/ecs:DescribeDisks）、`src/__tests__/ecs-lifecycle-command.test.ts`、`src/__tests__/ecs-lifecycle-provider.test.ts` 及更新的 guard 测试
+
+
 ## 执行风险与证据计划
 - **Top 3 风险**：信息缺失下误删（D4/D5 阻断缓解）；确认被绕过（D3/D6 缓解）；dry-run 触发删除（D1 缓解）。
 - **非显然依赖**：feature1 harness/releaseFacts 字段；SDK DeleteInstance/DeletionProtection/DescribeDisks 字段名（residual）。

@@ -85,7 +85,9 @@ describe('command manifest invariants', () => {
       'ecs info <instanceId>',
       'ecs start <instanceId>',
       'ecs reboot <instanceId>',
-      'ecs stop <instanceId>'
+      'ecs stop <instanceId>',
+      'ecs delete <instanceId>',
+      'ecs rm <instanceId>'
     ]);
   });
 });

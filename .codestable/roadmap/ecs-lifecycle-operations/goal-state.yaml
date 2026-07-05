@@ -3,7 +3,7 @@ status: dispatched
 baseline_ref: "2a13c1b0b454aa82a990d6ac6e79178a90f6e8d7"
 driver_kind: paseo
 driver_id: "99b394b6-af84-4647-b80b-ee802cfba6c3"
-current_feature_index: 2
+current_feature_index: 3
 features:
   - slug: "ecs-lifecycle-start-reboot"
     roadmap_item: "ecs-lifecycle-start-reboot"
@@ -31,7 +31,7 @@ features:
     review: ".codestable/features/2026-07-03-ecs-lifecycle-delete/ecs-lifecycle-delete-review.md"
     qa: ".codestable/features/2026-07-03-ecs-lifecycle-delete/ecs-lifecycle-delete-qa.md"
     acceptance: ".codestable/features/2026-07-03-ecs-lifecycle-delete/ecs-lifecycle-delete-acceptance.md"
-    status: pending
+    status: accepted
   - slug: "ecs-lifecycle-surface-harden"
     roadmap_item: "ecs-lifecycle-surface-harden"
     feature_dir: ".codestable/features/2026-07-03-ecs-lifecycle-surface-harden"

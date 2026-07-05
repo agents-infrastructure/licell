@@ -22,7 +22,7 @@ import { executeWithAuthRecovery } from '../utils/auth-recovery';
 import { emitCommandResult, isJsonOutput } from '../utils/output';
 import { commandInvocation, defineCliCommand, defineCommandModule, registerCliCommand } from './module';
 import { INFRA_SECTION } from './sections';
-import { ecsStartCommand, ecsRebootCommand, ecsStopCommand, registerEcsLifecycleCommands } from './ecs-lifecycle';
+import { ecsStartCommand, ecsRebootCommand, ecsStopCommand, ecsDeleteCommand, ecsRmCommand, registerEcsLifecycleCommands } from './ecs-lifecycle';
 
 // Original list command
 const ecsListCommand = defineCliCommand({
@@ -423,24 +423,25 @@ export function registerEcsCommands(cli: CAC) {
 
 export const ecsCommandModule = defineCommandModule({
   section: INFRA_SECTION,
-  commands: [ecsListCommand, ecsInfoCommand, ecsStartCommand, ecsRebootCommand, ecsStopCommand],
+  commands: [ecsListCommand, ecsInfoCommand, ecsStartCommand, ecsRebootCommand, ecsStopCommand, ecsDeleteCommand, ecsRmCommand],
   register: registerEcsCommands,
   namespaces: {
     ecs: {
       title: 'ECS instances',
-      summary: '查询、启动、重启和停止 ECS 云服务器实例。删除命令会按安全设计在后续发布。',
+      summary: '查询、启动、重启、停止和删除 ECS 云服务器实例，覆盖完整生命周期操作。',
       examples: [
         'licell ecs list --output json',
         'licell ecs info <instanceId> --output json',
         'licell ecs start <instanceId> --dry-run --output json',
         'licell ecs reboot <instanceId> --dry-run --output json',
-        'licell ecs stop <instanceId> --dry-run --output json'
+        'licell ecs stop <instanceId> --dry-run --output json',
+        'licell ecs delete <instanceId> --dry-run --output json'
       ],
       agentTips: [
-        'Start 免确认直接执行；Reboot 与 Stop 非交互必须显式 --yes。',
-        '过渡态（Starting/Stopping/Rebooting）下不允许操作，提示稍后重试。',
-        '建议先 --dry-run 确认 plan.willExecute 与 plan.requiresConfirmation。',
-        'Start/Reboot/Stop 会使用独立的单实例 ECS API，各自单独确认与验证。'
+        'Start 免确认直接执行；Reboot/Stop/Delete 非交互必须显式 --yes。',
+        'Delete 不可逆：释放前事实不可读或删除保护开启时阻断执行。',
+        '过渡态（Starting/Stopping/Rebooting）下 start/reboot/stop 不允许操作，提示稍后重试。',
+        '建议先 --dry-run 确认 plan.willExecute 与 plan.requiresConfirmation；delete 的 plan 含 releaseFacts。'
       ],
       recommendedFlow: [
         { title: '列出实例', command: 'licell ecs list --output json', reason: '读取当前 region ECS 实例摘要与状态。' },

@@ -5,6 +5,8 @@ import {
   startEcsInstance,
   rebootEcsInstance,
   stopEcsInstance,
+  deleteEcsInstance,
+  getEcsInstanceReleaseFacts,
   type EcsStatusClass
 } from '../providers/ecs';
 import {
@@ -15,11 +17,12 @@ import {
   toOptionalString,
   toPromptValue,
   withSpinner,
-  ensureHighImpactActionConfirmed
+  ensureHighImpactActionConfirmed,
+  ensureDestructiveActionConfirmed
 } from '../utils/cli-shared';
 import { executeWithAuthRecovery } from '../utils/auth-recovery';
 import { emitCommandResult, isJsonOutput } from '../utils/output';
-import { commandInvocation, defineCliCommand, registerCliCommand } from './module';
+import { commandInvocation, defineCliCommand, registerCliCommand, type CommandDescriptor, type DeclaredCliCommand } from './module';
 
 // Normalizes an ECS native status string into a coarse lifecycle class.
 export function classifyEcsStatus(status?: string): EcsStatusClass {
@@ -76,6 +79,51 @@ export async function pollForVerify(
     status: lastStatus,
     statusClass: lastStatusClass,
     reachedTarget: lastStatusClass ? targetClasses.includes(lastStatusClass) : false,
+    timedOut: true
+  };
+}
+
+function isNotFoundReadError(err: unknown): boolean {
+  const text = `${String((err as { message?: unknown })?.message || err || '')}`;
+  return /not exist|not found|notfound|不存在|未找到/i.test(text);
+}
+
+// Bounded polling for delete: re-reads instance detail until it is no longer
+// found (the terminal success state for a release), otherwise timedOut=true.
+async function pollForDeleteVerify(
+  instanceId: string,
+  regionId: string | undefined
+): Promise<{
+  status?: string;
+  statusClass?: EcsStatusClass;
+  reachedTarget: boolean;
+  notFound?: boolean;
+  timedOut: boolean;
+}> {
+  let lastStatus: string | undefined;
+  let lastStatusClass: EcsStatusClass | undefined;
+
+  for (let i = 0; i < MAX_VERIFY_POLLS; i++) {
+    try {
+      const detail = await getEcsInstanceDetail(instanceId, regionId ? { regionId } : undefined);
+      lastStatus = detail.summary.status;
+      lastStatusClass = classifyEcsStatus(lastStatus);
+    } catch (err) {
+      if (isNotFoundReadError(err)) {
+        return { reachedTarget: true, notFound: true, timedOut: false };
+      }
+      // Other read errors: keep trying within the bounded window.
+    }
+    if (i < MAX_VERIFY_POLLS - 1) {
+      await sleep(VERIFY_POLL_INTERVAL_MS);
+    }
+  }
+
+  return {
+    status: lastStatus,
+    statusClass: lastStatusClass,
+    reachedTarget: false,
+    notFound: false,
     timedOut: true
   };
 }
@@ -311,6 +359,222 @@ export const ecsStopCommand = defineCliCommand({
     }
   }
 });
+
+function buildDeleteDescriptor(primary: 'delete' | 'rm'): CommandDescriptor {
+  const other = primary === 'delete' ? 'rm' : 'delete';
+  return {
+    title: primary === 'delete' ? 'Delete (release) ECS Instance' : 'Remove (release) ECS Instance',
+    summary: `释放（删除）ECS 实例，操作不可逆。会先读取删除保护与磁盘释放事实：事实不可读或删除保护开启时阻断执行。ecs ${primary} 与 ecs ${other} 是同一操作的别名。`,
+    examples: [
+      `licell ecs ${primary} i-abc123 --dry-run --output json`,
+      `licell ecs ${primary} i-abc123 --yes`,
+      `licell ecs ${primary} i-abc123 --region cn-shanghai --yes`
+    ],
+    related: ['ecs info', 'ecs list', 'ecs stop', `ecs ${other}`],
+    agentTips: [
+      '删除不可逆；非交互模式必须显式 --yes 才能执行。',
+      '释放前事实（删除保护、磁盘随实例释放）不可读时阻断执行，不默认放行。',
+      '删除保护开启（deletionProtection=true）时阻断并提示先关保护，命令不代关。',
+      `ecs ${primary} 与 ecs ${other} 行为完全一致。`
+    ],
+    automation: {
+      preferredOutput: 'json',
+      explicitInputs: ['instanceId', '--region', '--dry-run', '--yes']
+    },
+    safety: {
+      level: 'destructive' as const,
+      reason: '会释放（删除）ECS 实例，操作不可逆；非交互模式必须显式 --yes 确认。',
+      confirmFlags: ['--yes']
+    },
+    optionInsights: {
+      '--region': {
+        whenToUse: '实例不在当前 licell 默认 region 时显式指定。',
+        cautions: ['不会跨 region 自动搜索；只影响本次查询，不修改全局默认 region。']
+      },
+      '--dry-run': {
+        whenToUse: '先确认操作计划与释放前事实，不实际执行。'
+      },
+      '--yes': {
+        whenToUse: '非交互模式下显式确认；交互模式下跳过两次确认 prompt。'
+      }
+    },
+    recommendedFlow: [
+      { title: '先查看实例状态', command: 'licell ecs info <instanceId> --output json', reason: '确认要删除的实例正确。' },
+      { title: 'Dry run 确认计划与释放事实', command: `licell ecs ${primary} <instanceId> --dry-run --output json`, reason: '查看 plan.releaseFacts 与 willExecute=false。' },
+      { title: '执行删除', command: `licell ecs ${primary} <instanceId> --yes`, reason: '实际释放实例，并轮询确认 not-found 终态。' }
+    ],
+    result: {
+      summary: '返回操作计划（含 releaseFacts）、执行请求ID（若执行）和最终验证状态。dry-run 时 execution 缺省。',
+      fields: [
+        { name: 'plan.action', description: '操作类型，值为 delete。', required: true },
+        { name: 'plan.regionId', description: '实例所在地域。', required: true },
+        { name: 'plan.instanceId', description: '实例 ID。', required: true },
+        { name: 'plan.currentStatus', description: '操作前 ECS 原生状态。' },
+        { name: 'plan.currentStatusClass', description: '操作前归一化状态类别。', required: true },
+        { name: 'plan.requiresConfirmation', description: '该操作是否需要确认，delete 为 true。', required: true },
+        { name: 'plan.willExecute', description: '是否实际执行，--dry-run 时为 false。', required: true },
+        { name: 'plan.releaseFacts', description: '释放前事实：deletionProtection / deleteWithDisks / releaseBehavior。', required: true },
+        { name: 'execution.requestId', description: 'ECS API 返回的 requestId，仅实际执行时存在。' },
+        { name: 'verify.notFound', description: '删除后实例是否已不可查询（true 表示释放终态成功）。', required: true },
+        { name: 'verify.reachedTarget', description: '是否到达删除终态（not-found）。', required: true },
+        { name: 'verify.timedOut', description: '验证是否超时仍能查询到实例。' }
+      ]
+    }
+  };
+}
+
+export const ecsDeleteCommand = defineCliCommand({
+  rawName: 'ecs delete <instanceId>',
+  description: '删除（释放）ECS 实例',
+  options: [
+    { rawName: '--region <regionId>', description: '实例所在地域；不传则使用当前 licell 默认 region' },
+    { rawName: '--dry-run', description: '只构造计划并读取释放前事实，不实际执行操作' },
+    { rawName: '--yes', description: '跳过交互式确认（非交互模式必须显式提供）' }
+  ],
+  descriptor: buildDeleteDescriptor('delete')
+});
+
+export const ecsRmCommand = defineCliCommand({
+  rawName: 'ecs rm <instanceId>',
+  description: '删除（释放）ECS 实例（delete 的别名）',
+  options: [
+    { rawName: '--region <regionId>', description: '实例所在地域；不传则使用当前 licell 默认 region' },
+    { rawName: '--dry-run', description: '只构造计划并读取释放前事实，不实际执行操作' },
+    { rawName: '--yes', description: '跳过交互式确认（非交互模式必须显式提供）' }
+  ],
+  descriptor: buildDeleteDescriptor('rm')
+});
+
+// Shared delete action used by both `ecs delete` and `ecs rm`.
+function registerEcsDeleteAction(cli: CAC, command: DeclaredCliCommand) {
+  registerCliCommand(cli, command)
+    .action(async (instanceId: string, options: { region?: unknown; dryRun?: unknown; yes?: unknown }) => {
+      await executeWithAuthRecovery(
+        {
+          commandLabel: commandInvocation(command),
+          interactiveTTY: isInteractiveTTY(),
+          requiredCapabilities: ['ecs']
+        },
+        async () => {
+          ensureAuthOrExit();
+          const normalizedId = toPromptValue(instanceId, 'instanceId');
+          const regionId = toOptionalString(options.region);
+          const dryRun = Boolean(options.dryRun);
+          const yes = Boolean(options.yes);
+          const s = createSpinner();
+
+          const detail = await withSpinner(
+            s,
+            '正在检查实例状态...',
+            '构造计划失败',
+            () => getEcsInstanceDetail(normalizedId, regionId ? { regionId } : undefined)
+          );
+          if (!detail) return;
+
+          const currentStatus = detail.summary.status;
+          const currentStatusClass = classifyEcsStatus(currentStatus);
+          const resolvedRegion = detail.summary.regionId || regionId || '';
+          const resolvedId = detail.summary.instanceId;
+
+          // Read pre-release facts; unreadable => block (RMR-001).
+          const facts = await withSpinner(
+            s,
+            '正在读取释放前事实...',
+            '释放前事实读取失败',
+            () => getEcsInstanceReleaseFacts({ instanceId: resolvedId, regionId: resolvedRegion || undefined })
+          );
+          if (!facts) return;
+
+          const releaseFacts = {
+            ...(facts.deletionProtection !== undefined ? { deletionProtection: facts.deletionProtection } : {}),
+            deleteWithDisks: (facts.disks || []).some((disk) => disk.deleteWithInstance === true),
+            ...(facts.releaseBehavior ? { releaseBehavior: facts.releaseBehavior } : {})
+          };
+
+          // Deletion protection => block (do not disable it on the user's behalf).
+          if (facts.deletionProtection === true) {
+            throw new Error('实例已开启删除保护（deletionProtection=true），已阻断删除；请先在控制台关闭删除保护后重试');
+          }
+
+          const plan = {
+            action: 'delete' as const,
+            regionId: resolvedRegion,
+            instanceId: resolvedId,
+            currentStatus,
+            currentStatusClass,
+            plannedRequest: { instanceId: resolvedId, regionId: resolvedRegion || regionId },
+            requiredCapabilities: ['ecs'] as const,
+            requiresConfirmation: true,
+            willExecute: !dryRun,
+            releaseFacts
+          };
+
+          if (dryRun) {
+            const result = {
+              plan: { ...plan, willExecute: false },
+              verify: { reachedTarget: false, notFound: false }
+            };
+            if (isJsonOutput()) {
+              emitCommandResult(result);
+            } else {
+              s.stop(pc.green('构造计划成功'));
+              console.log(pc.gray('  实例ID: ') + pc.white(plan.instanceId));
+              console.log(pc.gray('  地域: ') + pc.white(plan.regionId));
+              console.log(pc.gray('  当前状态: ') + pc.white(currentStatus || 'unknown'));
+              console.log(pc.gray('  删除保护: ') + pc.white(String(facts.deletionProtection ?? 'unknown')));
+              console.log(pc.gray('  磁盘随实例释放: ') + pc.white(String(releaseFacts.deleteWithDisks)));
+              console.log(pc.gray('  释放行为: ') + pc.white(facts.releaseBehavior || 'unknown'));
+              console.log(pc.cyan('  --dry-run 模式，不会实际执行'));
+              console.log('');
+              showOutro('Done (dry-run)');
+            }
+            return;
+          }
+
+          // Double confirmation (delete semantics): --yes skips; interactive => two prompts; non-interactive no --yes => throws.
+          await ensureDestructiveActionConfirmed('删除实例', {
+            yes,
+            interactiveTTY: isInteractiveTTY()
+          });
+
+          const execution = await withSpinner(
+            s,
+            '正在发送删除请求...',
+            '删除请求失败',
+            () => deleteEcsInstance({ instanceId: plan.instanceId, regionId: plan.regionId })
+          );
+          if (!execution) return;
+
+          const verify = await withSpinner(
+            s,
+            '正在等待实例释放...',
+            '状态验证失败',
+            () => pollForDeleteVerify(plan.instanceId, plan.regionId)
+          );
+          if (!verify) return;
+
+          const result = { plan, execution, verify };
+          if (isJsonOutput()) {
+            emitCommandResult(result);
+          } else {
+            s.stop(pc.green('删除操作完成'));
+            console.log('');
+            console.log(pc.cyan('ECS 删除结果'));
+            console.log(pc.gray('  实例ID: ') + pc.white(plan.instanceId));
+            console.log(pc.gray('  地域: ') + pc.white(plan.regionId));
+            if (execution.requestId) console.log(pc.gray('  请求ID: ') + pc.white(execution.requestId));
+            if (verify.notFound) {
+              console.log(pc.green('  ✓ 实例已释放（not-found 终态）'));
+            } else if (verify.timedOut) {
+              console.log(pc.yellow('  ⚠ 删除已下发，但暂未确认实例完全释放'));
+            }
+            console.log('');
+            showOutro('Done.');
+          }
+        }
+      );
+    });
+}
 
 export function registerEcsLifecycleCommands(cli: CAC) {
   registerCliCommand(cli, ecsStartCommand)
@@ -642,4 +906,7 @@ export function registerEcsLifecycleCommands(cli: CAC) {
         }
       );
     });
+
+  registerEcsDeleteAction(cli, ecsDeleteCommand);
+  registerEcsDeleteAction(cli, ecsRmCommand);
 }

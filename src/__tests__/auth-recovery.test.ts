@@ -4,11 +4,11 @@ import { AUTH_CAPABILITY_LABELS, detectAuthIssue, resolveAuthCapabilityActions }
 const ECS_LIFECYCLE_ALLOWED_ACTIONS = [
   'ecs:StartInstance',
   'ecs:RebootInstance',
-  'ecs:StopInstance'
+  'ecs:StopInstance',
+  'ecs:DeleteInstance'
 ];
 
 const ECS_LIFECYCLE_FORBIDDEN_ACTIONS = [
-  'ecs:DeleteInstance',
   'ecs:RunInstances'
 ];
 
@@ -53,6 +53,8 @@ describe('resolveAuthCapabilityActions', () => {
     expect(AUTH_CAPABILITY_LABELS.ecs).toBe('ECS');
     const actions = resolveAuthCapabilityActions(['ecs']);
     expect(actions).toEqual([
+      'ecs:DeleteInstance',
+      'ecs:DescribeDisks',
       'ecs:DescribeInstanceAttribute',
       'ecs:DescribeInstances',
       'ecs:RebootInstance',

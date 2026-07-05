@@ -77,3 +77,12 @@ export interface EcsLifecycleActionResult {
   instanceId: string;
   requestId?: string;
 }
+
+export interface EcsInstanceReleaseFacts {
+  instanceId: string;
+  regionId: string;
+  status?: string;
+  deletionProtection?: boolean;
+  disks?: Array<{ diskId: string; deleteWithInstance?: boolean; category?: string }>;
+  releaseBehavior?: 'released' | 'retained' | 'unknown';
+}
