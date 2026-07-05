@@ -1,17 +1,19 @@
 ---
 doc_type: roadmap-seed
 roadmap: ecs-operations-support
-status: current
+status: consumed
 created: 2026-07-03
+consumed_by: ecs-lifecycle-operations
+consumed: 2026-07-05
 ---
 
 # ECS lifecycle command seeds
 
+> 状态：**已消费**。本 seed 的 start/reboot/stop/delete/rm 命令已由 roadmap `ecs-lifecycle-operations`（features ecs-lifecycle-start-reboot / ecs-lifecycle-stop / ecs-lifecycle-delete / ecs-lifecycle-surface-harden）落地并验收。`run`/`create` 仍未实现，留待后续单独 epic/feature。
+
 ## 目的
 
-本文档是后续 ECS lifecycle feature 的输入，不是当前用户指南，也不表示任何 lifecycle 命令已经可用。当前 ECS surface 仍保持只读：`ecs list` 与 `ecs info`。
-
-后续 lifecycle 工作必须另起 feature design，并且不得在未显式批准额外 RAM action 的情况下复用只读 `ecs` capability。
+本文档是后续 ECS lifecycle feature 的输入，不是当前用户指南。start/reboot/stop/delete/rm 已落地；`run`/`create` 仍未实现，另起 epic/feature。
 
 ## Phase split
 

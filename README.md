@@ -31,7 +31,7 @@ Licell 当前覆盖的核心能力包括：
 - 自定义域名、HTTPS、CDN、DNS
 - ACR / Docker 镜像部署
 - Serverless 数据库与缓存辅助能力
-- ECS 实例只读查询与详情诊断
+- ECS 实例查询、详情诊断与生命周期操作（启动 / 重启 / 停止 / 删除）
 - 面向 Agent 的 Skills / catalog / JSON 输出 / 文档共源生成
 
 ---
@@ -744,8 +744,13 @@ licell e2e cleanup <runId>
 
 | 命令 | 说明 | 关键选项 |
 |------|------|----------|
+| `licell ecs delete <instanceId>` | 删除（释放）ECS 实例 | `--region`, `--dry-run`, `--yes` |
 | `licell ecs info <instanceId>` | 查看 ECS 实例基础详情 | `--region` |
 | `licell ecs list` | 查看 ECS 实例列表 | `--region`, `--limit`, `--status` |
+| `licell ecs reboot <instanceId>` | 重启 ECS 实例 | `--region`, `--dry-run`, `--yes` |
+| `licell ecs rm <instanceId>` | 删除（释放）ECS 实例（delete 的别名） | `--region`, `--dry-run`, `--yes` |
+| `licell ecs start <instanceId>` | 启动 ECS 实例 | `--region`, `--dry-run` |
+| `licell ecs stop <instanceId>` | 停止 ECS 实例 | `--region`, `--dry-run`, `--yes` |
 
 #### Automation & Tooling
 

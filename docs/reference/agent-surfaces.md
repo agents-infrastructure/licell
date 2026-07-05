@@ -228,8 +228,13 @@
 
 | 命令 | 说明 | 关键选项 |
 |------|------|----------|
+| `licell ecs delete <instanceId>` | 删除（释放）ECS 实例 | `--region`, `--dry-run`, `--yes` |
 | `licell ecs info <instanceId>` | 查看 ECS 实例基础详情 | `--region` |
 | `licell ecs list` | 查看 ECS 实例列表 | `--region`, `--limit`, `--status` |
+| `licell ecs reboot <instanceId>` | 重启 ECS 实例 | `--region`, `--dry-run`, `--yes` |
+| `licell ecs rm <instanceId>` | 删除（释放）ECS 实例（delete 的别名） | `--region`, `--dry-run`, `--yes` |
+| `licell ecs start <instanceId>` | 启动 ECS 实例 | `--region`, `--dry-run` |
+| `licell ecs stop <instanceId>` | 停止 ECS 实例 | `--region`, `--dry-run`, `--yes` |
 
 ### Automation & Tooling
 

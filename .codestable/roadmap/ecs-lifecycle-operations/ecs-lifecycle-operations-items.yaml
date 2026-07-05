@@ -29,7 +29,7 @@ items:
   - slug: ecs-lifecycle-surface-harden
     description: 整体命令 surface 同步与回归收口，让 catalog/help/completion/README/agent-surface/skill scaffold 反映最终 lifecycle 命令集
     depends_on: [ecs-lifecycle-stop, ecs-lifecycle-delete]
-    status: in-progress
+    status: done
     feature: 2026-07-03-ecs-lifecycle-surface-harden
     minimal_loop: false
     notes: 运行 bun run docs:sync/docs:check；统一回归 dry-run/确认/verify 契约；更新 ecs-lifecycle-command-seeds 状态；不新增用户命令

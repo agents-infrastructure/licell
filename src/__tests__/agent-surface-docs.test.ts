@@ -39,11 +39,16 @@ describe('renderAgentSurfaceReferenceDoc', () => {
     expect(output).toContain('### Cloud Infrastructure');
     expect(output).toContain('licell ecs list');
     expect(output).toContain('licell ecs info <instanceId>');
+    expect(output).toContain('licell ecs start <instanceId>');
+    expect(output).toContain('licell ecs reboot <instanceId>');
+    expect(output).toContain('licell ecs stop <instanceId>');
+    expect(output).toContain('licell ecs delete <instanceId>');
+    expect(output).toContain('licell ecs rm <instanceId>');
     expect(output.indexOf('### Data Services')).toBeLessThan(output.indexOf('### Cloud Infrastructure'));
     expect(output.indexOf('### Cloud Infrastructure')).toBeLessThan(output.indexOf('### Automation & Tooling'));
     expect(output).toContain('## Recommended Agent Flow');
     expect(output).toContain('`licell deploy check`');
-    expect(output).not.toMatch(/licell ecs (start|stop|reboot|delete|rm)|runInstances/);
+    expect(output).not.toMatch(/licell ecs (run|create)|runInstances/);
     expect(output).not.toContain('Tool Reference');
     expect(output).toContain('\n- `kind`：固定为 `licell-cli-record`。');
     expect(output).not.toContain('\n  - `kind`：固定为 `licell-cli-record`。');

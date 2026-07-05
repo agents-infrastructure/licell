@@ -102,6 +102,16 @@ surface 同步按各自证据入口（blocking 修正，不再统称"4 targets"�
 - 证据：command_output、diff_summary、review_report、qa_report、acceptance_report
 - 清洁度：禁调试输出/TODO/注释代码/死 import；diff 不含源码逻辑改动
 
+Validation Commands（核心性 core 与失败处理 failure_handling 详见 checklist `dod.commands`）：
+
+- CMD-001 `bun run typecheck` — core=true，failure_handling=fix-or-block
+- CMD-002 `bun run docs:check` — core=true，failure_handling=fix-or-block
+- CMD-003 `bun x vitest run src/__tests__/cli-help-json-contract.test.ts src/__tests__/shell-completion.test.ts src/__tests__/agent-surface-docs.test.ts src/__tests__/readme-docs.test.ts src/__tests__/skills-scaffold.test.ts` — core=true，failure_handling=fix-or-block
+- CMD-004 `bun x vitest run src/__tests__/ecs-lifecycle-command.test.ts` — core=true，failure_handling=fix-or-block
+- CMD-005 `validate-yaml.py --file <checklist> --yaml-only` — core=false，failure_handling=fix-or-block
+
+Required Artifacts: 刷新后的 generated docs（`README.md`、`docs/reference/agent-surfaces.md`）、`src/__tests__/ecs-lifecycle-surface.test.ts`（跨命令 dry-run/确认/verify/safety 一致性回归）、更新为 consumed 的 `.codestable/roadmap/ecs-operations-support/ecs-lifecycle-command-seeds.md`
+
 ## 执行风险与证据计划
 - **Top 3 风险**：generator 未覆盖某命令导致 drift（H1/H2 缓解 + 观察项）；跨命令确认策略回归遗漏（H4 缓解）；误改源码逻辑越界（diff review 反向核对缓解）。
 - **非显然依赖**：依赖 stop、delete 两 feature 已合入（命令集完整）。
