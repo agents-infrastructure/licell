@@ -3,6 +3,8 @@ import { spawnSync } from 'child_process';
 import { resolve } from 'path';
 import { extractJsonRecordsFromOutput } from '../utils/output';
 
+const ECS_LIFECYCLE_HELP_PATTERN = /(?:licell )?ecs (start|stop|reboot|delete|rm|run|create)\b|ecs:(StartInstance|StopInstance|RebootInstance|DeleteInstance|RunInstances)/;
+
 beforeAll(() => {
   const warmup = spawnSync('bun', ['x', 'tsx', '--version'], {
     cwd: process.cwd(),
@@ -45,6 +47,28 @@ function runCliHelpJson(args: string[]) {
 }
 
 describe('cli help json contract', () => {
+  it('keeps ecs namespace help limited to readonly inspect commands', () => {
+    const result = runCliHelpJson(['ecs']);
+    const records = extractJsonRecordsFromOutput(result.stdout) as Array<Record<string, any>>;
+
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(records).toHaveLength(1);
+
+    const record = records[0];
+    expect(record?.stage).toBe('help');
+    expect(record?.key).toBe('ecs');
+    expect(record?.help?.kind).toBe('licell-help');
+    expect(record?.help?.scope).toBe('namespace');
+    expect(record?.help?.safety?.level).toBe('safe');
+    expect(record?.help?.subcommands.map((command: { key?: string }) => command.key)).toEqual([
+      'ecs info',
+      'ecs list'
+    ]);
+    expect(JSON.stringify(record)).not.toMatch(ECS_LIFECYCLE_HELP_PATTERN);
+  }, 10000);
+
   it('locks deploy help json contract for task-aware result schema', () => {
     const result = runCliHelpJson(['deploy']);
     const records = extractJsonRecordsFromOutput(result.stdout) as Array<Record<string, any>>;
@@ -103,5 +127,73 @@ describe('cli help json contract', () => {
     expect(record?.help?.result?.fields.some((field: { name?: string }) => field.name === 'nextToken')).toBe(true);
     expect(record?.help?.renderedText).toContain('`tasks[]` · 异步任务摘要数组。');
     expect(record?.help?.renderedText).toContain('`nextToken` · 服务端下一页游标；若为 `null` 代表没有更多结果。');
+  }, 10000);
+
+  it('locks ecs list help json contract for agent discovery', () => {
+    const result = runCliHelpJson(['ecs', 'list']);
+    const records = extractJsonRecordsFromOutput(result.stdout) as Array<Record<string, any>>;
+
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(records).toHaveLength(1);
+
+    const record = records[0];
+    expect(record?.stage).toBe('help');
+    expect(record?.key).toBe('ecs list');
+    expect(record?.help?.kind).toBe('licell-help');
+    expect(record?.help?.scope).toBe('command');
+    expect(record?.help?.automation?.preferredOutput).toBe('json');
+    expect(record?.help?.safety?.level).toBe('safe');
+    expect(record?.help?.options.map((option: { rawName?: string }) => option.rawName)).toEqual(expect.arrayContaining([
+      '--region <regionId>',
+      '--limit <n>',
+      '--tag <key=value>',
+      '--name-prefix <prefix>',
+      '--private-ip <ip>',
+      '--public-ip <ip>',
+      '--eip <ip>'
+    ]));
+    expect(record?.help?.examples).toContain('licell ecs list --output json');
+    expect(record?.help?.recommendedFlow.map((step: { command?: string }) => step.command)).toContain('licell ecs list --output json');
+    expect(record?.help?.result?.fields.some((field: { name?: string }) => field.name === 'instances[]')).toBe(true);
+    expect(record?.help?.result?.fields.some((field: { name?: string }) => field.name === 'filters')).toBe(true);
+    expect(record?.help?.result?.fields.map((field: { name?: string }) => field.name)).toEqual(expect.arrayContaining([
+      'regionId',
+      'count',
+      'limit',
+      'totalCount',
+      'truncated',
+      'filters',
+      'instances[]'
+    ]));
+    expect(record?.help?.renderedText).toContain('`instances[]`');
+    expect(JSON.stringify(record)).not.toMatch(ECS_LIFECYCLE_HELP_PATTERN);
+  }, 10000);
+
+  it('locks ecs info help json contract for agent discovery', () => {
+    const result = runCliHelpJson(['ecs', 'info']);
+    const records = extractJsonRecordsFromOutput(result.stdout) as Array<Record<string, any>>;
+
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(records).toHaveLength(1);
+
+    const record = records[0];
+    expect(record?.stage).toBe('help');
+    expect(record?.key).toBe('ecs info');
+    expect(record?.help?.kind).toBe('licell-help');
+    expect(record?.help?.scope).toBe('command');
+    expect(record?.help?.automation?.preferredOutput).toBe('json');
+    expect(record?.help?.safety?.level).toBe('safe');
+    expect(record?.help?.options.map((option: { rawName?: string }) => option.rawName)).toContain('--region <regionId>');
+    expect(record?.help?.examples).toContain('licell ecs info i-xxx --output json');
+    expect(record?.help?.recommendedFlow.map((step: { command?: string }) => step.command)).toContain('licell ecs info <instanceId> --output json');
+    expect(record?.help?.result?.fields.some((field: { name?: string }) => field.name === 'detail.summary')).toBe(true);
+    expect(record?.help?.result?.fields.some((field: { name?: string }) => field.name === 'detail.summary.securityGroupIds[]')).toBe(true);
+    expect(record?.help?.renderedText).toContain('`detail.summary`');
+    expect(record?.help?.result?.fields.map((field: { name?: string }) => field.name).join(' ')).not.toMatch(/rawAttribute|userData|vncUrl|consoleOutput|password|keyPairPrivateKey/);
+    expect(JSON.stringify(record)).not.toMatch(ECS_LIFECYCLE_HELP_PATTERN);
   }, 10000);
 });

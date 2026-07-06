@@ -69,4 +69,17 @@ describe('command manifest invariants', () => {
     expect(() => assertCommandManifest(invalidManifest)).toThrow(/Invalid command manifest:/);
     expect(() => assertCommandManifest(invalidManifest)).toThrow(/root_help_missing/);
   });
+
+  it('places ecs module after supa and before doctor', () => {
+    const roots = LICELL_COMMAND_MANIFEST.modules.map((module) => module.roots[0]);
+    expect(roots.indexOf('ecs')).toBeGreaterThan(roots.indexOf('supa'));
+    expect(roots.indexOf('ecs')).toBeLessThan(roots.indexOf('doctor'));
+
+    const ecsModule = LICELL_COMMAND_MANIFEST.modules.find((module) => module.roots.includes('ecs'));
+    expect(ecsModule?.section).toMatchObject({
+      id: 'infra',
+      title: 'Cloud Infrastructure'
+    });
+    expect(ecsModule?.declaredCommands?.map((command) => command.rawName)).toEqual(['ecs list', 'ecs info <instanceId>']);
+  });
 });

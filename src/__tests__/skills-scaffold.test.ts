@@ -27,6 +27,7 @@ describe('getSkillFiles', () => {
 
   it('content is contract-first and points agents back to CLI help', () => {
     const [file] = getSkillFiles('claude');
+    expect(file.content).toContain('ECS queries');
     expect(file.content).toContain('## Scope');
     expect(file.content).toContain('## Operating Contract');
     expect(file.content).toContain('## Canonical Invocation Sequence');
@@ -43,6 +44,11 @@ describe('getSkillFiles', () => {
     expect(file.content).not.toContain('## SLS Query Reference');
     expect(file.content).not.toContain('## What Not To Do');
     expect(file.content).not.toContain('## Agent Usage');
+  });
+
+  it('keeps committed claude skill synced with scaffold output', () => {
+    const [file] = getSkillFiles('claude');
+    expect(readFileSync(file.path, 'utf8')).toBe(file.content);
   });
 });
 
@@ -149,6 +155,7 @@ describe('ensureAgentsMdEntry', () => {
       expect(filePath).toBe(join(dir, 'AGENTS.md'));
       const content = readFileSync(filePath, 'utf8');
       expect(content).toContain('.claude/skills/licell/SKILL.md');
+      expect(content).toContain('ECS queries');
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

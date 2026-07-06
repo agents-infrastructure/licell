@@ -1,0 +1,150 @@
+---
+doc_type: feature-evidence-pack
+feature: 2026-07-03-ecs-lifecycle-command-scaffold
+status: generated
+---
+
+# 2026-07-03-ecs-lifecycle-command-scaffold evidence pack
+
+## 1. Scope
+
+- Design: `.codestable/features/2026-07-03-ecs-lifecycle-command-scaffold/ecs-lifecycle-command-scaffold-design.md`
+- Checklist: `.codestable/features/2026-07-03-ecs-lifecycle-command-scaffold/ecs-lifecycle-command-scaffold-checklist.yaml`
+
+## 2. DoD Results
+
+```json
+{
+  "gate_id": "dod-runner",
+  "stage": "implementation.after_review",
+  "status": "passed",
+  "blocking": [],
+  "warnings": [],
+  "evidence": [
+    {
+      "command": "bun run typecheck",
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "$ bun x tsc --noEmit\nResolving dependencies\nResolved, downloaded and extracted [2]\nSaved lockfile\n",
+      "id": "CMD-001",
+      "core": true,
+      "failure_handling": "fix-or-block"
+    },
+    {
+      "command": "bun x vitest run src/__tests__/command-reference.test.ts src/__tests__/command-manifest.test.ts src/__tests__/command-surface-metadata.test.ts",
+      "exit_code": 0,
+      "stdout": "\n RUN  v4.0.18 /Users/wyattfang/.paseo/worktrees/0tcb78qo/licell-feat-ecs-support\n\n ✓ src/__tests__/command-manifest.test.ts (4 tests) 2ms\n ✓ src/__tests__/command-surface-metadata.test.ts (7 tests) 7ms\n ✓ src/__tests__/command-reference.test.ts (5 tests) 69ms\n\n Test Files  3 passed (3)\n      Tests  16 passed (16)\n   Start at  16:20:13\n   Duration  2.04s (transform 2.38s, setup 0ms, import 5.59s, tests 79ms, environment 0ms)\n\n",
+      "stderr": "",
+      "id": "CMD-002",
+      "core": true,
+      "failure_handling": "fix-or-block"
+    },
+    {
+      "command": "bun x vitest run src/__tests__/cli-help-json-contract.test.ts src/__tests__/shell-completion.test.ts",
+      "exit_code": 0,
+      "stdout": "\n RUN  v4.0.18 /Users/wyattfang/.paseo/worktrees/0tcb78qo/licell-feat-ecs-support\n\n ✓ src/__tests__/shell-completion.test.ts (14 tests) 8ms\n ✓ src/__tests__/cli-help-json-contract.test.ts (5 tests) 6749ms\n     ✓ keeps ecs namespace help limited to readonly inspect commands  1696ms\n     ✓ locks deploy help json contract for task-aware result schema  1250ms\n     ✓ locks task list help json contract for task tracking schema  1228ms\n     ✓ locks ecs list help json contract for agent discovery  1204ms\n     ✓ locks ecs info help json contract for agent discovery  1272ms\n\n Test Files  2 passed (2)\n      Tests  19 passed (19)\n   Start at  16:20:16\n   Duration  6.92s (transform 866ms, setup 0ms, import 1.58s, tests 6.76s, environment 0ms)\n\n",
+      "stderr": "",
+      "id": "CMD-003",
+      "core": true,
+      "failure_handling": "fix-or-block"
+    },
+    {
+      "command": "bun x vitest run src/__tests__/auth-recovery.test.ts src/__tests__/ram-bootstrap.test.ts",
+      "exit_code": 0,
+      "stdout": "\n RUN  v4.0.18 /Users/wyattfang/.paseo/worktrees/0tcb78qo/licell-feat-ecs-support\n\n ✓ src/__tests__/ram-bootstrap.test.ts (4 tests) 4ms\n ✓ src/__tests__/auth-recovery.test.ts (6 tests) 2ms\n\n Test Files  2 passed (2)\n      Tests  10 passed (10)\n   Start at  16:20:23\n   Duration  556ms (transform 380ms, setup 0ms, import 916ms, tests 6ms, environment 0ms)\n\n",
+      "stderr": "",
+      "id": "CMD-004",
+      "core": true,
+      "failure_handling": "fix-or-block"
+    },
+    {
+      "command": "python3 .codestable/tools/validate-yaml.py --file .codestable/features/2026-07-03-ecs-lifecycle-command-scaffold/ecs-lifecycle-command-scaffold-checklist.yaml --yaml-only",
+      "exit_code": 0,
+      "stdout": "Validated 1 file(s): 1 passed, 0 failed.\n\n  ✓ .codestable/features/2026-07-03-ecs-lifecycle-command-scaffold/ecs-lifecycle-command-scaffold-checklist.yaml\n\nAll files valid.\n",
+      "stderr": "",
+      "id": "CMD-005",
+      "core": false,
+      "failure_handling": "fix-or-block"
+    }
+  ],
+  "providers": {}
+}
+```
+
+## 3. Validation Commands
+
+Extracted from checklist `dod.commands`; see DoD Results for command status.
+
+## 4. Scope And Cleanliness
+
+Design bytes: 13752
+Checklist bytes: 4385
+
+## 5. Residual Risks
+
+- none
+
+## 6. Provider Signals
+
+```json
+{
+  "archguard": {
+    "status": "skipped",
+    "reason": "archguard collection disabled",
+    "warnings": []
+  },
+  "meta_cc": {
+    "status": "skipped",
+    "reason": "meta-cc collection disabled",
+    "warnings": []
+  }
+}
+```
+
+## 7. Gate Results
+
+```json
+{
+  "gate_id": "scope-gate",
+  "stage": "implementation.after_review",
+  "status": "passed",
+  "blocking": [],
+  "warnings": [],
+  "evidence": [
+    {
+      "changed_files": [
+        ".codestable/features/2026-07-03-ecs-lifecycle-command-scaffold/ecs-lifecycle-command-scaffold-checklist.yaml",
+        ".codestable/roadmap/ecs-operations-support/ecs-operations-support-items.yaml",
+        ".codestable/roadmap/ecs-operations-support/goal-state.yaml",
+        "src/__tests__/auth-recovery.test.ts",
+        "src/__tests__/cli-help-json-contract.test.ts",
+        "src/__tests__/command-reference.test.ts",
+        "src/__tests__/command-surface-metadata.test.ts",
+        "src/__tests__/ram-bootstrap.test.ts",
+        "src/__tests__/shell-completion.test.ts",
+        ".codestable/features/2026-07-03-ecs-lifecycle-command-scaffold/ecs-lifecycle-command-scaffold-acceptance.md",
+        ".codestable/features/2026-07-03-ecs-lifecycle-command-scaffold/ecs-lifecycle-command-scaffold-dod-before-review.json",
+        ".codestable/features/2026-07-03-ecs-lifecycle-command-scaffold/ecs-lifecycle-command-scaffold-evidence.json",
+        ".codestable/features/2026-07-03-ecs-lifecycle-command-scaffold/ecs-lifecycle-command-scaffold-qa.md",
+        ".codestable/features/2026-07-03-ecs-lifecycle-command-scaffold/ecs-lifecycle-command-scaffold-review.md",
+        ".codestable/features/2026-07-03-ecs-lifecycle-command-scaffold/ecs-lifecycle-command-scaffold-scope-before-review.json",
+        ".codestable/roadmap/ecs-operations-support/ecs-lifecycle-command-seeds.md"
+      ],
+      "ignored_machine_artifacts": [],
+      "allowed_prefixes": [
+        ".codestable/features/2026-07-03-ecs-lifecycle-command-scaffold",
+        ".codestable/features/2026-07-03-ecs-lifecycle-command-scaffold",
+        ".codestable/roadmap/ecs-operations-support",
+        "src/__tests__/command-reference.test.ts",
+        "src/__tests__/command-manifest.test.ts",
+        "src/__tests__/command-surface-metadata.test.ts",
+        "src/__tests__/cli-help-json-contract.test.ts",
+        "src/__tests__/shell-completion.test.ts",
+        "src/__tests__/auth-recovery.test.ts",
+        "src/__tests__/ram-bootstrap.test.ts"
+      ]
+    }
+  ],
+  "providers": {}
+}
+```

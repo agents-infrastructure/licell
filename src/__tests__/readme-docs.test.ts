@@ -40,6 +40,12 @@ describe('syncReadmeQuickReferenceSection', () => {
     expect(output).toContain('`nextActions[]`');
     expect(output).toContain('### 命令总览');
     expect(output).toContain('**Task 函数工作流**');
+    expect(output).toContain('#### Cloud Infrastructure');
+    expect(output).toContain('licell ecs list');
+    expect(output).toContain('licell ecs info <instanceId>');
+    expect(output.indexOf('#### Data Services')).toBeLessThan(output.indexOf('#### Cloud Infrastructure'));
+    expect(output.indexOf('#### Cloud Infrastructure')).toBeLessThan(output.indexOf('#### Automation & Tooling'));
+    expect(output).not.toMatch(/licell ecs (start|stop|reboot|delete|rm)|runInstances/);
     expect(output).toContain('licell deploy --type task --runtime nodejs22 --entry src/task.ts --target preview --output json');
     expect(output).not.toContain('old content');
     expect(output).toContain('upgrade guidance');
@@ -56,5 +62,10 @@ describe('syncReadmeGeneratedSections', () => {
     expect(readme).toContain('### Agent Contract');
     expect(readme).toContain('CLI Event Record');
     expect(readme).toContain('**Task 函数工作流**');
+    expect(readme).toContain('ECS 实例只读查询与详情诊断');
+    expect(readme).toContain('#### Cloud Infrastructure');
+    expect(readme).toContain('licell ecs list');
+    expect(readme).toContain('licell ecs info <instanceId>');
+    expect(readme).not.toMatch(/licell ecs (start|stop|reboot|delete|rm)|runInstances/);
   });
 });

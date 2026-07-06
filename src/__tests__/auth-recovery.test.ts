@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { detectAuthIssue, resolveAuthCapabilityActions } from '../utils/auth-recovery';
+import { AUTH_CAPABILITY_LABELS, detectAuthIssue, resolveAuthCapabilityActions } from '../utils/auth-recovery';
+
+const ECS_MUTATING_ACTIONS = [
+  'ecs:StartInstance',
+  'ecs:StopInstance',
+  'ecs:RebootInstance',
+  'ecs:DeleteInstance',
+  'ecs:RunInstances'
+];
 
 function withCode(message: string, code?: string) {
   const err = new Error(message);
@@ -36,5 +44,17 @@ describe('resolveAuthCapabilityActions', () => {
       'fc:ListFunctions',
       'fc:UpdateFunction'
     ]);
+  });
+
+  it('exposes ECS read-only action hints only', () => {
+    expect(AUTH_CAPABILITY_LABELS.ecs).toBe('ECS');
+    const actions = resolveAuthCapabilityActions(['ecs']);
+    expect(actions).toEqual([
+      'ecs:DescribeInstanceAttribute',
+      'ecs:DescribeInstances'
+    ]);
+    for (const action of ECS_MUTATING_ACTIONS) {
+      expect(actions).not.toContain(action);
+    }
   });
 });

@@ -222,6 +222,15 @@
 | `licell supa stop <instanceName>` | 暂停 Supabase 实例 | — |
 | `licell supa whitelist <instanceName>` | 查看/修改 Supabase IP 白名单 | `--set`, `--add`, `--remove` |
 
+### Cloud Infrastructure
+
+云服务器、网络与基础设施资源的查询和运维命令。
+
+| 命令 | 说明 | 关键选项 |
+|------|------|----------|
+| `licell ecs info <instanceId>` | 查看 ECS 实例基础详情 | `--region` |
+| `licell ecs list` | 查看 ECS 实例列表 | `--region`, `--limit`, `--status` |
+
 ### Automation & Tooling
 
 面向 Agent、开发体验与 CLI 生命周期的自动化命令。

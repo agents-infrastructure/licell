@@ -7,17 +7,28 @@ import {
 } from '../utils/command-reference';
 import { buildHelpSemanticDocument } from '../utils/help';
 
+const ECS_LIFECYCLE_SURFACE_PATTERN = /(?:licell )?ecs (start|stop|reboot|delete|rm|run|create)\b|ecs:(StartInstance|StopInstance|RebootInstance|DeleteInstance|RunInstances)/;
+
 describe('buildCommandReferenceSections', () => {
   it('groups commands into stable sections', () => {
     const sections = buildCommandReferenceSections();
     expect(sections.map((section) => section.id)).toContain('setup');
     expect(sections.map((section) => section.id)).toContain('delivery');
+    expect(sections.map((section) => section.id)).toContain('infra');
     expect(sections.map((section) => section.id)).toContain('automation');
+
+    const sectionIds = sections.map((section) => section.id);
+    expect(sectionIds.indexOf('infra')).toBeGreaterThan(sectionIds.indexOf('data'));
+    expect(sectionIds.indexOf('infra')).toBeLessThan(sectionIds.indexOf('automation'));
 
     const automation = sections.find((section) => section.id === 'automation');
     expect(automation?.commands.some((command) => command.key === 'doctor')).toBe(true);
     expect(automation?.commands.some((command) => command.key === 'completion')).toBe(true);
     expect(automation?.commands.some((command) => command.key === 'upgrade')).toBe(true);
+
+    const infra = sections.find((section) => section.id === 'infra');
+    expect(infra?.title).toBe('Cloud Infrastructure');
+    expect(infra?.commands.map((command) => command.key)).toEqual(['ecs info', 'ecs list']);
   });
 });
 
@@ -39,8 +50,41 @@ describe('buildAgentCommandCatalog', () => {
     expect(catalog.rootCommands).toContain('doctor');
     expect(catalog.rootCommands).toContain('deploy');
     expect(catalog.rootCommands).toContain('task');
+    expect(catalog.rootCommands).toContain('ecs');
     expect(catalog.rootCommands).toContain('completion');
     expect(catalog.rootCommands).toContain('catalog');
+
+    const sectionIds = catalog.sections.map((section) => section.id);
+    expect(sectionIds.indexOf('infra')).toBeGreaterThan(sectionIds.indexOf('data'));
+    expect(sectionIds.indexOf('infra')).toBeLessThan(sectionIds.indexOf('automation'));
+
+    const ecsList = catalog.commands.find((command) => command.key === 'ecs list');
+    expect(ecsList?.sectionId).toBe('infra');
+    expect(ecsList?.safety?.level).toBe('safe');
+    expect(ecsList?.automation?.preferredOutput).toBe('json');
+    expect(ecsList?.examples).toContain('licell ecs list --output json');
+    expect(ecsList?.recommendedFlow.some((step) => step.command === 'licell ecs list --output json')).toBe(true);
+    expect(ecsList?.result?.fields.map((field) => field.name)).toEqual(expect.arrayContaining([
+      'regionId',
+      'count',
+      'limit',
+      'totalCount',
+      'truncated',
+      'filters',
+      'instances[]'
+    ]));
+
+    const ecsInfo = catalog.commands.find((command) => command.key === 'ecs info');
+    expect(ecsInfo?.sectionId).toBe('infra');
+    expect(ecsInfo?.safety?.level).toBe('safe');
+    expect(ecsInfo?.automation?.preferredOutput).toBe('json');
+    expect(ecsInfo?.examples).toContain('licell ecs info i-xxx --output json');
+    expect(ecsInfo?.result?.fields.map((field) => field.name)).toEqual(expect.arrayContaining([
+      'regionId',
+      'instanceId',
+      'detail.summary'
+    ]));
+    expect(JSON.stringify(catalog)).not.toMatch(ECS_LIFECYCLE_SURFACE_PATTERN);
 
     const deploy = catalog.commands.find((command) => command.key === 'deploy');
     const deployHelp = buildHelpSemanticDocument({
@@ -175,7 +219,13 @@ describe('renderSkillCommandReference', () => {
   it('renders the auto-generated command reference with new tooling commands', () => {
     const markdown = renderSkillCommandReference();
     expect(markdown).toContain('以下命令清单由 licell CLI 注册表自动生成');
+    expect(markdown).toContain('### Cloud Infrastructure');
     expect(markdown).toContain('### Automation & Tooling');
+    expect(markdown.indexOf('### Data Services')).toBeLessThan(markdown.indexOf('### Cloud Infrastructure'));
+    expect(markdown.indexOf('### Cloud Infrastructure')).toBeLessThan(markdown.indexOf('### Automation & Tooling'));
+    expect(markdown).toContain('licell ecs list');
+    expect(markdown).toContain('licell ecs info <instanceId>');
+    expect(markdown).toContain('`instances[]`：ECS 实例摘要数组。');
     expect(markdown).toContain('licell doctor');
     expect(markdown).toContain('licell completion [shell]');
     expect(markdown).toContain('licell setup');
@@ -214,6 +264,7 @@ describe('renderSkillCommandReference', () => {
     expect(markdown).toContain('推荐流程：');
     expect(markdown).toContain('licell deploy spec');
     expect(markdown.indexOf('下一步：')).toBeLessThan(markdown.indexOf('决策指南：'));
+    expect(markdown).not.toMatch(ECS_LIFECYCLE_SURFACE_PATTERN);
   });
 });
 

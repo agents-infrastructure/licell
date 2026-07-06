@@ -1,0 +1,32 @@
+{
+  "gate_id": "scope-gate",
+  "stage": "implementation.before_review",
+  "status": "passed",
+  "blocking": [],
+  "warnings": [],
+  "evidence": [
+    {
+      "changed_files": [
+        ".codestable/features/2026-07-03-ecs-filter-contract-tests/ecs-filter-contract-tests-checklist.yaml",
+        "src/__tests__/cli-error.integration.test.ts",
+        "src/__tests__/ecs-command.test.ts",
+        "src/__tests__/ecs-provider.test.ts",
+        ".codestable/features/2026-07-03-ecs-filter-contract-tests/ecs-filter-contract-tests-evidence-pack.md"
+      ],
+      "ignored_machine_artifacts": [
+        ".codestable/features/2026-07-03-ecs-filter-contract-tests/ecs-filter-contract-tests-dod-results.json",
+        ".codestable/features/2026-07-03-ecs-filter-contract-tests/ecs-filter-contract-tests-evidence-pack-results.json",
+        ".codestable/features/2026-07-03-ecs-filter-contract-tests/ecs-filter-contract-tests-gate-results.json"
+      ],
+      "allowed_prefixes": [
+        ".codestable/features/2026-07-03-ecs-filter-contract-tests",
+        ".codestable/features/2026-07-03-ecs-filter-contract-tests",
+        "src/__tests__/ecs-provider.test.ts",
+        "src/__tests__/ecs-command.test.ts",
+        "src/__tests__/cli-error.integration.test.ts",
+        "src/__tests__/cli-help-json-contract.test.ts"
+      ]
+    }
+  ],
+  "providers": {}
+}

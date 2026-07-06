@@ -1,0 +1,43 @@
+{
+  "gate_id": "scope-gate",
+  "stage": "implementation.after_review",
+  "status": "passed",
+  "blocking": [],
+  "warnings": [],
+  "evidence": [
+    {
+      "changed_files": [
+        ".codestable/features/2026-07-03-ecs-lifecycle-command-scaffold/ecs-lifecycle-command-scaffold-checklist.yaml",
+        ".codestable/roadmap/ecs-operations-support/ecs-operations-support-items.yaml",
+        ".codestable/roadmap/ecs-operations-support/goal-state.yaml",
+        "src/__tests__/auth-recovery.test.ts",
+        "src/__tests__/cli-help-json-contract.test.ts",
+        "src/__tests__/command-reference.test.ts",
+        "src/__tests__/command-surface-metadata.test.ts",
+        "src/__tests__/ram-bootstrap.test.ts",
+        "src/__tests__/shell-completion.test.ts",
+        ".codestable/features/2026-07-03-ecs-lifecycle-command-scaffold/ecs-lifecycle-command-scaffold-acceptance.md",
+        ".codestable/features/2026-07-03-ecs-lifecycle-command-scaffold/ecs-lifecycle-command-scaffold-dod-before-review.json",
+        ".codestable/features/2026-07-03-ecs-lifecycle-command-scaffold/ecs-lifecycle-command-scaffold-evidence.json",
+        ".codestable/features/2026-07-03-ecs-lifecycle-command-scaffold/ecs-lifecycle-command-scaffold-qa.md",
+        ".codestable/features/2026-07-03-ecs-lifecycle-command-scaffold/ecs-lifecycle-command-scaffold-review.md",
+        ".codestable/features/2026-07-03-ecs-lifecycle-command-scaffold/ecs-lifecycle-command-scaffold-scope-before-review.json",
+        ".codestable/roadmap/ecs-operations-support/ecs-lifecycle-command-seeds.md"
+      ],
+      "ignored_machine_artifacts": [],
+      "allowed_prefixes": [
+        ".codestable/features/2026-07-03-ecs-lifecycle-command-scaffold",
+        ".codestable/features/2026-07-03-ecs-lifecycle-command-scaffold",
+        ".codestable/roadmap/ecs-operations-support",
+        "src/__tests__/command-reference.test.ts",
+        "src/__tests__/command-manifest.test.ts",
+        "src/__tests__/command-surface-metadata.test.ts",
+        "src/__tests__/cli-help-json-contract.test.ts",
+        "src/__tests__/shell-completion.test.ts",
+        "src/__tests__/auth-recovery.test.ts",
+        "src/__tests__/ram-bootstrap.test.ts"
+      ]
+    }
+  ],
+  "providers": {}
+}

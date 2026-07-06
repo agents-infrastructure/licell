@@ -1,0 +1,104 @@
+feature: 2026-07-03-ecs-list-command
+created: 2026-07-03
+
+steps:
+  - action: "Command skeleton：新增 INFRA_SECTION、ECS module、registry wiring，并只注册 ecs list"
+    exit_signal: "collectCommandManifestIssues(LICELL_COMMAND_MANIFEST) 为空，catalog 能看到 ecs list；ecsCommandModule 位于 supaCommandModule 之后、doctorCommandModule 之前，section 顺序为 data -> infra -> automation；未注册 ecs info 或 lifecycle 半成品命令"
+    status: done
+  - action: "Parser contract：实现 ecs list options 到 provider filters 的归一化"
+    exit_signal: "单测覆盖 region/limit/name/namePrefix/instanceIds/status/vpc/vsw/zone/type/charge/tag/privateIp/publicIp/eip 映射，互斥和非法 tag 报 input error"
+    status: done
+  - action: "Execution path：接通 auth recovery、provider、spinner、文本输出和 JSON result"
+    exit_signal: "命令测试 mock provider，断言 requiredCapabilities=['ecs']、provider options、emitCommandResult payload 和文本空态/列表输出"
+    status: done
+  - action: "Agent surface metadata：补 ecs namespace/list descriptor"
+    exit_signal: "help/catalog metadata 测试能看到 preferredOutput=json、safe safety、result fields、optionInsights、examples 和 INFRA_SECTION"
+    status: done
+  - action: "Validation cleanup：运行核心验证并确认 scope 未漂移"
+    exit_signal: "typecheck、ecs-command test、manifest/help metadata tests、checklist yaml 校验通过，diff 不包含 generated docs 手改或 ecs info/lifecycle 命令注册"
+    status: done
+
+checks:
+  - item: "不实现或修改 ECS provider 查询逻辑，只调用 listEcsInstances(options)"
+    source: 范围守护
+    status: passed
+  - item: "不修改 auth/RAM/doctor capability，只消费 requiredCapabilities=['ecs']"
+    source: 范围守护
+    status: passed
+  - item: "不注册 ecs info、start、stop、reboot、delete、rm、runInstances 等半成品或 lifecycle 命令"
+    source: 范围守护
+    status: passed
+  - item: "不手改 README generated block 或 docs/reference/agent-surfaces.md"
+    source: 范围守护
+    status: passed
+  - item: "新增 INFRA_SECTION，id=infra，title=Cloud Infrastructure，ECS module 使用该 section"
+    source: 挂载点
+    status: passed
+  - item: "新增 ecs command module 并加入 LICELL_COMMAND_MANIFEST.modules"
+    source: 挂载点
+    status: passed
+  - item: "ecsCommandModule 在 LICELL_COMMAND_MANIFEST.modules 中位于 supaCommandModule 之后、doctorCommandModule 之前，确保 INFRA_SECTION 生成顺序在 Data Services 与 Automation & Tooling 之间"
+    source: 挂载点
+    status: passed
+  - item: "ecs namespace descriptor 的 examples / recommendedFlow 不包含未注册的 ecs info 或 start/stop/reboot/delete/rm/runInstances 命令"
+    source: 范围守护
+    status: passed
+  - item: "ecs list 使用 parseListLimit(options.limit, 20, 200)，未传默认 20，超过 200 截断为 200"
+    source: 名词契约
+    status: passed
+  - item: "ecs list JSON payload 包含 regionId、count、limit、totalCount、truncated、filters、instances[]"
+    source: 名词契约
+    status: passed
+  - item: "status 仅透传 ECS 原生值，不做别名/大小写归一"
+    source: 流程级约束
+    status: passed
+  - item: "name 与 namePrefix 互斥；namePrefix 传给 provider 的 namePrefix 字段，不在命令层本地过滤"
+    source: 流程级约束
+    status: passed
+  - item: "重复 --tag key=value 转成 tags[]，多个 tag 保持 AND 语义；非法 tag 报 input error"
+    source: 流程级约束
+    status: passed
+  - item: "instance-id 支持逗号分隔列表并归一到 instanceIds[]"
+    source: 流程级约束
+    status: passed
+  - item: "private-ip/public-ip/eip 分别映射到 privateIpAddress/publicIpAddress/eipAddress，不提供含糊 --ip"
+    source: 流程级约束
+    status: passed
+  - item: "ecs list 通过 executeWithAuthRecovery 使用 requiredCapabilities=['ecs']"
+    source: 编排骨架
+    status: passed
+  - item: "ecs list 无副作用，不写 .licell/project.json、.licell/state.json 或 workspace component 配置"
+    source: 验收场景
+    status: passed
+  - item: "ecs list --help --output json 暴露 preferredOutput=json、safe safety、result fields、optionInsights"
+    source: 验收场景
+    status: passed
+
+dod:
+  commands:
+    - id: CMD-001
+      command: "bun run typecheck"
+      core: true
+      failure_handling: fix-or-block
+    - id: CMD-002
+      command: "bun x vitest run src/__tests__/ecs-command.test.ts"
+      core: true
+      failure_handling: fix-or-block
+    - id: CMD-003
+      command: "bun x vitest run src/__tests__/command-registry.test.ts src/__tests__/command-manifest.test.ts src/__tests__/command-surface-metadata.test.ts"
+      core: true
+      failure_handling: fix-or-block
+    - id: CMD-004
+      command: "bun x vitest run src/__tests__/cli-help-json-contract.test.ts"
+      core: false
+      failure_handling: fix-or-block
+    - id: CMD-005
+      command: "python3 .codestable/tools/validate-yaml.py --file .codestable/features/2026-07-03-ecs-list-command/ecs-list-command-checklist.yaml --yaml-only"
+      core: false
+      failure_handling: fix-or-block
+  evidence_required: [command_output, diff_summary, review_report, qa_report, acceptance_report]
+  cleanliness:
+    debug_output: forbidden
+    todo_comments: forbidden
+    commented_code: forbidden
+    unused_imports: forbidden

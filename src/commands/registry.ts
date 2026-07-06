@@ -11,6 +11,7 @@ import { dnsCommandModule } from './dns';
 import { domainCommandModule } from './domain';
 import { e2eCommandModule } from './e2e';
 import { envCommandModule } from './env';
+import { ecsCommandModule } from './ecs';
 import { fnCommandModule } from './fn';
 import { initCommandModule } from './init';
 import { logsCommandModule } from './logs';
@@ -90,6 +91,7 @@ export const LICELL_COMMAND_MANIFEST = defineCommandManifest({
     dbCommandModule,
     cacheCommandModule,
     supaCommandModule,
+    ecsCommandModule,
     doctorCommandModule,
     catalogCommandModule,
     ciCommandModule,

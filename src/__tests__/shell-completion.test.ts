@@ -6,6 +6,8 @@ import {
   resolveCompletionCandidates
 } from '../utils/shell-completion';
 
+const ECS_LIFECYCLE_COMPLETIONS = ['start', 'stop', 'reboot', 'delete', 'rm', 'run', 'create'];
+
 describe('resolveCompletionCandidates', () => {
   it('suggests top-level commands from partial token', () => {
     const candidates = resolveCompletionCandidates({
@@ -18,6 +20,25 @@ describe('resolveCompletionCandidates', () => {
     expect(candidates).toContain('db');
     expect(candidates).toContain('dns');
     expect(candidates).toContain('domain');
+  });
+
+  it('suggests ecs root command and inspect subcommands', () => {
+    const rootCandidates = resolveCompletionCandidates({
+      compWords: 'licell e',
+      compCword: 1,
+      compCur: 'e'
+    });
+    expect(rootCandidates).toContain('ecs');
+
+    const ecsCandidates = resolveCompletionCandidates({
+      compWords: 'licell ecs ',
+      compCword: 2,
+      compCur: ''
+    });
+    expect(ecsCandidates).toEqual(expect.arrayContaining(['list', 'info']));
+    for (const lifecycleCommand of ECS_LIFECYCLE_COMPLETIONS) {
+      expect(ecsCandidates).not.toContain(lifecycleCommand);
+    }
   });
 
   it('suggests global --output option from root', () => {
@@ -87,6 +108,31 @@ describe('resolveCompletionCandidates', () => {
 
     expect(candidates).toContain('--root-command');
     expect(candidates).toContain('--command-key');
+  });
+
+  it('suggests ecs list and info options from command graph', () => {
+    const listCandidates = resolveCompletionCandidates({
+      compWords: 'licell ecs list --',
+      compCword: 3,
+      compCur: '--'
+    });
+
+    expect(listCandidates).toEqual(expect.arrayContaining([
+      '--region',
+      '--limit',
+      '--tag',
+      '--name-prefix',
+      '--private-ip',
+      '--public-ip',
+      '--eip'
+    ]));
+
+    const infoCandidates = resolveCompletionCandidates({
+      compWords: 'licell ecs info --',
+      compCword: 3,
+      compCur: '--'
+    });
+    expect(infoCandidates).toContain('--region');
   });
 });
 

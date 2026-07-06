@@ -1,0 +1,59 @@
+roadmap: ecs-operations-support
+created: 2026-07-03
+
+items:
+  - slug: ecs-readonly-provider
+    description: 新增 ECS provider 查询层，能够按 region/limit/基础 filters 调用 DescribeInstances 并返回归一化实例摘要
+    depends_on: []
+    status: done
+    feature: 2026-07-03-ecs-readonly-provider
+    minimal_loop: true
+    notes: 最小闭环；必须包含 SDK client 构造、分页上限、instanceId/name/namePrefix/status/vpc/vsw/zone/instanceType/charge/tag/privateIp/publicIp/eip 过滤映射测试
+
+  - slug: ecs-auth-read-permissions
+    description: 把 ECS 只读查询纳入 auth recovery capability、bootstrap RAM policy 和 doctor cloud capability probe，并增加缺失权限检查测试
+    depends_on: [ecs-readonly-provider]
+    status: done
+    feature: 2026-07-03-ecs-auth-read-permissions
+    minimal_loop: false
+    notes: 先新增 AuthCapability=ecs、AUTH_CAPABILITY_LABELS.ecs、CAPABILITY_ACTIONS.ecs、LICELL_POLICY_ACTIONS 和 doctor probe，供命令层消费；接受 ECS 进入全员 doctor optional 探测，每次 doctor 多一次 limit=1 只读调用，存量 bootstrap operator 在重新 auth repair 前会出现 ECS 权限 warn；只加入 DescribeInstances / DescribeInstanceAttribute；不加入生命周期 mutating action；必须提示存量 bootstrap operator 需重新 auth repair，并测试 label/actions/probe 非空
+
+  - slug: ecs-list-command
+    description: 新增 licell ecs list 命令，把 provider 查询暴露为文本输出和结构化 JSON result
+    depends_on: [ecs-readonly-provider, ecs-auth-read-permissions]
+    status: done
+    feature: 2026-07-03-ecs-list-command
+    minimal_loop: false
+    notes: 负责创建/复用 INFRA_SECTION 并注册 ecs 命令族；必须验证 --region 覆盖 auth region、--limit 默认 20 / 上限 200、不做全量导出、--status 仅透传 ECS 原生值且不做别名/大小写归一、多个 --tag key=value 为 AND、非法 tag 格式报 input error、--name-prefix 转通配、--name 与 --name-prefix 互斥、--private-ip / --public-ip / --eip、--output json payload、auth recovery capability 和无副作用不写项目状态
+
+  - slug: ecs-info-command
+    description: 新增 licell ecs info 命令，返回单台 ECS 的基础详情并处理 not found/input 错误
+    depends_on: [ecs-readonly-provider, ecs-auth-read-permissions, ecs-list-command]
+    status: done
+    feature: 2026-07-03-ecs-info-command
+    minimal_loop: false
+    notes: 默认只查当前 Licell region，不跨 region 自动搜索；只返回 roadmap 白名单中的基础字段；若 DescribeInstanceAttribute 不可用，仍应通过 DescribeInstances instanceIds 查询返回基础 summary；不得返回 rawAttribute、userData、VNC、Cloud Assistant 输出或密钥材料；空结果必须抛 not-found 错误并在 JSON error 中归类为 not_found；无副作用不写项目状态
+
+  - slug: ecs-filter-contract-tests
+    description: 补强过滤与错误合同测试，锁定 tag/privateIp/publicIp/eip/name/namePrefix/status/region 参数映射、CLI input 错误分类和 JSON result 字段稳定性
+    depends_on: [ecs-list-command, ecs-info-command]
+    status: done
+    feature: 2026-07-03-ecs-filter-contract-tests
+    minimal_loop: false
+    notes: 这条不新增用户命令；目标是防止过滤支持在后续操控命令扩展时漂移
+
+  - slug: ecs-command-surface-docs
+    description: 同步命令 metadata、README generated block、agent surface reference、skills scaffold 和 shell completion，证明 Agent 可按 catalog/help/json flow 发现 ECS 查询
+    depends_on: [ecs-list-command, ecs-info-command, ecs-auth-read-permissions]
+    status: done
+    feature: 2026-07-03-ecs-command-surface-docs
+    minimal_loop: false
+    notes: 运行 bun run docs:sync、bun run docs:check，并覆盖 catalog/help JSON tests
+
+  - slug: ecs-lifecycle-command-scaffold
+    description: 为后续 start/stop/reboot/rm 等 ECS 操控命令补一层安全设计与空实现/设计占位，不开放实际 mutating 行为
+    depends_on: [ecs-filter-contract-tests, ecs-command-surface-docs]
+    status: done
+    feature: 2026-07-03-ecs-lifecycle-command-scaffold
+    minimal_loop: false
+    notes: 产出可执行的后续 feature 种子或 design note，明确 safety level、confirm flags、dry-run 策略、RAM action 边界；不注册会误导用户的半成品命令

@@ -7,6 +7,14 @@ import {
 } from '../providers/ram';
 import { resolveAuthCapabilityActions, type AuthCapability } from '../utils/auth-recovery';
 
+const ECS_MUTATING_ACTIONS = [
+  'ecs:StartInstance',
+  'ecs:StopInstance',
+  'ecs:RebootInstance',
+  'ecs:DeleteInstance',
+  'ecs:RunInstances'
+];
+
 describe('ram bootstrap helpers', () => {
   it('normalizes default user/policy names', () => {
     expect(normalizeRamUserName()).toBe('licell-operator');
@@ -41,12 +49,22 @@ describe('ram bootstrap helpers', () => {
       'log:CreateIndex',
       'log:ListProject',
       'log:ListLogStores',
-      'log:GetLogs'
+      'log:GetLogs',
+      'ecs:DescribeSecurityGroups',
+      'ecs:CreateSecurityGroup',
+      'ecs:DescribeInstanceAttribute',
+      'ecs:DescribeInstances'
     ]));
+    for (const action of ECS_MUTATING_ACTIONS) {
+      expect(doc.Statement[0].Action).not.toContain(action);
+    }
+    for (const action of ECS_MUTATING_ACTIONS) {
+      expect(LICELL_POLICY_ACTIONS).not.toContain(action);
+    }
   });
 
   it('covers all auth capability action hints in licell policy actions', () => {
-    const capabilities: AuthCapability[] = ['fc', 'dns', 'oss', 'rds', 'redis', 'cdn', 'vpc', 'cr', 'logs'];
+    const capabilities: AuthCapability[] = ['fc', 'dns', 'oss', 'rds', 'redis', 'cdn', 'vpc', 'cr', 'logs', 'ecs'];
     const hintedActions = resolveAuthCapabilityActions(capabilities);
     for (const action of hintedActions) {
       expect(LICELL_POLICY_ACTIONS).toContain(action);

@@ -74,4 +74,21 @@ describe('cli error e2e', () => {
     expect(records[0]?.nextActions?.[0]?.commandKey).toBe('dns records add');
     expect(records[0]?.nextActions?.[0]?.source).toBe('error-remediation');
   }, 10000);
+
+  it('emits structured ecs info missing-instance errors as input', () => {
+    const result = runCli(['ecs', 'info', '--output', 'json']);
+    const records = extractJsonRecordsFromOutput(result.stdout) as Array<Record<string, any>>;
+
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(1);
+    expect(result.stderr).toBe('');
+    expect(records).toHaveLength(1);
+    expect(records[0]?.type).toBe('error');
+    expect(records[0]?.ok).toBe(false);
+    expect(records[0]?.stage).toBe('parse');
+    expect(records[0]?.error).toMatchObject({
+      category: 'input',
+      code: 'CLI_MISSING_REQUIRED_ARGS'
+    });
+  }, 10000);
 });

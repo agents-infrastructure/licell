@@ -1,0 +1,40 @@
+{
+  "gate_id": "scope-gate",
+  "stage": "implementation.before_review",
+  "status": "passed",
+  "blocking": [],
+  "warnings": [],
+  "evidence": [
+    {
+      "changed_files": [
+        ".claude/skills/licell/SKILL.md",
+        ".codestable/features/2026-07-03-ecs-command-surface-docs/ecs-command-surface-docs-checklist.yaml",
+        "README.md",
+        "docs/reference/agent-surfaces.md",
+        "src/__tests__/agent-surface-docs.test.ts",
+        "src/__tests__/cli-help-json-contract.test.ts",
+        "src/__tests__/command-reference.test.ts",
+        "src/__tests__/readme-docs.test.ts",
+        "src/__tests__/shell-completion.test.ts",
+        "src/__tests__/skills-scaffold.test.ts",
+        "src/utils/skills-scaffold.ts"
+      ],
+      "ignored_machine_artifacts": [],
+      "allowed_prefixes": [
+        ".codestable/features/2026-07-03-ecs-command-surface-docs",
+        ".codestable/features/2026-07-03-ecs-command-surface-docs/ecs-command-surface-docs-checklist.yaml",
+        ".claude/skills/licell/SKILL.md",
+        "README.md",
+        "docs/reference/agent-surfaces.md",
+        "src/utils/skills-scaffold.ts",
+        "src/__tests__/agent-surface-docs.test.ts",
+        "src/__tests__/cli-help-json-contract.test.ts",
+        "src/__tests__/command-reference.test.ts",
+        "src/__tests__/readme-docs.test.ts",
+        "src/__tests__/shell-completion.test.ts",
+        "src/__tests__/skills-scaffold.test.ts"
+      ]
+    }
+  ],
+  "providers": {}
+}

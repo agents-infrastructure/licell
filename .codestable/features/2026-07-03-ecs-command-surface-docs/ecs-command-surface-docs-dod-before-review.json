@@ -1,0 +1,73 @@
+{
+  "gate_id": "dod-runner",
+  "stage": "implementation.before_review",
+  "status": "passed",
+  "blocking": [],
+  "warnings": [],
+  "evidence": [
+    {
+      "command": "bun run typecheck",
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "$ bun x tsc --noEmit\nResolving dependencies\nResolved, downloaded and extracted [2]\nSaved lockfile\n",
+      "id": "CMD-001",
+      "core": true,
+      "failure_handling": "fix-or-block"
+    },
+    {
+      "command": "bun x vitest run src/__tests__/command-reference.test.ts src/__tests__/readme-docs.test.ts src/__tests__/agent-surface-docs.test.ts src/__tests__/skills-scaffold.test.ts",
+      "exit_code": 0,
+      "stdout": "\n RUN  v4.0.18 /Users/wyattfang/.paseo/worktrees/0tcb78qo/licell-feat-ecs-support\n\n ✓ src/__tests__/readme-docs.test.ts (2 tests) 117ms\n ✓ src/__tests__/agent-surface-docs.test.ts (3 tests) 130ms\n ✓ src/__tests__/command-reference.test.ts (5 tests) 182ms\n ✓ src/__tests__/skills-scaffold.test.ts (15 tests) 218ms\n\n Test Files  4 passed (4)\n      Tests  25 passed (25)\n   Start at  15:54:57\n   Duration  2.38s (transform 3.35s, setup 0ms, import 8.17s, tests 647ms, environment 0ms)\n\n",
+      "stderr": "",
+      "id": "CMD-002",
+      "core": true,
+      "failure_handling": "fix-or-block"
+    },
+    {
+      "command": "bun x vitest run src/__tests__/command-surface-metadata.test.ts src/__tests__/cli-help-json-contract.test.ts",
+      "exit_code": 0,
+      "stdout": "\n RUN  v4.0.18 /Users/wyattfang/.paseo/worktrees/0tcb78qo/licell-feat-ecs-support\n\n ✓ src/__tests__/command-surface-metadata.test.ts (7 tests) 5ms\n ✓ src/__tests__/cli-help-json-contract.test.ts (4 tests) 5004ms\n     ✓ locks deploy help json contract for task-aware result schema  1422ms\n     ✓ locks task list help json contract for task tracking schema  1148ms\n     ✓ locks ecs list help json contract for agent discovery  1157ms\n     ✓ locks ecs info help json contract for agent discovery  1175ms\n\n Test Files  2 passed (2)\n      Tests  11 passed (11)\n   Start at  15:54:59\n   Duration  5.17s (transform 770ms, setup 0ms, import 1.41s, tests 5.01s, environment 0ms)\n\n",
+      "stderr": "",
+      "id": "CMD-003",
+      "core": true,
+      "failure_handling": "fix-or-block"
+    },
+    {
+      "command": "bun x vitest run src/__tests__/shell-completion.test.ts",
+      "exit_code": 0,
+      "stdout": "\n RUN  v4.0.18 /Users/wyattfang/.paseo/worktrees/0tcb78qo/licell-feat-ecs-support\n\n ✓ src/__tests__/shell-completion.test.ts (14 tests) 10ms\n\n Test Files  1 passed (1)\n      Tests  14 passed (14)\n   Start at  15:55:05\n   Duration  1.27s (transform 604ms, setup 0ms, import 1.17s, tests 10ms, environment 0ms)\n\n",
+      "stderr": "",
+      "id": "CMD-004",
+      "core": true,
+      "failure_handling": "fix-or-block"
+    },
+    {
+      "command": "bun run docs:sync",
+      "exit_code": 0,
+      "stdout": "already up to date: /Users/wyattfang/.paseo/worktrees/0tcb78qo/licell-feat-ecs-support/README.md\nalready up to date: /Users/wyattfang/.paseo/worktrees/0tcb78qo/licell-feat-ecs-support/docs/reference/agent-surfaces.md\nalready up to date: /Users/wyattfang/.paseo/worktrees/0tcb78qo/licell-feat-ecs-support/docs/scenarios/02-ai-driven-deployment.md\nalready up to date: /Users/wyattfang/.paseo/worktrees/0tcb78qo/licell-feat-ecs-support/docs/scenarios/03-domain-and-https.md\n",
+      "stderr": "$ ./scripts/sync-docs.sh\n",
+      "id": "CMD-005",
+      "core": true,
+      "failure_handling": "fix-or-block"
+    },
+    {
+      "command": "bun run docs:check",
+      "exit_code": 0,
+      "stdout": "generated docs are in sync (4 targets)\n",
+      "stderr": "$ ./scripts/check-docs.sh\n",
+      "id": "CMD-006",
+      "core": true,
+      "failure_handling": "fix-or-block"
+    },
+    {
+      "command": "python3 .codestable/tools/validate-yaml.py --file .codestable/features/2026-07-03-ecs-command-surface-docs/ecs-command-surface-docs-checklist.yaml --yaml-only",
+      "exit_code": 0,
+      "stdout": "Validated 1 file(s): 1 passed, 0 failed.\n\n  ✓ .codestable/features/2026-07-03-ecs-command-surface-docs/ecs-command-surface-docs-checklist.yaml\n\nAll files valid.\n",
+      "stderr": "",
+      "id": "CMD-007",
+      "core": false,
+      "failure_handling": "fix-or-block"
+    }
+  ],
+  "providers": {}
+}
