@@ -74,6 +74,10 @@ async function createCli() {
   return cli;
 }
 
+function stripAnsi(value: string) {
+  return value.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, '');
+}
+
 describe('ecs commands', () => {
   let consoleLogSpy: ReturnType<typeof vi.spyOn>;
 
@@ -327,10 +331,11 @@ describe('ecs commands', () => {
 
     expect(emitCommandResultMock).not.toHaveBeenCalled();
     expect(spinnerStopMock).toHaveBeenCalledWith(expect.stringContaining('共获取 1 个实例'));
-    expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('i-demo'));
-    expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('zone=cn-hangzhou-b'));
-    expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('publicIp=8.8.8.8'));
-    expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('eip=47.1.1.1'));
+    const textOutput = stripAnsi(consoleLogSpy.mock.calls.map((call: unknown[]) => String(call[0])).join('\n'));
+    expect(textOutput).toContain('i-demo');
+    expect(textOutput).toContain('zone=cn-hangzhou-b');
+    expect(textOutput).toContain('publicIp=8.8.8.8');
+    expect(textOutput).toContain('eip=47.1.1.1');
     expect(showOutroMock).toHaveBeenCalledWith('Done.');
   });
 
