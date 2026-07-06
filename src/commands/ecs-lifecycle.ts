@@ -37,16 +37,26 @@ export function classifyEcsStatus(status?: string): EcsStatusClass {
 const MAX_VERIFY_POLLS = 6;
 const VERIFY_POLL_INTERVAL_MS = 5000;
 
+function normalizeNativeStatus(status?: string): string {
+  return (status || '').trim().toLowerCase();
+}
+
+export function ecsStatusMatchesTarget(status: string | undefined, targetStatuses: readonly string[]): boolean {
+  const normalized = normalizeNativeStatus(status);
+  return Boolean(normalized && targetStatuses.some((target) => normalizeNativeStatus(target) === normalized));
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// Bounded polling: re-reads instance detail up to MAX_VERIFY_POLLS times until a
-// target status class is observed, otherwise returns timedOut=true (not a failure).
+// Bounded polling: re-reads instance detail until an action-specific native ECS
+// target status is observed, otherwise returns timedOut=true (not a failure).
 export async function pollForVerify(
   instanceId: string,
   regionId: string | undefined,
-  targetClasses: EcsStatusClass[]
+  targetStatuses: readonly string[],
+  options: { maxPolls?: number; pollIntervalMs?: number } = {}
 ): Promise<{
   status?: string;
   statusClass?: EcsStatusClass;
@@ -55,22 +65,24 @@ export async function pollForVerify(
 }> {
   let lastStatus: string | undefined;
   let lastStatusClass: EcsStatusClass | undefined;
+  const maxPolls = Math.max(1, options.maxPolls ?? MAX_VERIFY_POLLS);
+  const pollIntervalMs = Math.max(0, options.pollIntervalMs ?? VERIFY_POLL_INTERVAL_MS);
 
-  for (let i = 0; i < MAX_VERIFY_POLLS; i++) {
+  for (let i = 0; i < maxPolls; i++) {
     try {
       const detail = await getEcsInstanceDetail(instanceId, regionId ? { regionId } : undefined);
       lastStatus = detail.summary.status;
       lastStatusClass = classifyEcsStatus(lastStatus);
-      if (targetClasses.includes(lastStatusClass)) {
+      if (ecsStatusMatchesTarget(lastStatus, targetStatuses)) {
         return { status: lastStatus, statusClass: lastStatusClass, reachedTarget: true, timedOut: false };
       }
-      if (i < MAX_VERIFY_POLLS - 1) {
-        await sleep(VERIFY_POLL_INTERVAL_MS);
+      if (i < maxPolls - 1 && pollIntervalMs > 0) {
+        await sleep(pollIntervalMs);
       }
     } catch {
       // Best effort poll; swallow errors and keep trying.
-      if (i < MAX_VERIFY_POLLS - 1) {
-        await sleep(VERIFY_POLL_INTERVAL_MS);
+      if (i < maxPolls - 1 && pollIntervalMs > 0) {
+        await sleep(pollIntervalMs);
       }
     }
   }
@@ -78,7 +90,7 @@ export async function pollForVerify(
   return {
     status: lastStatus,
     statusClass: lastStatusClass,
-    reachedTarget: lastStatusClass ? targetClasses.includes(lastStatusClass) : false,
+    reachedTarget: ecsStatusMatchesTarget(lastStatus, targetStatuses),
     timedOut: true
   };
 }
@@ -216,7 +228,7 @@ export const ecsStartCommand = defineCliCommand({
         { name: 'execution.requestId', description: 'ECS API 返回的 requestId，仅实际执行时存在。' },
         { name: 'verify.status', description: '验证时最后观测到的 ECS 原生状态。' },
         { name: 'verify.statusClass', description: '验证时最后观测到的归一化状态类别。' },
-        { name: 'verify.reachedTarget', description: '是否到达目标状态类别（Running/Starting）。', required: true },
+        { name: 'verify.reachedTarget', description: '是否到达目标 ECS 状态（Running/Starting）。', required: true },
         { name: 'verify.timedOut', description: '验证是否因为过渡态超时而未确认到达目标。' }
       ]
     }
@@ -284,7 +296,7 @@ export const ecsRebootCommand = defineCliCommand({
         { name: 'execution.requestId', description: 'ECS API 返回的 requestId，仅实际执行时存在。' },
         { name: 'verify.status', description: '验证时最后观测到的 ECS 原生状态。' },
         { name: 'verify.statusClass', description: '验证时最后观测到的归一化状态类别。' },
-        { name: 'verify.reachedTarget', description: '是否到达目标状态类别（Running/Rebooting/Starting）。', required: true },
+        { name: 'verify.reachedTarget', description: '是否到达目标 ECS 状态（Running/Rebooting/Starting）。', required: true },
         { name: 'verify.timedOut', description: '验证是否因为过渡态超时而未确认到达目标。' }
       ]
     }
@@ -353,7 +365,7 @@ export const ecsStopCommand = defineCliCommand({
         { name: 'execution.requestId', description: 'ECS API 返回的 requestId，仅实际执行时存在。' },
         { name: 'verify.status', description: '验证时最后观测到的 ECS 原生状态。' },
         { name: 'verify.statusClass', description: '验证时最后观测到的归一化状态类别。' },
-        { name: 'verify.reachedTarget', description: '是否到达目标状态类别（Stopped/Stopping）。', required: true },
+        { name: 'verify.reachedTarget', description: '是否到达目标 ECS 状态（Stopped/Stopping）。', required: true },
         { name: 'verify.timedOut', description: '验证是否因为过渡态超时而未确认到达目标。' }
       ]
     }
@@ -364,7 +376,7 @@ function buildDeleteDescriptor(primary: 'delete' | 'rm'): CommandDescriptor {
   const other = primary === 'delete' ? 'rm' : 'delete';
   return {
     title: primary === 'delete' ? 'Delete (release) ECS Instance' : 'Remove (release) ECS Instance',
-    summary: `释放（删除）ECS 实例，操作不可逆。会先读取删除保护与磁盘释放事实：事实不可读或删除保护开启时阻断执行。ecs ${primary} 与 ecs ${other} 是同一操作的别名。`,
+    summary: `释放（删除）Stopped 状态的 ECS 实例，操作不可逆。会先读取删除保护与磁盘释放事实：实例未停止、事实不可读或删除保护开启时阻断执行。ecs ${primary} 与 ecs ${other} 是同一操作的别名。`,
     examples: [
       `licell ecs ${primary} i-abc123 --dry-run --output json`,
       `licell ecs ${primary} i-abc123 --yes`,
@@ -373,6 +385,7 @@ function buildDeleteDescriptor(primary: 'delete' | 'rm'): CommandDescriptor {
     related: ['ecs info', 'ecs list', 'ecs stop', `ecs ${other}`],
     agentTips: [
       '删除不可逆；非交互模式必须显式 --yes 才能执行。',
+      '仅释放 Stopped 实例；Running 实例请先执行 ecs stop 后再删除。',
       '释放前事实（删除保护、磁盘随实例释放）不可读时阻断执行，不默认放行。',
       '删除保护开启（deletionProtection=true）时阻断并提示先关保护，命令不代关。',
       `ecs ${primary} 与 ecs ${other} 行为完全一致。`
@@ -399,7 +412,8 @@ function buildDeleteDescriptor(primary: 'delete' | 'rm'): CommandDescriptor {
       }
     },
     recommendedFlow: [
-      { title: '先查看实例状态', command: 'licell ecs info <instanceId> --output json', reason: '确认要删除的实例正确。' },
+      { title: '先查看实例状态', command: 'licell ecs info <instanceId> --output json', reason: '确认要删除的实例正确，且当前状态为 Stopped。' },
+      { title: '必要时先停止实例', command: 'licell ecs stop <instanceId> --yes', reason: 'delete/rm 只释放已停止实例，不对 Running 实例执行强制释放。' },
       { title: 'Dry run 确认计划与释放事实', command: `licell ecs ${primary} <instanceId> --dry-run --output json`, reason: '查看 plan.releaseFacts 与 willExecute=false。' },
       { title: '执行删除', command: `licell ecs ${primary} <instanceId> --yes`, reason: '实际释放实例，并轮询确认 not-found 终态。' }
     ],
@@ -475,6 +489,16 @@ function registerEcsDeleteAction(cli: CAC, command: DeclaredCliCommand) {
           const currentStatusClass = classifyEcsStatus(currentStatus);
           const resolvedRegion = detail.summary.regionId || regionId || '';
           const resolvedId = detail.summary.instanceId;
+
+          if (currentStatusClass !== 'stopped-like') {
+            if (currentStatusClass === 'transitional') {
+              throw new Error('实例当前处于过渡态（' + currentStatus + '），请稍后重试删除');
+            }
+            if (currentStatusClass === 'running-like') {
+              throw new Error('实例当前状态（' + currentStatus + '）不符合删除条件；请先执行 licell ecs stop ' + resolvedId + ' --yes 将实例停止后再删除');
+            }
+            throw new Error('实例当前状态（' + currentStatus + '）不符合删除条件，请先确认实例为 Stopped');
+          }
 
           // Read pre-release facts; unreadable => block (RMR-001).
           const facts = await withSpinner(
@@ -672,7 +696,7 @@ export function registerEcsLifecycleCommands(cli: CAC) {
             s,
             '正在等待实例到达目标状态...',
             '状态验证失败',
-            () => pollForVerify(plan.instanceId, plan.regionId, ['running-like', 'transitional'])
+            () => pollForVerify(plan.instanceId, plan.regionId, ['Running', 'Starting'])
           );
           if (!verify) return;
 
@@ -773,7 +797,7 @@ export function registerEcsLifecycleCommands(cli: CAC) {
             s,
             '正在等待实例到达目标状态...',
             '状态验证失败',
-            () => pollForVerify(plan.instanceId, plan.regionId, ['running-like', 'transitional'])
+            () => pollForVerify(plan.instanceId, plan.regionId, ['Running', 'Rebooting', 'Starting'])
           );
           if (!verify) return;
 
@@ -891,7 +915,7 @@ export function registerEcsLifecycleCommands(cli: CAC) {
             s,
             '正在等待实例到达目标状态...',
             '状态验证失败',
-            () => pollForVerify(plan.instanceId, plan.regionId, ['stopped-like', 'transitional'])
+            () => pollForVerify(plan.instanceId, plan.regionId, ['Stopped', 'Stopping'])
           );
           if (!verify) return;
 

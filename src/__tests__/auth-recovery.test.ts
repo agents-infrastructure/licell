@@ -49,7 +49,7 @@ describe('resolveAuthCapabilityActions', () => {
     ]);
   });
 
-  it('exposes ECS read-only and start/reboot action hints, excludes stop/delete/run', () => {
+  it('exposes ECS read-only and lifecycle action hints, excludes instance creation', () => {
     expect(AUTH_CAPABILITY_LABELS.ecs).toBe('ECS');
     const actions = resolveAuthCapabilityActions(['ecs']);
     expect(actions).toEqual([

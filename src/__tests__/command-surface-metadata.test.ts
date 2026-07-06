@@ -162,6 +162,8 @@ describe('command surface metadata', () => {
     expect(surface.examples).toContain('licell ecs list --output json');
     expect(surface.examples).toContain('licell ecs info <instanceId> --output json');
     expect(surface.examples).toContain('licell ecs start <instanceId> --dry-run --output json');
+    expect(surface.safety?.level).toBe('destructive');
+    expect(surface.safety?.confirmFlags).toContain('--yes');
     const serialized = JSON.stringify(surface);
     for (const command of ECS_FORBIDDEN_COMMANDS) {
       expect(serialized).not.toContain(command);

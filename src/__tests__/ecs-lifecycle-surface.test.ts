@@ -4,7 +4,8 @@ import {
   ecsRebootCommand,
   ecsStopCommand,
   ecsDeleteCommand,
-  ecsRmCommand
+  ecsRmCommand,
+  ecsStatusMatchesTarget
 } from '../commands/ecs-lifecycle';
 import type { DeclaredCliCommand } from '../commands/module';
 
@@ -81,6 +82,15 @@ describe('ecs lifecycle surface consistency', () => {
       expect(fields, `${key} verify.notFound`).toContain('verify.notFound');
       expect(fields, `${key} plan.releaseFacts`).toContain('plan.releaseFacts');
     }
+  });
+
+  it('verify target matching is action-specific and does not accept unrelated transitional statuses', () => {
+    expect(ecsStatusMatchesTarget('Starting', ['Running', 'Starting'])).toBe(true);
+    expect(ecsStatusMatchesTarget('Stopping', ['Running', 'Starting'])).toBe(false);
+    expect(ecsStatusMatchesTarget('Rebooting', ['Running', 'Rebooting', 'Starting'])).toBe(true);
+    expect(ecsStatusMatchesTarget('Stopping', ['Running', 'Rebooting', 'Starting'])).toBe(false);
+    expect(ecsStatusMatchesTarget('Stopping', ['Stopped', 'Stopping'])).toBe(true);
+    expect(ecsStatusMatchesTarget('Starting', ['Stopped', 'Stopping'])).toBe(false);
   });
 
   it('H4/H5: every lifecycle command declares a dry-run -> execute -> verify recommendedFlow', () => {

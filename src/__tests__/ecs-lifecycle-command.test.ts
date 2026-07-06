@@ -678,7 +678,7 @@ describe('ecs start/reboot commands', () => {
   });
 
   it('ecs delete --dry-run emits plan with releaseFacts, willExecute=false, does NOT call deleteEcsInstance (D1)', async () => {
-    getEcsInstanceDetailMock.mockResolvedValue(summaryWithStatus('Running'));
+    getEcsInstanceDetailMock.mockResolvedValue(summaryWithStatus('Stopped'));
     const cli = await createCli();
     await cli.parse(['node', 'src/cli.ts', 'ecs delete', 'i-abc123', '--dry-run']);
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -694,9 +694,9 @@ describe('ecs start/reboot commands', () => {
 
   it('ecs delete --yes calls deleteEcsInstance after destructive confirm, verify notFound (D2)', async () => {
     getEcsInstanceDetailMock.mockReset();
-    // plan read -> Running; verify polls -> throw not-found
+    // plan read -> Stopped; verify polls -> throw not-found
     getEcsInstanceDetailMock
-      .mockResolvedValueOnce(summaryWithStatus('Running'))
+      .mockResolvedValueOnce(summaryWithStatus('Stopped'))
       .mockRejectedValue(new Error('ECS instance not exist: i-abc123'));
     const cli = await createCli();
     await cli.parse(['node', 'src/cli.ts', 'ecs delete', 'i-abc123', '--yes']);
@@ -711,7 +711,7 @@ describe('ecs start/reboot commands', () => {
   });
 
   it('ecs delete throws without --yes in non-interactive mode (D3)', async () => {
-    getEcsInstanceDetailMock.mockResolvedValue(summaryWithStatus('Running'));
+    getEcsInstanceDetailMock.mockResolvedValue(summaryWithStatus('Stopped'));
     ensureDestructiveActionConfirmedMock.mockImplementationOnce(() => {
       throw new Error('删除实例 属于删除操作；非交互模式请添加 --yes 明确确认');
     });
@@ -728,7 +728,7 @@ describe('ecs start/reboot commands', () => {
   });
 
   it('ecs delete blocks when release facts are unreadable (D4)', async () => {
-    getEcsInstanceDetailMock.mockResolvedValue(summaryWithStatus('Running'));
+    getEcsInstanceDetailMock.mockResolvedValue(summaryWithStatus('Stopped'));
     getEcsInstanceReleaseFactsMock.mockReset();
     getEcsInstanceReleaseFactsMock.mockRejectedValue(new Error('ECS 实例释放前事实不可读：未查询到实例 i-abc123 的删除保护信息'));
     let caught: unknown = null;
@@ -745,7 +745,7 @@ describe('ecs start/reboot commands', () => {
   });
 
   it('ecs delete blocks when deletionProtection=true (D5)', async () => {
-    getEcsInstanceDetailMock.mockResolvedValue(summaryWithStatus('Running'));
+    getEcsInstanceDetailMock.mockResolvedValue(summaryWithStatus('Stopped'));
     getEcsInstanceReleaseFactsMock.mockReset();
     getEcsInstanceReleaseFactsMock.mockResolvedValue({
       instanceId: 'i-abc123',
@@ -768,11 +768,27 @@ describe('ecs start/reboot commands', () => {
     expect(String(caught)).toMatch(/删除保护|deletionProtection/);
   });
 
+  it('ecs delete blocks Running instances instead of relying on implicit force delete', async () => {
+    getEcsInstanceDetailMock.mockResolvedValue(summaryWithStatus('Running'));
+    let caught: unknown = null;
+    executeWithAuthRecoveryMock.mockImplementationOnce(async (_opts: unknown, task: () => Promise<unknown>) => {
+      try { await task(); } catch (err) { caught = err; }
+    });
+    const cli = await createCli();
+    await cli.parse(['node', 'src/cli.ts', 'ecs delete', 'i-abc123', '--yes']);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(getEcsInstanceReleaseFactsMock).not.toHaveBeenCalled();
+    expect(ensureDestructiveActionConfirmedMock).not.toHaveBeenCalled();
+    expect(deleteEcsInstanceMock).not.toHaveBeenCalled();
+    expect(String(caught)).toMatch(/不符合删除条件|ecs stop|Running/);
+  });
+
   it('ecs delete via interactive double-confirm path calls deleteEcsInstance (D2b)', async () => {
     isInteractiveTTYMock.mockReturnValue(true);
     getEcsInstanceDetailMock.mockReset();
     getEcsInstanceDetailMock
-      .mockResolvedValueOnce(summaryWithStatus('Running'))
+      .mockResolvedValueOnce(summaryWithStatus('Stopped'))
       .mockRejectedValue(new Error('ECS instance not exist: i-abc123'));
     // ensureDestructiveActionConfirmedMock default resolves (simulating two prompts accepted)
     const cli = await createCli();
@@ -787,7 +803,7 @@ describe('ecs start/reboot commands', () => {
   it('ecs rm behaves identically to ecs delete (D8)', async () => {
     getEcsInstanceDetailMock.mockReset();
     getEcsInstanceDetailMock
-      .mockResolvedValueOnce(summaryWithStatus('Running'))
+      .mockResolvedValueOnce(summaryWithStatus('Stopped'))
       .mockRejectedValue(new Error('ECS instance not exist: i-abc123'));
     const cli = await createCli();
     await cli.parse(['node', 'src/cli.ts', 'ecs rm', 'i-abc123', '--yes']);

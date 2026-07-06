@@ -61,7 +61,8 @@ describe('cli help json contract', () => {
     expect(record?.key).toBe('ecs');
     expect(record?.help?.kind).toBe('licell-help');
     expect(record?.help?.scope).toBe('namespace');
-    expect(record?.help?.safety?.level).toBe('mutating');
+    expect(record?.help?.safety?.level).toBe('destructive');
+    expect(record?.help?.safety?.confirmFlags).toContain('--yes');
     expect(record?.help?.subcommands.map((command: { key?: string }) => command.key)).toEqual(expect.arrayContaining([
       'ecs info',
       'ecs list',

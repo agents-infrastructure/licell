@@ -439,7 +439,7 @@ export const ecsCommandModule = defineCommandModule({
       ],
       agentTips: [
         'Start 免确认直接执行；Reboot/Stop/Delete 非交互必须显式 --yes。',
-        'Delete 不可逆：释放前事实不可读或删除保护开启时阻断执行。',
+        'Delete 不可逆且只释放 Stopped 实例：实例未停止、释放前事实不可读或删除保护开启时阻断执行。',
         '过渡态（Starting/Stopping/Rebooting）下 start/reboot/stop 不允许操作，提示稍后重试。',
         '建议先 --dry-run 确认 plan.willExecute 与 plan.requiresConfirmation；delete 的 plan 含 releaseFacts。'
       ],
@@ -447,16 +447,16 @@ export const ecsCommandModule = defineCommandModule({
         { title: '列出实例', command: 'licell ecs list --output json', reason: '读取当前 region ECS 实例摘要与状态。' },
         { title: '先查看实例状态', command: 'licell ecs info <instanceId> --output json', reason: '确认当前实例状态是否符合操作条件。' },
         { title: 'Dry run 确认计划', command: 'licell ecs start <instanceId> --dry-run --output json', reason: '确认计划与前置条件。' },
-        { title: '执行操作', command: 'licell ecs start <instanceId>', reason: '实际执行并轮询验证到达目标状态。' }
+        { title: '执行操作', command: 'licell ecs start <instanceId>', reason: '实际执行并轮询验证到达目标 ECS 状态。' }
       ],
       automation: {
         preferredOutput: 'json',
         explicitInputs: ['--region', '--limit']
       },
       safety: {
-        level: 'mutating',
-        reason: 'ECS namespace 包含只读查询命令（safe）和启动/重启命令（mutating）。',
-        confirmFlags: []
+        level: 'destructive',
+        reason: 'ECS namespace 包含只读查询、启动/重启，以及停止/删除等 destructive 子命令；执行 stop/delete/rm 前需按子命令 help 显式确认。',
+        confirmFlags: ['--yes']
       }
     }
   }
