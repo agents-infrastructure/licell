@@ -1,0 +1,55 @@
+{
+  "gate_id": "dod-runner",
+  "stage": "acceptance.before_done",
+  "status": "passed",
+  "blocking": [],
+  "warnings": [],
+  "evidence": [
+    {
+      "command": "bun run typecheck",
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "$ bun x tsc --noEmit\nResolving dependencies\nResolved, downloaded and extracted [2]\nSaved lockfile\n",
+      "id": "CMD-001",
+      "core": true,
+      "failure_handling": "fix-or-block"
+    },
+    {
+      "command": "bun run docs:check",
+      "exit_code": 0,
+      "stdout": "generated docs are in sync (4 targets)\n",
+      "stderr": "$ ./scripts/check-docs.sh\n",
+      "id": "CMD-002",
+      "core": true,
+      "failure_handling": "fix-or-block"
+    },
+    {
+      "command": "bun x vitest run src/__tests__/cli-help-json-contract.test.ts src/__tests__/shell-completion.test.ts src/__tests__/agent-surface-docs.test.ts src/__tests__/readme-docs.test.ts src/__tests__/skills-scaffold.test.ts",
+      "exit_code": 0,
+      "stdout": "\n\u001b[1m\u001b[46m RUN \u001b[49m\u001b[22m \u001b[36mv4.0.18 \u001b[39m\u001b[90m/Users/wyattfang/.paseo/worktrees/0tcb78qo/feat-ecs-support\u001b[39m\n\n \u001b[32m✓\u001b[39m src/__tests__/shell-completion.test.ts \u001b[2m(\u001b[22m\u001b[2m14 tests\u001b[22m\u001b[2m)\u001b[22m\u001b[32m 16\u001b[2mms\u001b[22m\u001b[39m\n \u001b[32m✓\u001b[39m src/__tests__/agent-surface-docs.test.ts \u001b[2m(\u001b[22m\u001b[2m3 tests\u001b[22m\u001b[2m)\u001b[22m\u001b[32m 87\u001b[2mms\u001b[22m\u001b[39m\n \u001b[32m✓\u001b[39m src/__tests__/readme-docs.test.ts \u001b[2m(\u001b[22m\u001b[2m2 tests\u001b[22m\u001b[2m)\u001b[22m\u001b[32m 85\u001b[2mms\u001b[22m\u001b[39m\n \u001b[32m✓\u001b[39m src/__tests__/skills-scaffold.test.ts \u001b[2m(\u001b[22m\u001b[2m15 tests\u001b[22m\u001b[2m)\u001b[22m\u001b[32m 149\u001b[2mms\u001b[22m\u001b[39m\n \u001b[32m✓\u001b[39m src/__tests__/cli-help-json-contract.test.ts \u001b[2m(\u001b[22m\u001b[2m5 tests\u001b[22m\u001b[2m)\u001b[22m\u001b[33m 6500\u001b[2mms\u001b[22m\u001b[39m\n     \u001b[33m\u001b[2m✓\u001b[22m\u001b[39m keeps ecs namespace help includes lifecycle commands but excludes run/create \u001b[33m 1616\u001b[2mms\u001b[22m\u001b[39m\n     \u001b[33m\u001b[2m✓\u001b[22m\u001b[39m locks deploy help json contract for task-aware result schema \u001b[33m 1370\u001b[2mms\u001b[22m\u001b[39m\n     \u001b[33m\u001b[2m✓\u001b[22m\u001b[39m locks task list help json contract for task tracking schema \u001b[33m 1126\u001b[2mms\u001b[22m\u001b[39m\n     \u001b[33m\u001b[2m✓\u001b[22m\u001b[39m locks ecs list help json contract for agent discovery \u001b[33m 1128\u001b[2mms\u001b[22m\u001b[39m\n     \u001b[33m\u001b[2m✓\u001b[22m\u001b[39m locks ecs info help json contract for agent discovery \u001b[33m 1125\u001b[2mms\u001b[22m\u001b[39m\n\n\u001b[2m Test Files \u001b[22m \u001b[1m\u001b[32m5 passed\u001b[39m\u001b[22m\u001b[90m (5)\u001b[39m\n\u001b[2m      Tests \u001b[22m \u001b[1m\u001b[32m39 passed\u001b[39m\u001b[22m\u001b[90m (39)\u001b[39m\n\u001b[2m   Start at \u001b[22m 19:44:54\n\u001b[2m   Duration \u001b[22m 6.70s\u001b[2m (transform 2.60s, setup 0ms, import 6.24s, tests 6.84s, environment 0ms)\u001b[22m\n\n",
+      "stderr": "",
+      "id": "CMD-003",
+      "core": true,
+      "failure_handling": "fix-or-block"
+    },
+    {
+      "command": "bun x vitest run src/__tests__/ecs-lifecycle-command.test.ts",
+      "exit_code": 0,
+      "stdout": "\n\u001b[1m\u001b[46m RUN \u001b[49m\u001b[22m \u001b[36mv4.0.18 \u001b[39m\u001b[90m/Users/wyattfang/.paseo/worktrees/0tcb78qo/feat-ecs-support\u001b[39m\n\n \u001b[32m✓\u001b[39m src/__tests__/ecs-lifecycle-command.test.ts \u001b[2m(\u001b[22m\u001b[2m25 tests\u001b[22m\u001b[2m)\u001b[22m\u001b[33m 453\u001b[2mms\u001b[22m\u001b[39m\n     \u001b[33m\u001b[2m✓\u001b[22m\u001b[39m ecs start --dry-run emits plan with willExecute=false and does NOT call startEcsInstance \u001b[33m 415\u001b[2mms\u001b[22m\u001b[39m\n\n\u001b[2m Test Files \u001b[22m \u001b[1m\u001b[32m1 passed\u001b[39m\u001b[22m\u001b[90m (1)\u001b[39m\n\u001b[2m      Tests \u001b[22m \u001b[1m\u001b[32m25 passed\u001b[39m\u001b[22m\u001b[90m (25)\u001b[39m\n\u001b[2m   Start at \u001b[22m 19:45:01\n\u001b[2m   Duration \u001b[22m 592ms\u001b[2m (transform 243ms, setup 0ms, import 48ms, tests 453ms, environment 0ms)\u001b[22m\n\n",
+      "stderr": "",
+      "id": "CMD-004",
+      "core": true,
+      "failure_handling": "fix-or-block"
+    },
+    {
+      "command": "python3 .codestable/tools/validate-yaml.py --file .codestable/features/2026-07-03-ecs-lifecycle-surface-harden/ecs-lifecycle-surface-harden-checklist.yaml --yaml-only",
+      "exit_code": 0,
+      "stdout": "Validated 1 file(s): 1 passed, 0 failed.\n\n  ✓ .codestable/features/2026-07-03-ecs-lifecycle-surface-harden/ecs-lifecycle-surface-harden-checklist.yaml\n\nAll files valid.\n",
+      "stderr": "",
+      "id": "CMD-005",
+      "core": false,
+      "failure_handling": "fix-or-block"
+    }
+  ],
+  "providers": {}
+}

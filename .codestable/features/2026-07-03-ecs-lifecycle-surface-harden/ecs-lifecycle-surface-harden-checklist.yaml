@@ -1,0 +1,83 @@
+feature: 2026-07-03-ecs-lifecycle-surface-harden
+created: 2026-07-03
+
+steps:
+  - action: "前置 gate：确认 ecs start/reboot/stop/rm/delete 已在 registry/catalog/help，且 stop/delete feature 已 acceptance passed，否则 blocked"
+    exit_signal: "command registry/catalog 列出全部 5 条 lifecycle 命令；stop/delete acceptance 报告存在且 passed；否则标记 blocked 不继续"
+    status: done
+  - action: "docs pipeline 同步：跑 bun run docs:sync 让 README/agent-surfaces/scenario docs 反映最终命令集（docs pipeline 仅 4 targets，不含 skill/completion）"
+    exit_signal: "bun run docs:check 通过（README/agent-surfaces/scenarios02/03 in sync），generated docs 含 lifecycle 命令不含 run/create"
+    status: done
+  - action: "skill/completion/catalog 各自证据：skills-scaffold/shell-completion/cli-help-json-contract 测试断言最终命令集"
+    exit_signal: "skills-scaffold.test 断言 SKILL.md 含 lifecycle 且 wording 更新；shell-completion 断言 ecs subcommands 含 start/reboot/stop/delete/rm 不含 run/create；cli-help-json-contract 断言 per-command safety/confirmFlags/result fields"
+    status: done
+  - action: "跨命令一致性回归测试：dry-run 无副作用、确认策略矩阵、verify 字段级一致、safety metadata 覆盖全部 lifecycle 命令"
+    exit_signal: "单测断言四命令 dry-run 不触发 mutating、start 免确认 reboot/stop/delete 需确认、verify.statusClass/reachedTarget/timedOut 及 delete verify.notFound 一致、safety.level 与 confirmFlags 正确"
+    status: done
+  - action: "seed 状态更新与全量回归"
+    exit_signal: "ecs-lifecycle-command-seeds.md 标记已消费；ecs-lifecycle 全量测试 + docs:check + typecheck 通过；diff 只含 docs/tests/seed 无源码逻辑改动"
+    status: done
+
+checks:
+  - item: "不新增命令或改命令行为，纯 surface 同步 + 回归"
+    source: 范围守护
+    status: passed
+  - item: "不改 provider/harness 逻辑（diff 只含 generated docs + tests + seed）"
+    source: 范围守护
+    status: passed
+  - item: "generated docs 由 generator 产出，不手改 README block/agent-surfaces.md"
+    source: 流程级约束
+    status: passed
+  - item: "docs pipeline 仅 README/agent-surfaces/scenarios02/03 四 target；skill 由 skills-scaffold.test、completion 由 shell-completion.test 分别证明，不用 docs:check 冒充"
+    source: 流程级约束
+    status: passed
+  - item: "前置 gate：ecs start/reboot/stop/rm/delete 已在 registry/catalog/help 且 stop/delete 已 acceptance passed，否则本 feature blocked"
+    source: 验收场景
+    status: passed
+  - item: "README/agent-surfaces/SKILL/completion 均含 start/reboot/stop/rm/delete，不含 run/create"
+    source: 验收场景
+    status: passed
+  - item: "跨命令一致性：所有 lifecycle 命令 dry-run 不触发 mutating"
+    source: 验收场景
+    status: passed
+  - item: "确认策略矩阵：start 免确认；reboot/stop/delete 非交互需确认 flag"
+    source: 验收场景
+    status: passed
+  - item: "verify 字段级一致：全命令 verify.statusClass/reachedTarget/timedOut，delete verify.notFound 终态，dry-run 下 execution 缺省 verify 形状稳定"
+    source: 验收场景
+    status: passed
+  - item: "safety metadata：start/reboot=mutating、stop/delete=destructive，confirmFlags 正确"
+    source: 名词契约
+    status: passed
+  - item: "ecs-lifecycle-command-seeds.md 状态更新为已消费"
+    source: 挂载点
+    status: passed
+
+dod:
+  commands:
+    - id: CMD-001
+      command: "bun run typecheck"
+      core: true
+      failure_handling: fix-or-block
+    - id: CMD-002
+      command: "bun run docs:check"
+      core: true
+      failure_handling: fix-or-block
+    - id: CMD-003
+      command: "bun x vitest run src/__tests__/cli-help-json-contract.test.ts src/__tests__/shell-completion.test.ts src/__tests__/agent-surface-docs.test.ts src/__tests__/readme-docs.test.ts src/__tests__/skills-scaffold.test.ts"
+      core: true
+      failure_handling: fix-or-block
+    - id: CMD-004
+      command: "bun x vitest run src/__tests__/ecs-lifecycle-command.test.ts"
+      core: true
+      failure_handling: fix-or-block
+    - id: CMD-005
+      command: "python3 .codestable/tools/validate-yaml.py --file .codestable/features/2026-07-03-ecs-lifecycle-surface-harden/ecs-lifecycle-surface-harden-checklist.yaml --yaml-only"
+      core: false
+      failure_handling: fix-or-block
+  evidence_required: [command_output, diff_summary, review_report, qa_report, acceptance_report]
+  cleanliness:
+    debug_output: forbidden
+    todo_comments: forbidden
+    commented_code: forbidden
+    unused_imports: forbidden

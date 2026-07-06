@@ -1,0 +1,68 @@
+{
+  "gate_id": "scope-gate",
+  "stage": "acceptance.before_done",
+  "status": "passed",
+  "blocking": [],
+  "warnings": [],
+  "evidence": [
+    {
+      "changed_files": [
+        "src/__tests__/auth-recovery.test.ts",
+        "src/__tests__/cli-help-json-contract.test.ts",
+        "src/__tests__/command-manifest.test.ts",
+        "src/__tests__/ram-bootstrap.test.ts",
+        "src/__tests__/shell-completion.test.ts",
+        "src/commands/ecs.ts",
+        "src/providers/ecs.ts",
+        "src/providers/ecs/types.ts",
+        "src/providers/ram.ts",
+        "src/utils/auth-recovery.ts",
+        "src/utils/cli-shared.ts",
+        ".codestable/features/2026-07-03-ecs-lifecycle-delete/ecs-lifecycle-delete-checklist.yaml",
+        ".codestable/features/2026-07-03-ecs-lifecycle-delete/ecs-lifecycle-delete-design-review.md",
+        ".codestable/features/2026-07-03-ecs-lifecycle-delete/ecs-lifecycle-delete-design.md",
+        ".codestable/features/2026-07-03-ecs-lifecycle-start-reboot/dod-results.json",
+        ".codestable/features/2026-07-03-ecs-lifecycle-start-reboot/ecs-lifecycle-start-reboot-acceptance.md",
+        ".codestable/features/2026-07-03-ecs-lifecycle-start-reboot/ecs-lifecycle-start-reboot-checklist.yaml",
+        ".codestable/features/2026-07-03-ecs-lifecycle-start-reboot/ecs-lifecycle-start-reboot-design-review.md",
+        ".codestable/features/2026-07-03-ecs-lifecycle-start-reboot/ecs-lifecycle-start-reboot-design.md",
+        ".codestable/features/2026-07-03-ecs-lifecycle-start-reboot/ecs-lifecycle-start-reboot-dod-contract-results.json",
+        ".codestable/features/2026-07-03-ecs-lifecycle-start-reboot/ecs-lifecycle-start-reboot-evidence.md",
+        ".codestable/features/2026-07-03-ecs-lifecycle-start-reboot/ecs-lifecycle-start-reboot-qa.md",
+        ".codestable/features/2026-07-03-ecs-lifecycle-start-reboot/ecs-lifecycle-start-reboot-review.md",
+        ".codestable/features/2026-07-03-ecs-lifecycle-stop/ecs-lifecycle-stop-checklist.yaml",
+        ".codestable/features/2026-07-03-ecs-lifecycle-stop/ecs-lifecycle-stop-design-review.md",
+        ".codestable/features/2026-07-03-ecs-lifecycle-stop/ecs-lifecycle-stop-design.md",
+        ".codestable/features/2026-07-03-ecs-lifecycle-surface-harden/ecs-lifecycle-surface-harden-checklist.yaml",
+        ".codestable/features/2026-07-03-ecs-lifecycle-surface-harden/ecs-lifecycle-surface-harden-design-review.md",
+        ".codestable/features/2026-07-03-ecs-lifecycle-surface-harden/ecs-lifecycle-surface-harden-design.md",
+        ".codestable/roadmap/ecs-lifecycle-operations/ecs-lifecycle-operations-items.yaml",
+        ".codestable/roadmap/ecs-lifecycle-operations/ecs-lifecycle-operations-roadmap-review.md",
+        ".codestable/roadmap/ecs-lifecycle-operations/ecs-lifecycle-operations-roadmap.md",
+        ".codestable/roadmap/ecs-lifecycle-operations/goal-features/ecs-lifecycle-delete.md",
+        ".codestable/roadmap/ecs-lifecycle-operations/goal-features/ecs-lifecycle-start-reboot.md",
+        ".codestable/roadmap/ecs-lifecycle-operations/goal-features/ecs-lifecycle-stop.md",
+        ".codestable/roadmap/ecs-lifecycle-operations/goal-features/ecs-lifecycle-surface-harden.md",
+        ".codestable/roadmap/ecs-lifecycle-operations/goal-plan.md",
+        ".codestable/roadmap/ecs-lifecycle-operations/goal-protocol-audit.md",
+        ".codestable/roadmap/ecs-lifecycle-operations/goal-protocol-feature-loop.md",
+        ".codestable/roadmap/ecs-lifecycle-operations/goal-protocol-gates.md",
+        ".codestable/roadmap/ecs-lifecycle-operations/goal-protocol.md",
+        ".codestable/roadmap/ecs-lifecycle-operations/goal-state.yaml",
+        "src/__tests__/ecs-lifecycle-command.test.ts",
+        "src/__tests__/ecs-lifecycle-provider.test.ts",
+        "src/commands/ecs-lifecycle.ts",
+        "src/providers/ecs/lifecycle.ts"
+      ],
+      "ignored_machine_artifacts": [
+        ".codestable/features/2026-07-03-ecs-lifecycle-start-reboot/ecs-lifecycle-start-reboot-dod-results.json"
+      ],
+      "allowed_prefixes": [
+        ".codestable/features/2026-07-03-ecs-lifecycle-start-reboot",
+        "src/",
+        ".codestable/"
+      ]
+    }
+  ],
+  "providers": {}
+}

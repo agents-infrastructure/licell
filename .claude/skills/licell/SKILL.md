@@ -2,7 +2,7 @@
 name: licell
 description: >-
   Deploy and manage Alibaba Cloud Serverless applications using the licell CLI.
-  Covers deploy, release, functions, env vars, domains, DNS, logs, OSS, database, cache, Supabase, and ECS queries.
+  Covers deploy, release, functions, env vars, domains, DNS, logs, OSS, database, cache, Supabase, and ECS queries and lifecycle operations.
 metadata:
   author: licell
   version: "1.0"

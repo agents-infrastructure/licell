@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { AUTH_CAPABILITY_LABELS, detectAuthIssue, resolveAuthCapabilityActions } from '../utils/auth-recovery';
 
-const ECS_MUTATING_ACTIONS = [
+const ECS_LIFECYCLE_ALLOWED_ACTIONS = [
   'ecs:StartInstance',
-  'ecs:StopInstance',
   'ecs:RebootInstance',
-  'ecs:DeleteInstance',
+  'ecs:StopInstance',
+  'ecs:DeleteInstance'
+];
+
+const ECS_LIFECYCLE_FORBIDDEN_ACTIONS = [
   'ecs:RunInstances'
 ];
 
@@ -46,14 +49,22 @@ describe('resolveAuthCapabilityActions', () => {
     ]);
   });
 
-  it('exposes ECS read-only action hints only', () => {
+  it('exposes ECS read-only and lifecycle action hints, excludes instance creation', () => {
     expect(AUTH_CAPABILITY_LABELS.ecs).toBe('ECS');
     const actions = resolveAuthCapabilityActions(['ecs']);
     expect(actions).toEqual([
+      'ecs:DeleteInstance',
+      'ecs:DescribeDisks',
       'ecs:DescribeInstanceAttribute',
-      'ecs:DescribeInstances'
+      'ecs:DescribeInstances',
+      'ecs:RebootInstance',
+      'ecs:StartInstance',
+      'ecs:StopInstance'
     ]);
-    for (const action of ECS_MUTATING_ACTIONS) {
+    for (const action of ECS_LIFECYCLE_ALLOWED_ACTIONS) {
+      expect(actions).toContain(action);
+    }
+    for (const action of ECS_LIFECYCLE_FORBIDDEN_ACTIONS) {
       expect(actions).not.toContain(action);
     }
   });

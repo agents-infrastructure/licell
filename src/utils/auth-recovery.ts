@@ -52,7 +52,7 @@ const CAPABILITY_ACTIONS: Record<AuthCapability, string[]> = {
   vpc: ['vpc:DescribeVpcs', 'vpc:CreateVpc', 'vpc:CreateVSwitch'],
   cr: ['cr:ListInstance', 'cr:CreateNamespace', 'cr:CreateRepository'],
   logs: ['log:GetLogs', 'log:ListProject', 'log:ListLogStores', 'log:CreateProject', 'log:CreateLogStore', 'log:CreateIndex'],
-  ecs: ['ecs:DescribeInstanceAttribute', 'ecs:DescribeInstances']
+  ecs: ['ecs:DescribeInstanceAttribute', 'ecs:DescribeInstances', 'ecs:DescribeDisks', 'ecs:StartInstance', 'ecs:RebootInstance', 'ecs:StopInstance', 'ecs:DeleteInstance']
 };
 
 const preflightPrompted = new Set<string>();

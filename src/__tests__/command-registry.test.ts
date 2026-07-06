@@ -34,13 +34,16 @@ describe('LICELL_COMMAND_MANIFEST', () => {
     expect(catalog.commandsByKey['catalog']).toBeDefined();
   });
 
-  it('registers ecs inspect commands in the infrastructure section only', () => {
+  it('registers ecs inspect and lifecycle commands in the infrastructure section only', () => {
     const catalog = getCommandCatalog();
     expect(catalog.commandsByKey['ecs list']).toBeDefined();
     expect(catalog.commandsByKey['ecs info']).toBeDefined();
-    expect(catalog.commandsByKey['ecs start']).toBeUndefined();
-    expect(catalog.commandsByKey['ecs stop']).toBeUndefined();
-    expect(catalog.commandsByKey['ecs reboot']).toBeUndefined();
-    expect(catalog.commandsByKey['ecs rm']).toBeUndefined();
+    expect(catalog.commandsByKey['ecs start']).toBeDefined();
+    expect(catalog.commandsByKey['ecs stop']).toBeDefined();
+    expect(catalog.commandsByKey['ecs reboot']).toBeDefined();
+    expect(catalog.commandsByKey['ecs delete']).toBeDefined();
+    expect(catalog.commandsByKey['ecs rm']).toBeDefined();
+    expect(catalog.commandsByKey['ecs run']).toBeUndefined();
+    expect(catalog.commandsByKey['ecs create']).toBeUndefined();
   });
 });

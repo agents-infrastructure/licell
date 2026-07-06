@@ -3,7 +3,7 @@ import { spawnSync } from 'child_process';
 import { resolve } from 'path';
 import { extractJsonRecordsFromOutput } from '../utils/output';
 
-const ECS_LIFECYCLE_HELP_PATTERN = /(?:licell )?ecs (start|stop|reboot|delete|rm|run|create)\b|ecs:(StartInstance|StopInstance|RebootInstance|DeleteInstance|RunInstances)/;
+const ECS_LIFECYCLE_HELP_PATTERN = /(?:licell )?ecs (run|create)\b|ecs:(RunInstances)/;
 
 beforeAll(() => {
   const warmup = spawnSync('bun', ['x', 'tsx', '--version'], {
@@ -47,7 +47,7 @@ function runCliHelpJson(args: string[]) {
 }
 
 describe('cli help json contract', () => {
-  it('keeps ecs namespace help limited to readonly inspect commands', () => {
+  it('keeps ecs namespace help includes lifecycle commands but excludes run/create', () => {
     const result = runCliHelpJson(['ecs']);
     const records = extractJsonRecordsFromOutput(result.stdout) as Array<Record<string, any>>;
 
@@ -61,11 +61,18 @@ describe('cli help json contract', () => {
     expect(record?.key).toBe('ecs');
     expect(record?.help?.kind).toBe('licell-help');
     expect(record?.help?.scope).toBe('namespace');
-    expect(record?.help?.safety?.level).toBe('safe');
-    expect(record?.help?.subcommands.map((command: { key?: string }) => command.key)).toEqual([
+    expect(record?.help?.safety?.level).toBe('destructive');
+    expect(record?.help?.safety?.confirmFlags).toContain('--yes');
+    expect(record?.help?.subcommands.map((command: { key?: string }) => command.key)).toEqual(expect.arrayContaining([
       'ecs info',
-      'ecs list'
-    ]);
+      'ecs list',
+      'ecs start',
+      'ecs reboot',
+      'ecs stop',
+      'ecs delete',
+      'ecs rm'
+    ]));
+    expect(record?.help?.subcommands).toHaveLength(7);
     expect(JSON.stringify(record)).not.toMatch(ECS_LIFECYCLE_HELP_PATTERN);
   }, 10000);
 

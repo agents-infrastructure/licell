@@ -80,6 +80,14 @@ describe('command manifest invariants', () => {
       id: 'infra',
       title: 'Cloud Infrastructure'
     });
-    expect(ecsModule?.declaredCommands?.map((command) => command.rawName)).toEqual(['ecs list', 'ecs info <instanceId>']);
+    expect(ecsModule?.declaredCommands?.map((command) => command.rawName)).toEqual([
+      'ecs list',
+      'ecs info <instanceId>',
+      'ecs start <instanceId>',
+      'ecs reboot <instanceId>',
+      'ecs stop <instanceId>',
+      'ecs delete <instanceId>',
+      'ecs rm <instanceId>'
+    ]);
   });
 });

@@ -6,7 +6,7 @@ import {
   resolveCompletionCandidates
 } from '../utils/shell-completion';
 
-const ECS_LIFECYCLE_COMPLETIONS = ['start', 'stop', 'reboot', 'delete', 'rm', 'run', 'create'];
+const ECS_LIFECYCLE_COMPLETIONS = ['run', 'create'];
 
 describe('resolveCompletionCandidates', () => {
   it('suggests top-level commands from partial token', () => {
@@ -22,7 +22,7 @@ describe('resolveCompletionCandidates', () => {
     expect(candidates).toContain('domain');
   });
 
-  it('suggests ecs root command and inspect subcommands', () => {
+  it('suggests ecs root command and full lifecycle subcommands', () => {
     const rootCandidates = resolveCompletionCandidates({
       compWords: 'licell e',
       compCword: 1,
@@ -35,7 +35,7 @@ describe('resolveCompletionCandidates', () => {
       compCword: 2,
       compCur: ''
     });
-    expect(ecsCandidates).toEqual(expect.arrayContaining(['list', 'info']));
+    expect(ecsCandidates).toEqual(expect.arrayContaining(['list', 'info', 'start', 'reboot', 'stop', 'delete', 'rm']));
     for (const lifecycleCommand of ECS_LIFECYCLE_COMPLETIONS) {
       expect(ecsCandidates).not.toContain(lifecycleCommand);
     }

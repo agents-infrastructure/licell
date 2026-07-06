@@ -218,6 +218,33 @@ export async function ensureDestructiveActionConfirmed(
   if (!secondConfirm) throw new Error('操作已取消');
 }
 
+export interface HighImpactConfirmOptions {
+  yes?: boolean;
+  interactiveTTY?: boolean;
+  interruption?: boolean;
+  confirmPrompt?: (message: string) => Promise<boolean>;
+}
+
+export async function ensureHighImpactActionConfirmed(
+  actionLabel: string,
+  options: HighImpactConfirmOptions = {}
+) {
+  if (options.yes) return;
+  const interactiveTTY = options.interactiveTTY ?? isInteractiveTTY();
+  if (!interactiveTTY) {
+    throw new Error(`${actionLabel} 会中断实例运行；非交互模式请添加 --yes 明确确认`);
+  }
+
+  const confirmPrompt = options.confirmPrompt || (async (message: string) => {
+    const answered = await confirm({ message });
+    if (isCancel(answered)) process.exit(0);
+    return Boolean(answered);
+  });
+
+  const confirmed = await confirmPrompt(`${actionLabel} 会中断实例运行，是否继续？`);
+  if (!confirmed) throw new Error('操作已取消');
+}
+
 export const DEPLOY_TYPES = ['api', 'static', 'task'] as const;
 export type DeployType = (typeof DEPLOY_TYPES)[number];
 
