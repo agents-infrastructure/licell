@@ -20,7 +20,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/agents-infrastructure/licell.git"
+    "url": "git+https://github.com/team-harness/licell.git"
   },
   "engines": {
     "node": ">=18"

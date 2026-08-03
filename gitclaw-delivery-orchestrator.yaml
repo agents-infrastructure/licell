@@ -8,7 +8,7 @@ defaults:
 projects:
   licell:
     name: licell
-    repo: github.com/agents-infrastructure/licell
+    repo: github.com/team-harness/licell
     path: /Users/wyattfang/work/licell
     defaultBranch: main
     sessionPrefix: lic

@@ -10,7 +10,7 @@ import { createSpinner, showIntro, showOutro, toOptionalString } from '../utils/
 import { emitCliEvent, emitCommandEvent, emitCommandResult, isJsonOutput } from '../utils/output';
 import { AUTOMATION_SECTION } from './sections';
 
-const DEFAULT_UPGRADE_REPO = 'agents-infrastructure/licell';
+const DEFAULT_UPGRADE_REPO = 'team-harness/licell';
 const DEFAULT_PACKAGE_NAME = 'licell';
 const REPO_SLUG_RE = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 const UPGRADE_CHANNELS = ['auto', 'release', 'npm', 'pnpm', 'yarn', 'bun'] as const;

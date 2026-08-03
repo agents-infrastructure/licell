@@ -88,7 +88,7 @@ That means command-surface changes can converge across help, MCP, skills, and do
 ### Recommended: install script
 
 ```bash
-curl -fsSL https://github.com/agents-infrastructure/licell/releases/latest/download/install.sh | bash
+curl -fsSL https://github.com/team-harness/licell/releases/latest/download/install.sh | bash
 ```
 
 After installation, run:

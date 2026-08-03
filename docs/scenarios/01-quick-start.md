@@ -11,7 +11,7 @@ Licell 提供了一款开箱即用的命令行工具。对于全新的 Mac 或 L
 编译的单文件脱水版）：
 
 ```bash
-curl -fsSL https://github.com/agents-infrastructure/licell/releases/latest/download/install.sh | bash
+curl -fsSL https://github.com/team-harness/licell/releases/latest/download/install.sh | bash
 ```
 
 _(如果你习惯使用 npm，也可以通过 `npm install -g licell` 进行安装。)_

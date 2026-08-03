@@ -90,7 +90,7 @@ Licell 最新架构里，命令不再只是“能执行”，还要“能自我�
 ### 推荐：安装脚本
 
 ```bash
-curl -fsSL https://github.com/agents-infrastructure/licell/releases/latest/download/install.sh | bash
+curl -fsSL https://github.com/team-harness/licell/releases/latest/download/install.sh | bash
 ```
 
 安装完成后，可直接运行：

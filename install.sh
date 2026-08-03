@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO="${LICELL_REPO:-agents-infrastructure/licell}"
+REPO="${LICELL_REPO:-team-harness/licell}"
 REF="${LICELL_REF:-main}"
 ARCHIVE_URL="${LICELL_ARCHIVE_URL:-https://api.github.com/repos/${REPO}/tarball/${REF}}"
 INSTALL_ROOT="${LICELL_INSTALL_ROOT:-$HOME/.local/share/licell}"

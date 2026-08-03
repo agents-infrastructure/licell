@@ -7,7 +7,7 @@ const CACHE_DIR = join(homedir(), '.licell-cli');
 const CACHE_FILE = join(CACHE_DIR, 'update-check.json');
 const CACHE_TTL_MS = 12 * 60 * 60 * 1000;
 const FETCH_TIMEOUT_MS = 2_000;
-const RELEASE_API = 'https://api.github.com/repos/agents-infrastructure/licell/releases/latest';
+const RELEASE_API = 'https://api.github.com/repos/team-harness/licell/releases/latest';
 
 interface UpdateCache {
   latestVersion: string;

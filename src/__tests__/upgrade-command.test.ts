@@ -17,13 +17,13 @@ import {
 describe('upgrade command helpers', () => {
   it('uses latest release installer by default', () => {
     expect(resolveUpgradeScriptUrl({})).toBe(
-      'https://github.com/agents-infrastructure/licell/releases/latest/download/install.sh'
+      'https://github.com/team-harness/licell/releases/latest/download/install.sh'
     );
   });
 
   it('uses versioned release installer when version is provided', () => {
     expect(resolveUpgradeScriptUrl({ version: 'v1.2.3' })).toBe(
-      'https://github.com/agents-infrastructure/licell/releases/download/v1.2.3/install.sh'
+      'https://github.com/team-harness/licell/releases/download/v1.2.3/install.sh'
     );
   });
 
@@ -48,13 +48,13 @@ describe('upgrade command helpers', () => {
 
 describe('resolveChecksumUrl', () => {
   it('derives SHA256SUMS url from script url', () => {
-    expect(resolveChecksumUrl('https://github.com/agents-infrastructure/licell/releases/latest/download/install.sh'))
-      .toBe('https://github.com/agents-infrastructure/licell/releases/latest/download/SHA256SUMS.txt');
+    expect(resolveChecksumUrl('https://github.com/team-harness/licell/releases/latest/download/install.sh'))
+      .toBe('https://github.com/team-harness/licell/releases/latest/download/SHA256SUMS.txt');
   });
 
   it('handles versioned url', () => {
-    expect(resolveChecksumUrl('https://github.com/agents-infrastructure/licell/releases/download/v1.0.0/install.sh'))
-      .toBe('https://github.com/agents-infrastructure/licell/releases/download/v1.0.0/SHA256SUMS.txt');
+    expect(resolveChecksumUrl('https://github.com/team-harness/licell/releases/download/v1.0.0/install.sh'))
+      .toBe('https://github.com/team-harness/licell/releases/download/v1.0.0/SHA256SUMS.txt');
   });
 
   it('returns null for url without slash', () => {
@@ -321,7 +321,7 @@ describe('resolveUpgradePlan', () => {
       }
     })).toEqual({
       mode: 'release',
-      scriptUrl: 'https://github.com/agents-infrastructure/licell/releases/download/v1.2.3/install.sh'
+      scriptUrl: 'https://github.com/team-harness/licell/releases/download/v1.2.3/install.sh'
     });
   });
 });
