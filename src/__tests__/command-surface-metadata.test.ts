@@ -72,6 +72,30 @@ describe('command surface metadata', () => {
     expect(surface.automation?.notes).toEqual([]);
   });
 
+  it('exposes db info region and aggregated security metadata', () => {
+    const dbInfo = catalog.commandsByKey['db info']!;
+    const surface = buildCommandSurfaceMetadata({
+      scope: 'command',
+      key: 'db info',
+      command: dbInfo,
+      subcommands: [],
+      descriptor: getCommandDescriptor('db info'),
+      extraTokens: []
+    });
+
+    expect(dbInfo.options.some((option) => option.rawName === '--region <regionId>')).toBe(true);
+    expect(surface.safety?.level).toBe('safe');
+    expect(surface.optionInsights?.some((item) => item.flag === '--region <regionId>')).toBe(true);
+    expect(surface.result?.fields.map((field) => field.name)).toEqual(expect.arrayContaining([
+      'regionId',
+      'detail.attributes',
+      'detail.network',
+      'detail.security.whitelists[]',
+      'detail.security.securityGroups[]',
+      'detail.inspectionWarnings[]'
+    ]));
+  });
+
   it('resolves explicit recommended flow for deploy command scopes with child commands', () => {
     const deploy = catalog.commandsByKey['deploy']!;
     const subcommands = ['deploy spec', 'deploy check']

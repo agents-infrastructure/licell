@@ -1,6 +1,7 @@
 import * as $Rds from '@alicloud/rds20140815';
 import { Config } from '../../utils/config';
 import { isNotFoundError, isTransientError } from '../../utils/alicloud-error';
+import { formatErrorMessage } from '../../utils/errors';
 import { sleep } from '../../utils/runtime';
 import { createRdsClient } from './client';
 import { resolveDatabaseProvisionDefaults } from './defaults';
@@ -11,6 +12,7 @@ import type {
   DatabaseClassEntry,
   DatabaseZoneClassEntry,
   DatabaseConnectInfo,
+  DatabaseInspectionWarning,
   DatabaseInstanceDetail,
   DatabaseInstanceSummary
 } from './types';
@@ -68,20 +70,6 @@ function toDatabaseSummary(item: {
   };
 }
 
-async function getDatabaseInstanceSummaryOrThrow(instanceId: string) {
-  const { auth, client } = createRdsClient();
-  const res = await client.describeDBInstances(new $Rds.DescribeDBInstancesRequest({
-    regionId: auth.region,
-    DBInstanceId: instanceId,
-    pageNumber: 1,
-    pageSize: 30
-  }));
-  const rows = res.body?.items?.DBInstance || [];
-  const matched = rows.find((item) => item.DBInstanceId === instanceId) || rows[0];
-  if (!matched?.DBInstanceId) throw new Error(`未找到数据库实例: ${instanceId}`);
-  return toDatabaseSummary(matched);
-}
-
 export async function listDatabaseInstances(limit = 200): Promise<DatabaseInstanceSummary[]> {
   const { auth, client } = createRdsClient();
   const results: DatabaseInstanceSummary[] = [];
@@ -109,15 +97,97 @@ export async function listDatabaseInstances(limit = 200): Promise<DatabaseInstan
   return results;
 }
 
-export async function getDatabaseInstanceDetail(instanceId: string): Promise<DatabaseInstanceDetail> {
+export async function getDatabaseInstanceDetail(
+  instanceId: string,
+  options: { regionId?: string } = {}
+): Promise<DatabaseInstanceDetail> {
   const resolvedId = instanceId.trim();
   if (!resolvedId) throw new Error('instanceId 不能为空');
-  const { client } = createRdsClient();
-  const summary = await getDatabaseInstanceSummaryOrThrow(resolvedId);
+  const { client, regionId } = createRdsClient(options.regionId);
 
-  const netRes = await client.describeDBInstanceNetInfo(new $Rds.DescribeDBInstanceNetInfoRequest({
+  const attributeRes = await client.describeDBInstanceAttribute(new $Rds.DescribeDBInstanceAttributeRequest({
     DBInstanceId: resolvedId
   }));
+  const attributeRows = attributeRes.body?.items?.DBInstanceAttribute || [];
+  const attribute = attributeRows.find((item) => item.DBInstanceId === resolvedId) || attributeRows[0];
+  if (!attribute?.DBInstanceId) throw new Error(`未找到数据库实例: ${resolvedId}（region=${regionId}）`);
+
+  const summary: DatabaseInstanceSummary = {
+    instanceId: attribute.DBInstanceId,
+    regionId: attribute.regionId || regionId,
+    description: attribute.DBInstanceDescription,
+    engine: attribute.engine,
+    engineVersion: attribute.engineVersion,
+    status: attribute.DBInstanceStatus,
+    payType: attribute.payType,
+    category: attribute.category,
+    instanceClass: attribute.DBInstanceClass,
+    zoneId: attribute.zoneId,
+    vpcId: attribute.vpcId,
+    vSwitchId: attribute.vSwitchId
+  };
+
+  const attributes = {
+    instanceType: attribute.DBInstanceType,
+    instanceClassType: attribute.DBInstanceClassType,
+    cpu: attribute.DBInstanceCPU,
+    memoryMb: attribute.DBInstanceMemory,
+    storageGb: attribute.DBInstanceStorage,
+    storageType: attribute.DBInstanceStorageType,
+    storageUsed: attribute.DBInstanceDiskUsed,
+    maxConnections: attribute.maxConnections,
+    maxIops: attribute.maxIOPS,
+    maxIoMbps: attribute.maxIOMBPS,
+    creationTime: attribute.creationTime,
+    expireTime: attribute.expireTime,
+    maintainTime: attribute.maintainTime,
+    resourceGroupId: attribute.resourceGroupId,
+    deletionProtection: attribute.deletionProtection,
+    lockMode: attribute.lockMode,
+    lockReason: attribute.lockReason,
+    serverless: attribute.serverlessConfig
+      ? {
+        autoPause: attribute.serverlessConfig.autoPause,
+        scaleMin: attribute.serverlessConfig.scaleMin,
+        scaleMax: attribute.serverlessConfig.scaleMax
+      }
+      : undefined
+  };
+
+  const network = {
+    regionId: summary.regionId || regionId,
+    zoneId: attribute.zoneId,
+    slaveZoneIds: (attribute.slaveZones?.slaveZone || [])
+      .map((item) => item.zoneId)
+      .filter((item): item is string => typeof item === 'string' && item.length > 0),
+    vpcId: attribute.vpcId,
+    vSwitchId: attribute.vSwitchId,
+    networkType: attribute.instanceNetworkType || attribute.DBInstanceNetType,
+    connectionMode: attribute.connectionMode,
+    masterInstanceId: attribute.masterInstanceId,
+    masterZone: attribute.masterZone
+  };
+
+  const [netRes, databasesRes, accountsRes, whitelistResult, securityGroupResult] = await Promise.all([
+    client.describeDBInstanceNetInfo(new $Rds.DescribeDBInstanceNetInfoRequest({
+      DBInstanceId: resolvedId
+    })),
+    client.describeDatabases(new $Rds.DescribeDatabasesRequest({
+      DBInstanceId: resolvedId,
+      pageNumber: 1,
+      pageSize: 100
+    })),
+    client.describeAccounts(new $Rds.DescribeAccountsRequest({
+      DBInstanceId: resolvedId
+    })),
+    client.describeDBInstanceIPArrayList(new $Rds.DescribeDBInstanceIPArrayListRequest({
+      DBInstanceId: resolvedId
+    })).then((value) => ({ value })).catch((error: unknown) => ({ error })),
+    client.describeSecurityGroupConfiguration(new $Rds.DescribeSecurityGroupConfigurationRequest({
+      DBInstanceId: resolvedId
+    })).then((value) => ({ value })).catch((error: unknown) => ({ error }))
+  ]);
+
   const endpoints = (netRes.body?.DBInstanceNetInfos?.DBInstanceNetInfo || []).map((item) => ({
     type: item.connectionStringType,
     ipType: item.IPType,
@@ -127,27 +197,52 @@ export async function getDatabaseInstanceDetail(instanceId: string): Promise<Dat
     vSwitchId: item.vSwitchId
   }));
 
-  const databasesRes = await client.describeDatabases(new $Rds.DescribeDatabasesRequest({
-    DBInstanceId: resolvedId,
-    pageNumber: 1,
-    pageSize: 100
-  }));
   const databases = (databasesRes.body?.databases?.database || [])
     .map((item) => item.DBName)
     .filter((item): item is string => typeof item === 'string' && item.length > 0);
 
-  const accountsRes = await client.describeAccounts(new $Rds.DescribeAccountsRequest({
-    DBInstanceId: resolvedId
-  }));
   const accounts = (accountsRes.body?.accounts?.DBInstanceAccount || [])
     .map((item) => item.accountName)
     .filter((item): item is string => typeof item === 'string' && item.length > 0);
 
+  const inspectionWarnings: DatabaseInspectionWarning[] = [];
+  const whitelists = 'value' in whitelistResult
+    ? (whitelistResult.value.body?.items?.DBInstanceIPArray || []).map((item) => ({
+      name: item.DBInstanceIPArrayName,
+      attribute: item.DBInstanceIPArrayAttribute,
+      type: item.securityIPType,
+      ips: (item.securityIPList || '').split(',').map((ip) => ip.trim()).filter(Boolean)
+    }))
+    : [];
+  if ('error' in whitelistResult) {
+    inspectionWarnings.push({ source: 'whitelists', message: formatErrorMessage(whitelistResult.error) });
+  }
+
+  const securityGroups = 'value' in securityGroupResult
+    ? (securityGroupResult.value.body?.items?.ecsSecurityGroupRelation || []).map((item) => ({
+      id: item.securityGroupId,
+      name: item.securityGroupName,
+      networkType: item.networkType,
+      regionId: item.regionId
+    }))
+    : [];
+  if ('error' in securityGroupResult) {
+    inspectionWarnings.push({ source: 'securityGroups', message: formatErrorMessage(securityGroupResult.error) });
+  }
+
   return {
     summary,
+    attributes,
+    network,
+    security: {
+      ipMode: attribute.securityIPMode,
+      whitelists,
+      securityGroups
+    },
     endpoints,
     databases,
-    accounts
+    accounts,
+    inspectionWarnings
   };
 }
 

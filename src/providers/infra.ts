@@ -1,5 +1,11 @@
 export type {
   DatabaseInstanceSummary,
+  DatabaseInstanceAttributes,
+  DatabaseNetworkInfo,
+  DatabaseWhitelistInfo,
+  DatabaseSecurityGroupInfo,
+  DatabaseSecurityInfo,
+  DatabaseInspectionWarning,
   DatabaseEndpointInfo,
   DatabaseInstanceDetail,
   DatabaseConnectInfo,

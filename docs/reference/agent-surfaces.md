@@ -198,7 +198,7 @@
 | `licell db add` | 分配数据库实例 | `--type`, `--engine-version`, `--category` |
 | `licell db class [type]` | 查询数据库可用规格（给 Agent/开发者在 db add 前对照） | `--engine-version`, `--category`, `--storage-type` |
 | `licell db connect [instanceId]` | 输出数据库连接信息 | — |
-| `licell db info <instanceId>` | 查看数据库实例详情 | — |
+| `licell db info <instanceId>` | 查看数据库实例详情 | `--region` |
 | `licell db list` | 查看数据库实例列表 | `--limit` |
 | `licell db public-access [instanceId]` | 开通数据库公网访问并添加当前 IP 到白名单 | `--ip` |
 | `licell db rm <instanceId>` | 删除数据库实例 | `--yes` |

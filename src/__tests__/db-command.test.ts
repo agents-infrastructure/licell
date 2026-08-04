@@ -5,6 +5,7 @@ const {
   configState,
   deleteDatabaseInstanceMock,
   executeWithAuthRecoveryMock,
+  getDatabaseInstanceDetailMock,
   getProjectMock,
   listDatabaseClassesMock,
   setProjectMock,
@@ -16,6 +17,7 @@ const {
   },
   deleteDatabaseInstanceMock: vi.fn(),
   executeWithAuthRecoveryMock: vi.fn(async (_options: unknown, task: () => Promise<unknown>) => task()),
+  getDatabaseInstanceDetailMock: vi.fn(),
   getProjectMock: vi.fn(),
   listDatabaseClassesMock: vi.fn(),
   setProjectMock: vi.fn(),
@@ -33,7 +35,7 @@ vi.mock('../providers/infra', () => ({
   provisionDatabase: vi.fn(),
   listDatabaseClasses: listDatabaseClassesMock,
   listDatabaseInstances: vi.fn(),
-  getDatabaseInstanceDetail: vi.fn(),
+  getDatabaseInstanceDetail: getDatabaseInstanceDetailMock,
   resolveDatabaseConnectInfo: vi.fn(),
   deleteDatabaseInstance: deleteDatabaseInstanceMock,
   allocateDbPublicConnection: vi.fn(),
@@ -66,6 +68,11 @@ vi.mock('../utils/cli-shared', () => ({
     const value = String(input).trim();
     return value.length > 0 ? value : undefined;
   },
+  toPromptValue: (input: unknown, label: string) => {
+    const value = String(input ?? '').trim();
+    if (!value) throw new Error(`${label} 不能为空`);
+    return value;
+  },
   parseListLimit: (_input: unknown, fallback: number) => fallback,
   withSpinner: async (_spinner: unknown, _startMsg: string, _failMsg: string, fn: () => Promise<unknown>) => fn()
 }));
@@ -90,6 +97,38 @@ describe('db commands', () => {
     deleteDatabaseInstanceMock.mockReset();
     deleteDatabaseInstanceMock.mockResolvedValue(undefined);
     executeWithAuthRecoveryMock.mockClear();
+    getDatabaseInstanceDetailMock.mockReset();
+    getDatabaseInstanceDetailMock.mockResolvedValue({
+      summary: {
+        instanceId: 'pgm-demo',
+        regionId: 'cn-shanghai',
+        engine: 'PostgreSQL',
+        engineVersion: '16.0',
+        status: 'Running',
+        instanceClass: 'pg.n2.medium.2c',
+        payType: 'Postpaid',
+        zoneId: 'cn-shanghai-m',
+        vpcId: 'vpc-demo',
+        vSwitchId: 'vsw-demo'
+      },
+      attributes: { storageGb: 100, storageType: 'cloud_essd' },
+      network: {
+        regionId: 'cn-shanghai',
+        zoneId: 'cn-shanghai-m',
+        slaveZoneIds: ['cn-shanghai-n'],
+        vpcId: 'vpc-demo',
+        vSwitchId: 'vsw-demo',
+        networkType: 'VPC'
+      },
+      security: {
+        whitelists: [{ name: 'default', ips: ['10.0.0.0/8'] }],
+        securityGroups: [{ id: 'sg-demo', name: 'rds-access' }]
+      },
+      endpoints: [{ ipType: 'Private', host: 'pgm-demo.pg.rds.aliyuncs.com', port: '5432' }],
+      databases: ['app'],
+      accounts: ['app_user'],
+      inspectionWarnings: []
+    });
     configState.current = { envs: {}, database: undefined };
     getProjectMock.mockReset();
     getProjectMock.mockImplementation(() => configState.current);
@@ -193,6 +232,17 @@ describe('db commands', () => {
     });
     expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('Zone Breakdown'));
     expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('cn-hangzhou-b'));
+  });
+
+  it('forwards a per-call region and renders aggregated RDS detail', async () => {
+    const cli = await createCli();
+    await cli.parse(['node', 'src/cli.ts', 'db info', 'pgm-demo', '--region', 'cn-shanghai']);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(getDatabaseInstanceDetailMock).toHaveBeenCalledWith('pgm-demo', { regionId: 'cn-shanghai' });
+    expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('cn-shanghai'));
+    expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('default=10.0.0.0/8'));
+    expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('sg-demo(rds-access)'));
   });
 
   it('stops spinner after successful deletion', async () => {

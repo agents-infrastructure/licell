@@ -45,7 +45,18 @@ const CAPABILITY_ACTIONS: Record<AuthCapability, string[]> = {
     'oss:PutCname',
     'oss:DeleteCname'
   ],
-  rds: ['rds:DescribeDBInstances', 'rds:CreateDBInstance', 'rds:CreateDatabase', 'rds:DeleteDBInstance'],
+  rds: [
+    'rds:DescribeDBInstances',
+    'rds:DescribeDBInstanceAttribute',
+    'rds:DescribeDBInstanceNetInfo',
+    'rds:DescribeDatabases',
+    'rds:DescribeAccounts',
+    'rds:DescribeDBInstanceIPArrayList',
+    'rds:DescribeSecurityGroupConfiguration',
+    'rds:CreateDBInstance',
+    'rds:CreateDatabase',
+    'rds:DeleteDBInstance'
+  ],
   rdsai: ['rdsai:CreateAppInstance', 'rdsai:DescribeAppInstances', 'rdsai:DeleteAppInstance'],
   redis: ['kvstore:DescribeInstances', 'kvstore:CreateTairKVCacheVNode', 'kvstore:ResetAccountPassword'],
   cdn: ['cdn:DescribeUserDomains', 'cdn:AddCdnDomain', 'cdn:BatchSetCdnDomainConfig'],

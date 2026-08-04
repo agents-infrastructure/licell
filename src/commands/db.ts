@@ -94,7 +94,60 @@ const dbClassCommand = defineCliCommand({
 
 const dbInfoCommand = defineCliCommand({
   rawName: 'db info <instanceId>',
-  description: '查看数据库实例详情'
+  description: '查看数据库实例详情',
+  options: [
+    { rawName: '--region <regionId>', description: '查询地域；不传则使用当前 licell 默认 region，不跨 region 查询' }
+  ],
+  descriptor: {
+    title: 'Show RDS instance detail',
+    summary: '按实例 ID 聚合 RDS 属性、网络拓扑、连接端点、IP 白名单和安全组信息。',
+    examples: [
+      'licell db info <instanceId> --output json',
+      'licell db info <instanceId> --region cn-shanghai --output json'
+    ],
+    related: ['db list', 'db connect', 'db public-access', 'auth repair'],
+    agentTips: [
+      '自动化调用优先使用 `--output json`，读取 `detail.summary`、`detail.network` 和 `detail.security`。',
+      '未传 `--region` 时只查询当前 licell 默认 region；本命令不会跨 region 自动搜索。',
+      '`inspectionWarnings[]` 表示白名单或安全组附加检查不可用，其他基础详情仍可使用。'
+    ],
+    automation: {
+      preferredOutput: 'json',
+      explicitInputs: ['instanceId', '--region']
+    },
+    safety: {
+      level: 'safe',
+      reason: '只调用 RDS Describe 类 API 读取实例信息，不修改云端资源或本地配置。',
+      confirmFlags: []
+    },
+    optionInsights: {
+      '--region': {
+        whenToUse: '实例不在当前 licell 默认 region 时显式指定。',
+        cautions: ['只影响本次查询，不修改全局默认 region，也不会跨 region 自动搜索。']
+      }
+    },
+    recommendedFlow: [
+      { title: '列出当前地域实例', command: 'licell db list --output json', reason: '先确认实例 ID 和当前默认地域是否匹配。' },
+      { title: '查看实例详情', command: 'licell db info <instanceId> --output json', reason: '聚合读取实例、网络和安全配置。' },
+      { title: '修复权限', command: 'licell auth repair', reason: '若 RDS 读权限不足，补齐 bootstrap RAM policy。' }
+    ],
+    result: {
+      summary: '返回实际查询地域以及 RDS 实例属性、网络、安全配置、数据库和账号摘要。',
+      fields: [
+        { name: 'regionId', description: '实际查询的 RDS region。', required: true },
+        { name: 'instanceId', description: 'RDS 实例 ID。', required: true },
+        { name: 'detail.summary', description: '实例引擎、状态、规格、可用区和 VPC 摘要。', required: true },
+        { name: 'detail.attributes', description: 'CPU、内存、存储、生命周期和资源组等属性。', required: true },
+        { name: 'detail.network', description: 'region、主备可用区、VPC、交换机和网络类型。', required: true },
+        { name: 'detail.security.whitelists[]', description: 'RDS IP 白名单分组及 CIDR。', required: true },
+        { name: 'detail.security.securityGroups[]', description: '关联的 ECS 安全组。', required: true },
+        { name: 'detail.endpoints[]', description: '实例内网/公网连接端点。', required: true },
+        { name: 'detail.databases[]', description: '数据库名称列表。', required: true },
+        { name: 'detail.accounts[]', description: '数据库账号名称列表。', required: true },
+        { name: 'detail.inspectionWarnings[]', description: '附加安全检查失败时的非致命告警。', required: true }
+      ]
+    }
+  }
 });
 
 const dbConnectCommand = defineCliCommand({
@@ -441,7 +494,7 @@ export function registerDbCommands(cli: CAC) {
     });
 
   registerCliCommand(cli, dbInfoCommand)
-    .action(async (instanceId: string) => {
+    .action(async (instanceId: string, options: { region?: unknown }) => {
       await executeWithAuthRecovery(
         {
           commandLabel: commandInvocation(dbInfoCommand),
@@ -451,12 +504,13 @@ export function registerDbCommands(cli: CAC) {
         async () => {
           ensureAuthOrExit();
           const normalizedId = toPromptValue(instanceId, 'instanceId');
+          const regionId = toOptionalString(options.region);
           const s = createSpinner();
           const detail = await withSpinner(
             s,
             `正在拉取实例 ${normalizedId} 详情...`,
             '❌ 获取数据库实例详情失败',
-            () => getDatabaseInstanceDetail(normalizedId)
+            () => getDatabaseInstanceDetail(normalizedId, regionId ? { regionId } : undefined)
           );
           if (!detail) return;
           const summary = detail.summary;
@@ -464,7 +518,8 @@ export function registerDbCommands(cli: CAC) {
             s.stop(pc.green('✅ 获取成功'));
           } else {
             emitCommandResult({
-              instanceId: normalizedId,
+              regionId: detail.network.regionId,
+              instanceId: detail.summary.instanceId,
               detail
             });
             return;
@@ -474,13 +529,26 @@ export function registerDbCommands(cli: CAC) {
           console.log(`status:     ${pc.cyan(summary.status || '-')}`);
           console.log(`class:      ${pc.cyan(summary.instanceClass || '-')}`);
           console.log(`payType:    ${pc.cyan(summary.payType || '-')}`);
+          console.log(`region:     ${pc.cyan(detail.network.regionId)}`);
           console.log(`vpc/vsw:    ${pc.cyan(`${summary.vpcId || '-'} / ${summary.vSwitchId || '-'}`)}`);
           console.log(`zone:       ${pc.cyan(summary.zoneId || '-')}`);
+          if (detail.network.slaveZoneIds.length > 0) console.log(`slaveZones: ${pc.cyan(detail.network.slaveZoneIds.join(', '))}`);
+          console.log(`network:    ${pc.cyan(detail.network.networkType || '-')}`);
+          console.log(`storage:    ${pc.cyan(`${detail.attributes.storageGb ?? '-'} GB / ${detail.attributes.storageType || '-'}`)}`);
           if (detail.endpoints.length > 0) {
             console.log(`endpoints:  ${pc.cyan(detail.endpoints.map((item) => `${item.ipType || item.type || '-'}:${item.host || '-'}:${item.port || '-'}`).join(', '))}`);
           }
           if (detail.databases.length > 0) console.log(`databases:  ${pc.cyan(detail.databases.join(', '))}`);
           if (detail.accounts.length > 0) console.log(`accounts:   ${pc.cyan(detail.accounts.join(', '))}`);
+          if (detail.security.whitelists.length > 0) {
+            console.log(`whitelists: ${pc.cyan(detail.security.whitelists.map((item) => `${item.name || 'default'}=${item.ips.join(',') || '-'}`).join('; '))}`);
+          }
+          if (detail.security.securityGroups.length > 0) {
+            console.log(`securityGroups: ${pc.cyan(detail.security.securityGroups.map((item) => `${item.id || '-'}${item.name ? `(${item.name})` : ''}`).join(', '))}`);
+          }
+          for (const warning of detail.inspectionWarnings) {
+            console.log(pc.yellow(`warning[${warning.source}]: ${warning.message}`));
+          }
           console.log('');
           showOutro('Done.');
         }
