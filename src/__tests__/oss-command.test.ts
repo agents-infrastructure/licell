@@ -76,23 +76,33 @@ import {
   bindOssBucketDomain,
   createOssBucket,
   createOssBucketDomainToken,
+  deleteOssBucket,
   deleteOssBucketRecursively,
   deleteOssObject,
   downloadOssObject,
   downloadOssObjectsToDirectory,
+  getOssBucketInfo,
   getOssObjectInfo,
+  listOssBucketDomains,
+  listOssBuckets,
+  listOssObjects,
   removeOssBucketDomain,
   updateOssBucket,
   uploadDirectoryToBucket
 } from '../providers/oss';
 
 const createOssBucketMock = createOssBucket as unknown as ReturnType<typeof vi.fn>;
+const deleteOssBucketMock = deleteOssBucket as unknown as ReturnType<typeof vi.fn>;
 const updateOssBucketMock = updateOssBucket as unknown as ReturnType<typeof vi.fn>;
 const deleteOssBucketRecursivelyMock = deleteOssBucketRecursively as unknown as ReturnType<typeof vi.fn>;
 const deleteOssObjectMock = deleteOssObject as unknown as ReturnType<typeof vi.fn>;
 const downloadOssObjectMock = downloadOssObject as unknown as ReturnType<typeof vi.fn>;
 const downloadOssObjectsToDirectoryMock = downloadOssObjectsToDirectory as unknown as ReturnType<typeof vi.fn>;
+const getOssBucketInfoMock = getOssBucketInfo as unknown as ReturnType<typeof vi.fn>;
 const getOssObjectInfoMock = getOssObjectInfo as unknown as ReturnType<typeof vi.fn>;
+const listOssBucketDomainsMock = listOssBucketDomains as unknown as ReturnType<typeof vi.fn>;
+const listOssBucketsMock = listOssBuckets as unknown as ReturnType<typeof vi.fn>;
+const listOssObjectsMock = listOssObjects as unknown as ReturnType<typeof vi.fn>;
 const createOssBucketDomainTokenMock = createOssBucketDomainToken as unknown as ReturnType<typeof vi.fn>;
 const bindOssBucketDomainMock = bindOssBucketDomain as unknown as ReturnType<typeof vi.fn>;
 const removeOssBucketDomainMock = removeOssBucketDomain as unknown as ReturnType<typeof vi.fn>;
@@ -126,6 +136,31 @@ describe('oss commands', () => {
         domains: []
       }
     });
+
+    deleteOssBucketMock.mockReset();
+    deleteOssBucketMock.mockResolvedValue({
+      bucket: 'demo-bucket',
+      deletedObjects: 0,
+      deletedBucket: true
+    });
+
+    getOssBucketInfoMock.mockReset();
+    getOssBucketInfoMock.mockResolvedValue({
+      name: 'demo-bucket',
+      location: 'cn-hangzhou',
+      acl: 'private',
+      publicAccessBlock: false,
+      domains: []
+    });
+
+    listOssBucketsMock.mockReset();
+    listOssBucketsMock.mockResolvedValue([]);
+
+    listOssObjectsMock.mockReset();
+    listOssObjectsMock.mockResolvedValue([]);
+
+    listOssBucketDomainsMock.mockReset();
+    listOssBucketDomainsMock.mockResolvedValue([]);
 
     updateOssBucketMock.mockReset();
     updateOssBucketMock.mockResolvedValue({
@@ -215,6 +250,51 @@ describe('oss commands', () => {
     consoleLogSpy.mockRestore();
   });
 
+  it('declares a per-command region override on every OSS leaf command', async () => {
+    const { ossCommandModule } = await import('../commands/oss');
+
+    expect(ossCommandModule.declaredCommands).toHaveLength(17);
+    for (const command of ossCommandModule.declaredCommands || []) {
+      expect(command.options, command.rawName).toContainEqual({
+        rawName: '--region <regionId>',
+        description: 'OSS 地域；仅覆盖当前命令，不传则使用 licell 默认 region'
+      });
+    }
+  });
+
+  it('passes `oss list --region` to the provider', async () => {
+    const cli = await createCli();
+    await cli.parse(['node', 'src/cli.ts', 'oss list', '--region', 'cn-shanghai']);
+
+    expect(listOssBucketsMock).toHaveBeenCalledWith(50, { regionId: 'cn-shanghai' });
+  });
+
+  it('passes `oss info --region` to the provider', async () => {
+    const cli = await createCli();
+    await cli.parse(['node', 'src/cli.ts', 'oss info', 'demo-bucket', '--region', 'cn-shanghai']);
+
+    expect(getOssBucketInfoMock).toHaveBeenCalledWith('demo-bucket', { regionId: 'cn-shanghai' });
+  });
+
+  it('passes `oss ls --region` to the provider', async () => {
+    const cli = await createCli();
+    await cli.parse(['node', 'src/cli.ts', 'oss ls', 'demo-bucket', '--region', 'cn-shanghai']);
+
+    expect(listOssObjectsMock).toHaveBeenCalledWith(
+      'demo-bucket',
+      undefined,
+      100,
+      { regionId: 'cn-shanghai' }
+    );
+  });
+
+  it('passes `oss domain list --region` to the provider', async () => {
+    const cli = await createCli();
+    await cli.parse(['node', 'src/cli.ts', 'oss domain list', 'demo-bucket', '--region', 'cn-shanghai']);
+
+    expect(listOssBucketDomainsMock).toHaveBeenCalledWith('demo-bucket', { regionId: 'cn-shanghai' });
+  });
+
   it('maps `oss create` args to provider call', async () => {
     const cli = await createCli();
     await cli.parse([
@@ -229,7 +309,9 @@ describe('oss commands', () => {
       '--redundancy',
       'zrs',
       '--public-access-block',
-      'off'
+      'off',
+      '--region',
+      'cn-shanghai'
     ]);
 
     expect(createOssBucketMock).toHaveBeenCalledTimes(1);
@@ -237,7 +319,8 @@ describe('oss commands', () => {
       acl: 'public-read',
       storageClass: 'ia',
       dataRedundancyType: 'ZRS',
-      publicAccessBlock: false
+      publicAccessBlock: false,
+      regionId: 'cn-shanghai'
     });
   });
 
@@ -251,13 +334,16 @@ describe('oss commands', () => {
       '--acl',
       'public-read',
       '--public-access-block',
-      'off'
+      'off',
+      '--region',
+      'cn-shanghai'
     ]);
 
     expect(updateOssBucketMock).toHaveBeenCalledTimes(1);
     expect(updateOssBucketMock).toHaveBeenCalledWith('demo-bucket', {
       acl: 'public-read',
-      publicAccessBlock: false
+      publicAccessBlock: false,
+      regionId: 'cn-shanghai'
     });
   });
 
@@ -269,12 +355,14 @@ describe('oss commands', () => {
       'oss rm',
       'demo-bucket',
       '--recursive',
+      '--region',
+      'cn-shanghai',
       '--yes'
     ]);
 
     expect(ensureDestructiveActionConfirmedMock).toHaveBeenCalledTimes(1);
     expect(deleteOssBucketRecursivelyMock).toHaveBeenCalledTimes(1);
-    expect(deleteOssBucketRecursivelyMock).toHaveBeenCalledWith('demo-bucket');
+    expect(deleteOssBucketRecursivelyMock).toHaveBeenCalledWith('demo-bucket', { regionId: 'cn-shanghai' });
   });
 
   it('maps `oss domain token` args to provider call', async () => {
@@ -284,11 +372,13 @@ describe('oss commands', () => {
       'src/cli.ts',
       'oss domain token',
       'demo-bucket',
-      'static.example.com'
+      'static.example.com',
+      '--region',
+      'cn-shanghai'
     ]);
 
     expect(createOssBucketDomainTokenMock).toHaveBeenCalledTimes(1);
-    expect(createOssBucketDomainTokenMock).toHaveBeenCalledWith('demo-bucket', 'static.example.com');
+    expect(createOssBucketDomainTokenMock).toHaveBeenCalledWith('demo-bucket', 'static.example.com', { regionId: 'cn-shanghai' });
   });
 
   it('maps `oss domain bind` args to provider call', async () => {
@@ -298,11 +388,13 @@ describe('oss commands', () => {
       'src/cli.ts',
       'oss domain bind',
       'demo-bucket',
-      'static.example.com'
+      'static.example.com',
+      '--region',
+      'cn-shanghai'
     ]);
 
     expect(bindOssBucketDomainMock).toHaveBeenCalledTimes(1);
-    expect(bindOssBucketDomainMock).toHaveBeenCalledWith('demo-bucket', 'static.example.com');
+    expect(bindOssBucketDomainMock).toHaveBeenCalledWith('demo-bucket', 'static.example.com', { regionId: 'cn-shanghai' });
   });
 
 
@@ -315,12 +407,14 @@ describe('oss commands', () => {
       'oss domain unbind',
       'demo-bucket',
       'static.example.com',
+      '--region',
+      'cn-shanghai',
       '--yes'
     ]);
 
     expect(ensureDestructiveActionConfirmedMock).toHaveBeenCalledTimes(1);
     expect(removeOssBucketDomainMock).toHaveBeenCalledTimes(1);
-    expect(removeOssBucketDomainMock).toHaveBeenCalledWith('demo-bucket', 'static.example.com');
+    expect(removeOssBucketDomainMock).toHaveBeenCalledWith('demo-bucket', 'static.example.com', { regionId: 'cn-shanghai' });
   });
 
   it('maps `oss upload` args to provider call', async () => {
@@ -333,11 +427,35 @@ describe('oss commands', () => {
       '--source-dir',
       'dist',
       '--target-dir',
-      'mysite'
+      'mysite',
+      '--region',
+      'cn-shanghai'
     ]);
 
     expect(uploadDirectoryToBucketMock).toHaveBeenCalledTimes(1);
-    expect(uploadDirectoryToBucketMock).toHaveBeenCalledWith('demo-bucket', 'dist', { targetDir: 'mysite' });
+    expect(uploadDirectoryToBucketMock).toHaveBeenCalledWith('demo-bucket', 'dist', {
+      regionId: 'cn-shanghai',
+      targetDir: 'mysite'
+    });
+  });
+
+  it('passes `oss bucket --region` to the upload provider', async () => {
+    const cli = await createCli();
+    await cli.parse([
+      'node',
+      'src/cli.ts',
+      'oss bucket',
+      'demo-bucket',
+      '--source-dir',
+      'dist',
+      '--region',
+      'cn-shanghai'
+    ]);
+
+    expect(uploadDirectoryToBucketMock).toHaveBeenCalledWith('demo-bucket', 'dist', {
+      regionId: 'cn-shanghai',
+      targetDir: undefined
+    });
   });
 
   it('maps `oss object info` args to provider call', async () => {
@@ -351,7 +469,26 @@ describe('oss commands', () => {
     ]);
 
     expect(getOssObjectInfoMock).toHaveBeenCalledTimes(1);
-    expect(getOssObjectInfoMock).toHaveBeenCalledWith('demo-bucket', 'site/index.html');
+    expect(getOssObjectInfoMock).toHaveBeenCalledWith('demo-bucket', 'site/index.html', undefined);
+  });
+
+  it('passes `oss object info --region` to the provider without changing global config', async () => {
+    const cli = await createCli();
+    await cli.parse([
+      'node',
+      'src/cli.ts',
+      'oss object info',
+      'demo-bucket',
+      'site/index.html',
+      '--region',
+      'cn-shanghai'
+    ]);
+
+    expect(getOssObjectInfoMock).toHaveBeenCalledWith(
+      'demo-bucket',
+      'site/index.html',
+      { regionId: 'cn-shanghai' }
+    );
   });
 
   it('maps `oss object get` args to provider call', async () => {
@@ -366,7 +503,28 @@ describe('oss commands', () => {
     ]);
 
     expect(downloadOssObjectMock).toHaveBeenCalledTimes(1);
-    expect(downloadOssObjectMock).toHaveBeenCalledWith('demo-bucket', 'site/index.html', './index.html');
+    expect(downloadOssObjectMock).toHaveBeenCalledWith('demo-bucket', 'site/index.html', './index.html', undefined);
+  });
+
+  it('passes `oss object get --region` to the provider', async () => {
+    const cli = await createCli();
+    await cli.parse([
+      'node',
+      'src/cli.ts',
+      'oss object get',
+      'demo-bucket',
+      'site/index.html',
+      './index.html',
+      '--region',
+      'cn-shanghai'
+    ]);
+
+    expect(downloadOssObjectMock).toHaveBeenCalledWith(
+      'demo-bucket',
+      'site/index.html',
+      './index.html',
+      { regionId: 'cn-shanghai' }
+    );
   });
 
   it('maps `oss object rm --yes` args to provider call', async () => {
@@ -377,12 +535,14 @@ describe('oss commands', () => {
       'oss object rm',
       'demo-bucket',
       'site/old.js',
+      '--region',
+      'cn-shanghai',
       '--yes'
     ]);
 
     expect(ensureDestructiveActionConfirmedMock).toHaveBeenCalledTimes(1);
     expect(deleteOssObjectMock).toHaveBeenCalledTimes(1);
-    expect(deleteOssObjectMock).toHaveBeenCalledWith('demo-bucket', 'site/old.js');
+    expect(deleteOssObjectMock).toHaveBeenCalledWith('demo-bucket', 'site/old.js', { regionId: 'cn-shanghai' });
   });
 
   it('maps `oss sync down` args to provider call', async () => {
@@ -394,11 +554,16 @@ describe('oss commands', () => {
       'demo-bucket',
       'site',
       '--dest-dir',
-      './downloads/site'
+      './downloads/site',
+      '--region',
+      'cn-shanghai'
     ]);
 
     expect(downloadOssObjectsToDirectoryMock).toHaveBeenCalledTimes(1);
-    expect(downloadOssObjectsToDirectoryMock).toHaveBeenCalledWith('demo-bucket', './downloads/site', { prefix: 'site' });
+    expect(downloadOssObjectsToDirectoryMock).toHaveBeenCalledWith('demo-bucket', './downloads/site', {
+      regionId: 'cn-shanghai',
+      prefix: 'site'
+    });
   });
 
   it('maps `oss sync up` args to upload provider call', async () => {
@@ -411,10 +576,15 @@ describe('oss commands', () => {
       '--source-dir',
       'dist',
       '--target-dir',
-      'site'
+      'site',
+      '--region',
+      'cn-shanghai'
     ]);
 
     expect(uploadDirectoryToBucketMock).toHaveBeenCalledTimes(1);
-    expect(uploadDirectoryToBucketMock).toHaveBeenCalledWith('demo-bucket', 'dist', { targetDir: 'site' });
+    expect(uploadDirectoryToBucketMock).toHaveBeenCalledWith('demo-bucket', 'dist', {
+      regionId: 'cn-shanghai',
+      targetDir: 'site'
+    });
   });
 });

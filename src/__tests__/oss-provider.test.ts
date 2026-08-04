@@ -15,6 +15,7 @@ const mockIsConflictError = vi.fn();
 const mockIsAccessDeniedError = vi.fn();
 const mockIsNotFoundError = vi.fn();
 const mockIsTransientError = vi.fn();
+const mockOpenApiConfigInput = vi.fn();
 
 async function readStream(stream: Readable) {
   const chunks: Buffer[] = [];
@@ -90,6 +91,7 @@ vi.mock('@alicloud/oss20190517', () => ({
 vi.mock('@alicloud/openapi-client', () => ({
   Config: class MockOpenApiConfig {
     constructor(input: unknown) {
+      mockOpenApiConfigInput(input);
       Object.assign(this, input);
     }
   },
@@ -147,6 +149,7 @@ describe('createOssBucket', () => {
     mockIsAccessDeniedError.mockReset();
     mockIsNotFoundError.mockReset();
     mockIsTransientError.mockReset();
+    mockOpenApiConfigInput.mockReset();
 
     mockPutBucketWithOptions.mockResolvedValue({});
     mockGetBucketInfoWithOptions.mockResolvedValue({
@@ -175,6 +178,28 @@ describe('createOssBucket', () => {
 
     const request = mockPutBucketWithOptions.mock.calls[0]?.[1];
     expect(request?.createBucketConfiguration).toBeUndefined();
+  });
+
+  it('uses a per-call region override for the OSS client endpoint', async () => {
+    const { getOssObjectInfo } = await import('../providers/oss');
+
+    await getOssObjectInfo('demo-bucket', 'site/index.html', { regionId: 'cn-shanghai' });
+
+    expect(mockOpenApiConfigInput).toHaveBeenCalledWith(expect.objectContaining({
+      regionId: 'cn-shanghai',
+      endpoint: 'oss-cn-shanghai.aliyuncs.com'
+    }));
+  });
+
+  it('uses the configured default region when no per-call override is provided', async () => {
+    const { getOssObjectInfo } = await import('../providers/oss');
+
+    await getOssObjectInfo('demo-bucket', 'site/index.html');
+
+    expect(mockOpenApiConfigInput).toHaveBeenCalledWith(expect.objectContaining({
+      regionId: 'cn-hangzhou',
+      endpoint: 'oss-cn-hangzhou.aliyuncs.com'
+    }));
   });
 
   it('keeps non-default storageClass in createBucketConfiguration', async () => {

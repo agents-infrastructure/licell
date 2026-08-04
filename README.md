@@ -687,23 +687,23 @@ licell e2e cleanup <runId>
 | `licell dns records add <domain>` | 添加域名解析记录 | `--rr`, `--type`, `--value` |
 | `licell dns records list [domain]` | 查看域名解析记录 | `--limit` |
 | `licell dns records rm <recordId>` | 删除域名解析记录 | `--yes` |
-| `licell oss bucket [bucket]` | 上传本地目录到 OSS Bucket 指定目录（兼容命令，等同 oss upload） | `--bucket`, `--source-dir`, `--target-dir` |
-| `licell oss create <bucket>` | 创建 OSS Bucket | `--acl`, `--storage-class`, `--redundancy` |
-| `licell oss info <bucket>` | 查看 OSS Bucket 详情（含 ACL / 公共访问阻止 / 域名） | — |
-| `licell oss list` | 查看 OSS Bucket 列表 | `--limit` |
-| `licell oss ls <bucket> [prefix]` | 列出 Bucket 对象 | `--limit` |
-| `licell oss rm <bucket>` | 删除 OSS Bucket（默认仅删空 Bucket） | `--recursive`, `--yes` |
-| `licell oss update <bucket>` | 更新 OSS Bucket 属性（ACL / 公共访问阻止） | `--acl`, `--public-access-block` |
-| `licell oss upload [bucket]` | 上传本地目录到 OSS Bucket 指定目录 | `--bucket`, `--source-dir`, `--target-dir` |
-| `licell oss domain bind <bucket> <domain>` | 为 Bucket 绑定原生 OSS 自定义域名 | — |
-| `licell oss domain list <bucket>` | 查看 Bucket 已绑定的原生 OSS 域名 | — |
-| `licell oss domain token <bucket> <domain>` | 为 Bucket 自定义域名生成 TXT 验证 token | — |
-| `licell oss domain unbind <bucket> <domain>` | 解绑 Bucket 原生 OSS 自定义域名 | `--yes` |
-| `licell oss object get <bucket> <key> [file]` | 下载 OSS 对象到本地文件 | `--file` |
-| `licell oss object info <bucket> <key>` | 查看 OSS 对象元数据 | — |
-| `licell oss object rm <bucket> <key>` | 删除 OSS 对象 | `--yes` |
-| `licell oss sync down <bucket> [prefix]` | 批量下载 Bucket 对象到本地目录 | `--dest-dir` |
-| `licell oss sync up [bucket]` | 同步本地目录到 OSS Bucket（等同 oss upload） | `--bucket`, `--source-dir`, `--target-dir` |
+| `licell oss bucket [bucket]` | 上传本地目录到 OSS Bucket 指定目录（兼容命令，等同 oss upload） | `--region`, `--bucket`, `--source-dir` |
+| `licell oss create <bucket>` | 创建 OSS Bucket | `--region`, `--acl`, `--storage-class` |
+| `licell oss info <bucket>` | 查看 OSS Bucket 详情（含 ACL / 公共访问阻止 / 域名） | `--region` |
+| `licell oss list` | 查看 OSS Bucket 列表 | `--region`, `--limit` |
+| `licell oss ls <bucket> [prefix]` | 列出 Bucket 对象 | `--region`, `--limit` |
+| `licell oss rm <bucket>` | 删除 OSS Bucket（默认仅删空 Bucket） | `--region`, `--recursive`, `--yes` |
+| `licell oss update <bucket>` | 更新 OSS Bucket 属性（ACL / 公共访问阻止） | `--region`, `--acl`, `--public-access-block` |
+| `licell oss upload [bucket]` | 上传本地目录到 OSS Bucket 指定目录 | `--region`, `--bucket`, `--source-dir` |
+| `licell oss domain bind <bucket> <domain>` | 为 Bucket 绑定原生 OSS 自定义域名 | `--region` |
+| `licell oss domain list <bucket>` | 查看 Bucket 已绑定的原生 OSS 域名 | `--region` |
+| `licell oss domain token <bucket> <domain>` | 为 Bucket 自定义域名生成 TXT 验证 token | `--region` |
+| `licell oss domain unbind <bucket> <domain>` | 解绑 Bucket 原生 OSS 自定义域名 | `--region`, `--yes` |
+| `licell oss object get <bucket> <key> [file]` | 下载 OSS 对象到本地文件 | `--region`, `--file` |
+| `licell oss object info <bucket> <key>` | 查看 OSS 对象元数据 | `--region` |
+| `licell oss object rm <bucket> <key>` | 删除 OSS 对象 | `--region`, `--yes` |
+| `licell oss sync down <bucket> [prefix]` | 批量下载 Bucket 对象到本地目录 | `--region`, `--dest-dir` |
+| `licell oss sync up [bucket]` | 同步本地目录到 OSS Bucket（等同 oss upload） | `--region`, `--bucket`, `--source-dir` |
 
 #### Data Services
 

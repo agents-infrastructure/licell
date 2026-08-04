@@ -34,6 +34,10 @@ export type OssBucketAcl = 'private' | 'public-read' | 'public-read-write';
 export type OssBucketStorageClass = 'Standard' | 'IA' | 'Archive' | 'ColdArchive' | 'DeepColdArchive';
 export type OssBucketDataRedundancyType = 'LRS' | 'ZRS';
 
+export interface OssRegionOptions {
+  regionId?: string;
+}
+
 export interface OssBucketDomainCertificate {
   certId?: string;
   creationDate?: string;
@@ -147,19 +151,20 @@ export interface CollectOssUploadFilesResult {
   skippedSymlinkCount: number;
 }
 
-function createOssClient() {
+function createOssClient(regionId?: string) {
   const auth = Config.requireAuth();
+  const resolvedRegion = regionId?.trim() || auth.region;
   const client = new OssClientCtor(new $OpenApi.Config({
     accessKeyId: auth.ak,
     accessKeySecret: auth.sk,
-    regionId: auth.region,
-    endpoint: `oss-${auth.region}.aliyuncs.com`
+    regionId: resolvedRegion,
+    endpoint: `oss-${resolvedRegion}.aliyuncs.com`
   }));
   const runtime = new $Util.RuntimeOptions({
     connectTimeout: OSS_CONNECT_TIMEOUT_MS,
     readTimeout: OSS_READ_TIMEOUT_MS
   });
-  return { auth, client, runtime };
+  return { auth, regionId: resolvedRegion, client, runtime };
 }
 
 function isPublicBucketAclBlockedError(err: unknown) {
@@ -267,6 +272,7 @@ function collectOssUserMetadata(headers: Record<string, string> | undefined) {
 type OssRawBody = Record<string, unknown>;
 
 export interface CreateOssBucketOptions {
+  regionId?: string;
   acl?: OssBucketAcl;
   storageClass?: OssBucketStorageClass;
   dataRedundancyType?: OssBucketDataRedundancyType;
@@ -282,6 +288,7 @@ export interface CreateOssBucketResult {
 }
 
 export interface UpdateOssBucketOptions {
+  regionId?: string;
   acl?: OssBucketAcl;
   publicAccessBlock?: boolean;
 }
@@ -978,9 +985,9 @@ async function downloadOssObjectToFile(
 export async function uploadDirectoryToBucket(
   bucketName: string,
   sourceDir: string,
-  options?: { targetDir?: string; concurrency?: number }
+  options?: { regionId?: string; targetDir?: string; concurrency?: number }
 ): Promise<OssUploadDirectoryResult> {
-  const { auth, client, runtime } = createOssClient();
+  const { regionId, client, runtime } = createOssClient(options?.regionId);
   const normalizedBucket = bucketName.trim();
   if (!normalizedBucket) throw new Error('bucket 名称不能为空');
   const targetDir = normalizeOssTargetDir(options?.targetDir);
@@ -1015,7 +1022,7 @@ export async function uploadDirectoryToBucket(
     bucket: normalizedBucket,
     targetDir,
     uploadedCount: collected.files.length,
-    baseUrl: `https://${normalizedBucket}.oss-${auth.region}.aliyuncs.com`,
+    baseUrl: `https://${normalizedBucket}.oss-${regionId}.aliyuncs.com`,
     skippedSymlinkCount: collected.skippedSymlinkCount
   };
 }
@@ -1062,7 +1069,7 @@ export function resolveOssBucketOriginDomain(bucketName: string, endpoint?: stri
 }
 
 export async function createOssBucket(bucketName: string, options: CreateOssBucketOptions = {}): Promise<CreateOssBucketResult> {
-  const { client, runtime } = createOssClient();
+  const { client, runtime } = createOssClient(options.regionId);
   const bucket = normalizeBucketName(bucketName);
   const acl = options.acl || 'private';
   const publicAccessBlock = options.publicAccessBlock;
@@ -1172,7 +1179,7 @@ export async function createOssBucket(bucketName: string, options: CreateOssBuck
     bucket,
     created,
     info: await withRetry(
-      () => getOssBucketInfo(bucket),
+      () => getOssBucketInfo(bucket, { regionId: options.regionId }),
       {
         maxAttempts: 5,
         baseDelayMs: 800,
@@ -1202,13 +1209,13 @@ export async function setOssBucketPublicAccessBlock(bucketName: string, enabled:
   return setOssBucketPublicAccessBlockInternal(client, runtime, normalizeBucketName(bucketName), enabled);
 }
 
-export async function listOssBucketDomains(bucketName: string): Promise<OssBucketDomainSummary[]> {
-  const { client, runtime } = createOssClient();
+export async function listOssBucketDomains(bucketName: string, options: OssRegionOptions = {}): Promise<OssBucketDomainSummary[]> {
+  const { client, runtime } = createOssClient(options.regionId);
   return listOssBucketDomainsInternal(client, runtime, normalizeBucketName(bucketName));
 }
 
-export async function createOssBucketDomainToken(bucketName: string, domain: string): Promise<OssBucketDomainTokenResult> {
-  const { client, runtime } = createOssClient();
+export async function createOssBucketDomainToken(bucketName: string, domain: string, options: OssRegionOptions = {}): Promise<OssBucketDomainTokenResult> {
+  const { client, runtime } = createOssClient(options.regionId);
   const bucket = normalizeBucketName(bucketName);
   const normalizedDomain = domain.trim().toLowerCase();
   if (!normalizedDomain) throw new Error('域名不能为空');
@@ -1237,8 +1244,8 @@ export async function createOssBucketDomainToken(bucketName: string, domain: str
   };
 }
 
-export async function bindOssBucketDomain(bucketName: string, domain: string): Promise<OssBucketDomainSummary> {
-  const { client, runtime } = createOssClient();
+export async function bindOssBucketDomain(bucketName: string, domain: string, options: OssRegionOptions = {}): Promise<OssBucketDomainSummary> {
+  const { client, runtime } = createOssClient(options.regionId);
   const bucket = normalizeBucketName(bucketName);
   const normalizedDomain = domain.trim().toLowerCase();
   if (!normalizedDomain) throw new Error('域名不能为空');
@@ -1271,8 +1278,8 @@ export async function bindOssBucketDomain(bucketName: string, domain: string): P
   return domains.find((item) => item.domain === normalizedDomain) || { domain: normalizedDomain };
 }
 
-export async function removeOssBucketDomain(bucketName: string, domain: string): Promise<boolean> {
-  const { client, runtime } = createOssClient();
+export async function removeOssBucketDomain(bucketName: string, domain: string, options: OssRegionOptions = {}): Promise<boolean> {
+  const { client, runtime } = createOssClient(options.regionId);
   const bucket = normalizeBucketName(bucketName);
   const normalizedDomain = domain.trim().toLowerCase();
   if (!normalizedDomain) throw new Error('域名不能为空');
@@ -1300,7 +1307,7 @@ export async function removeOssBucketDomain(bucketName: string, domain: string):
 }
 
 export async function updateOssBucket(bucketName: string, options: UpdateOssBucketOptions): Promise<OssBucketSummary> {
-  const { client, runtime } = createOssClient();
+  const { client, runtime } = createOssClient(options.regionId);
   const bucket = normalizeBucketName(bucketName);
 
   if (!options.acl && options.publicAccessBlock === undefined) {
@@ -1320,11 +1327,11 @@ export async function updateOssBucket(bucketName: string, options: UpdateOssBuck
     await setOssBucketPublicAccessBlockInternal(client, runtime, bucket, true);
   }
 
-  return getOssBucketInfo(bucket);
+  return getOssBucketInfo(bucket, { regionId: options.regionId });
 }
 
-export async function deleteOssBucket(bucketName: string): Promise<OssBucketCleanupResult> {
-  const { client, runtime } = createOssClient();
+export async function deleteOssBucket(bucketName: string, options: OssRegionOptions = {}): Promise<OssBucketCleanupResult> {
+  const { client, runtime } = createOssClient(options.regionId);
   const bucket = normalizeBucketName(bucketName);
   try {
     await withRetry(
@@ -1355,10 +1362,10 @@ export async function deleteOssBucket(bucketName: string): Promise<OssBucketClea
   }
 }
 
-export async function listOssBuckets(limit = 200): Promise<OssBucketSummary[]> {
+export async function listOssBuckets(limit = 200, options: OssRegionOptions = {}): Promise<OssBucketSummary[]> {
   const safeLimit = Math.max(1, Math.min(Math.floor(limit), 1000));
   const pageSize = Math.min(100, safeLimit);
-  const { client, runtime } = createOssClient();
+  const { client, runtime } = createOssClient(options.regionId);
   const buckets: OssBucketSummary[] = [];
   let marker: string | undefined;
   while (buckets.length < safeLimit) {
@@ -1393,8 +1400,8 @@ export async function listOssBuckets(limit = 200): Promise<OssBucketSummary[]> {
   return buckets;
 }
 
-export async function getOssBucketInfo(bucketName: string): Promise<OssBucketSummary> {
-  const { client, runtime } = createOssClient();
+export async function getOssBucketInfo(bucketName: string, options: OssRegionOptions = {}): Promise<OssBucketSummary> {
+  const { client, runtime } = createOssClient(options.regionId);
   const normalized = normalizeBucketName(bucketName);
   const response = await client.getBucketInfoWithOptions(normalized, {}, runtime);
   const bucket = response.body?.bucket;
@@ -1418,8 +1425,8 @@ export async function getOssBucketInfo(bucketName: string): Promise<OssBucketSum
   };
 }
 
-export async function listOssObjects(bucketName: string, prefix?: string, limit = 200): Promise<OssObjectSummary[]> {
-  const { client, runtime } = createOssClient();
+export async function listOssObjects(bucketName: string, prefix?: string, limit = 200, options: OssRegionOptions = {}): Promise<OssObjectSummary[]> {
+  const { client, runtime } = createOssClient(options.regionId);
   const normalized = bucketName.trim();
   if (!normalized) throw new Error('bucket 名称不能为空');
 
@@ -1458,8 +1465,8 @@ export async function listOssObjects(bucketName: string, prefix?: string, limit 
   return objects;
 }
 
-export async function getOssObjectInfo(bucketName: string, objectKey: string): Promise<OssObjectInfo> {
-  const { client, runtime } = createOssClient();
+export async function getOssObjectInfo(bucketName: string, objectKey: string, options: OssRegionOptions = {}): Promise<OssObjectInfo> {
+  const { client, runtime } = createOssClient(options.regionId);
   const bucket = normalizeBucketName(bucketName);
   const key = normalizeOssObjectKey(objectKey);
   const response = await withRetry(
@@ -1479,8 +1486,8 @@ export async function getOssObjectInfo(bucketName: string, objectKey: string): P
   return toOssObjectInfo(bucket, key, response.headers);
 }
 
-export async function downloadOssObject(bucketName: string, objectKey: string, filePath: string): Promise<OssDownloadObjectResult> {
-  const { client, runtime } = createOssClient();
+export async function downloadOssObject(bucketName: string, objectKey: string, filePath: string, options: OssRegionOptions = {}): Promise<OssDownloadObjectResult> {
+  const { client, runtime } = createOssClient(options.regionId);
   const bucket = normalizeBucketName(bucketName);
   const key = normalizeOssObjectKey(objectKey);
   const normalizedFilePath = filePath.trim();
@@ -1531,8 +1538,8 @@ export function createSignedOssGetUrl(
   };
 }
 
-export async function deleteOssObject(bucketName: string, objectKey: string): Promise<OssDeleteObjectResult> {
-  const { client, runtime } = createOssClient();
+export async function deleteOssObject(bucketName: string, objectKey: string, options: OssRegionOptions = {}): Promise<OssDeleteObjectResult> {
+  const { client, runtime } = createOssClient(options.regionId);
   const bucket = normalizeBucketName(bucketName);
   const key = normalizeOssObjectKey(objectKey);
   try {
@@ -1560,9 +1567,9 @@ export async function deleteOssObject(bucketName: string, objectKey: string): Pr
 export async function downloadOssObjectsToDirectory(
   bucketName: string,
   destinationDir: string,
-  options?: { prefix?: string; concurrency?: number }
+  options?: { regionId?: string; prefix?: string; concurrency?: number }
 ): Promise<OssDownloadDirectoryResult> {
-  const { client, runtime } = createOssClient();
+  const { client, runtime } = createOssClient(options?.regionId);
   const bucket = normalizeBucketName(bucketName);
   const normalizedDestinationDir = destinationDir.trim();
   if (!normalizedDestinationDir) throw new Error('本地目标目录不能为空');
@@ -1618,8 +1625,8 @@ export async function downloadOssObjectsToDirectory(
 }
 
 
-export async function deleteOssBucketRecursively(bucketName: string): Promise<OssBucketCleanupResult> {
-  const { client, runtime } = createOssClient();
+export async function deleteOssBucketRecursively(bucketName: string, options: OssRegionOptions = {}): Promise<OssBucketCleanupResult> {
+  const { client, runtime } = createOssClient(options.regionId);
   const normalized = bucketName.trim();
   if (!normalized) throw new Error('bucket 名称不能为空');
 

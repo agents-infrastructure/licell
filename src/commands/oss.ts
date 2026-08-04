@@ -103,7 +103,18 @@ function buildOssDomainVerificationHint(domain: string, token: string) {
   } as const;
 }
 
+const ossRegionOption = {
+  rawName: '--region <regionId>',
+  description: 'OSS 地域；仅覆盖当前命令，不传则使用 licell 默认 region'
+} as const;
+
+function toOssRegionOptions(region: unknown) {
+  const regionId = toOptionalString(region);
+  return regionId ? { regionId } : undefined;
+}
+
 const uploadCommandOptions = [
+  ossRegionOption,
   { rawName: '--bucket <bucket>', description: 'Bucket 名称（可替代位置参数）' },
   { rawName: '--source-dir <dir>', description: '本地目录（默认 dist）' },
   { rawName: '--target-dir <dir>', description: 'Bucket 内目标目录前缀（如 mysite 或 mysite/v2）' }
@@ -113,6 +124,7 @@ const ossListCommand = defineCliCommand({
   rawName: 'oss list',
   description: '查看 OSS Bucket 列表',
   options: [
+    ossRegionOption,
     { rawName: '--limit <n>', description: '返回数量，默认 50' }
   ],
   descriptor: {
@@ -123,6 +135,7 @@ const ossListCommand = defineCliCommand({
 const ossInfoCommand = defineCliCommand({
   rawName: 'oss info <bucket>',
   description: '查看 OSS Bucket 详情（含 ACL / 公共访问阻止 / 域名）',
+  options: [ossRegionOption],
   descriptor: {
     summary: '查看 Bucket 基本信息，并补充 ACL、公共访问阻止、已绑定域名。',
     examples: ['licell oss info my-bucket', 'licell oss info my-bucket --output json']
@@ -133,6 +146,7 @@ const ossCreateCommand = defineCliCommand({
   rawName: 'oss create <bucket>',
   description: '创建 OSS Bucket',
   options: [
+    ossRegionOption,
     { rawName: '--acl <acl>', description: 'Bucket ACL：private / public-read / public-read-write' },
     { rawName: '--storage-class <class>', description: '默认存储类型：standard / ia / archive / cold-archive / deep-cold-archive' },
     { rawName: '--redundancy <type>', description: '冗余类型：lrs / zrs' },
@@ -168,6 +182,7 @@ const ossUpdateCommand = defineCliCommand({
   rawName: 'oss update <bucket>',
   description: '更新 OSS Bucket 属性（ACL / 公共访问阻止）',
   options: [
+    ossRegionOption,
     { rawName: '--acl <acl>', description: 'Bucket ACL：private / public-read / public-read-write' },
     { rawName: '--public-access-block <mode>', description: 'Bucket 级公共访问阻止：on / off' }
   ],
@@ -184,6 +199,7 @@ const ossRmCommand = defineCliCommand({
   rawName: 'oss rm <bucket>',
   description: '删除 OSS Bucket（默认仅删空 Bucket）',
   options: [
+    ossRegionOption,
     { rawName: '--recursive', description: '先删除对象，再删除 Bucket（危险）' },
     { rawName: '--yes', description: '跳过二次确认（危险）' }
   ],
@@ -201,6 +217,7 @@ const ossLsCommand = defineCliCommand({
   rawName: 'oss ls <bucket> [prefix]',
   description: '列出 Bucket 对象',
   options: [
+    ossRegionOption,
     { rawName: '--limit <n>', description: '返回数量，默认 100' }
   ],
   descriptor: {
@@ -212,9 +229,13 @@ const ossLsCommand = defineCliCommand({
 const ossObjectInfoCommand = defineCliCommand({
   rawName: 'oss object info <bucket> <key>',
   description: '查看 OSS 对象元数据',
+  options: [ossRegionOption],
   descriptor: {
     summary: '查看对象元数据（长度 / Content-Type / ETag / 用户自定义 metadata）。',
-    examples: ['licell oss object info my-bucket site/index.html', 'licell oss object info my-bucket site/index.html --output json']
+    examples: [
+      'licell oss object info my-bucket site/index.html',
+      'licell oss object info my-bucket site/index.html --region cn-hangzhou --output json'
+    ]
   }
 });
 
@@ -222,11 +243,15 @@ const ossObjectGetCommand = defineCliCommand({
   rawName: 'oss object get <bucket> <key> [file]',
   description: '下载 OSS 对象到本地文件',
   options: [
+    ossRegionOption,
     { rawName: '--file <path>', description: '本地文件路径（可替代位置参数）' }
   ],
   descriptor: {
     summary: '下载单个对象到本地文件。',
-    examples: ['licell oss object get my-bucket site/index.html ./index.html', 'licell oss object get my-bucket site/app.js --file ./downloads/app.js'],
+    examples: [
+      'licell oss object get my-bucket site/index.html ./index.html',
+      'licell oss object get my-bucket site/app.js --file ./downloads/app.js --region cn-hangzhou'
+    ],
     optionInsights: {
       '--file': {
         whenToUse: '需要把对象保存到指定本地路径，而不是默认文件名时使用。',
@@ -240,6 +265,7 @@ const ossObjectRmCommand = defineCliCommand({
   rawName: 'oss object rm <bucket> <key>',
   description: '删除 OSS 对象',
   options: [
+    ossRegionOption,
     { rawName: '--yes', description: '跳过二次确认（危险）' }
   ],
   descriptor: {
@@ -255,6 +281,7 @@ const ossObjectRmCommand = defineCliCommand({
 const ossDomainListCommand = defineCliCommand({
   rawName: 'oss domain list <bucket>',
   description: '查看 Bucket 已绑定的原生 OSS 域名',
+  options: [ossRegionOption],
   descriptor: {
     examples: ['licell oss domain list my-bucket', 'licell oss domain list my-bucket --output json']
   }
@@ -263,6 +290,7 @@ const ossDomainListCommand = defineCliCommand({
 const ossDomainTokenCommand = defineCliCommand({
   rawName: 'oss domain token <bucket> <domain>',
   description: '为 Bucket 自定义域名生成 TXT 验证 token',
+  options: [ossRegionOption],
   descriptor: {
     summary: '为待绑定的 OSS 自定义域名生成 TXT 验证 token。',
     examples: ['licell oss domain token my-bucket static.example.com', 'licell oss domain token my-bucket static.example.com --output json'],
@@ -287,6 +315,7 @@ const ossDomainTokenCommand = defineCliCommand({
 const ossDomainBindCommand = defineCliCommand({
   rawName: 'oss domain bind <bucket> <domain>',
   description: '为 Bucket 绑定原生 OSS 自定义域名',
+  options: [ossRegionOption],
   descriptor: {
     safety: {
       level: 'mutating',
@@ -309,6 +338,7 @@ const ossDomainUnbindCommand = defineCliCommand({
   rawName: 'oss domain unbind <bucket> <domain>',
   description: '解绑 Bucket 原生 OSS 自定义域名',
   options: [
+    ossRegionOption,
     { rawName: '--yes', description: '跳过二次确认（危险）' }
   ],
   descriptor: {
@@ -364,6 +394,7 @@ const ossSyncDownCommand = defineCliCommand({
   rawName: 'oss sync down <bucket> [prefix]',
   description: '批量下载 Bucket 对象到本地目录',
   options: [
+    ossRegionOption,
     { rawName: '--dest-dir <dir>', description: '本地目标目录（默认 oss-download/<bucket>）' }
   ],
   descriptor: {
@@ -380,7 +411,7 @@ const ossSyncDownCommand = defineCliCommand({
 
 export function registerOssCommands(cli: CAC) {
   registerCliCommand(cli, ossListCommand)
-    .action(async (options: { limit?: unknown }) => {
+    .action(async (options: { region?: unknown; limit?: unknown }) => {
       await executeWithAuthRecovery(
         {
           commandLabel: commandInvocation(ossListCommand),
@@ -389,13 +420,14 @@ export function registerOssCommands(cli: CAC) {
         },
         async () => {
           ensureAuthOrExit();
+          const regionOptions = toOssRegionOptions(options.region);
           const limit = parseListLimit(options.limit, 50, 500);
           const s = createSpinner();
           const buckets = await withSpinner(
             s,
             '正在拉取 OSS Bucket 列表...',
             '❌ 获取 Bucket 列表失败',
-            () => listOssBuckets(limit)
+            () => listOssBuckets(limit, regionOptions)
           );
           if (!buckets) return;
           if (!isJsonOutput()) {
@@ -422,7 +454,7 @@ export function registerOssCommands(cli: CAC) {
     });
 
   registerCliCommand(cli, ossInfoCommand)
-    .action(async (bucket: string) => {
+    .action(async (bucket: string, options: { region?: unknown }) => {
       await executeWithAuthRecovery(
         {
           commandLabel: commandInvocation(ossInfoCommand),
@@ -432,12 +464,13 @@ export function registerOssCommands(cli: CAC) {
         async () => {
           ensureAuthOrExit();
           const bucketName = toPromptValue(bucket, 'bucket');
+          const regionOptions = toOssRegionOptions(options.region);
           const s = createSpinner();
           const info = await withSpinner(
             s,
             `正在拉取 Bucket ${bucketName} 详情...`,
             '❌ 获取 Bucket 详情失败',
-            () => getOssBucketInfo(bucketName)
+            () => getOssBucketInfo(bucketName, regionOptions)
           );
           if (!info) return;
           if (!isJsonOutput()) {
@@ -457,7 +490,7 @@ export function registerOssCommands(cli: CAC) {
     });
 
   registerCliCommand(cli, ossCreateCommand)
-    .action(async (bucket: string, options: { acl?: unknown; storageClass?: unknown; redundancy?: unknown; publicAccessBlock?: unknown }) => {
+    .action(async (bucket: string, options: { region?: unknown; acl?: unknown; storageClass?: unknown; redundancy?: unknown; publicAccessBlock?: unknown }) => {
       await executeWithAuthRecovery(
         {
           commandLabel: commandInvocation(ossCreateCommand),
@@ -471,6 +504,7 @@ export function registerOssCommands(cli: CAC) {
           const storageClass = toOptionalString(options.storageClass);
           const redundancy = toOptionalString(options.redundancy);
           const publicAccessBlock = parsePublicAccessBlockOption(options.publicAccessBlock);
+          const regionOptions = toOssRegionOptions(options.region);
 
           const s = createSpinner();
           const result = await withSpinner(
@@ -478,6 +512,7 @@ export function registerOssCommands(cli: CAC) {
             `正在创建 Bucket ${bucketName}...`,
             '❌ 创建 Bucket 失败',
             () => createOssBucket(bucketName, {
+              ...(regionOptions || {}),
               acl: acl ? normalizeOssBucketAcl(acl) : undefined,
               storageClass: storageClass ? normalizeOssBucketStorageClass(storageClass) : undefined,
               dataRedundancyType: redundancy ? normalizeOssBucketDataRedundancyType(redundancy) : undefined,
@@ -503,7 +538,7 @@ export function registerOssCommands(cli: CAC) {
     });
 
   registerCliCommand(cli, ossUpdateCommand)
-    .action(async (bucket: string, options: { acl?: unknown; publicAccessBlock?: unknown }) => {
+    .action(async (bucket: string, options: { region?: unknown; acl?: unknown; publicAccessBlock?: unknown }) => {
       await executeWithAuthRecovery(
         {
           commandLabel: commandInvocation(ossUpdateCommand),
@@ -515,6 +550,7 @@ export function registerOssCommands(cli: CAC) {
           const bucketName = toPromptValue(bucket, 'bucket');
           const acl = toOptionalString(options.acl);
           const publicAccessBlock = parsePublicAccessBlockOption(options.publicAccessBlock);
+          const regionOptions = toOssRegionOptions(options.region);
           if (!acl && publicAccessBlock === undefined) {
             throw new Error('oss update 至少需要一个变更：--acl 或 --public-access-block');
           }
@@ -525,6 +561,7 @@ export function registerOssCommands(cli: CAC) {
             `正在更新 Bucket ${bucketName} 配置...`,
             '❌ 更新 Bucket 配置失败',
             () => updateOssBucket(bucketName, {
+              ...(regionOptions || {}),
               acl: acl ? normalizeOssBucketAcl(acl) : undefined,
               publicAccessBlock
             })
@@ -547,7 +584,7 @@ export function registerOssCommands(cli: CAC) {
     });
 
   registerCliCommand(cli, ossRmCommand)
-    .action(async (bucket: string, options: { recursive?: boolean; yes?: boolean }) => {
+    .action(async (bucket: string, options: { region?: unknown; recursive?: boolean; yes?: boolean }) => {
       await executeWithAuthRecovery(
         {
           commandLabel: commandInvocation(ossRmCommand),
@@ -557,6 +594,7 @@ export function registerOssCommands(cli: CAC) {
         async () => {
           ensureAuthOrExit();
           const bucketName = toPromptValue(bucket, 'bucket');
+          const regionOptions = toOssRegionOptions(options.region);
           await ensureDestructiveActionConfirmed(
             options.recursive ? `递归删除 OSS Bucket ${bucketName}` : `删除 OSS Bucket ${bucketName}`,
             { yes: Boolean(options.yes) }
@@ -569,7 +607,9 @@ export function registerOssCommands(cli: CAC) {
               ? `正在递归删除 Bucket ${bucketName} 及其对象...`
               : `正在删除空 Bucket ${bucketName}...`,
             '❌ 删除 Bucket 失败',
-            () => (options.recursive ? deleteOssBucketRecursively(bucketName) : deleteOssBucket(bucketName))
+            () => (options.recursive
+              ? deleteOssBucketRecursively(bucketName, regionOptions)
+              : deleteOssBucket(bucketName, regionOptions))
           );
           if (!result) return;
 
@@ -594,7 +634,7 @@ export function registerOssCommands(cli: CAC) {
     });
 
   registerCliCommand(cli, ossLsCommand)
-    .action(async (bucket: string, prefix: string | undefined, options: { limit?: unknown }) => {
+    .action(async (bucket: string, prefix: string | undefined, options: { region?: unknown; limit?: unknown }) => {
       await executeWithAuthRecovery(
         {
           commandLabel: commandInvocation(ossLsCommand),
@@ -605,13 +645,14 @@ export function registerOssCommands(cli: CAC) {
           ensureAuthOrExit();
           const bucketName = toPromptValue(bucket, 'bucket');
           const normalizedPrefix = toOptionalString(prefix);
+          const regionOptions = toOssRegionOptions(options.region);
           const limit = parseListLimit(options.limit, 100, 2000);
           const s = createSpinner();
           const objects = await withSpinner(
             s,
             `正在列出 ${bucketName} 对象...`,
             '❌ 获取对象列表失败',
-            () => listOssObjects(bucketName, normalizedPrefix || undefined, limit)
+            () => listOssObjects(bucketName, normalizedPrefix || undefined, limit, regionOptions)
           );
           if (!objects) return;
           if (!isJsonOutput()) {
@@ -641,7 +682,7 @@ export function registerOssCommands(cli: CAC) {
 
 
   registerCliCommand(cli, ossObjectInfoCommand)
-    .action(async (bucket: string, key: string) => {
+    .action(async (bucket: string, key: string, options: { region?: unknown }) => {
       await executeWithAuthRecovery(
         {
           commandLabel: commandInvocation(ossObjectInfoCommand),
@@ -652,12 +693,13 @@ export function registerOssCommands(cli: CAC) {
           ensureAuthOrExit();
           const bucketName = toPromptValue(bucket, 'bucket');
           const objectKey = toPromptValue(key, 'key');
+          const regionOptions = toOssRegionOptions(options.region);
           const s = createSpinner();
           const info = await withSpinner(
             s,
             `正在读取 ${bucketName}/${objectKey} 元数据...`,
             '❌ 获取对象元数据失败',
-            () => getOssObjectInfo(bucketName, objectKey)
+            () => getOssObjectInfo(bucketName, objectKey, regionOptions)
           );
           if (!info) return;
           if (!isJsonOutput()) {
@@ -678,7 +720,7 @@ export function registerOssCommands(cli: CAC) {
     });
 
   registerCliCommand(cli, ossObjectGetCommand)
-    .action(async (bucket: string, key: string, file: string | undefined, options: { file?: unknown }) => {
+    .action(async (bucket: string, key: string, file: string | undefined, options: { region?: unknown; file?: unknown }) => {
       await executeWithAuthRecovery(
         {
           commandLabel: commandInvocation(ossObjectGetCommand),
@@ -690,6 +732,7 @@ export function registerOssCommands(cli: CAC) {
           const interactiveTTY = isInteractiveTTY();
           const bucketName = toPromptValue(bucket, 'bucket');
           const objectKey = toPromptValue(key, 'key');
+          const regionOptions = toOssRegionOptions(options.region);
           const outputFile = toOptionalString(options.file)
             || toOptionalString(file)
             || (
@@ -703,7 +746,7 @@ export function registerOssCommands(cli: CAC) {
             s,
             `正在下载 ${bucketName}/${objectKey} 到 ${outputFile}...`,
             '❌ 对象下载失败',
-            () => downloadOssObject(bucketName, objectKey, outputFile)
+            () => downloadOssObject(bucketName, objectKey, outputFile, regionOptions)
           );
           if (!result) return;
           if (!isJsonOutput()) {
@@ -731,7 +774,7 @@ export function registerOssCommands(cli: CAC) {
     });
 
   registerCliCommand(cli, ossObjectRmCommand)
-    .action(async (bucket: string, key: string, options: { yes?: boolean }) => {
+    .action(async (bucket: string, key: string, options: { region?: unknown; yes?: boolean }) => {
       await executeWithAuthRecovery(
         {
           commandLabel: commandInvocation(ossObjectRmCommand),
@@ -742,6 +785,7 @@ export function registerOssCommands(cli: CAC) {
           ensureAuthOrExit();
           const bucketName = toPromptValue(bucket, 'bucket');
           const objectKey = toPromptValue(key, 'key');
+          const regionOptions = toOssRegionOptions(options.region);
           await ensureDestructiveActionConfirmed(
             `删除 OSS 对象 ${bucketName}/${objectKey}`,
             { yes: Boolean(options.yes) }
@@ -752,7 +796,7 @@ export function registerOssCommands(cli: CAC) {
             s,
             `正在删除 ${bucketName}/${objectKey}...`,
             '❌ 删除对象失败',
-            () => deleteOssObject(bucketName, objectKey)
+            () => deleteOssObject(bucketName, objectKey, regionOptions)
           );
           if (!result) return;
           if (!isJsonOutput()) {
@@ -775,7 +819,7 @@ export function registerOssCommands(cli: CAC) {
     });
 
   registerCliCommand(cli, ossDomainListCommand)
-    .action(async (bucket: string) => {
+    .action(async (bucket: string, options: { region?: unknown }) => {
       await executeWithAuthRecovery(
         {
           commandLabel: commandInvocation(ossDomainListCommand),
@@ -785,12 +829,13 @@ export function registerOssCommands(cli: CAC) {
         async () => {
           ensureAuthOrExit();
           const bucketName = toPromptValue(bucket, 'bucket');
+          const regionOptions = toOssRegionOptions(options.region);
           const s = createSpinner();
           const domains = await withSpinner(
             s,
             `正在获取 Bucket ${bucketName} 的域名绑定...`,
             '❌ 获取 Bucket 域名失败',
-            () => listOssBucketDomains(bucketName)
+            () => listOssBucketDomains(bucketName, regionOptions)
           );
           if (!domains) return;
           if (!isJsonOutput()) {
@@ -818,7 +863,7 @@ export function registerOssCommands(cli: CAC) {
     });
 
   registerCliCommand(cli, ossDomainTokenCommand)
-    .action(async (bucket: string, domain: string) => {
+    .action(async (bucket: string, domain: string, options: { region?: unknown }) => {
       await executeWithAuthRecovery(
         {
           commandLabel: commandInvocation(ossDomainTokenCommand),
@@ -829,12 +874,13 @@ export function registerOssCommands(cli: CAC) {
           ensureAuthOrExit();
           const bucketName = toPromptValue(bucket, 'bucket');
           const normalizedDomain = normalizeCustomDomain(domain);
+          const regionOptions = toOssRegionOptions(options.region);
           const s = createSpinner();
           const token = await withSpinner(
             s,
             `正在为 ${normalizedDomain} 生成 OSS 域名验证 token...`,
             '❌ 生成域名验证 token 失败',
-            () => createOssBucketDomainToken(bucketName, normalizedDomain)
+            () => createOssBucketDomainToken(bucketName, normalizedDomain, regionOptions)
           );
           if (!token) return;
           const hint = buildOssDomainVerificationHint(normalizedDomain, token.token);
@@ -863,7 +909,7 @@ export function registerOssCommands(cli: CAC) {
     });
 
   registerCliCommand(cli, ossDomainBindCommand)
-    .action(async (bucket: string, domain: string) => {
+    .action(async (bucket: string, domain: string, options: { region?: unknown }) => {
       await executeWithAuthRecovery(
         {
           commandLabel: commandInvocation(ossDomainBindCommand),
@@ -874,12 +920,13 @@ export function registerOssCommands(cli: CAC) {
           ensureAuthOrExit();
           const bucketName = toPromptValue(bucket, 'bucket');
           const normalizedDomain = normalizeCustomDomain(domain);
+          const regionOptions = toOssRegionOptions(options.region);
           const s = createSpinner();
           const binding = await withSpinner(
             s,
             `正在为 Bucket ${bucketName} 绑定域名 ${normalizedDomain}...`,
             '❌ Bucket 域名绑定失败',
-            () => bindOssBucketDomain(bucketName, normalizedDomain)
+            () => bindOssBucketDomain(bucketName, normalizedDomain, regionOptions)
           );
           if (!binding) return;
           if (!isJsonOutput()) {
@@ -902,7 +949,7 @@ export function registerOssCommands(cli: CAC) {
     });
 
   registerCliCommand(cli, ossDomainUnbindCommand)
-    .action(async (bucket: string, domain: string, options: { yes?: boolean }) => {
+    .action(async (bucket: string, domain: string, options: { region?: unknown; yes?: boolean }) => {
       await executeWithAuthRecovery(
         {
           commandLabel: commandInvocation(ossDomainUnbindCommand),
@@ -913,6 +960,7 @@ export function registerOssCommands(cli: CAC) {
           ensureAuthOrExit();
           const bucketName = toPromptValue(bucket, 'bucket');
           const normalizedDomain = normalizeCustomDomain(domain);
+          const regionOptions = toOssRegionOptions(options.region);
           await ensureDestructiveActionConfirmed(`解绑 Bucket ${bucketName} 的 OSS 域名 ${normalizedDomain}`, { yes: Boolean(options.yes) });
 
           const s = createSpinner();
@@ -921,7 +969,7 @@ export function registerOssCommands(cli: CAC) {
             `正在解绑域名 ${normalizedDomain}...`,
             '❌ 解绑 Bucket 域名失败',
             async () => ({
-              unbound: await removeOssBucketDomain(bucketName, normalizedDomain)
+              unbound: await removeOssBucketDomain(bucketName, normalizedDomain, regionOptions)
             })
           );
           if (!result) return;
@@ -948,7 +996,7 @@ export function registerOssCommands(cli: CAC) {
     options: { stage: string }
   ) => {
     registerCliCommand(cli, command)
-      .action(async (bucket: string | undefined, actionOptions: { bucket?: unknown; sourceDir?: unknown; targetDir?: unknown }) => {
+      .action(async (bucket: string | undefined, actionOptions: { region?: unknown; bucket?: unknown; sourceDir?: unknown; targetDir?: unknown }) => {
         await executeWithAuthRecovery(
           {
             commandLabel: commandInvocation(command),
@@ -974,13 +1022,17 @@ export function registerOssCommands(cli: CAC) {
                   : 'dist'
               );
             const targetDir = toOptionalString(actionOptions.targetDir);
+            const regionOptions = toOssRegionOptions(actionOptions.region);
 
             const s = createSpinner();
             const result = await withSpinner(
               s,
               `正在上传 ${sourceDir} 到 OSS Bucket ${bucketName}${targetDir ? `/${targetDir}` : ''}...`,
               '❌ OSS 目录上传失败',
-              () => uploadDirectoryToBucket(bucketName, sourceDir, { targetDir })
+              () => uploadDirectoryToBucket(bucketName, sourceDir, {
+                ...(regionOptions || {}),
+                targetDir
+              })
             );
             if (!result) return;
 
@@ -1014,7 +1066,7 @@ bucket: ${pc.cyan(result.bucket)}`);
   };
 
   registerCliCommand(cli, ossSyncDownCommand)
-    .action(async (bucket: string, prefix: string | undefined, options: { destDir?: unknown }) => {
+    .action(async (bucket: string, prefix: string | undefined, options: { region?: unknown; destDir?: unknown }) => {
       await executeWithAuthRecovery(
         {
           commandLabel: commandInvocation(ossSyncDownCommand),
@@ -1026,6 +1078,7 @@ bucket: ${pc.cyan(result.bucket)}`);
           const interactiveTTY = isInteractiveTTY();
           const bucketName = toPromptValue(bucket, 'bucket');
           const normalizedPrefix = toOptionalString(prefix);
+          const regionOptions = toOssRegionOptions(options.region);
           const destDir = toOptionalString(options.destDir)
             || (
               interactiveTTY
@@ -1038,7 +1091,10 @@ bucket: ${pc.cyan(result.bucket)}`);
             s,
             `正在下载 ${bucketName}${normalizedPrefix ? `/${normalizedPrefix}` : ''} 到 ${destDir}...`,
             '❌ OSS 批量下载失败',
-            () => downloadOssObjectsToDirectory(bucketName, destDir, { prefix: normalizedPrefix || undefined })
+            () => downloadOssObjectsToDirectory(bucketName, destDir, {
+              ...(regionOptions || {}),
+              prefix: normalizedPrefix || undefined
+            })
           );
           if (!result) return;
           if (!isJsonOutput()) {
@@ -1085,14 +1141,15 @@ export const ossCommandModule = defineCommandModule({
       summary: 'OSS Bucket 的创建、属性配置、原生域名绑定与对象上传/下载/删除/同步。',
       notes: [
         '`deploy static` 的生产域名默认走 CDN(sourceType=oss) + DNS；这里补充的是 OSS Bucket 原生管理能力。',
-        '首次绑定 OSS 原生域名前，通常先执行 `licell oss domain token`，再添加 TXT 验证记录。'
+        '首次绑定 OSS 原生域名前，通常先执行 `licell oss domain token`，再添加 TXT 验证记录。',
+        '所有 OSS 子命令都支持 `--region <regionId>` 覆盖当前调用的地域；未传时使用 licell 默认 region，且覆盖不会写回全局配置。'
       ],
       examples: [
         'licell oss list',
         'licell oss create my-bucket --acl private',
         'licell oss info my-bucket',
         'licell oss object info my-bucket site/index.html',
-        'licell oss object get my-bucket site/index.html ./index.html',
+        'licell oss object get my-bucket site/index.html ./index.html --region cn-hangzhou',
         'licell oss sync down my-bucket site --dest-dir ./downloads/site'
       ],
       agentTips: [
