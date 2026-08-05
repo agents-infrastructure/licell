@@ -1,9 +1,9 @@
 ---
 epic: ../epics/command-region-overrides.md
-phase: executing
+phase: accepting
 approved_revision: 4e51507401b921732725f2f78388b214c6a69004e4b3530bf11512e6580f3c62
-current_item: ITEM-5
-next_action: 统一迁移既有 regional metadata，并用机械守卫收口 87 个命令、结果合同与生成表面
+current_item: FINAL-ACCEPTANCE
+next_action: 由 fresh reviewer 按批准合同审查完整实现范围与最终验证证据
 blocked_by: null
 item_progression: continuous
 milestone_commit: authorized
@@ -16,7 +16,7 @@ remote_publish: manual
 - [x] ITEM-2
 - [x] ITEM-3
 - [x] ITEM-4
-- [ ] ITEM-5
+- [x] ITEM-5
 
 ## 临时决策与证据
 
@@ -42,3 +42,5 @@ remote_publish: manual
 - 2026-08-05：ITEM-4 第一轮 change review 由 Paseo agent `5cf2bf4c-3651-462f-b962-ae484552ddc6` 使用 `claude/claude-opus-5`、plan 模式只读完成；冻结 staged diff SHA-256 `85408bb09648e4cb334c848a9688d9df42f3f479c4b6781bf063bd8ce0615a10`，结论 `needs changes`，生产地域语义通过但顶层 E2E home 生命周期和 auth export raw/effective 分离仅有 helper/mock 假绿。
 - 2026-08-05：ITEM-4 第二轮复审冻结 SHA-256 `0c362ebee9cc63e60dcb6a8b1734e90ae2ca49d9232f216a7e22191af0da523e`，同一 reviewer 核销 B-1/B-2 及 I-1/I-3/I-4/I-5，结论 `approve`、无新增 blocking/important；真实 spawn runner、auto/standalone cleanup、真实 CAC auth export 加密包和 workspace doctor 聚合均有回归证据。
 - 2026-08-05：ITEM-4 测试卫生修订后最终冻结 SHA-256 `d4382d9fadd6f34454c6d349d666031b4619867d93075b43fda8ede696c35e15`，同一 reviewer 第三轮极窄复核维持 `approve`；测试使用唯一 tmp basename、临时 HOME 与 partial child_process mock，不会触碰并发 E2E home 或本机 ACME。auth export、doctor/workspace doctor、E2E run/cleanup 共 5 个命令完成 scope 覆盖；`bun run typecheck`、`bun run docs:check`、`bun run build` 通过，`bun run test:integration` 7/7，`bun run test:ci` 149 files / 1080 tests 全绿。
+- 2026-08-05：ITEM-5 第一轮 change review 由 Paseo agent `79772085-52f2-46c1-b4fd-b0eaae864a67` 使用 `claude/claude-opus-5`、plan 模式只读完成；冻结 staged diff SHA-256 `15bb9476d388c933558f4ccab3531660cbd96896ba1c9d431b1dd90fd6393fb8`，结论 `passed`、无 blocking，提出运行时行为证据、metadata 自洽守卫与 raw-auth 静态扫描 3 项 important。
+- 2026-08-05：ITEM-5 第二轮复审冻结 SHA-256 `5c84ef676987e19b8bb161e1bf2fa59965b91c59a14b86f4e4c86f2fa496b196`，同一 reviewer/lineage 结论 `approve / passed`、无 blocking/important；OSS/ECS/logs 三族真实 CAC→ALS→provider→structured result 链路均 capture `cn-shanghai`，116 个命令完成 `87 regional + 5 default configuration + 24 explicit exclusion` 三态分类，17 处 raw `Config.getAuth()` 由静态基线守卫锁定。`bun run typecheck`、`bun run docs:check`、`bun run build` 通过，`bun run test:integration` 7/7，`bun run test:ci` 151 files / 1090 tests 全绿；里程碑 commit 为 `d1b77de`。
