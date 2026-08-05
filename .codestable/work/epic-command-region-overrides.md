@@ -1,9 +1,9 @@
 ---
 epic: ../epics/command-region-overrides.md
-phase: accepting
+phase: acceptance
 approved_revision: 4e51507401b921732725f2f78388b214c6a69004e4b3530bf11512e6580f3c62
 current_item: FINAL-ACCEPTANCE
-next_action: 由 fresh reviewer 按批准合同审查完整实现范围与最终验证证据
+next_action: 等待 owner 最终接受完整 Region Epic，并明确接受既有 VPC binding 在探测瞬时错误时 fail closed 的兼容性取舍
 blocked_by: null
 item_progression: continuous
 milestone_commit: authorized
@@ -44,3 +44,5 @@ remote_publish: manual
 - 2026-08-05：ITEM-4 测试卫生修订后最终冻结 SHA-256 `d4382d9fadd6f34454c6d349d666031b4619867d93075b43fda8ede696c35e15`，同一 reviewer 第三轮极窄复核维持 `approve`；测试使用唯一 tmp basename、临时 HOME 与 partial child_process mock，不会触碰并发 E2E home 或本机 ACME。auth export、doctor/workspace doctor、E2E run/cleanup 共 5 个命令完成 scope 覆盖；`bun run typecheck`、`bun run docs:check`、`bun run build` 通过，`bun run test:integration` 7/7，`bun run test:ci` 149 files / 1080 tests 全绿。
 - 2026-08-05：ITEM-5 第一轮 change review 由 Paseo agent `79772085-52f2-46c1-b4fd-b0eaae864a67` 使用 `claude/claude-opus-5`、plan 模式只读完成；冻结 staged diff SHA-256 `15bb9476d388c933558f4ccab3531660cbd96896ba1c9d431b1dd90fd6393fb8`，结论 `passed`、无 blocking，提出运行时行为证据、metadata 自洽守卫与 raw-auth 静态扫描 3 项 important。
 - 2026-08-05：ITEM-5 第二轮复审冻结 SHA-256 `5c84ef676987e19b8bb161e1bf2fa59965b91c59a14b86f4e4c86f2fa496b196`，同一 reviewer/lineage 结论 `approve / passed`、无 blocking/important；OSS/ECS/logs 三族真实 CAC→ALS→provider→structured result 链路均 capture `cn-shanghai`，116 个命令完成 `87 regional + 5 default configuration + 24 explicit exclusion` 三态分类，17 处 raw `Config.getAuth()` 由静态基线守卫锁定。`bun run typecheck`、`bun run docs:check`、`bun run build` 通过，`bun run test:integration` 7/7，`bun run test:ci` 151 files / 1090 tests 全绿；里程碑 commit 为 `d1b77de`。
+- 2026-08-05：fresh final acceptance reviewer 使用 Paseo agent `32fd19a8-7eaf-4135-b368-c19d35a87699`、`claude/claude-opus-5`、plan 模式只读审查完整范围 `abf9c990..efda38e`；Epic 合同 SHA-256 `4e51507401b921732725f2f78388b214c6a69004e4b3530bf11512e6580f3c62`、完整 diff SHA-256 `17afa9bcab7072d8765c28fe3fa9299100c21d65d8546f0e55d05d4a80bb6bf1` 均一致且无目标漂移，结论 `approve / passed`、无 blocking。
+- 2026-08-05：final reviewer 独立复跑 `bun run typecheck`、`bun run test:ci`（151 files / 1090 tests）、`bun run test:integration`（7/7）与 `bun run docs:check`（4 targets），全部通过；逐项确认 10 条验收标准、ITEM-1 至 ITEM-5、`87 regional + 5 default configuration + 24 explicit exclusion = 116`、四类 scope、provider capture、E2E 生命周期与生成表面。唯一 Important 为已有 VPC binding 在复用前新增 Describe 校验，限流/权限等瞬时错误会 fail closed；该行为符合验收 7 并有回归锁定，但需要 owner 在终态 gate 明确接受兼容性取舍。
