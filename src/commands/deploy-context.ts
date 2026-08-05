@@ -23,6 +23,7 @@ import { isJsonOutput } from '../utils/output';
 
 export interface DeployCliOptions {
   component?: string;
+  region?: string;
   target?: string;
   domain?: string;
   domainSuffix?: string;

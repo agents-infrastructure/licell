@@ -24,6 +24,7 @@ import { emitCommandResult, isJsonOutput } from '../utils/output';
 const domainStaticBindCommand = defineCliCommand({
   rawName: 'domain static bind <domain>',
   description: '为静态站点编排 CDN、DNS 与可选 HTTPS',
+  region: { scope: 'project' },
   options: [
     { rawName: '--component <name>', description: '在 workspace / monorepo 根目录显式选择 component' },
     { rawName: '--bucket <bucket>', description: '指定已有 OSS Bucket；默认使用当前项目推导出的 Bucket' },
@@ -65,6 +66,7 @@ const domainStaticBindCommand = defineCliCommand({
 const domainStaticUnbindCommand = defineCliCommand({
   rawName: 'domain static unbind <domain>',
   description: '解绑静态站点域名，并清理 CDN / DNS',
+  region: { scope: 'project' },
   descriptor: {
     summary: '解绑静态站点域名，并清理对应 CDN domain / DNS CNAME。',
     safety: {

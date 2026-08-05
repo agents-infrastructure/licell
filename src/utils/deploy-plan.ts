@@ -1,6 +1,7 @@
 import type { ProjectConfig, WorkspaceConfigSnapshot } from './config';
 import { Config } from './config';
 import { readLicellState } from './project-state';
+import { normalizeRegionId } from './region-context';
 import { normalizeComponentName } from './workspace-config';
 
 export interface DeployPlanIssue {
@@ -33,6 +34,7 @@ interface DeployPlanSelectionInput {
   component?: string;
   include?: string;
   exclude?: string;
+  region?: string;
   cwd?: string;
 }
 
@@ -59,7 +61,12 @@ function inferExpectedUrl(project: ProjectConfig) {
   return null;
 }
 
-function buildPlanForProject(component: string, project: ProjectConfig, path?: string): DeployPlanComponent {
+function buildPlanForProject(
+  component: string,
+  project: ProjectConfig,
+  path?: string,
+  invocationRegion?: string
+): DeployPlanComponent {
   const deployType = project.deployType || (project.deployTarget?.service === 'oss-static' ? 'static' : undefined);
   const issues: DeployPlanIssue[] = [];
   const artifact = deployType === 'static'
@@ -77,7 +84,7 @@ function buildPlanForProject(component: string, project: ProjectConfig, path?: s
   const target = deployType === 'static'
     ? {
       service: project.deployTarget?.service || 'oss-static',
-      region: project.deployTarget?.region || project.region || null,
+      region: invocationRegion || project.region || null,
       bucket: project.deployTarget?.bucket || (project.appName ? `licell-${project.appName}${Config.getAuth()?.accountId ? `-${Config.getAuth()!.accountId.substring(0, 4)}` : ''}` : null),
       function: null,
       alias: null,
@@ -86,7 +93,7 @@ function buildPlanForProject(component: string, project: ProjectConfig, path?: s
     }
     : {
       service: project.deployTarget?.service || (deployType === 'task' ? 'fc-task' : 'fc-http'),
-      region: project.deployTarget?.region || project.region || null,
+      region: invocationRegion || project.region || null,
       bucket: null,
       function: project.deployTarget?.function || project.appName || null,
       alias: project.deployTarget?.alias || project.target || null,
@@ -118,7 +125,12 @@ function buildPlanForProject(component: string, project: ProjectConfig, path?: s
     artifact,
     target,
     route,
-    command: component === 'default' ? 'licell deploy --output json' : `licell deploy --component ${component} --output json`,
+    command: [
+      'licell deploy',
+      ...(component === 'default' ? [] : ['--component', component]),
+      ...(invocationRegion ? ['--region', invocationRegion] : []),
+      '--output json'
+    ].join(' '),
     expectedUrl: inferExpectedUrl(project),
     issues
   };
@@ -198,13 +210,19 @@ function resolvePlanSelection(snapshot: WorkspaceConfigSnapshot, input: DeployPl
 
 export function buildDeployPlan(snapshot: WorkspaceConfigSnapshot, input: DeployPlanSelectionInput = {}): DeployPlanResult {
   const selection = resolvePlanSelection(snapshot, input);
+  const invocationRegion = normalizeRegionId(input.region);
   return {
     rootDir: snapshot.rootDir,
     mode: snapshot.mode,
     selectionSource: selection.selectionSource,
     selectedComponents: selection.selectedNames,
     skippedComponents: selection.skippedNames,
-    components: selection.selected.map((component) => buildPlanForProject(component.name, component.project, component.path))
+    components: selection.selected.map((component) => buildPlanForProject(
+      component.name,
+      component.project,
+      component.path,
+      invocationRegion
+    ))
   };
 }
 

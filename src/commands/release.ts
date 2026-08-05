@@ -33,6 +33,7 @@ import { DELIVERY_SECTION } from './sections';
 const releaseListCommand = defineCliCommand({
   rawName: 'release list',
   description: '查看函数版本列表',
+  region: { scope: 'project' },
   options: [
     { rawName: '--component <name>', description: '在 workspace / monorepo 根目录显式选择 component' },
     { rawName: '--limit <n>', description: '返回版本数量，默认 20' }
@@ -42,6 +43,7 @@ const releaseListCommand = defineCliCommand({
 const releasePromoteCommand = defineCliCommand({
   rawName: 'release promote [versionId]',
   description: '发布并切流到目标别名',
+  region: { scope: 'project' },
   options: [
     { rawName: '--component <name>', description: '在 workspace / monorepo 根目录显式选择 component' },
     { rawName: '--target <target>', description: '目标别名，默认 prod' }
@@ -58,6 +60,7 @@ const releasePromoteCommand = defineCliCommand({
 const releaseRollbackCommand = defineCliCommand({
   rawName: 'release rollback <versionId>',
   description: '回滚到指定函数版本',
+  region: { scope: 'project' },
   options: [
     { rawName: '--component <name>', description: '在 workspace / monorepo 根目录显式选择 component' },
     { rawName: '--target <target>', description: '目标别名，默认 prod' }
@@ -74,6 +77,7 @@ const releaseRollbackCommand = defineCliCommand({
 const releasePruneCommand = defineCliCommand({
   rawName: 'release prune',
   description: '清理历史函数版本（默认仅预览）',
+  region: { scope: 'project' },
   options: [
     { rawName: '--component <name>', description: '在 workspace / monorepo 根目录显式选择 component' },
     { rawName: '--keep <n>', description: '保留最近 N 个版本，默认 10' },

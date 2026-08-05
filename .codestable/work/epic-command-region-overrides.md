@@ -2,8 +2,8 @@
 epic: ../epics/command-region-overrides.md
 phase: executing
 approved_revision: 4e51507401b921732725f2f78388b214c6a69004e4b3530bf11512e6580f3c62
-current_item: ITEM-3
-next_action: 测试先行接入 Deploy、Task、Release、Function、Env 与 Domain 的 project-aware Region
+current_item: ITEM-4
+next_action: 测试先行接入 auth export、doctor、workspace doctor 与 E2E Region 传播和清理
 blocked_by: null
 item_progression: continuous
 milestone_commit: authorized
@@ -14,7 +14,7 @@ remote_publish: manual
 
 - [x] ITEM-1
 - [x] ITEM-2
-- [ ] ITEM-3
+- [x] ITEM-3
 - [ ] ITEM-4
 - [ ] ITEM-5
 
@@ -36,3 +36,6 @@ remote_publish: manual
 - 2026-08-05：ITEM-2 第一轮 change review 由 Paseo agent `9bf756f0-3880-41c2-886e-a545e07b5d46` 使用 `claude/claude-opus-5`、plan 模式只读完成；冻结 staged diff SHA-256 `c10401e4e556c5c7efc4c0496abe2aa1ba2f9c9f17445273c8eb8dae7f80c37b`，结论 `passed（有条件可合）`、无 blocking，提出 VPC 错误分类、命令合同、真实 helper/client 链路、Redis 非绑定轮换与生成文档等 7 项 important。
 - 2026-08-05：ITEM-2 第二轮复审冻结 SHA-256 `0fd861d51caff7e56a4b676459fd0e9eaeca37be2e7a894c07eb02a62bc16fe5`，同一 reviewer 指出 cache 非绑定实例轮换后的命令输出仍错误宣称项目已更新，以及文档 Region 选项排序误伤非 regional 命令两项缺陷，结论 `needs changes`。
 - 2026-08-05：ITEM-2 第三轮终审冻结 SHA-256 `4bf4305540e3e78bbae8bbbbecd75f1db94b4e28f20d5b4bbd4aa020ab6eb32d`，同一 reviewer/lineage 结论 `passed`、无 blocking/important；VPC 仅对确认 stale/not-found 回退，RDS/Redis 上下文到 SDK region capture、14 个 RDS AI endpoint、四类 binding 归一化、Redis 轮换持久化语义与 regional-only 文档排序均有回归守卫。`bun run typecheck`、`bun run docs:check`、`bun run build` 通过，`bun run test:integration` 7/7，`bun run test:ci` 144 files / 1052 tests 全绿。
+- 2026-08-05：ITEM-3 第一轮 change review 由 Paseo agent `387fe01a-bf41-4183-a34e-c309e52c4aac` 使用 `claude/claude-opus-5`、plan 模式只读完成；冻结 staged diff SHA-256 `7028548b0d200bbabf9927726db72e1ec9787255514b23f2d06449ae2a5555ed`，结论 `needs changes`，指出已有跨地域 network binding 会绕过重新验证、缺少 project 无 region 回退、Env 写入提示及异构 workspace plan 的 `callRegionId` 语义问题。
+- 2026-08-05：ITEM-3 第二轮复审冻结 SHA-256 `762d92f38f863b095697f95fb5079664768deafc929fec7411dae8155d7dd173`；B1/I1-I3 已核销，reviewer 在确认 `withProcessCwd(resolveDeployWorkingDirectory(ctx.component))` 后撤回 component 目录误判，剩余唯一 important 为已有 network binding 遇瞬时探测错误时不能静默降级公网。
+- 2026-08-05：ITEM-3 第三轮终审冻结 SHA-256 `8aa2d7ea891524e42439a2c13a57d76f3da1d68c27660be63b0753471b6316f0`，同一 reviewer/lineage 结论 `passed`、无 blocking/important；已有 network binding 的 VPC 探测异常会终止部署，fresh 项目保留原有公网回退。Deploy/plan、Task、Release、Function、Env、Domain 共 30 个命令完成 project/auth scope 覆盖，项目默认值、有效调用值与 state 审计值保持分离。`bun run typecheck`、`bun run docs:check`、`bun run build` 通过，`bun run test:integration` 7/7，`bun run test:ci` 146 files / 1067 tests 全绿。

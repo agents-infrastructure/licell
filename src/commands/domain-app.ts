@@ -23,6 +23,7 @@ import { emitCommandResult, isJsonOutput } from '../utils/output';
 const domainAppBindCommand = defineCliCommand({
   rawName: 'domain app bind <domain>',
   description: '为当前应用编排 DNS、函数域名与可选 SSL',
+  region: { scope: 'project' },
   options: [
     { rawName: '--component <name>', description: '在 workspace / monorepo 根目录显式选择 component' },
     { rawName: '--ssl', description: '自动配置 Let\'s Encrypt 免费证书开启 HTTPS' },
@@ -64,6 +65,7 @@ const domainAppBindCommand = defineCliCommand({
 const domainAppUnbindCommand = defineCliCommand({
   rawName: 'domain app unbind <domain>',
   description: '解绑当前应用域名，并清理 FC custom domain / DNS CNAME',
+  region: { scope: 'project' },
   descriptor: {
     summary: '解绑应用域名，并清理对应 FC custom domain / DNS CNAME。',
     safety: {

@@ -30,6 +30,7 @@ import { DELIVERY_SECTION } from './sections';
 const taskConfigCommand = defineCliCommand({
   rawName: 'task config [name]',
   description: '查看任务函数的异步调用配置',
+  region: { scope: 'project' },
   options: [
     { rawName: '--component <name>', description: '在 workspace / monorepo 根目录显式选择 component' },
     { rawName: '--target <target>', description: '指定 alias/version（如 prod/preview/1）' }
@@ -66,6 +67,7 @@ const taskConfigCommand = defineCliCommand({
 const taskConfigSetCommand = defineCliCommand({
   rawName: 'task config set [name]',
   description: '写入任务函数的异步调用配置',
+  region: { scope: 'project' },
   options: [
     { rawName: '--component <name>', description: '在 workspace / monorepo 根目录显式选择 component' },
     { rawName: '--target <target>', description: '指定 alias/version（如 prod/preview/1）' },
@@ -138,6 +140,7 @@ const taskConfigSetCommand = defineCliCommand({
 const taskConfigRmCommand = defineCliCommand({
   rawName: 'task config rm [name]',
   description: '删除任务函数的异步调用配置',
+  region: { scope: 'project' },
   options: [
     { rawName: '--component <name>', description: '在 workspace / monorepo 根目录显式选择 component' },
     { rawName: '--target <target>', description: '指定 alias/version（如 prod/preview/1）' },
@@ -174,6 +177,7 @@ const taskConfigRmCommand = defineCliCommand({
 const taskInvokeCommand = defineCliCommand({
   rawName: 'task invoke [name]',
   description: '异步调用任务函数',
+  region: { scope: 'project' },
   options: [
     { rawName: '--component <name>', description: '在 workspace / monorepo 根目录显式选择 component' },
     { rawName: '--target <target>', description: '指定 alias/version（如 prod/preview/1）' },
@@ -228,6 +232,7 @@ const taskInvokeCommand = defineCliCommand({
 const taskListCommand = defineCliCommand({
   rawName: 'task list [name]',
   description: '查看任务函数的异步任务列表',
+  region: { scope: 'project' },
   options: [
     { rawName: '--component <name>', description: '在 workspace / monorepo 根目录显式选择 component' },
     { rawName: '--target <target>', description: '指定 alias/version（如 prod/preview/1）' },
@@ -300,6 +305,7 @@ const taskListCommand = defineCliCommand({
 const taskInfoCommand = defineCliCommand({
   rawName: 'task info <taskId> [name]',
   description: '查看单个异步任务详情',
+  region: { scope: 'project' },
   options: [
     { rawName: '--component <name>', description: '在 workspace / monorepo 根目录显式选择 component' },
     { rawName: '--target <target>', description: '指定 alias/version（如 prod/preview/1）' }
@@ -343,6 +349,7 @@ const taskInfoCommand = defineCliCommand({
 const taskStopCommand = defineCliCommand({
   rawName: 'task stop <taskId> [name]',
   description: '停止正在运行的异步任务',
+  region: { scope: 'project' },
   options: [
     { rawName: '--component <name>', description: '在 workspace / monorepo 根目录显式选择 component' },
     { rawName: '--target <target>', description: '指定 alias/version（如 prod/preview/1）' }

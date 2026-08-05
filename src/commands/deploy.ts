@@ -71,6 +71,7 @@ const deployCheckCommand = defineCliCommand({
 const deployPlanCommand = defineCliCommand({
   rawName: 'deploy plan',
   description: '基于 `.licell/project.json` 生成部署计划（不执行云端变更）',
+  region: { scope: 'project' },
   options: [
     { rawName: '--component <name>', description: '只生成指定 component 的 deploy plan' },
     { rawName: '--include <names>', description: '只为这些 component 生成 deploy plan（逗号分隔）' },
@@ -110,7 +111,8 @@ const deployPlanCommand = defineCliCommand({
         { name: 'selectionSource', description: '`bootstrap` / `workspace` / `explicit-filter`，表示本次组件选择来源。', required: true },
         { name: 'selectedComponents[]', description: '本次实际生成 plan 的 component 列表。', required: true },
         { name: 'skippedComponents[]', description: '因为 bootstrap selection 或 include/exclude 被跳过的 component 列表。', required: true },
-        { name: 'components[]', description: '部署计划数组。', required: true }
+        { name: 'components[]', description: '部署计划数组；每个 component 的实际预览地域以 `target.region` 为准。', required: true },
+        { name: 'callRegionId', description: '本次 plan 的 project-scope 调用地域；异构 workspace 中各 component 的目标地域仍以 `components[].target.region` 为准。', required: false }
       ]
     }
   }
@@ -119,6 +121,7 @@ const deployPlanCommand = defineCliCommand({
 const deployCommand = defineCliCommand({
   rawName: 'deploy',
   description: '一键极速打包部署',
+  region: { scope: 'project' },
   options: [
     { rawName: '--component <name>', description: '在 workspace / monorepo 根目录显式选择要部署的 component' },
     { rawName: '--type <type>', description: '部署类型：api、static 或 task（适配 CI 非交互场景）' },
@@ -217,7 +220,8 @@ const deployCommand = defineCliCommand({
     ],
     agentTips: [
       '生成或修改部署前配置时，优先调用 `deploy spec` 与 `deploy check`。',
-      '当结果 `type=task` 时，优先读取 `functionName`、`configuredQualifiers[]`、`invokeCommand`，不要期待 `url`。'
+      '当结果 `type=task` 时，优先读取 `functionName`、`configuredQualifiers[]`、`invokeCommand`，不要期待 `url`。',
+      '当 `--region` 与项目默认地域不同时，后续 project-scope 命令继续传同一 `--region`，或正式更新项目 `region`。'
     ],
     related: ['task config', 'task invoke', 'task info', 'task list', 'release promote', 'logs'],
     result: {
@@ -238,7 +242,8 @@ const deployCommand = defineCliCommand({
         { name: 'functionName', description: '当 `type=task` 时返回的函数名。' },
         { name: 'asyncTaskEnabled', description: '当 `type=task` 时，异步任务能力是否已启用。' },
         { name: 'configuredQualifiers[]', description: '当 `type=task` 时，已经写入 async invoke config 的 qualifier 列表。' },
-        { name: 'invokeCommand', description: '当 `type=task` 时，推荐直接复制执行的任务调用命令。' }
+        { name: 'invokeCommand', description: '当 `type=task` 时，推荐直接复制执行的任务调用命令。' },
+        { name: 'regionGuidance', description: '仅当调用地域不同于项目默认地域时，提示后续继续显式传 Region 或更新项目默认值。', required: false }
       ]
     }
   }
@@ -283,6 +288,12 @@ function resolveDeployRequiredCapabilities(ctx: {
   if (ctx.cliDomain || ctx.domainSuffix) capabilities.push('dns');
   if (ctx.enableCdn) capabilities.push('cdn');
   return [...new Set(capabilities)];
+}
+
+function buildDeployRegionGuidance(effectiveRegion: string, defaultRegion?: string) {
+  if (!effectiveRegion || effectiveRegion === defaultRegion) return undefined;
+  const defaultDescription = defaultRegion ? `项目默认地域 ${defaultRegion}` : '当前默认地域';
+  return `本次部署使用 ${effectiveRegion}，未修改${defaultDescription}；后续 project-scope 命令请继续传同一 --region（例如 licell deploy --region ${effectiveRegion}），或更新 .licell/project.json 的 region。`;
 }
 
 function resolveApiRuntimeForSpec(input: string | undefined, component?: string) {
@@ -464,7 +475,7 @@ export function registerDeployCommand(cli: CAC) {
     });
 
   registerCliCommand(cli, deployPlanCommand)
-    .action((options: { component?: string; include?: string; exclude?: string }) => {
+    .action((options: { component?: string; include?: string; exclude?: string; region?: string }) => {
       try {
         const snapshot = getDeployPlanSnapshot(options.component);
         const plan = buildDeployPlan(snapshot, options);
@@ -531,6 +542,9 @@ export function registerDeployCommand(cli: CAC) {
             // auth preflight may rotate/update credentials; reload deploy context with latest auth.
             continue;
           }
+          const canonicalDefaultRegion = ctx.project.region || currentAuth?.region;
+          const effectiveRegion = ctx.auth.region;
+          const regionGuidance = buildDeployRegionGuidance(effectiveRegion, canonicalDefaultRegion);
           try {
             emitCommandEvent({
               stage: 'deploy.preflight',
@@ -655,6 +669,9 @@ export function registerDeployCommand(cli: CAC) {
               if (healthCheckLogs.length > 0) {
                 console.log(`${healthCheckLogs.join('\n')}\n`);
               }
+              if (regionGuidance && !isJsonOutput()) {
+                console.log(`${pc.yellow(`Region: ${regionGuidance}`)}\n`);
+              }
               const projectPatch = buildDeployProjectPatch({
                 deploySucceeded: true,
                 deployType: ctx.type,
@@ -670,7 +687,7 @@ export function registerDeployCommand(cli: CAC) {
                 cdnRefresh: ctx.type === 'static' ? ctx.cdnRefreshMode : undefined,
                 useVpc: ctx.type === 'static' ? undefined : ctx.useVpc,
                 acrNamespace: ctx.cliAcrNamespace || ctx.project.acrNamespace,
-                region: ctx.project.region || ctx.auth.region,
+                region: canonicalDefaultRegion,
                 bucketName,
                 functionName: functionResourceName || functionName,
                 existingArtifact: ctx.project.artifact
@@ -681,7 +698,7 @@ export function registerDeployCommand(cli: CAC) {
               updateLicellComponentState(buildDeployStatePatch({
                 cwd: process.cwd(),
                 deployType: ctx.type,
-                region: ctx.project.region || ctx.auth.region,
+                region: effectiveRegion,
                 appName: ctx.appName,
                 bucketName,
                 functionName: functionResourceName || functionName || ctx.appName,
@@ -713,6 +730,7 @@ export function registerDeployCommand(cli: CAC) {
                     configuredQualifiers: configuredQualifiers || [],
                     invokeCommand: invokeCommand || null,
                     healthCheckLogs,
+                    ...(regionGuidance ? { regionGuidance } : {}),
                     ...(!ctx.releaseTarget ? { hint: '运行 licell release promote 发布 alias；运行 licell task invoke 调用任务' } : {})
                   });
                 } else {
@@ -733,6 +751,7 @@ export function registerDeployCommand(cli: CAC) {
                     releaseTarget: ctx.releaseTarget || null,
                     promotedVersion: promotedVersion || null,
                     healthCheckLogs,
+                    ...(regionGuidance ? { regionGuidance } : {}),
                     ...(!ctx.releaseTarget && ctx.type === 'api' ? { hint: '运行 licell release promote 发布到生产' } : {})
                   });
                 }

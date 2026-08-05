@@ -1,7 +1,7 @@
 import { confirm, text, isCancel, type spinner } from '@clack/prompts';
 import pc from 'picocolors';
 import { existsSync } from 'fs';
-import { Config } from '../utils/config';
+import { Config, type ProjectNetworkConfig } from '../utils/config';
 import { getRuntime } from '../providers/fc/runtime-handler';
 import { ensureDefaultNetwork } from '../providers/vpc';
 import {
@@ -113,7 +113,9 @@ export async function executeTaskDeploy(
     spinnerMsg,
     '❌ 任务部署失败',
     async () => {
-      if (ctx.useVpc && !ctx.project.network) {
+      const existingNetwork = ctx.project.network;
+      let deployNetwork: ProjectNetworkConfig | null = null;
+      if (ctx.useVpc) {
         try {
           const defaultNetwork = await runDeployProgressStep(
             s,
@@ -129,14 +131,16 @@ export async function executeTaskDeploy(
             },
             () => ensureDefaultNetwork()
           );
+          if (!defaultNetwork) throw new Error('VPC 自动接入失败：未返回网络配置');
           Config.setProject({ network: defaultNetwork }, { component: ctx.component });
-          ctx.project = Config.getProject({ component: ctx.component });
+          ctx.project = { ...ctx.project, network: defaultNetwork };
+          deployNetwork = defaultNetwork;
         } catch (err: unknown) {
+          if (existingNetwork) throw err;
           console.warn(pc.yellow(`⚠️ VPC 自动接入失败，回退公网模式: ${formatErrorMessage(err)}`));
         }
       }
 
-      const deployNetwork = ctx.useVpc ? ctx.project.network : null;
       const deployOptions = {
         ...(ctx.cliResources ? { resources: ctx.cliResources } : {}),
         ...(deployNetwork !== undefined ? { network: deployNetwork } : {}),

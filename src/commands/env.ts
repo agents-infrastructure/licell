@@ -25,6 +25,7 @@ import { DELIVERY_SECTION } from './sections';
 const envListCommand = defineCliCommand({
   rawName: 'env list',
   description: '查看云端环境变量',
+  region: { scope: 'project' },
   options: [
     { rawName: '--component <name>', description: '在 workspace / monorepo 根目录显式选择 component' },
     { rawName: '--target <target>', description: '查看指定 FC alias 的环境变量（如 prod/preview）' },
@@ -35,11 +36,18 @@ const envListCommand = defineCliCommand({
 const envSetCommand = defineCliCommand({
   rawName: 'env set <key> <value>',
   description: '设置云端环境变量（并同步本地 .licell/project.json）',
+  region: { scope: 'project' },
   options: [
     { rawName: '--component <name>', description: '在 workspace / monorepo 根目录显式选择 component' }
   ],
   descriptor: {
     examples: ['licell env set API_BASE_URL https://api.example.com', 'licell env set NODE_ENV production --output json'],
+    optionInsights: {
+      '--region': {
+        whenToUse: '需要在项目默认地域之外更新同名函数的环境变量时使用。',
+        cautions: ['不会修改项目默认地域；仍会按 env set 的既有语义把云端 envs 同步到本地项目配置。']
+      }
+    },
     argumentHints: {
       key: '环境变量名，例如 `API_KEY`、`NODE_ENV`。',
       value: '变量值；如包含空格，请使用引号。'
@@ -59,12 +67,19 @@ const envSetCommand = defineCliCommand({
 const envRmCommand = defineCliCommand({
   rawName: 'env rm <key>',
   description: '删除云端环境变量（并同步本地 .licell/project.json）',
+  region: { scope: 'project' },
   options: [
     { rawName: '--component <name>', description: '在 workspace / monorepo 根目录显式选择 component' },
     { rawName: '--yes', description: '跳过二次确认（危险）' }
   ],
   descriptor: {
     notes: ['会同时删除云端环境变量与本地 `.licell/project.json` 中对应项。'],
+    optionInsights: {
+      '--region': {
+        whenToUse: '需要在项目默认地域之外删除同名函数的环境变量时使用。',
+        cautions: ['不会修改项目默认地域；仍会按 env rm 的既有语义把云端 envs 同步到本地项目配置。']
+      }
+    },
     examples: ['licell env rm API_KEY', 'licell env rm API_KEY --output json'],
     argumentHints: {
       key: '待删除的环境变量名。'
@@ -79,6 +94,7 @@ const envRmCommand = defineCliCommand({
 const envPullCommand = defineCliCommand({
   rawName: 'env pull',
   description: '拉取云端环境变量',
+  region: { scope: 'project' },
   options: [
     { rawName: '--component <name>', description: '在 workspace / monorepo 根目录显式选择 component' },
     { rawName: '--target <target>', description: '从指定 FC alias 拉取环境变量（如 prod/preview）' }
@@ -89,6 +105,10 @@ const envPullCommand = defineCliCommand({
       '传入 `--target` 时，会把指定 alias/version 的环境变量写入 `.env`，但不会覆盖本地项目默认环境变量。'
     ],
     optionInsights: {
+      '--region': {
+        whenToUse: '需要从项目默认地域之外拉取同名函数的环境变量时使用。',
+        cautions: ['不会修改项目默认地域；未传 --target 时仍会按 env pull 的既有语义同步项目 envs。']
+      },
       '--target': {
         whenToUse: '需要查看或导出某个 alias / version 的环境变量快照时使用。',
         cautions: ['该模式只更新 `.env`，不会覆盖本地 `.licell/project.json` 默认 env。']

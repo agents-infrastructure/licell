@@ -83,6 +83,55 @@ describe('deploy plan', () => {
     });
   });
 
+  it('uses an explicit invocation region for every planned target and generated deploy command', () => {
+    const snapshot = Config.getWorkspace();
+    if (!snapshot) throw new Error('missing workspace snapshot');
+    const plan = buildDeployPlan(snapshot, { include: 'api,web', region: ' CN-Shanghai ' });
+
+    expect(plan.components.map((component) => component.target.region)).toEqual([
+      'cn-shanghai',
+      'cn-shanghai'
+    ]);
+    expect(plan.components.map((component) => component.command)).toEqual([
+      'licell deploy --component api --region cn-shanghai --output json',
+      'licell deploy --component web --region cn-shanghai --output json'
+    ]);
+  });
+
+  it('uses canonical project region instead of deployTarget region', () => {
+    const snapshot = Config.getWorkspace();
+    if (!snapshot) throw new Error('missing workspace snapshot');
+    const api = snapshot.components.find((component) => component.name === 'api');
+    if (!api) throw new Error('missing api component');
+    api.project.region = 'cn-shanghai';
+    api.project.deployTarget = { ...api.project.deployTarget, region: 'cn-beijing' };
+
+    const plan = buildDeployPlan(snapshot, { include: 'api' });
+    expect(plan.components[0]?.target.region).toBe('cn-shanghai');
+  });
+
+  it('does not use state resource region for project routing', () => {
+    writeFileSync(join(root, '.licell', 'state.json'), JSON.stringify({
+      schemaVersion: 1,
+      defaultComponent: 'web',
+      bootstrap: {
+        mode: 'batch',
+        selectedComponents: ['web'],
+        defaultComponent: 'web'
+      },
+      components: {
+        web: {
+          resources: { bucket: { name: 'demo-web', region: 'cn-beijing' } }
+        }
+      }
+    }, null, 2));
+
+    const snapshot = Config.getWorkspace();
+    if (!snapshot) throw new Error('missing workspace snapshot');
+    const plan = buildDeployPlan(snapshot);
+    expect(plan.components[0]?.target.region).toBe('cn-hangzhou');
+  });
+
   it('falls back to workspace deployables when bootstrap selection is stale', () => {
     writeFileSync(join(root, '.licell', 'state.json'), JSON.stringify({
       schemaVersion: 1,

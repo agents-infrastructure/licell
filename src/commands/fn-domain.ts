@@ -28,17 +28,20 @@ import { emitCommandResult, isJsonOutput } from '../utils/output';
 
 const fnDomainListCommand = defineCliCommand({
   rawName: 'fn domain list',
-  description: '查看 FC 自定义域名列表'
+  description: '查看 FC 自定义域名列表',
+  region: { scope: 'project' }
 });
 
 const fnDomainInfoCommand = defineCliCommand({
   rawName: 'fn domain info <domain>',
-  description: '查看 FC 自定义域名详情'
+  description: '查看 FC 自定义域名详情',
+  region: { scope: 'project' }
 });
 
 const fnDomainBindCommand = defineCliCommand({
   rawName: 'fn domain bind <domain>',
   description: '绑定或更新 FC 自定义域名（资源级，不默认改 DNS）',
+  region: { scope: 'project' },
   options: [
     { rawName: '--function <name>', description: '指定函数名；默认使用当前项目 appName' },
     { rawName: '--component <name>', description: '在 workspace / monorepo 根目录显式选择 component' },
@@ -98,6 +101,7 @@ const fnDomainBindCommand = defineCliCommand({
 const fnDomainUnbindCommand = defineCliCommand({
   rawName: 'fn domain unbind <domain>',
   description: '解绑 FC 自定义域名',
+  region: { scope: 'project' },
   descriptor: {
     summary: '解绑 FC 自定义域名，可选同步清理 DNS。',
     safety: {

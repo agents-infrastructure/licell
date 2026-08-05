@@ -173,4 +173,59 @@ describe('executeApiDeploy', () => {
       'deploy.api.health.fixed-domain'
     ]));
   });
+
+  it('revalidates an existing network in the effective region before FC deploy', async () => {
+    const spinner = { start: vi.fn(), stop: vi.fn(), message: vi.fn() };
+    const existingNetwork = { vpcId: 'vpc-hz', vswId: 'vsw-hz', region: 'cn-hangzhou' };
+    const effectiveNetwork = { vpcId: 'vpc-sh', vswId: 'vsw-sh', sgId: 'sg-sh', region: 'cn-shanghai' };
+    mockEnsureDefaultNetwork.mockResolvedValue(effectiveNetwork);
+
+    await executeApiDeploy({
+      appName: 'demo-app',
+      type: 'api',
+      enableCdn: false,
+      useVpc: true,
+      enableSSL: false,
+      forceSslRenew: false,
+      preview: false,
+      interactiveTTY: false,
+      auth: { accountId: '123', region: 'cn-shanghai' },
+      project: { network: existingNetwork },
+      cliRuntime: 'nodejs22',
+      cliEntry: 'index.ts'
+    } as never, spinner as never);
+
+    expect(mockEnsureDefaultNetwork).toHaveBeenCalledTimes(1);
+    expect(mockSetProject).toHaveBeenCalledWith({ network: effectiveNetwork }, { component: undefined });
+    expect(mockDeployFC).toHaveBeenCalledWith(
+      'demo-app',
+      'index.ts',
+      'nodejs22',
+      expect.objectContaining({ network: effectiveNetwork })
+    );
+  });
+
+  it('fails instead of silently dropping an existing VPC on transient validation errors', async () => {
+    const spinner = { start: vi.fn(), stop: vi.fn(), message: vi.fn() };
+    const existingNetwork = { vpcId: 'vpc-hz', vswId: 'vsw-hz', region: 'cn-hangzhou' };
+    mockEnsureDefaultNetwork.mockRejectedValue(new Error('Throttling.User'));
+
+    await expect(executeApiDeploy({
+      appName: 'demo-app',
+      type: 'api',
+      enableCdn: false,
+      useVpc: true,
+      enableSSL: false,
+      forceSslRenew: false,
+      preview: false,
+      interactiveTTY: false,
+      auth: { accountId: '123', region: 'cn-shanghai' },
+      project: { network: existingNetwork },
+      cliRuntime: 'nodejs22',
+      cliEntry: 'index.ts'
+    } as never, spinner as never)).rejects.toThrow('Throttling.User');
+
+    expect(mockDeployFC).not.toHaveBeenCalled();
+    expect(mockSetProject).not.toHaveBeenCalled();
+  });
 });

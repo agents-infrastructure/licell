@@ -30,6 +30,7 @@ import { DELIVERY_SECTION } from './sections';
 const fnListCommand = defineCliCommand({
   rawName: 'fn list',
   description: '查看函数列表',
+  region: { scope: 'auth' },
   options: [
     { rawName: '--limit <n>', description: '返回数量，默认 20' },
     { rawName: '--prefix <prefix>', description: '按函数名前缀过滤' }
@@ -39,6 +40,7 @@ const fnListCommand = defineCliCommand({
 const fnInfoCommand = defineCliCommand({
   rawName: 'fn info [name]',
   description: '查看函数详情',
+  region: { scope: 'project' },
   options: [
     { rawName: '--component <name>', description: '在 workspace / monorepo 根目录显式选择 component' },
     { rawName: '--target <target>', description: '指定 alias/version（如 prod/preview/1）' }
@@ -48,6 +50,7 @@ const fnInfoCommand = defineCliCommand({
 const fnInvokeCommand = defineCliCommand({
   rawName: 'fn invoke [name]',
   description: '调用函数（同步）',
+  region: { scope: 'project' },
   options: [
     { rawName: '--component <name>', description: '在 workspace / monorepo 根目录显式选择 component' },
     { rawName: '--target <target>', description: '指定 alias/version（如 prod/preview/1）' },
@@ -59,6 +62,7 @@ const fnInvokeCommand = defineCliCommand({
 const fnRmCommand = defineCliCommand({
   rawName: 'fn rm [name]',
   description: '删除函数',
+  region: { scope: 'project' },
   options: [
     { rawName: '--component <name>', description: '在 workspace / monorepo 根目录显式选择 component' },
     { rawName: '--force', description: '级联删除触发器、alias、已发布版本后再删除函数' },
@@ -69,6 +73,7 @@ const fnRmCommand = defineCliCommand({
 const fnLogsCommand = defineCliCommand({
   rawName: 'fn logs [name]',
   description: '查看函数日志（默认实时流式）',
+  region: { scope: 'project' },
   options: [
     { rawName: '--component <name>', description: '在 workspace / monorepo 根目录显式选择 component' },
     { rawName: '--once', description: '仅拉取一次最近日志并退出' },

@@ -16,7 +16,11 @@ const {
   getAuthMock,
   emitCliErrorMock,
   setProjectMock,
-  updateLicellComponentStateMock
+  updateLicellComponentStateMock,
+  buildDeployProjectPatchMock,
+  buildDeployStatePatchMock,
+  buildDeployPlanMock,
+  getDeployPlanSnapshotMock
 } = vi.hoisted(() => ({
   ensureAuthReadyForCommandMock: vi.fn(async () => undefined),
   ensureAuthCapabilityPreflightMock: vi.fn(async () => undefined),
@@ -32,7 +36,11 @@ const {
   getAuthMock: vi.fn(),
   emitCliErrorMock: vi.fn(),
   setProjectMock: vi.fn(),
-  updateLicellComponentStateMock: vi.fn()
+  updateLicellComponentStateMock: vi.fn(),
+  buildDeployProjectPatchMock: vi.fn(() => ({})),
+  buildDeployStatePatchMock: vi.fn(() => ({})),
+  buildDeployPlanMock: vi.fn(),
+  getDeployPlanSnapshotMock: vi.fn()
 }));
 
 vi.mock('../utils/auth-recovery', () => ({
@@ -68,11 +76,11 @@ vi.mock('../utils/config', () => ({
 }));
 
 vi.mock('../utils/deploy-config', () => ({
-  buildDeployProjectPatch: vi.fn(() => ({}))
+  buildDeployProjectPatch: buildDeployProjectPatchMock
 }));
 
 vi.mock('../utils/deploy-state', () => ({
-  buildDeployStatePatch: vi.fn(() => ({}))
+  buildDeployStatePatch: buildDeployStatePatchMock
 }));
 
 vi.mock('../utils/project-state', () => ({
@@ -91,8 +99,8 @@ vi.mock('../providers/fc', () => ({
 }));
 
 vi.mock('../utils/deploy-plan', () => ({
-  buildDeployPlan: vi.fn(),
-  getDeployPlanSnapshot: vi.fn()
+  buildDeployPlan: buildDeployPlanMock,
+  getDeployPlanSnapshot: getDeployPlanSnapshotMock
 }));
 
 vi.mock('../utils/deploy-runtime', () => ({
@@ -155,6 +163,10 @@ describe('deploy command json result', () => {
     emitCliErrorMock.mockReset();
     setProjectMock.mockReset();
     updateLicellComponentStateMock.mockReset();
+    buildDeployProjectPatchMock.mockReset().mockReturnValue({});
+    buildDeployStatePatchMock.mockReset().mockReturnValue({});
+    buildDeployPlanMock.mockReset();
+    getDeployPlanSnapshotMock.mockReset();
 
     cwdSpy.mockReturnValue('/repo');
     getProjectMock.mockReturnValue({ runtime: 'nodejs22' });
@@ -224,6 +236,132 @@ describe('deploy command json result', () => {
       cdnRefreshTaskIds: ['refresh-task-1'],
       healthCheckLogs: ['✅ 固定域名可访问 (200 https://demo-web.bazhuayu.xyz/)']
     }));
+  });
+
+  it('keeps invocation override out of project defaults while recording the effective region', async () => {
+    resolveDeployContextMock.mockResolvedValueOnce({
+      component: 'web',
+      appName: 'demo-web',
+      type: 'static',
+      releaseTarget: undefined,
+      cliDomain: undefined,
+      projectDomain: undefined,
+      domainSuffix: 'bazhuayu.xyz',
+      enableCdn: true,
+      cdnRefreshMode: 'entrypoints',
+      useVpc: false,
+      enableSSL: true,
+      forceSslRenew: false,
+      preview: false,
+      interactiveTTY: false,
+      auth: { region: 'cn-shanghai' },
+      project: { envs: {}, region: 'cn-hangzhou' }
+    });
+
+    const cli = await createCli();
+    await getCommandAction(cli, 'deploy')({ component: 'web', region: 'cn-shanghai' });
+
+    expect(executeStaticDeployMock).toHaveBeenCalledWith(
+      expect.objectContaining({ auth: expect.objectContaining({ region: 'cn-shanghai' }) }),
+      expect.anything()
+    );
+    expect(buildDeployProjectPatchMock).toHaveBeenCalledWith(expect.objectContaining({
+      region: 'cn-hangzhou'
+    }));
+    expect(buildDeployStatePatchMock).toHaveBeenCalledWith(expect.objectContaining({
+      region: 'cn-shanghai'
+    }));
+    expect(emitCommandResultMock).toHaveBeenCalledWith(expect.objectContaining({
+      regionGuidance: expect.stringContaining('licell deploy --region cn-shanghai')
+    }));
+  });
+
+  it('keeps canonical project region when no invocation override is provided', async () => {
+    resolveDeployContextMock.mockResolvedValueOnce({
+      component: 'web',
+      appName: 'demo-web',
+      type: 'static',
+      releaseTarget: undefined,
+      cliDomain: undefined,
+      projectDomain: undefined,
+      domainSuffix: 'bazhuayu.xyz',
+      enableCdn: true,
+      cdnRefreshMode: 'entrypoints',
+      useVpc: false,
+      enableSSL: true,
+      forceSslRenew: false,
+      preview: false,
+      interactiveTTY: false,
+      auth: { region: 'cn-shanghai' },
+      project: { envs: {}, region: 'cn-shanghai' }
+    });
+
+    const cli = await createCli();
+    await getCommandAction(cli, 'deploy')({ component: 'web' });
+
+    expect(buildDeployProjectPatchMock).toHaveBeenCalledWith(expect.objectContaining({
+      region: 'cn-shanghai'
+    }));
+    expect(buildDeployStatePatchMock).toHaveBeenCalledWith(expect.objectContaining({
+      region: 'cn-shanghai'
+    }));
+    expect(emitCommandResultMock).toHaveBeenCalledWith(expect.not.objectContaining({
+      regionGuidance: expect.anything()
+    }));
+  });
+
+  it('uses raw auth default for the project patch when the project has no region', async () => {
+    resolveDeployContextMock.mockResolvedValueOnce({
+      component: 'web',
+      appName: 'demo-web',
+      type: 'static',
+      releaseTarget: undefined,
+      cliDomain: undefined,
+      projectDomain: undefined,
+      domainSuffix: 'bazhuayu.xyz',
+      enableCdn: true,
+      cdnRefreshMode: 'entrypoints',
+      useVpc: false,
+      enableSSL: true,
+      forceSslRenew: false,
+      preview: false,
+      interactiveTTY: false,
+      auth: { region: 'cn-shanghai' },
+      project: { envs: {} }
+    });
+
+    const cli = await createCli();
+    await getCommandAction(cli, 'deploy')({ component: 'web', region: 'cn-shanghai' });
+
+    expect(buildDeployProjectPatchMock).toHaveBeenCalledWith(expect.objectContaining({
+      region: 'cn-hangzhou'
+    }));
+    expect(buildDeployStatePatchMock).toHaveBeenCalledWith(expect.objectContaining({
+      region: 'cn-shanghai'
+    }));
+  });
+
+  it('passes the invocation region into deploy plan generation', async () => {
+    const snapshot = { mode: 'single', rootDir: '/repo', project: { region: 'cn-hangzhou' } };
+    const plan = {
+      rootDir: '/repo',
+      mode: 'single',
+      selectionSource: 'workspace',
+      selectedComponents: ['default'],
+      skippedComponents: [],
+      components: []
+    };
+    getDeployPlanSnapshotMock.mockReturnValue(snapshot);
+    buildDeployPlanMock.mockReturnValue(plan);
+
+    const cli = await createCli();
+    await getCommandAction(cli, 'deploy plan')({ region: 'cn-shanghai' });
+
+    expect(buildDeployPlanMock).toHaveBeenCalledWith(snapshot, { region: 'cn-shanghai' });
+    expect(emitCommandResultMock).toHaveBeenCalledWith(plan, {
+      stage: 'deploy.plan',
+      inferOutcome: false
+    });
   });
 
   it('requires logs capability for static preview deploys because they create FC proxy functions', async () => {
