@@ -2,7 +2,23 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { describe, it, expect } from 'vitest';
-import { Config, normalizeProject, normalizeAuth } from '../utils/config';
+import { Config, normalizeProject, normalizeAuth, withProjectBindingRegion } from '../utils/config';
+
+describe('withProjectBindingRegion', () => {
+  it('normalizes an explicit region and lets it override an existing value', () => {
+    expect(withProjectBindingRegion({ instanceId: 'r-1', region: 'cn-beijing' }, ' CN-Shanghai ')).toEqual({
+      instanceId: 'r-1',
+      region: 'cn-shanghai'
+    });
+  });
+
+  it('preserves and normalizes an existing region when no override is provided', () => {
+    expect(withProjectBindingRegion({ instanceId: 'r-1', region: ' CN-Beijing ' })).toEqual({
+      instanceId: 'r-1',
+      region: 'cn-beijing'
+    });
+  });
+});
 
 describe('normalizeAuth', () => {
   it('returns valid auth from correct input', () => {

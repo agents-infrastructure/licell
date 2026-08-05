@@ -4,10 +4,13 @@ import { cac } from 'cac';
 const {
   configState,
   deleteCacheInstanceMock,
+  emitCommandResultMock,
   executeWithAuthRecoveryMock,
   getProjectMock,
   listCacheClassesMock,
+  outputState,
   provisionRedisMock,
+  rotateRedisPasswordMock,
   selectPromptMock,
   setProjectMock,
   showOutroMock,
@@ -17,10 +20,13 @@ const {
     current: { envs: {} as Record<string, string>, cache: undefined as unknown }
   },
   deleteCacheInstanceMock: vi.fn(),
+  emitCommandResultMock: vi.fn(),
   executeWithAuthRecoveryMock: vi.fn(async (_options: unknown, task: () => Promise<unknown>) => task()),
   getProjectMock: vi.fn(),
   listCacheClassesMock: vi.fn(),
+  outputState: { json: false },
   provisionRedisMock: vi.fn(),
+  rotateRedisPasswordMock: vi.fn(),
   selectPromptMock: vi.fn(),
   setProjectMock: vi.fn(),
   showOutroMock: vi.fn(),
@@ -39,7 +45,7 @@ vi.mock('../providers/redis', () => ({
   listCacheInstances: vi.fn(),
   provisionRedis: provisionRedisMock,
   resolveCacheConnectInfo: vi.fn(),
-  rotateRedisPassword: vi.fn(),
+  rotateRedisPassword: rotateRedisPasswordMock,
   deleteCacheInstance: deleteCacheInstanceMock,
   allocateCachePublicConnection: vi.fn(),
   applyCachePublicWhitelist: vi.fn()
@@ -78,8 +84,8 @@ vi.mock('../utils/cli-shared', () => ({
 }));
 
 vi.mock('../utils/output', () => ({
-  emitCommandResult: vi.fn(),
-  isJsonOutput: vi.fn(() => false)
+  emitCommandResult: emitCommandResultMock,
+  isJsonOutput: () => outputState.json
 }));
 
 async function createCli() {
@@ -101,6 +107,8 @@ describe('cache commands', () => {
     getProjectMock.mockReset();
     getProjectMock.mockImplementation(() => configState.current);
     listCacheClassesMock.mockReset();
+    outputState.json = false;
+    emitCommandResultMock.mockReset();
     listCacheClassesMock.mockResolvedValue({
       regionId: 'cn-hangzhou',
       serverless: {
@@ -127,6 +135,12 @@ describe('cache commands', () => {
       mode: 'classic-redis',
       instanceId: 'r-demo',
       instanceClass: 'redis.master.small.default'
+    });
+    rotateRedisPasswordMock.mockReset();
+    rotateRedisPasswordMock.mockResolvedValue({
+      instanceId: 'r-demo',
+      redisUrl: 'redis://default:secret@cache.example:6379',
+      persisted: true
     });
     selectPromptMock.mockClear();
     setProjectMock.mockReset();
@@ -205,5 +219,39 @@ describe('cache commands', () => {
     }, { replaceEnvs: true });
     expect(spinnerStopMock).toHaveBeenCalledWith(expect.stringContaining('实例 r-demo 已删除'));
     expect(showOutroMock).toHaveBeenCalledWith('Done.');
+  });
+
+  it('reports when rotating an explicit non-binding instance without changing project config', async () => {
+    rotateRedisPasswordMock.mockResolvedValueOnce({
+      instanceId: 'r-other',
+      redisUrl: 'redis://rotated:secret@other.example:6380',
+      persisted: false
+    });
+
+    const cli = await createCli();
+    await cli.parse(['node', 'src/cli.ts', 'cache rotate-password', '--instance', 'r-other']);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(rotateRedisPasswordMock).toHaveBeenCalledWith(expect.anything(), 'r-other');
+    expect(showOutroMock).toHaveBeenCalledWith('本次未修改项目配置，请妥善保存新的连接凭证');
+  });
+
+  it('exposes project persistence in the password rotation JSON result', async () => {
+    outputState.json = true;
+    rotateRedisPasswordMock.mockResolvedValueOnce({
+      instanceId: 'r-other',
+      redisUrl: 'redis://rotated:secret@other.example:6380',
+      persisted: false
+    });
+
+    const cli = await createCli();
+    await cli.parse(['node', 'src/cli.ts', 'cache rotate-password', '--instance', 'r-other']);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(emitCommandResultMock).toHaveBeenCalledWith({
+      instanceId: 'r-other',
+      connectionStringMasked: expect.any(String),
+      projectConfigSynced: false
+    });
   });
 });

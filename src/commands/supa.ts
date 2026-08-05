@@ -48,10 +48,11 @@ const SUPABASE_PROJECT_ENV_KEYS = [
 
 function clearProjectSupabaseBinding(instanceName: string, dbInstanceId?: string) {
   const project = Config.getProject();
+  const normalizedInstanceName = instanceName.trim();
   const nextEnvs = { ...project.envs };
   let changed = false;
 
-  if ((project.envs.SUPABASE_INSTANCE_NAME || '').trim() === instanceName) {
+  if ((project.envs.SUPABASE_INSTANCE_NAME || '').trim() === normalizedInstanceName) {
     for (const key of SUPABASE_PROJECT_ENV_KEYS) {
       delete nextEnvs[key];
     }
@@ -64,10 +65,14 @@ function clearProjectSupabaseBinding(instanceName: string, dbInstanceId?: string
     changed = true;
   }
 
+  const shouldClearSupabase = project.supabase?.instanceName === normalizedInstanceName;
+  if (shouldClearSupabase) changed = true;
+
   if (!changed) return;
 
   Config.setProject({
     ...(shouldClearDatabase ? { database: undefined } : {}),
+    ...(shouldClearSupabase ? { supabase: undefined } : {}),
     envs: nextEnvs
   }, { replaceEnvs: true });
 }
@@ -75,6 +80,7 @@ function clearProjectSupabaseBinding(instanceName: string, dbInstanceId?: string
 const supaAddCommand = defineCliCommand({
   rawName: 'supa add',
   description: '创建 RDS Supabase 实例',
+  region: { scope: 'auth' },
   descriptor: { title: 'Create Supabase instance' },
   options: [
     { rawName: '--name <name>', description: '应用名称' },
@@ -91,6 +97,7 @@ const supaAddCommand = defineCliCommand({
 const supaListCommand = defineCliCommand({
   rawName: 'supa list',
   description: '查看 Supabase 实例列表',
+  region: { scope: 'auth' },
   options: [
     { rawName: '--limit <n>', description: '返回数量，默认 20' }
   ]
@@ -99,18 +106,21 @@ const supaListCommand = defineCliCommand({
 const supaInfoCommand = defineCliCommand({
   rawName: 'supa info <instanceName>',
   description: '查看 Supabase 实例详情',
+  region: { scope: 'binding', binding: 'supabase', target: { argumentIndex: 0 } },
   descriptor: { title: 'Get Supabase instance details' }
 });
 
 const supaConnectCommand = defineCliCommand({
   rawName: 'supa connect <instanceName>',
   description: '查看 Supabase 连接信息和 API Keys',
+  region: { scope: 'binding', binding: 'supabase', target: { argumentIndex: 0 } },
   descriptor: { title: 'Get Supabase connection info' }
 });
 
 const supaConfigCommand = defineCliCommand({
   rawName: 'supa config <instanceName>',
   description: '查看 Supabase 实例配置（auth/storage/rag）',
+  region: { scope: 'binding', binding: 'supabase', target: { argumentIndex: 0 } },
   descriptor: { title: 'View/modify Supabase config' },
   options: [
     { rawName: '--set-auth <key=value>', description: '修改 Auth 配置（如 GOTRUE_SITE_URL=http://example.com）' },
@@ -123,6 +133,7 @@ const supaConfigCommand = defineCliCommand({
 const supaWhitelistCommand = defineCliCommand({
   rawName: 'supa whitelist <instanceName>',
   description: '查看/修改 Supabase IP 白名单',
+  region: { scope: 'binding', binding: 'supabase', target: { argumentIndex: 0 } },
   descriptor: { title: 'Manage Supabase IP whitelist' },
   options: [
     { rawName: '--set <ips>', description: '设置白名单 IP（覆盖模式，逗号分隔）' },
@@ -135,6 +146,7 @@ const supaWhitelistCommand = defineCliCommand({
 const supaResetPasswordCommand = defineCliCommand({
   rawName: 'supa reset-password <instanceName>',
   description: '重置 Supabase Dashboard 或数据库密码',
+  region: { scope: 'binding', binding: 'supabase', target: { argumentIndex: 0 } },
   descriptor: { title: 'Reset Supabase password' },
   options: [
     { rawName: '--dashboard-password <password>', description: '新的 Dashboard 密码' },
@@ -144,22 +156,26 @@ const supaResetPasswordCommand = defineCliCommand({
 
 const supaRestartCommand = defineCliCommand({
   rawName: 'supa restart <instanceName>',
-  description: '重启 Supabase 实例'
+  description: '重启 Supabase 实例',
+  region: { scope: 'binding', binding: 'supabase', target: { argumentIndex: 0 } }
 });
 
 const supaStopCommand = defineCliCommand({
   rawName: 'supa stop <instanceName>',
-  description: '暂停 Supabase 实例'
+  description: '暂停 Supabase 实例',
+  region: { scope: 'binding', binding: 'supabase', target: { argumentIndex: 0 } }
 });
 
 const supaStartCommand = defineCliCommand({
   rawName: 'supa start <instanceName>',
-  description: '启动 Supabase 实例'
+  description: '启动 Supabase 实例',
+  region: { scope: 'binding', binding: 'supabase', target: { argumentIndex: 0 } }
 });
 
 const supaRmCommand = defineCliCommand({
   rawName: 'supa rm <instanceName>',
   description: '删除 Supabase 实例',
+  region: { scope: 'binding', binding: 'supabase', target: { argumentIndex: 0 } },
   options: [
     { rawName: '--yes', description: '跳过确认' }
   ],

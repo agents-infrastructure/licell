@@ -54,6 +54,7 @@ const cacheAddOptions = [
 const cacheAddCommand = defineCliCommand({
   rawName: 'cache add',
   description: '分配 Redis 缓存',
+  region: { scope: 'auth' },
   options: cacheAddOptions,
   descriptor: {
     title: 'Provision Redis cache',
@@ -106,6 +107,7 @@ const cacheAddCommand = defineCliCommand({
 const cacheListCommand = defineCliCommand({
   rawName: 'cache list',
   description: '查看缓存实例列表',
+  region: { scope: 'auth' },
   options: [
     { rawName: '--limit <n>', description: '返回数量，默认 20' }
   ]
@@ -114,6 +116,7 @@ const cacheListCommand = defineCliCommand({
 const cacheClassCommand = defineCliCommand({
   rawName: 'cache class [mode]',
   description: '查询缓存可用规格（给 Agent/开发者在 cache add 前对照）',
+  region: { scope: 'auth' },
   options: [
     { rawName: '--zone <zoneId>', description: '按可用区过滤 classic Redis 规格（默认查询当前地域全部可售 zone）' },
     { rawName: '--limit <n>', description: '输出数量，默认 20' }
@@ -132,24 +135,34 @@ const cacheClassCommand = defineCliCommand({
 
 const cacheInfoCommand = defineCliCommand({
   rawName: 'cache info <instanceId>',
-  description: '查看缓存实例详情'
+  description: '查看缓存实例详情',
+  region: { scope: 'binding', binding: 'cache', target: { argumentIndex: 0 } }
 });
 
 const cacheConnectCommand = defineCliCommand({
   rawName: 'cache connect [instanceId]',
-  description: '输出缓存连接信息'
+  description: '输出缓存连接信息',
+  region: { scope: 'binding', binding: 'cache', target: { argumentIndex: 0 } }
 });
 
 const cacheRotatePasswordCommand = defineCliCommand({
   rawName: 'cache rotate-password',
   description: '轮换 Redis 密码',
+  region: { scope: 'binding', binding: 'cache', target: { option: 'instance' } },
   options: [
-    { rawName: '--instance <instanceId>', description: '指定 Redis 实例 ID，不传则使用当前项目绑定实例' }
+    { rawName: '--instance <instanceId>', description: '指定 Redis 实例 ID；非项目绑定实例只轮换密码，不改写项目 binding/env' }
   ],
   descriptor: {
     safety: {
       level: 'destructive',
       reason: '会轮换 Redis 密码，现有连接配置可能立即失效。'
+    },
+    result: {
+      fields: [
+        { name: 'instanceId', description: '实际轮换密码的 Redis 实例 ID。', required: true },
+        { name: 'connectionStringMasked', description: '轮换后的脱敏 Redis 连接串。', required: true },
+        { name: 'projectConfigSynced', description: '是否同步更新了项目 cache binding 与 REDIS_* 环境变量。', required: true }
+      ]
     }
   }
 });
@@ -157,6 +170,7 @@ const cacheRotatePasswordCommand = defineCliCommand({
 const cachePublicAccessCommand = defineCliCommand({
   rawName: 'cache public-access [instanceId]',
   description: '开通 Redis 公网访问并添加当前 IP 到白名单',
+  region: { scope: 'binding', binding: 'cache', target: { argumentIndex: 0 } },
   options: [
     { rawName: '--ip <ip>', description: '手动指定公网 IP（不传则自动获取）' }
   ],
@@ -171,6 +185,7 @@ const cachePublicAccessCommand = defineCliCommand({
 const cacheRmCommand = defineCliCommand({
   rawName: 'cache rm <instanceId>',
   description: '删除缓存实例',
+  region: { scope: 'binding', binding: 'cache', target: { argumentIndex: 0 } },
   options: [
     { rawName: '--yes', description: '跳过确认' }
   ],
@@ -551,25 +566,28 @@ export function registerCacheCommands(cli: CAC) {
           const instanceId = options.instance ? toPromptValue(options.instance, '实例 ID') : undefined;
 
           const s = createSpinner();
-          const redisUrl = await withSpinner(
+          const rotation = await withSpinner(
             s,
             '正在执行 Redis 密钥轮换...',
             '❌ Redis 密钥轮换失败',
             () => rotateRedisPassword(s, instanceId)
           );
-          if (!redisUrl) return;
+          if (!rotation) return;
           if (!isJsonOutput()) {
             s.stop(pc.green('✅ Redis 密钥轮换完成'));
           }
           if (isJsonOutput()) {
             emitCommandResult({
-              instanceId: instanceId || null,
-              connectionStringMasked: maskConnectionString(redisUrl)
+              instanceId: rotation.instanceId,
+              connectionStringMasked: maskConnectionString(rotation.redisUrl),
+              projectConfigSynced: rotation.persisted
             });
             return;
           }
-          console.log(`\n🔑 新连接串: ${pc.cyan(maskConnectionString(redisUrl))}\n`);
-          showOutro('已同步更新 .licell/project.json 的 REDIS_* 环境变量');
+          console.log(`\n🔑 新连接串: ${pc.cyan(maskConnectionString(rotation.redisUrl))}\n`);
+          showOutro(rotation.persisted
+            ? '已同步更新 .licell/project.json 的 cache binding 与 REDIS_* 环境变量'
+            : '本次未修改项目配置，请妥善保存新的连接凭证');
         }
       );
     });

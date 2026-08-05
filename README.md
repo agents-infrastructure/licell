@@ -711,32 +711,32 @@ licell e2e cleanup <runId>
 
 | 命令 | 说明 | 关键选项 |
 |------|------|----------|
-| `licell db add` | 分配数据库实例 | `--type`, `--engine-version`, `--category` |
-| `licell db class [type]` | 查询数据库可用规格（给 Agent/开发者在 db add 前对照） | `--engine-version`, `--category`, `--storage-type` |
-| `licell db connect [instanceId]` | 输出数据库连接信息 | — |
+| `licell db add` | 分配数据库实例 | `--region`, `--type`, `--engine-version` |
+| `licell db class [type]` | 查询数据库可用规格（给 Agent/开发者在 db add 前对照） | `--region`, `--engine-version`, `--category` |
+| `licell db connect [instanceId]` | 输出数据库连接信息 | `--region` |
 | `licell db info <instanceId>` | 查看数据库实例详情 | `--region` |
-| `licell db list` | 查看数据库实例列表 | `--limit` |
-| `licell db public-access [instanceId]` | 开通数据库公网访问并添加当前 IP 到白名单 | `--ip` |
-| `licell db rm <instanceId>` | 删除数据库实例 | `--yes` |
-| `licell cache add` | 分配 Redis 缓存 | `--type`, `--mode`, `--instance` |
-| `licell cache class [mode]` | 查询缓存可用规格（给 Agent/开发者在 cache add 前对照） | `--zone`, `--limit` |
-| `licell cache connect [instanceId]` | 输出缓存连接信息 | — |
-| `licell cache info <instanceId>` | 查看缓存实例详情 | — |
-| `licell cache list` | 查看缓存实例列表 | `--limit` |
-| `licell cache public-access [instanceId]` | 开通 Redis 公网访问并添加当前 IP 到白名单 | `--ip` |
-| `licell cache rm <instanceId>` | 删除缓存实例 | `--yes` |
-| `licell cache rotate-password` | 轮换 Redis 密码 | `--instance` |
-| `licell supa add` | 创建 RDS Supabase 实例 | `--name`, `--vsw`, `--class` |
-| `licell supa config <instanceName>` | 查看 Supabase 实例配置（auth/storage/rag） | `--set-auth`, `--set-storage`, `--rag` |
-| `licell supa connect <instanceName>` | 查看 Supabase 连接信息和 API Keys | — |
-| `licell supa info <instanceName>` | 查看 Supabase 实例详情 | — |
-| `licell supa list` | 查看 Supabase 实例列表 | `--limit` |
-| `licell supa reset-password <instanceName>` | 重置 Supabase Dashboard 或数据库密码 | `--dashboard-password`, `--db-password` |
-| `licell supa restart <instanceName>` | 重启 Supabase 实例 | — |
-| `licell supa rm <instanceName>` | 删除 Supabase 实例 | `--yes` |
-| `licell supa start <instanceName>` | 启动 Supabase 实例 | — |
-| `licell supa stop <instanceName>` | 暂停 Supabase 实例 | — |
-| `licell supa whitelist <instanceName>` | 查看/修改 Supabase IP 白名单 | `--set`, `--add`, `--remove` |
+| `licell db list` | 查看数据库实例列表 | `--region`, `--limit` |
+| `licell db public-access [instanceId]` | 开通数据库公网访问并添加当前 IP 到白名单 | `--region`, `--ip` |
+| `licell db rm <instanceId>` | 删除数据库实例 | `--region`, `--yes` |
+| `licell cache add` | 分配 Redis 缓存 | `--region`, `--type`, `--mode` |
+| `licell cache class [mode]` | 查询缓存可用规格（给 Agent/开发者在 cache add 前对照） | `--region`, `--zone`, `--limit` |
+| `licell cache connect [instanceId]` | 输出缓存连接信息 | `--region` |
+| `licell cache info <instanceId>` | 查看缓存实例详情 | `--region` |
+| `licell cache list` | 查看缓存实例列表 | `--region`, `--limit` |
+| `licell cache public-access [instanceId]` | 开通 Redis 公网访问并添加当前 IP 到白名单 | `--region`, `--ip` |
+| `licell cache rm <instanceId>` | 删除缓存实例 | `--region`, `--yes` |
+| `licell cache rotate-password` | 轮换 Redis 密码 | `--region`, `--instance` |
+| `licell supa add` | 创建 RDS Supabase 实例 | `--region`, `--name`, `--vsw` |
+| `licell supa config <instanceName>` | 查看 Supabase 实例配置（auth/storage/rag） | `--region`, `--set-auth`, `--set-storage` |
+| `licell supa connect <instanceName>` | 查看 Supabase 连接信息和 API Keys | `--region` |
+| `licell supa info <instanceName>` | 查看 Supabase 实例详情 | `--region` |
+| `licell supa list` | 查看 Supabase 实例列表 | `--region`, `--limit` |
+| `licell supa reset-password <instanceName>` | 重置 Supabase Dashboard 或数据库密码 | `--region`, `--dashboard-password`, `--db-password` |
+| `licell supa restart <instanceName>` | 重启 Supabase 实例 | `--region` |
+| `licell supa rm <instanceName>` | 删除 Supabase 实例 | `--region`, `--yes` |
+| `licell supa start <instanceName>` | 启动 Supabase 实例 | `--region` |
+| `licell supa stop <instanceName>` | 暂停 Supabase 实例 | `--region` |
+| `licell supa whitelist <instanceName>` | 查看/修改 Supabase IP 白名单 | `--region`, `--set`, `--add` |
 
 #### Cloud Infrastructure
 

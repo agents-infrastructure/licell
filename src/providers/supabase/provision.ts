@@ -1,7 +1,7 @@
 import { randomInt, randomUUID } from 'crypto';
 import * as $RdsAi from '@alicloud/rdsai20250507';
 import * as $OpenApi from '@alicloud/openapi-client';
-import { Config } from '../../utils/config';
+import { Config, withProjectBindingRegion } from '../../utils/config';
 import { type Spinner } from '../../utils/errors';
 import { sleep } from '../../utils/runtime';
 import { ensureDefaultNetwork } from '../vpc';
@@ -37,6 +37,7 @@ export async function provisionSupabase(spinner: Spinner, options: ProvisionSupa
   if (!vSwitchId) {
     const net = await ensureDefaultNetwork();
     vSwitchId = net.vswId;
+    project.network = withProjectBindingRegion(net, auth.region);
   }
 
   const appName = options.appName?.trim() || `licell-supa-${Date.now()}`;
@@ -139,6 +140,7 @@ export async function provisionSupabase(spinner: Spinner, options: ProvisionSupa
     SUPABASE_DASHBOARD_PASSWORD: dashboardPassword,
     SUPABASE_DB_PASSWORD: databasePassword
   };
+  project.supabase = withProjectBindingRegion({ instanceName }, auth.region);
   Config.setProject(project);
 
   return {

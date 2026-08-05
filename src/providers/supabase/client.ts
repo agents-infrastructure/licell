@@ -9,6 +9,7 @@ const RdsAiClientCtor = resolveSdkCtor<RdsAi>(RdsAi, '@alicloud/rdsai20250507');
 
 const REGION_SPECIFIC_ENDPOINTS: Record<string, string> = {
   'cn-chengdu': 'rdsai.cn-chengdu.aliyuncs.com',
+  'cn-hongkong': 'rdsai.cn-hongkong.aliyuncs.com',
   'ap-northeast-1': 'rdsai.ap-northeast-1.aliyuncs.com',
   'ap-southeast-1': 'rdsai.ap-southeast-1.aliyuncs.com',
   'ap-southeast-3': 'rdsai.ap-southeast-3.aliyuncs.com',
@@ -26,6 +27,7 @@ export function createRdsAiClient() {
   const client = new RdsAiClientCtor(new $OpenApi.Config({
     accessKeyId: auth.ak,
     accessKeySecret: auth.sk,
+    regionId: auth.region,
     endpoint: resolveEndpoint(auth.region),
     connectTimeout: RDSAI_CONNECT_TIMEOUT_MS,
     readTimeout: RDSAI_READ_TIMEOUT_MS

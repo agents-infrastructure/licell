@@ -48,6 +48,11 @@ describe('renderAgentSurfaceReferenceDoc', () => {
     expect(output.indexOf('### Cloud Infrastructure')).toBeLessThan(output.indexOf('### Automation & Tooling'));
     expect(output).toContain('## Recommended Agent Flow');
     expect(output).toContain('`licell deploy check`');
+    expect(output).toMatch(/\| `licell db add` \|[^\n]+\| `--region`,/);
+    expect(output).toMatch(/\| `licell cache add` \|[^\n]+\| `--region`,/);
+    expect(output).toMatch(/\| `licell supa add` \|[^\n]+\| `--region`,/);
+    expect(output).toMatch(/\| `licell login` \|[^\n]+\| `--account-id`, `--ak`, `--sk` \|/);
+    expect(output).toMatch(/\| `licell auth repair` \|[^\n]+\| `--account-id`, `--ak`, `--sk` \|/);
     expect(output).not.toMatch(/licell ecs (run|create)|runInstances/);
     expect(output).not.toContain('Tool Reference');
     expect(output).toContain('\n- `kind`：固定为 `licell-cli-record`。');

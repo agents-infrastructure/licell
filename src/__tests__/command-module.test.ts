@@ -59,6 +59,24 @@ describe('command module DSL', () => {
     });
   });
 
+  it('describes binding and project region defaults on generated options', () => {
+    const binding = defineCliCommand({
+      rawName: 'probe binding',
+      description: '探测资源绑定地域',
+      region: { scope: 'binding', binding: 'database' }
+    });
+    const project = defineCliCommand({
+      rawName: 'probe project',
+      description: '探测项目地域',
+      region: { scope: 'project' }
+    });
+
+    expect(binding.options.find((option) => option.rawName.includes('--region'))?.description)
+      .toContain('项目资源绑定地域');
+    expect(project.options.find((option) => option.rawName.includes('--region'))?.description)
+      .toContain('项目默认地域');
+  });
+
   it('preserves an existing regional option alias', () => {
     const command = defineCliCommand({
       rawName: 'probe logs',

@@ -1,5 +1,5 @@
 import Rds, * as $Rds from '@alicloud/rds20140815';
-import { Config } from '../../utils/config';
+import { Config, withProjectBindingRegion } from '../../utils/config';
 import { randomStrongPassword } from '../../utils/crypto';
 import { ignoreConflict, type Spinner } from '../../utils/errors';
 import { isRoleMissingError, isAlreadyExistsRoleError, isTransientError } from '../../utils/alicloud-error';
@@ -287,13 +287,13 @@ export async function provisionDatabase(
   const protocol = dbType === 'postgres' ? 'postgresql' : 'mysql';
   const dbUrl = `${protocol}://${encodeURIComponent(dbUser)}:${encodeURIComponent(dbPassword)}@${host}:${port}/${databaseName}`;
   project.envs = { ...project.envs, DATABASE_URL: dbUrl };
-  project.network = net;
-  project.database = {
+  project.network = withProjectBindingRegion(net, auth.region);
+  project.database = withProjectBindingRegion({
     type: dbType,
     instanceId: dbInstanceId,
     user: dbUser,
     name: databaseName
-  };
+  }, auth.region);
   Config.setProject(project);
   spinner.message('⚠️ DATABASE_URL（含密码）已写入 .licell/project.json；如需提交仓库，请先移除或改用不含密钥的配置。');
   return dbUrl;

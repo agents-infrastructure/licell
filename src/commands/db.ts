@@ -58,12 +58,14 @@ const dbAddOptions = [
 const dbAddCommand = defineCliCommand({
   rawName: 'db add',
   description: '分配数据库实例',
+  region: { scope: 'auth' },
   options: dbAddOptions
 });
 
 const dbListCommand = defineCliCommand({
   rawName: 'db list',
   description: '查看数据库实例列表',
+  region: { scope: 'auth' },
   options: [
     { rawName: '--limit <n>', description: '返回数量，默认 20' }
   ]
@@ -72,6 +74,7 @@ const dbListCommand = defineCliCommand({
 const dbClassCommand = defineCliCommand({
   rawName: 'db class [type]',
   description: '查询数据库可用规格（给 Agent/开发者在 db add 前对照）',
+  region: { scope: 'auth' },
   options: [
     { rawName: '--engine-version <version>', description: '数据库引擎版本（默认 postgresql=18.0，mysql=8.0）' },
     { rawName: '--category <category>', description: 'RDS Category（默认 postgresql=Basic，mysql=serverless_basic）' },
@@ -95,8 +98,9 @@ const dbClassCommand = defineCliCommand({
 const dbInfoCommand = defineCliCommand({
   rawName: 'db info <instanceId>',
   description: '查看数据库实例详情',
+  region: { scope: 'binding', binding: 'database', target: { argumentIndex: 0 } },
   options: [
-    { rawName: '--region <regionId>', description: '查询地域；不传则使用当前 licell 默认 region，不跨 region 查询' }
+    { rawName: '--region <regionId>', description: '查询地域；不传则优先使用匹配的项目 database binding region，否则使用 licell 默认 region' }
   ],
   descriptor: {
     title: 'Show RDS instance detail',
@@ -108,7 +112,7 @@ const dbInfoCommand = defineCliCommand({
     related: ['db list', 'db connect', 'db public-access', 'auth repair'],
     agentTips: [
       '自动化调用优先使用 `--output json`，读取 `detail.summary`、`detail.network` 和 `detail.security`。',
-      '未传 `--region` 时只查询当前 licell 默认 region；本命令不会跨 region 自动搜索。',
+      '未传 `--region` 时，若实例 ID 匹配项目 database binding 则使用其 region，否则使用 licell 默认 region；本命令不会跨 region 自动搜索。',
       '`inspectionWarnings[]` 表示白名单或安全组附加检查不可用，其他基础详情仍可使用。'
     ],
     automation: {
@@ -122,7 +126,7 @@ const dbInfoCommand = defineCliCommand({
     },
     optionInsights: {
       '--region': {
-        whenToUse: '实例不在当前 licell 默认 region 时显式指定。',
+        whenToUse: '实例不在匹配的项目 database binding region 或当前 licell 默认 region 时显式指定。',
         cautions: ['只影响本次查询，不修改全局默认 region，也不会跨 region 自动搜索。']
       }
     },
@@ -152,12 +156,14 @@ const dbInfoCommand = defineCliCommand({
 
 const dbConnectCommand = defineCliCommand({
   rawName: 'db connect [instanceId]',
-  description: '输出数据库连接信息'
+  description: '输出数据库连接信息',
+  region: { scope: 'binding', binding: 'database', target: { argumentIndex: 0 } }
 });
 
 const dbPublicAccessCommand = defineCliCommand({
   rawName: 'db public-access [instanceId]',
   description: '开通数据库公网访问并添加当前 IP 到白名单',
+  region: { scope: 'binding', binding: 'database', target: { argumentIndex: 0 } },
   options: [
     { rawName: '--ip <ip>', description: '手动指定公网 IP（不传则自动获取）' }
   ],
@@ -172,6 +178,7 @@ const dbPublicAccessCommand = defineCliCommand({
 const dbRmCommand = defineCliCommand({
   rawName: 'db rm <instanceId>',
   description: '删除数据库实例',
+  region: { scope: 'binding', binding: 'database', target: { argumentIndex: 0 } },
   options: [
     { rawName: '--yes', description: '跳过确认' }
   ],

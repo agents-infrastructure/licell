@@ -1,4 +1,4 @@
-import { type ProjectNetworkConfig } from '../../utils/config';
+import { type ProjectNetworkConfig, withProjectBindingRegion } from '../../utils/config';
 import { formatErrorMessage } from '../../utils/errors';
 import type { CacheInstanceSummary, ParsedRedisConnection, TairKVCacheInstanceSummary } from './types';
 
@@ -94,14 +94,15 @@ export function isTairServerlessInstance(instanceId: string) {
 
 export function mergeProjectNetwork(
   current: ProjectNetworkConfig | undefined,
-  next: { vpcId: string; vswId: string; zoneId?: string; cidrBlock?: string; sgId?: string }
+  next: { vpcId: string; vswId: string; zoneId?: string; cidrBlock?: string; sgId?: string; region?: string },
+  regionId?: string
 ): ProjectNetworkConfig {
-  return {
+  return withProjectBindingRegion({
     vpcId: next.vpcId,
     vswId: next.vswId,
     sgId: next.sgId ?? current?.sgId,
     cidrBlock: next.cidrBlock ?? current?.cidrBlock
-  };
+  }, regionId || next.region || current?.region);
 }
 
 export function toClassicSummary(instance: {

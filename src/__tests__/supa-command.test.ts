@@ -11,7 +11,11 @@ const {
   spinnerStopMock
 } = vi.hoisted(() => ({
   configState: {
-    current: { envs: {} as Record<string, string>, database: undefined as unknown }
+    current: {
+      envs: {} as Record<string, string>,
+      database: undefined as unknown,
+      supabase: undefined as unknown
+    }
   },
   executeWithAuthRecoveryMock: vi.fn(async (_options: unknown, task: () => Promise<unknown>) => task()),
   getProjectMock: vi.fn(),
@@ -97,7 +101,7 @@ describe('supa rm command', () => {
 
   beforeEach(() => {
     consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
-    configState.current = { envs: {}, database: undefined };
+    configState.current = { envs: {}, database: undefined, supabase: undefined };
     executeWithAuthRecoveryMock.mockClear();
     getProjectMock.mockReset();
     getProjectMock.mockImplementation(() => configState.current);
@@ -135,6 +139,10 @@ describe('supa rm command', () => {
         instanceId: 'pgm-demo',
         user: 'demo',
         name: 'app'
+      },
+      supabase: {
+        instanceName: 'demo-supa',
+        region: 'cn-shanghai'
       }
     };
 
@@ -153,6 +161,7 @@ describe('supa rm command', () => {
     });
     expect(setProjectMock).toHaveBeenCalledWith({
       database: undefined,
+      supabase: undefined,
       envs: {
         KEEP_ME: '1'
       }
@@ -173,6 +182,10 @@ describe('supa rm command', () => {
         instanceId: 'pgm-other',
         user: 'demo',
         name: 'app'
+      },
+      supabase: {
+        instanceName: 'other-supa',
+        region: 'cn-beijing'
       }
     };
 

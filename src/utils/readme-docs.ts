@@ -22,7 +22,13 @@ function escapeMarkdownCell(value: string) {
 }
 
 function summarizeKeyOptions(command: ReturnType<typeof buildCommandReferenceSections>[number]['commands'][number]) {
-  const flags = unique(command.options.map((option) => option.primaryFlag)).slice(0, 3);
+  const allFlags = unique(command.options.map((option) => option.primaryFlag));
+  const flags = (command.region
+    ? [
+      ...allFlags.filter((flag) => flag === '--region'),
+      ...allFlags.filter((flag) => flag !== '--region')
+    ]
+    : allFlags).slice(0, 3);
   return flags.length > 0 ? flags.map((flag) => `\`${flag}\``).join(', ') : '—';
 }
 

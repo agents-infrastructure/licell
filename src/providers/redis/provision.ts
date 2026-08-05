@@ -1,6 +1,6 @@
 import Kvstore, * as $Kvstore from '@alicloud/r-kvstore20150101';
 import { randomUUID } from 'crypto';
-import { type AuthConfig, Config } from '../../utils/config';
+import { type AuthConfig, Config, withProjectBindingRegion } from '../../utils/config';
 import { randomStrongPassword } from '../../utils/crypto';
 import { formatErrorMessage, type Spinner } from '../../utils/errors';
 import { sleep } from '../../utils/runtime';
@@ -127,15 +127,15 @@ async function bindExistingClassicRedisInstance(
     REDIS_PASSWORD: redisPassword,
     REDIS_USERNAME: accountName
   };
-  project.network = mergeProjectNetwork(project.network, net);
-  project.cache = {
+  project.network = mergeProjectNetwork(project.network, net, auth.region);
+  project.cache = withProjectBindingRegion({
     type: 'redis',
     instanceId,
     host,
     port,
     accountName,
     mode: 'classic-redis'
-  };
+  }, auth.region);
   Config.setProject(project);
   return {
     redisUrl,
@@ -147,6 +147,7 @@ async function bindExistingClassicRedisInstance(
 async function bindExistingTairInstance(
   spinner: Spinner,
   redisClient: Kvstore,
+  auth: AuthConfig,
   project: ReturnType<typeof Config.getProject>,
   options: ProvisionRedisOptions,
   net: { vpcId: string; vswId: string; zoneId?: string; cidrBlock?: string }
@@ -210,8 +211,8 @@ async function bindExistingTairInstance(
     REDIS_PASSWORD: redisPassword,
     REDIS_USERNAME: accountName
   };
-  project.network = mergeProjectNetwork(project.network, net);
-  project.cache = {
+  project.network = mergeProjectNetwork(project.network, net, auth.region);
+  project.cache = withProjectBindingRegion({
     type: 'redis',
     instanceId: endpoint.sourceInstanceId,
     host: endpoint.host,
@@ -219,7 +220,7 @@ async function bindExistingTairInstance(
     accountName,
     vkName: options.vkName?.trim() || project.cache?.vkName || (endpoint.sourceInstanceId.startsWith('tk-') ? endpoint.sourceInstanceId : undefined),
     mode: 'tair-serverless-kv'
-  };
+  }, auth.region);
   Config.setProject(project);
   return {
     redisUrl,
@@ -268,7 +269,7 @@ export async function provisionRedis(spinner: Spinner, options: ProvisionRedisOp
   const existingInstanceId = options.instanceId?.trim();
   if (existingInstanceId) {
     if (provisionMode === 'serverless') {
-      return bindExistingTairInstance(spinner, redisClient, project, options, net);
+      return bindExistingTairInstance(spinner, redisClient, auth, project, options, net);
     }
     return bindExistingClassicRedisInstance(spinner, redisClient, auth, project, options, net);
   }
@@ -294,15 +295,15 @@ export async function provisionRedis(spinner: Spinner, options: ProvisionRedisOp
         REDIS_PASSWORD: inferResult.password,
         REDIS_USERNAME: inferResult.accountName || ''
       };
-      project.network = mergeProjectNetwork(project.network, net);
-      project.cache = {
+      project.network = mergeProjectNetwork(project.network, net, auth.region);
+      project.cache = withProjectBindingRegion({
         type: 'redis',
         instanceId: inferResult.instanceId,
         host: inferResult.host,
         port: inferResult.port,
         accountName: inferResult.accountName,
         mode: 'tair-serverless-kv'
-      };
+      }, auth.region);
       Config.setProject(project);
       return {
         redisUrl: inferResult.redisUrl,
@@ -403,8 +404,8 @@ export async function provisionRedis(spinner: Spinner, options: ProvisionRedisOp
     REDIS_PASSWORD: redisPassword,
     REDIS_USERNAME: accountName
   };
-  project.network = mergeProjectNetwork(project.network, net);
-  project.cache = {
+  project.network = mergeProjectNetwork(project.network, net, auth.region);
+  project.cache = withProjectBindingRegion({
     type: 'redis',
     instanceId: endpoint.sourceInstanceId,
     host,
@@ -412,7 +413,7 @@ export async function provisionRedis(spinner: Spinner, options: ProvisionRedisOp
     accountName,
     vkName: returnedVkName,
     mode: 'tair-serverless-kv'
-  };
+  }, auth.region);
   Config.setProject(project);
   return {
     redisUrl,
@@ -491,15 +492,15 @@ async function createClassicRedisInstance(
         REDIS_PASSWORD: password,
         REDIS_USERNAME: ''
       };
-      project.network = mergeProjectNetwork(project.network, net);
-      project.cache = {
+      project.network = mergeProjectNetwork(project.network, net, auth.region);
+      project.cache = withProjectBindingRegion({
         type: 'redis',
         instanceId,
         host: resolvedHost,
         port: resolvedPort,
         accountName: undefined,
         mode: 'classic-redis'
-      };
+      }, auth.region);
       Config.setProject(project);
       return {
         redisUrl,

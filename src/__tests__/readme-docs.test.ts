@@ -51,6 +51,11 @@ describe('syncReadmeQuickReferenceSection', () => {
     expect(output.indexOf('#### Cloud Infrastructure')).toBeLessThan(output.indexOf('#### Automation & Tooling'));
     expect(output).not.toMatch(/licell ecs (run|create)|runInstances/);
     expect(output).toContain('licell deploy --type task --runtime nodejs22 --entry src/task.ts --target preview --output json');
+    expect(output).toMatch(/\| `licell db add` \|[^\n]+\| `--region`,/);
+    expect(output).toMatch(/\| `licell cache add` \|[^\n]+\| `--region`,/);
+    expect(output).toMatch(/\| `licell supa add` \|[^\n]+\| `--region`,/);
+    expect(output).toMatch(/\| `licell login` \|[^\n]+\| `--account-id`, `--ak`, `--sk` \|/);
+    expect(output).toMatch(/\| `licell auth repair` \|[^\n]+\| `--account-id`, `--ak`, `--sk` \|/);
     expect(output).not.toContain('old content');
     expect(output).toContain('upgrade guidance');
   });

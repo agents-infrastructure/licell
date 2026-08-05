@@ -4,7 +4,8 @@ import * as $OpenApi from '@alicloud/openapi-client';
 import { Config } from '../utils/config';
 import { sleep } from '../utils/runtime';
 import { resolveSdkCtor } from '../utils/sdk';
-import { isCidrConflictError } from '../utils/alicloud-error';
+import { isCidrConflictError, isNotFoundError } from '../utils/alicloud-error';
+import { formatErrorMessage } from '../utils/errors';
 
 const VpcClientCtor = resolveSdkCtor<Vpc>(Vpc, '@alicloud/vpc20160428');
 const EcsClientCtor = resolveSdkCtor<Ecs>(Ecs, '@alicloud/ecs20140526');
@@ -43,6 +44,11 @@ function normalizePreferredZones(zoneIds?: string[]) {
 
 function isManagedVSwitchName(vSwitchName?: string) {
   return vSwitchName === DEFAULT_VSW_NAME || (vSwitchName || '').startsWith(`${DEFAULT_VSW_NAME}-`);
+}
+
+function isStaleNetworkBindingError(err: unknown) {
+  if (isNotFoundError(err)) return true;
+  return /指定 VPC 不存在|不属于 --vpc|无法确定 vSwitch 所在可用区/.test(formatErrorMessage(err));
 }
 
 function isUsableSwitch(vswitch: VSwitchSummary) {
@@ -173,6 +179,21 @@ export async function ensureDefaultNetwork(options?: EnsureDefaultNetworkOptions
   const auth = Config.requireAuth();
   const regionId = auth.region;
   const preferredZoneIds = normalizePreferredZones(options?.preferredZoneIds);
+  const projectNetwork = Config.getProject().network;
+  if (projectNetwork && (!projectNetwork.region || projectNetwork.region === regionId)) {
+    try {
+      const resolved = await resolveProvidedNetwork({
+        vpcId: projectNetwork.vpcId,
+        vswId: projectNetwork.vswId
+      });
+      if (preferredZoneIds.length === 0 || preferredZoneIds.includes(resolved.zoneId)) {
+        return resolved;
+      }
+    } catch (err: unknown) {
+      if (!isStaleNetworkBindingError(err)) throw err;
+      // A confirmed stale binding is ignored and rebuilt in the effective region below.
+    }
+  }
   const vpcConfig = new $OpenApi.Config({
     accessKeyId: auth.ak,
     accessKeySecret: auth.sk,
@@ -227,7 +248,7 @@ export async function ensureDefaultNetwork(options?: EnsureDefaultNetworkOptions
   }
 
   if (!zoneId) throw new Error(`无法确定 vSwitch 所在可用区 (vswId=${vswId})`);
-  return { vpcId, vswId, sgId, cidrBlock, zoneId };
+  return { vpcId, vswId, sgId, cidrBlock, zoneId, region: regionId };
 }
 
 export async function resolveProvidedNetwork(options: ResolveProvidedNetworkOptions) {
@@ -278,6 +299,7 @@ export async function resolveProvidedNetwork(options: ResolveProvidedNetworkOpti
     vswId,
     sgId,
     cidrBlock: vpc.cidrBlock || DEFAULT_VPC_CIDR,
-    zoneId
+    zoneId,
+    region: regionId
   };
 }

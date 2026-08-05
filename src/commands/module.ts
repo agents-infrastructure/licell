@@ -316,9 +316,14 @@ export function defineCliCommand(command: DeclaredCliCommand): any {
 
   const options = [...(command.options || [])];
   if (!options.some((option) => /(?:^|[,\s])--region(?:[\s=]|$)/.test(option.rawName))) {
+    const description = command.region.scope === 'binding'
+      ? '覆盖本次命令使用的阿里云地域；不传时优先使用匹配的项目资源绑定地域'
+      : command.region.scope === 'project'
+        ? '覆盖本次命令使用的阿里云地域；不传时优先使用项目默认地域'
+        : '覆盖本次命令使用的阿里云地域（不修改默认配置）';
     options.push({
       rawName: '--region <regionId>',
-      description: '覆盖本次命令使用的阿里云地域（不修改默认配置）'
+      description
     });
   }
 
@@ -339,7 +344,11 @@ export function defineCliCommand(command: DeclaredCliCommand): any {
       ...descriptor,
       optionInsights: {
         '--region': {
-          whenToUse: '需要让本次命令使用不同于默认配置的阿里云地域时使用。',
+          whenToUse: command.region.scope === 'binding'
+            ? '目标资源不属于项目 binding 记录的地域，或需要临时覆盖该地域时使用。'
+            : command.region.scope === 'project'
+              ? '需要让本次命令使用不同于项目默认配置的阿里云地域时使用。'
+              : '需要让本次命令使用不同于默认配置的阿里云地域时使用。',
           cautions: ['只影响本次命令，不修改 auth 或项目默认地域。']
         },
         ...(descriptor.optionInsights || {})

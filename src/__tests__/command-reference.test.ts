@@ -268,6 +268,7 @@ describe('renderSkillCommandReference', () => {
     expect(markdown).toContain('`licell doctor --output json`');
     expect(markdown).toContain('Inspect：');
     expect(markdown).toContain('关键选项建议：');
+    expect(markdown).toMatch(/\| `licell login` \|[^\n]+\| `--account-id`, `--ak`, `--sk`, `--region` \|/);
     expect(markdown).toContain('结构化结果：');
     expect(markdown).toContain('`stage`：命令阶段标识。');
     expect(markdown).toContain('`finalUrl`：最终访问 URL。');

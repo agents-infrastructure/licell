@@ -24,7 +24,8 @@ const {
   tryCreateInferInstanceMock: vi.fn()
 }));
 
-vi.mock('../utils/config', () => ({
+vi.mock('../utils/config', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../utils/config')>()),
   Config: {
     requireAuth: () => ({
       accountId: '1494123412341234',
@@ -68,6 +69,7 @@ vi.mock('../providers/redis/internals', () => ({
 }));
 
 import { provisionRedis } from '../providers/redis/provision';
+import { mergeProjectNetwork } from '../providers/redis/helpers';
 
 describe('cache provider network zone selection', () => {
   const describeAvailableResourceMock = vi.fn();
@@ -138,6 +140,29 @@ describe('cache provider network zone selection', () => {
     });
   });
 
+  it('merges network ownership without dropping existing optional fields', () => {
+    expect(mergeProjectNetwork(
+      {
+        vpcId: 'vpc-old',
+        vswId: 'vsw-old',
+        sgId: 'sg-old',
+        cidrBlock: '10.0.0.0/8',
+        region: 'cn-hangzhou'
+      },
+      {
+        vpcId: 'vpc-new',
+        vswId: 'vsw-new',
+        region: ' CN-Shanghai '
+      }
+    )).toEqual({
+      vpcId: 'vpc-new',
+      vswId: 'vsw-new',
+      sgId: 'sg-old',
+      cidrBlock: '10.0.0.0/8',
+      region: 'cn-shanghai'
+    });
+  });
+
   it('defaults to classic mode for new cache creation', async () => {
     listTairKVCacheInstancesMock.mockResolvedValue([
       { instanceId: 'tk-demo-1', zoneId: 'cn-hangzhou-e', instanceStatus: 'Normal' }
@@ -164,6 +189,10 @@ describe('cache provider network zone selection', () => {
     expect(result).toMatchObject({
       mode: 'classic-redis',
       instanceId: 'r-created'
+    });
+    expect(setProjectMock.mock.calls.at(-1)?.[0]).toMatchObject({
+      network: { region: 'cn-hangzhou' },
+      cache: { instanceId: 'r-created', region: 'cn-hangzhou' }
     });
   });
 

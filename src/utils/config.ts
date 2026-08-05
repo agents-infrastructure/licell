@@ -58,6 +58,15 @@ export interface ProjectSupabaseConfig {
   region?: string;
 }
 
+export function withProjectBindingRegion<T extends object>(binding: T, regionId?: unknown): T & { region?: string } {
+  const { region: existingRegion, ...withoutRegion } = binding as T & { region?: unknown };
+  const region = normalizeRegionId(regionId) || normalizeRegionId(existingRegion);
+  return {
+    ...withoutRegion,
+    ...(region ? { region } : {})
+  } as T & { region?: string };
+}
+
 export interface ProjectResourcesConfig {
   memorySize?: number;
   diskSize?: number;
