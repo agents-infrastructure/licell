@@ -9,6 +9,7 @@ import { listFunctionVersions } from '../providers/fc';
 import { isAccessDeniedError, isAuthCredentialInvalidError } from './alicloud-error';
 import { isJsonOutput } from './output';
 import { readLicellEnv } from './env';
+import { applyInvocationRegion } from './region-context';
 
 export function toPromptValue(input: unknown, fieldName: string) {
   if (isCancel(input)) process.exit(0);
@@ -72,7 +73,7 @@ export async function ensureAuthOrExit() {
         const newAuth = Config.getAuth();
         if (newAuth) {
           console.log(pc.green('继续执行原来的命令...\n'));
-          return newAuth;
+          return applyInvocationRegion(newAuth);
         }
       }
     }
@@ -80,7 +81,7 @@ export async function ensureAuthOrExit() {
     outro(pc.red('未登录，请先执行 `licell login`'));
     process.exit(1);
   }
-  return auth;
+  return applyInvocationRegion(auth);
 }
 
 export function requireAppName(project: { appName?: string }, message = '请先执行 licell deploy 部署项目'): asserts project is { appName: string } {

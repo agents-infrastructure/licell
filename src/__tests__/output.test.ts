@@ -10,6 +10,7 @@ import {
   initOutputContext,
   parseGlobalOutputModeArgv
 } from '../utils/output';
+import { runWithInvocationRegion } from '../utils/region-context';
 
 describe('output utils', () => {
   it('parses and strips global --output option', () => {
@@ -302,6 +303,23 @@ describe('output utils', () => {
     expect(records[0].stage).toBe('db.add');
     expect(records[0].created).toBe(true);
     expect(records[0].connectionStringMasked).toBe('postgres://***');
+
+    writeSpy.mockRestore();
+  });
+
+  it('injects the active call region without overwriting an explicit field', () => {
+    initOutputContext('json', ['node', 'src/cli.ts', 'db', 'list']);
+    const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+
+    runWithInvocationRegion({ scope: 'auth', regionId: 'cn-shanghai' }, () => {
+      emitCommandResult({ instances: [] });
+      emitCommandResult({ instances: [], callRegionId: 'cn-beijing' });
+    });
+
+    const raw = writeSpy.mock.calls.map((args) => String(args[0])).join('');
+    const records = extractJsonRecordsFromOutput(raw) as any[];
+    expect(records[0].callRegionId).toBe('cn-shanghai');
+    expect(records[1].callRegionId).toBe('cn-beijing');
 
     writeSpy.mockRestore();
   });

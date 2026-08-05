@@ -103,6 +103,42 @@ describe('normalizeAuth', () => {
 });
 
 describe('normalizeProject', () => {
+  it('keeps the existing top-level region authoritative over a conflicting deploy target', () => {
+    const result = normalizeProject({
+      region: 'CN-HANGZHOU',
+      deployTarget: {
+        service: 'fc-http',
+        region: 'cn-shanghai',
+        function: 'demo-api'
+      }
+    });
+
+    expect(result.region).toBe('cn-hangzhou');
+    expect(result.deployTarget?.region).toBe('cn-hangzhou');
+  });
+
+  it('normalizes and preserves all resource binding regions', () => {
+    const result = normalizeProject({
+      network: { vpcId: 'vpc-1', vswId: 'vsw-1', region: ' CN-SHANGHAI ' },
+      cache: { type: 'redis', instanceId: 'r-1', region: ' CN-BEIJING ' },
+      database: { instanceId: 'pgm-1', region: ' CN-HANGZHOU ' },
+      supabase: { instanceName: ' Demo-Supa ', region: ' CN-CHENGDU ' }
+    });
+
+    expect(result.network?.region).toBe('cn-shanghai');
+    expect(result.cache?.region).toBe('cn-beijing');
+    expect(result.database?.region).toBe('cn-hangzhou');
+    expect(result.supabase).toEqual({
+      instanceName: 'Demo-Supa',
+      region: 'cn-chengdu'
+    });
+  });
+
+  it('drops invalid supabase bindings instead of passing untyped data through', () => {
+    expect(normalizeProject({ supabase: 'invalid' }).supabase).toBeUndefined();
+    expect(normalizeProject({ supabase: { instanceName: '   ', region: 123 } }).supabase).toBeUndefined();
+  });
+
   it('returns default for null', () => {
     const result = normalizeProject(null);
     expect(result).toEqual({ envs: {} });
@@ -380,6 +416,34 @@ describe('normalizeProject', () => {
 });
 
 describe('Config.setProject', () => {
+  it('preserves resource binding regions across unrelated project writes', () => {
+    const root = mkdtempSync(join(tmpdir(), 'licell-config-'));
+    const previousCwd = process.cwd();
+    try {
+      process.chdir(root);
+      Config.setProject({
+        network: { vpcId: 'vpc-1', vswId: 'vsw-1', region: 'cn-shanghai' },
+        cache: { type: 'redis', instanceId: 'r-1', region: 'cn-beijing' },
+        database: { instanceId: 'pgm-1', region: 'cn-hangzhou' },
+        supabase: { instanceName: 'Demo-Supa', region: 'cn-chengdu' }
+      });
+
+      Config.setProject({ appName: 'updated-app' });
+
+      const persisted = JSON.parse(readFileSync(join(root, '.licell', 'project.json'), 'utf-8'));
+      expect(persisted).toMatchObject({
+        appName: 'updated-app',
+        network: { region: 'cn-shanghai' },
+        cache: { region: 'cn-beijing' },
+        database: { region: 'cn-hangzhou' },
+        supabase: { instanceName: 'Demo-Supa', region: 'cn-chengdu' }
+      });
+    } finally {
+      process.chdir(previousCwd);
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('writes project config without mutating an existing .gitignore', () => {
     const root = mkdtempSync(join(tmpdir(), 'licell-config-'));
     const previousCwd = process.cwd();

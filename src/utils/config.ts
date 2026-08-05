@@ -1,6 +1,7 @@
 import { homedir } from 'os';
 import { dirname, isAbsolute, join, relative, resolve } from 'path';
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'fs';
+import { applyInvocationRegion, normalizeRegionId } from './region-context';
 
 const GLOBAL_DIR = join(homedir(), '.licell-cli');
 const LEGACY_GLOBAL_DIR = join(homedir(), '.ali-cli');
@@ -30,6 +31,7 @@ export interface ProjectNetworkConfig {
   vswId: string;
   sgId?: string;
   cidrBlock?: string;
+  region?: string;
 }
 
 export interface ProjectCacheConfig {
@@ -40,6 +42,7 @@ export interface ProjectCacheConfig {
   accountName?: string;
   vkName?: string;
   mode?: string;
+  region?: string;
 }
 
 export interface ProjectDatabaseConfig {
@@ -47,6 +50,12 @@ export interface ProjectDatabaseConfig {
   instanceId: string;
   user?: string;
   name?: string;
+  region?: string;
+}
+
+export interface ProjectSupabaseConfig {
+  instanceName: string;
+  region?: string;
 }
 
 export interface ProjectResourcesConfig {
@@ -112,6 +121,7 @@ export interface ProjectConfig {
   network?: ProjectNetworkConfig;
   cache?: ProjectCacheConfig;
   database?: ProjectDatabaseConfig;
+  supabase?: ProjectSupabaseConfig;
   artifact?: ProjectArtifactConfig;
   deployTarget?: ProjectDeployTargetConfig;
   route?: ProjectRouteConfig;
@@ -501,11 +511,13 @@ export function normalizeProject(raw: unknown): ProjectConfig {
     typeof networkRaw.vpcId === 'string' &&
     typeof networkRaw.vswId === 'string'
   ) {
+    const region = normalizeRegionId(networkRaw.region);
     normalized.network = {
       vpcId: networkRaw.vpcId,
       vswId: networkRaw.vswId,
       sgId: typeof networkRaw.sgId === 'string' ? networkRaw.sgId : undefined,
-      cidrBlock: typeof networkRaw.cidrBlock === 'string' ? networkRaw.cidrBlock : undefined
+      cidrBlock: typeof networkRaw.cidrBlock === 'string' ? networkRaw.cidrBlock : undefined,
+      ...(region ? { region } : {})
     };
   }
 
@@ -515,12 +527,14 @@ export function normalizeProject(raw: unknown): ProjectConfig {
     typeof cacheRaw.type === 'string' &&
     typeof cacheRaw.instanceId === 'string'
   ) {
+    const region = normalizeRegionId(cacheRaw.region);
     const cache: ProjectCacheConfig = {
       type: cacheRaw.type,
       instanceId: cacheRaw.instanceId,
       host: typeof cacheRaw.host === 'string' ? cacheRaw.host : undefined,
       port: typeof cacheRaw.port === 'number' ? cacheRaw.port : undefined,
-      accountName: typeof cacheRaw.accountName === 'string' ? cacheRaw.accountName : undefined
+      accountName: typeof cacheRaw.accountName === 'string' ? cacheRaw.accountName : undefined,
+      ...(region ? { region } : {})
     };
     if (typeof cacheRaw.vkName === 'string') cache.vkName = cacheRaw.vkName;
     if (typeof cacheRaw.mode === 'string') cache.mode = cacheRaw.mode;
@@ -529,13 +543,27 @@ export function normalizeProject(raw: unknown): ProjectConfig {
 
   const databaseRaw = isRecord(projectRaw.database) ? projectRaw.database : null;
   if (databaseRaw && typeof databaseRaw.instanceId === 'string') {
+    const region = normalizeRegionId(databaseRaw.region);
     const database: ProjectDatabaseConfig = {
       instanceId: databaseRaw.instanceId,
       type: typeof databaseRaw.type === 'string' ? databaseRaw.type : undefined,
       user: typeof databaseRaw.user === 'string' ? databaseRaw.user : undefined,
-      name: typeof databaseRaw.name === 'string' ? databaseRaw.name : undefined
+      name: typeof databaseRaw.name === 'string' ? databaseRaw.name : undefined,
+      ...(region ? { region } : {})
     };
     normalized.database = database;
+  }
+
+  const supabaseRaw = isRecord(projectRaw.supabase) ? projectRaw.supabase : null;
+  if (supabaseRaw && typeof supabaseRaw.instanceName === 'string') {
+    const instanceName = supabaseRaw.instanceName.trim();
+    const region = normalizeRegionId(supabaseRaw.region);
+    if (instanceName) {
+      normalized.supabase = {
+        instanceName,
+        ...(region ? { region } : {})
+      };
+    }
   }
 
   const derivedArtifact = normalizeArtifactConfig({
@@ -591,6 +619,12 @@ export function normalizeProject(raw: unknown): ProjectConfig {
   if (!normalized.region && deployTarget?.region) {
     normalized.region = deployTarget.region;
   }
+  if (normalized.region && normalized.deployTarget) {
+    normalized.deployTarget = {
+      ...normalized.deployTarget,
+      region: normalized.region
+    };
+  }
   if (!normalized.appName && deployTarget?.function) {
     normalized.appName = deployTarget.function;
   }
@@ -638,6 +672,7 @@ export function normalizeProject(raw: unknown): ProjectConfig {
     network: _n,
     cache: _c,
     database: _db,
+    supabase: _supabase,
     artifact: _artifact,
     deployTarget: _deployTarget,
     route: _route,
@@ -782,10 +817,15 @@ export const Config = {
     }
     return normalized;
   },
+  getDefaultRegion() {
+    const authFile = getReadableAuthFile();
+    if (!authFile) return null;
+    return normalizeAuth(readJsonSafely<unknown>(authFile, null))?.region || null;
+  },
   requireAuth() {
     const auth = this.getAuth();
     if (!auth) throw new Error('未登录，请先执行 `licell login`');
-    return auth;
+    return applyInvocationRegion(auth);
   },
   setAuth(data: AuthConfig) {
     ensureSecureDir(GLOBAL_DIR);

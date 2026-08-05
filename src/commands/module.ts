@@ -1,4 +1,10 @@
 import type { CAC } from 'cac';
+import { Config, type ProjectConfig } from '../utils/config';
+import {
+  type CommandRegionScope,
+  normalizeRegionId,
+  runWithInvocationRegion
+} from '../utils/region-context';
 
 export interface CommandActionHint {
   name: string;
@@ -141,6 +147,19 @@ export interface DeclaredCliOption {
   description: string;
 }
 
+export type CommandRegionBinding = 'database' | 'cache' | 'supabase';
+
+export interface CommandRegionBindingTarget {
+  argumentIndex?: number;
+  option?: string;
+}
+
+export interface CommandRegionMetadata {
+  scope: CommandRegionScope;
+  binding?: CommandRegionBinding;
+  target?: CommandRegionBindingTarget;
+}
+
 export interface DeclaredCliCommand {
   rawName: string;
   /**
@@ -153,6 +172,7 @@ export interface DeclaredCliCommand {
   aliases?: string[];
   options?: readonly DeclaredCliOption[];
   descriptor?: CommandDescriptor;
+  region?: CommandRegionMetadata;
 }
 
 function normalizeDescriptorKey(key: string) {
@@ -282,8 +302,54 @@ ${lines.join('\n')}`);
 export function defineCommandManifest<const T extends LicellCommandManifest>(manifest: T) {
   return assertCommandManifest(manifest);
 }
-export function defineCliCommand<const T extends DeclaredCliCommand>(command: T) {
-  return command;
+type RegionalizedCliCommand<T extends DeclaredCliCommand> = Omit<T, 'options' | 'descriptor'> & {
+  options: readonly DeclaredCliOption[];
+  descriptor: CommandDescriptor;
+};
+
+export function defineCliCommand<const T extends DeclaredCliCommand & { region: CommandRegionMetadata }>(
+  command: T
+): RegionalizedCliCommand<T>;
+export function defineCliCommand<const T extends DeclaredCliCommand>(command: T): T;
+export function defineCliCommand(command: DeclaredCliCommand): any {
+  if (!command.region) return command;
+
+  const options = [...(command.options || [])];
+  if (!options.some((option) => /(?:^|[,\s])--region(?:[\s=]|$)/.test(option.rawName))) {
+    options.push({
+      rawName: '--region <regionId>',
+      description: '覆盖本次命令使用的阿里云地域（不修改默认配置）'
+    });
+  }
+
+  const descriptor = command.descriptor || {};
+  const fields = [...(descriptor.result?.fields || [])];
+  if (!fields.some((field) => field.name === 'callRegionId')) {
+    fields.push({
+      name: 'callRegionId',
+      description: '本次命令实际使用的阿里云地域 ID。',
+      required: false
+    });
+  }
+
+  return {
+    ...command,
+    options,
+    descriptor: {
+      ...descriptor,
+      optionInsights: {
+        '--region': {
+          whenToUse: '需要让本次命令使用不同于默认配置的阿里云地域时使用。',
+          cautions: ['只影响本次命令，不修改 auth 或项目默认地域。']
+        },
+        ...(descriptor.optionInsights || {})
+      },
+      result: {
+        ...(descriptor.result || {}),
+        fields
+      }
+    }
+  };
 }
 
 function toCommandKey(rawName: string) {
@@ -300,6 +366,63 @@ export function commandInvocation(command: Pick<DeclaredCliCommand, 'rawName'>) 
   return key ? `licell ${key}` : 'licell';
 }
 
+function toInvocationOptions(args: unknown[]) {
+  const candidate = args.at(-1);
+  return candidate && typeof candidate === 'object' && !Array.isArray(candidate)
+    ? candidate as Record<string, unknown>
+    : {};
+}
+
+function toBindingIdentity(
+  project: ProjectConfig,
+  binding: CommandRegionBinding
+) {
+  if (binding === 'database') {
+    return { id: project.database?.instanceId, region: project.database?.region };
+  }
+  if (binding === 'cache') {
+    return { id: project.cache?.instanceId, region: project.cache?.region };
+  }
+  return { id: project.supabase?.instanceName, region: project.supabase?.region };
+}
+
+function resolveBindingRegion(
+  command: DeclaredCliCommand,
+  project: ProjectConfig,
+  args: unknown[],
+  options: Record<string, unknown>
+) {
+  const binding = command.region?.binding;
+  if (!binding) return undefined;
+  const identity = toBindingIdentity(project, binding);
+  if (!identity.id || !identity.region) return undefined;
+
+  const target = command.region?.target;
+  const targetValue = target?.option ? options[target.option] : args[target?.argumentIndex ?? 0];
+  const explicitTarget = typeof targetValue === 'string' ? targetValue.trim() : '';
+  if (explicitTarget && explicitTarget !== identity.id.trim()) return undefined;
+  return identity.region;
+}
+
+function resolveCommandRegion(command: DeclaredCliCommand, args: unknown[]) {
+  const region = command.region;
+  if (!region) return undefined;
+  const options = toInvocationOptions(args);
+  const explicitRegion = normalizeRegionId(options.region);
+  if (explicitRegion) return explicitRegion;
+
+  if (region.scope === 'auth' || region.scope === 'manifest') return undefined;
+  const component = typeof options.component === 'string' ? options.component.trim() : undefined;
+  const project = Config.getProject(component ? { component } : undefined);
+  if (region.scope === 'binding') {
+    return normalizeRegionId(resolveBindingRegion(command, project, args, options));
+  }
+  if (region.scope === 'project') {
+    return normalizeRegionId(project.region);
+  }
+  return undefined;
+}
+
 export function registerCliCommand(cli: CAC, command: DeclaredCliCommand) {
   const instance = cli.command(command.cliRawName || command.rawName, command.description);
   (instance as typeof instance & { licellDeclaredCommand?: DeclaredCliCommand }).licellDeclaredCommand = command;
@@ -308,6 +431,27 @@ export function registerCliCommand(cli: CAC, command: DeclaredCliCommand) {
   }
   for (const option of command.options || []) {
     instance.option(option.rawName, option.description);
+  }
+  if (command.region) {
+    const action = instance.action.bind(instance);
+    instance.action = ((callback: (...args: any[]) => any) => action(function (this: unknown, ...args: any[]) {
+      let defaultRegionResolved = false;
+      let defaultRegion: string | undefined;
+      return runWithInvocationRegion(
+        {
+          scope: command.region!.scope,
+          regionId: resolveCommandRegion(command, args),
+          resolveFallbackRegion: () => {
+            if (!defaultRegionResolved) {
+              defaultRegion = normalizeRegionId(Config.getDefaultRegion());
+              defaultRegionResolved = defaultRegion !== undefined;
+            }
+            return defaultRegion;
+          }
+        },
+        () => callback.apply(this, args)
+      );
+    })) as typeof instance.action;
   }
   return instance;
 }

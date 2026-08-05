@@ -9,6 +9,7 @@ import {
 import { formatErrorMessage } from './errors';
 import { inferCommandTaskPhaseFromText, type CommandTaskEntryPhase } from './command-tasks';
 import type { ResolvedCommandNextAction } from './command-next-actions';
+import { getInvocationRegionId, isRegionalInvocation } from './region-context';
 
 export type CliOutputMode = 'text' | 'json';
 export type CliErrorCategory =
@@ -796,10 +797,14 @@ export function emitCommandResult<T extends object>(result: T, options?: string 
   const normalized = normalizeEmitCommandResultOptions(options);
   const command = normalized.command || outputContext.command;
   const { stage, ...payload } = result as Record<string, unknown>;
-  const inferredOutcomeKey = normalized.inferOutcome ? inferCommandOutcomeKey(command) : undefined;
-  const finalPayload = inferredOutcomeKey && !hasExplicitOutcome(payload)
-    ? { ...payload, [inferredOutcomeKey]: true }
+  const callRegionId = isRegionalInvocation() ? getInvocationRegionId() : undefined;
+  const regionalPayload = callRegionId && payload.callRegionId === undefined
+    ? { ...payload, callRegionId }
     : payload;
+  const inferredOutcomeKey = normalized.inferOutcome ? inferCommandOutcomeKey(command) : undefined;
+  const finalPayload = inferredOutcomeKey && !hasExplicitOutcome(regionalPayload)
+    ? { ...regionalPayload, [inferredOutcomeKey]: true }
+    : regionalPayload;
 
   emitCliResult({
     stage: typeof stage === 'string' && stage.trim().length > 0
