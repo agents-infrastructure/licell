@@ -1,7 +1,6 @@
 ---
-status: active
+status: accepted
 created: 2026-08-05
-work: ../work/epic-command-region-overrides.md
 ---
 
 # 命令级 Region 覆盖全覆盖
@@ -170,14 +169,33 @@ Licell 把全局默认地域保存在 `~/.licell-cli/auth.json`，项目配置�
 
 ## 最终交付索引
 
-待执行完成后填写。
+- `6306bf8 feat(region): add invocation-scoped region context`：ITEM-1，共享 regional metadata、四类 scope、AsyncLocalStorage 调用上下文、canonical project region、有效 auth clone 与 `callRegionId` 合同。
+- `05de749 feat(region): cover data service overrides`：ITEM-2，RDS、Redis/Tair、Supabase 与 VPC 的调用地域、四类 binding region、RDS AI endpoint 路由和数据服务合同测试。
+- `d3b1ca1 feat(region): cover delivery workflow overrides`：ITEM-3，Deploy/Plan、Task、Release、Function、Env 与 Domain 的 project-aware region 传播及默认值/state 分离。
+- `9d1ced6 feat(region): cover automation overrides`：ITEM-4，auth export、doctor/workspace doctor、E2E manifest、registry-aware 子进程 argv 与 cleanup ownership region。
+- `d1b77de feat(region): unify regional command surfaces`：ITEM-5，既有 OSS/ECS/logs/db info 迁移、116 个命令三态分类守卫、raw-auth 静态守卫、运行时全链测试和生成表面同步。
+- `efda38e`、`867f70f`：记录 ITEM-5 与 fresh final acceptance 的冻结目标、审查结论和验证证据。
 
 ## 整体验收
 
-待全部子项完成后，由 fresh reviewer 按本文件验收标准执行 final acceptance review，并由 owner 最终确认。
+- 2026-08-05，fresh Paseo reviewer `32fd19a8-7eaf-4135-b368-c19d35a87699` 使用 `claude/claude-opus-5`、plan 模式只读审查 `abf9c990..efda38e`；批准合同 SHA-256 `4e51507401b921732725f2f78388b214c6a69004e4b3530bf11512e6580f3c62` 与完整 diff SHA-256 `17afa9bcab7072d8765c28fe3fa9299100c21d65d8546f0e55d05d4a80bb6bf1` 均一致，无目标漂移。
+- Final acceptance verdict 为 `approve / passed`，无 blocking；10 条验收标准及 ITEM-1 至 ITEM-5 的交付、验收和约束全部满足。命令 registry 最终为 `87 regional + 5 default configuration + 24 explicit exclusion = 116`，四类 scope、provider/request capture、E2E 生命周期和生成表面均有独立核验证据。
+- Reviewer 独立复跑 `bun run typecheck`、`bun run test:ci`（151 files / 1090 tests）、`bun run test:integration`（7/7）与 `bun run docs:check`（4 targets），全部通过；主流程另已验证 `bun run build`。
+- Owner 于 2026-08-05 最终接受完整 Epic，并明确接受已有 VPC binding 在 Describe 校验遇到限流或权限错误时 fail closed、终止部署的兼容性取舍。
 
 ## 遗留风险
 
-- Alibaba Cloud 各 SDK 对 `regionId` 与 endpoint 的要求不完全一致；实现必须在 provider seam 通过 request/client capture 验证，不能只验证 CLI options。
-- 调用级上下文属于基础设施能力，任何遗漏的 `Config.getAuth()` 或显式 raw auth 传递都可能绕过覆盖；ITEM-5 需要静态扫描和代表性端到端测试共同兜底。
+- Alibaba Cloud 各 SDK 对 `regionId` 与 endpoint 的要求不完全一致；当前 provider seam 已有 request/client capture，后续新增 provider 仍须延续该验证，不能只验证 CLI options。
+- 调用级上下文属于基础设施能力；当前 17 处 `Config.getAuth()` 由静态基线守卫锁定，但该正则不覆盖解构或计算属性访问，后续修改 raw auth 路径仍需 code review。
 - 部分旧 project binding、`.licell/state.json` 和 E2E manifest 不含 region，只能按对应 metadata scope 回退 project/auth 默认值；旧格式无法凭实例 ID 恢复未知地域，这是不做跨地域发现的兼容限制。
+- 已有 VPC binding 会在每次相关部署前执行 Describe 校验；限流、权限或网络瞬时错误会 fail closed，避免静默丢弃 VPC 后转为公网部署，但相较旧行为增加了调用与失败面。该取舍已由 owner 接受。
+- 注入式 `--region` 对未知值执行 trim/lowercase 后原样交给 SDK，未统一复用 logs/switch 的格式校验；非法格式可能表现为下游 endpoint 或网络错误。
+
+## 毕业清单
+
+- [x] ITEM-1 至 ITEM-5 均完成独立 change review、修复、验证和语义原子提交。
+- [x] 调用级 Region 合同已毕业到 command registry metadata、结构化 help/catalog、shell completion、README 与 `docs/reference/agent-surfaces.md`，不另维护平行命令目录。
+- [x] canonical project region、binding ownership、state/manifest 边界和 E2E 跨进程传播等结构性决策保留在本 accepted Epic，相关行为由代码合同测试锁定。
+- [x] 全量测试、集成测试、类型检查、构建与生成文档检查通过，fresh final acceptance reviewer 给出 `approve / passed`。
+- [x] Owner 已完成最终接受，并明确接受 VPC fail-closed 兼容性取舍。
+- [x] 执行游标已移除；远端发布策略为 `manual`，本流程未 push。
