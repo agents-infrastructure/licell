@@ -11,6 +11,7 @@ interface CatalogOptions {
 
 const catalogCommand = defineCliCommand({
   rawName: 'catalog',
+  regionExclusion: 'local',
   description: '输出共享 CLI 命令目录，供 Agent / 自动化发现命令、选项和结构化契约',
   options: [
     { rawName: '--root-command <root>', description: '按 root command 过滤（如 deploy / oss / domain）' },

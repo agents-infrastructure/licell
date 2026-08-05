@@ -173,6 +173,7 @@ function printLifecycleResult(
 export const ecsStartCommand = defineCliCommand({
   rawName: 'ecs start <instanceId>',
   description: '启动 ECS 实例',
+  region: { scope: 'auth' },
   options: [
     { rawName: '--region <regionId>', description: '实例所在地域；不传则使用当前 licell 默认 region' },
     { rawName: '--dry-run', description: '只构造计划，不实际执行操作' }
@@ -238,6 +239,7 @@ export const ecsStartCommand = defineCliCommand({
 export const ecsRebootCommand = defineCliCommand({
   rawName: 'ecs reboot <instanceId>',
   description: '重启 ECS 实例',
+  region: { scope: 'auth' },
   options: [
     { rawName: '--region <regionId>', description: '实例所在地域；不传则使用当前 licell 默认 region' },
     { rawName: '--dry-run', description: '只构造计划，不实际执行操作' },
@@ -306,6 +308,7 @@ export const ecsRebootCommand = defineCliCommand({
 export const ecsStopCommand = defineCliCommand({
   rawName: 'ecs stop <instanceId>',
   description: '停止 ECS 实例',
+  region: { scope: 'auth' },
   options: [
     { rawName: '--region <regionId>', description: '实例所在地域；不传则使用当前 licell 默认 region' },
     { rawName: '--dry-run', description: '只构造计划，不实际执行操作' },
@@ -440,6 +443,7 @@ function buildDeleteDescriptor(primary: 'delete' | 'rm'): CommandDescriptor {
 export const ecsDeleteCommand = defineCliCommand({
   rawName: 'ecs delete <instanceId>',
   description: '删除（释放）ECS 实例',
+  region: { scope: 'auth' },
   options: [
     { rawName: '--region <regionId>', description: '实例所在地域；不传则使用当前 licell 默认 region' },
     { rawName: '--dry-run', description: '只构造计划并读取释放前事实，不实际执行操作' },
@@ -451,6 +455,7 @@ export const ecsDeleteCommand = defineCliCommand({
 export const ecsRmCommand = defineCliCommand({
   rawName: 'ecs rm <instanceId>',
   description: '删除（释放）ECS 实例（delete 的别名）',
+  region: { scope: 'auth' },
   options: [
     { rawName: '--region <regionId>', description: '实例所在地域；不传则使用当前 licell 默认 region' },
     { rawName: '--dry-run', description: '只构造计划并读取释放前事实，不实际执行操作' },

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cac } from 'cac';
+import { initOutputContext, LICELL_JSON_PREFIX } from '../utils/output';
 
 const { ensureDestructiveActionConfirmedMock, showOutroMock, spinnerStopMock } = vi.hoisted(() => ({
   ensureDestructiveActionConfirmedMock: vi.fn(async () => {}),
@@ -247,6 +248,7 @@ describe('oss commands', () => {
   });
 
   afterEach(() => {
+    initOutputContext('text', ['node', 'src/cli.ts']);
     consoleLogSpy.mockRestore();
   });
 
@@ -262,11 +264,28 @@ describe('oss commands', () => {
     }
   });
 
-  it('passes `oss list --region` to the provider', async () => {
-    const cli = await createCli();
-    await cli.parse(['node', 'src/cli.ts', 'oss list', '--region', 'cn-shanghai']);
+  it('routes `oss list --region` to the provider and structured result', async () => {
+    const argv = ['node', 'src/cli.ts', 'oss', 'list', '--region', 'cn-shanghai'];
+    initOutputContext('json', argv);
+    const stdoutWriteSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    try {
+      const cli = await createCli();
+      await cli.parse(['node', 'src/cli.ts', 'oss list', '--region', 'cn-shanghai']);
+      await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(listOssBucketsMock).toHaveBeenCalledWith(50, { regionId: 'cn-shanghai' });
+      expect(listOssBucketsMock).toHaveBeenCalledWith(50, { regionId: 'cn-shanghai' });
+      const result = stdoutWriteSpy.mock.calls
+        .flatMap(([chunk]) => String(chunk).split('\n'))
+        .filter((line) => line.startsWith(LICELL_JSON_PREFIX))
+        .map((line) => JSON.parse(line.slice(LICELL_JSON_PREFIX.length)) as Record<string, unknown>)
+        .find((record) => record.type === 'result');
+      expect(result).toMatchObject({
+        type: 'result',
+        callRegionId: 'cn-shanghai'
+      });
+    } finally {
+      stdoutWriteSpy.mockRestore();
+    }
   });
 
   it('passes `oss info --region` to the provider', async () => {

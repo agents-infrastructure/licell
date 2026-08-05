@@ -27,6 +27,7 @@ interface InitOptions {
 
 const initCommand = defineCliCommand({
   rawName: 'init',
+  regionExclusion: 'local',
   description: '初始化 FC 项目（空目录生成脚手架，已有项目写入 licell 配置）',
   options: [
     { rawName: '--runtime <runtime>', description: '默认 runtime：nodejs20/nodejs22/python3.12/python3.13/docker' },

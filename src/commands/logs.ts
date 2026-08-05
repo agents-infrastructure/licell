@@ -37,6 +37,7 @@ interface LogsTailCommandOptions extends LogsCommonCommandOptions {}
 const logsQueryCommand = defineCliCommand({
   rawName: 'logs query [query]',
   description: '按 SLS project/logstore/query 一次性检索日志',
+  region: { scope: 'auth' },
   options: [
     { rawName: '-p, --project <project>', description: 'SLS project；未传时自动探测当前地域默认 FC 日志项目' },
     { rawName: '-s, --store <logstore>', description: 'SLS logstore；未传时按 project 自动选择默认 logstore' },
@@ -118,6 +119,7 @@ const logsQueryCommand = defineCliCommand({
 const logsTailCommand = defineCliCommand({
   rawName: 'logs tail [query]',
   description: '按 SLS project/logstore/query 持续跟随日志流',
+  region: { scope: 'auth' },
   options: [
     { rawName: '-p, --project <project>', description: 'SLS project；未传时自动探测当前地域默认 FC 日志项目' },
     { rawName: '-s, --store <logstore>', description: 'SLS logstore；未传时按 project 自动选择默认 logstore' },

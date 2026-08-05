@@ -28,6 +28,7 @@ import { ecsStartCommand, ecsRebootCommand, ecsStopCommand, ecsDeleteCommand, ec
 const ecsListCommand = defineCliCommand({
   rawName: 'ecs list',
   description: '查看 ECS 实例列表',
+  region: { scope: 'auth' },
   options: [
     { rawName: '--region <regionId>', description: '查询地域；不传则使用当前 licell 默认 region' },
     { rawName: '--limit <n>', description: '返回数量，默认 20，最大 200' },
@@ -123,6 +124,7 @@ const ecsListCommand = defineCliCommand({
 const ecsInfoCommand = defineCliCommand({
   rawName: 'ecs info <instanceId>',
   description: '查看 ECS 实例基础详情',
+  region: { scope: 'auth' },
   options: [
     { rawName: '--region <regionId>', description: '查询地域；不传则使用当前 licell 默认 region，不跨 region 查询' }
   ],

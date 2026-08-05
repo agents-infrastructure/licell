@@ -9,6 +9,7 @@ interface CompletionOptions {
 
 const completionCommand = defineCliCommand({
   rawName: 'completion [shell]',
+  regionExclusion: 'local',
   description: '输出 shell 补全脚本（bash/zsh）',
   options: [
     { rawName: '--engine', description: '内部补全引擎（供 shell completion 调用）' }

@@ -37,6 +37,7 @@ export { resolveDeploySslEnabled } from './deploy-context';
 
 const deploySpecCommand = defineCliCommand({
   rawName: 'deploy spec [runtime]',
+  regionExclusion: 'local',
   description: '查看 FC API 部署规格（给 Agent/开发者在 deploy 前对照）',
   options: [
     { rawName: '--all', description: '输出全部 runtime 规格' }
@@ -49,6 +50,7 @@ const deploySpecCommand = defineCliCommand({
 
 const deployCheckCommand = defineCliCommand({
   rawName: 'deploy check',
+  regionExclusion: 'local',
   description: '本地预检 FC API 入口与 runtime 约束（建议 deploy 前执行）',
   options: [
     { rawName: '--component <name>', description: '在 workspace / monorepo 根目录显式选择要预检的 component' },

@@ -200,7 +200,11 @@ describe('buildAgentCommandCatalog', () => {
     const logsTail = catalog.commands.find((command) => command.key === 'logs tail');
     expect(logsTail?.title).toBe('Tail SLS logs');
     expect(logsTail?.examples).toContain('licell logs tail -p your-project -s your-store \'*\'');
-    expect(logsTail?.result).toBeUndefined();
+    expect(logsTail?.result?.fields).toEqual([{
+      name: 'callRegionId',
+      description: '本次命令实际使用的阿里云地域 ID。',
+      required: false
+    }]);
 
     const cacheAdd = catalog.commands.find((command) => command.key === 'cache add');
     expect(cacheAdd?.options.some((option) => option.primaryFlag === '--mode')).toBe(true);

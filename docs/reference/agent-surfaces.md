@@ -149,8 +149,8 @@
 | `licell release promote [versionId]` | 发布并切流到目标别名 | `--region`, `--component`, `--target` |
 | `licell release prune` | 清理历史函数版本（默认仅预览） | `--region`, `--component`, `--keep` |
 | `licell release rollback <versionId>` | 回滚到指定函数版本 | `--region`, `--component`, `--target` |
-| `licell logs query [query]` | 按 SLS project/logstore/query 一次性检索日志 | `--project`, `--store`, `--region` |
-| `licell logs tail [query]` | 按 SLS project/logstore/query 持续跟随日志流 | `--project`, `--store`, `--region` |
+| `licell logs query [query]` | 按 SLS project/logstore/query 一次性检索日志 | `--region`, `--project`, `--store` |
+| `licell logs tail [query]` | 按 SLS project/logstore/query 持续跟随日志流 | `--region`, `--project`, `--store` |
 | `licell fn info [name]` | 查看函数详情 | `--region`, `--component`, `--target` |
 | `licell fn invoke [name]` | 调用函数（同步） | `--region`, `--component`, `--target` |
 | `licell fn list` | 查看函数列表 | `--region`, `--limit`, `--prefix` |

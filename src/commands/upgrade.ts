@@ -17,6 +17,7 @@ const UPGRADE_CHANNELS = ['auto', 'release', 'npm', 'pnpm', 'yarn', 'bun'] as co
 
 const upgradeCommand = defineCliCommand({
   rawName: 'upgrade',
+  regionExclusion: 'region-agnostic',
   description: '按当前安装来源升级 licell',
   options: [
     { rawName: '--channel <channel>', description: `升级渠道：${UPGRADE_CHANNELS.join('/')}（默认 auto）` },

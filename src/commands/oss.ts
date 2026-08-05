@@ -123,6 +123,7 @@ const uploadCommandOptions = [
 const ossListCommand = defineCliCommand({
   rawName: 'oss list',
   description: '查看 OSS Bucket 列表',
+  region: { scope: 'auth' },
   options: [
     ossRegionOption,
     { rawName: '--limit <n>', description: '返回数量，默认 50' }
@@ -135,6 +136,7 @@ const ossListCommand = defineCliCommand({
 const ossInfoCommand = defineCliCommand({
   rawName: 'oss info <bucket>',
   description: '查看 OSS Bucket 详情（含 ACL / 公共访问阻止 / 域名）',
+  region: { scope: 'auth' },
   options: [ossRegionOption],
   descriptor: {
     summary: '查看 Bucket 基本信息，并补充 ACL、公共访问阻止、已绑定域名。',
@@ -145,6 +147,7 @@ const ossInfoCommand = defineCliCommand({
 const ossCreateCommand = defineCliCommand({
   rawName: 'oss create <bucket>',
   description: '创建 OSS Bucket',
+  region: { scope: 'auth' },
   options: [
     ossRegionOption,
     { rawName: '--acl <acl>', description: 'Bucket ACL：private / public-read / public-read-write' },
@@ -181,6 +184,7 @@ const ossCreateCommand = defineCliCommand({
 const ossUpdateCommand = defineCliCommand({
   rawName: 'oss update <bucket>',
   description: '更新 OSS Bucket 属性（ACL / 公共访问阻止）',
+  region: { scope: 'auth' },
   options: [
     ossRegionOption,
     { rawName: '--acl <acl>', description: 'Bucket ACL：private / public-read / public-read-write' },
@@ -198,6 +202,7 @@ const ossUpdateCommand = defineCliCommand({
 const ossRmCommand = defineCliCommand({
   rawName: 'oss rm <bucket>',
   description: '删除 OSS Bucket（默认仅删空 Bucket）',
+  region: { scope: 'auth' },
   options: [
     ossRegionOption,
     { rawName: '--recursive', description: '先删除对象，再删除 Bucket（危险）' },
@@ -216,6 +221,7 @@ const ossRmCommand = defineCliCommand({
 const ossLsCommand = defineCliCommand({
   rawName: 'oss ls <bucket> [prefix]',
   description: '列出 Bucket 对象',
+  region: { scope: 'auth' },
   options: [
     ossRegionOption,
     { rawName: '--limit <n>', description: '返回数量，默认 100' }
@@ -229,6 +235,7 @@ const ossLsCommand = defineCliCommand({
 const ossObjectInfoCommand = defineCliCommand({
   rawName: 'oss object info <bucket> <key>',
   description: '查看 OSS 对象元数据',
+  region: { scope: 'auth' },
   options: [ossRegionOption],
   descriptor: {
     summary: '查看对象元数据（长度 / Content-Type / ETag / 用户自定义 metadata）。',
@@ -242,6 +249,7 @@ const ossObjectInfoCommand = defineCliCommand({
 const ossObjectGetCommand = defineCliCommand({
   rawName: 'oss object get <bucket> <key> [file]',
   description: '下载 OSS 对象到本地文件',
+  region: { scope: 'auth' },
   options: [
     ossRegionOption,
     { rawName: '--file <path>', description: '本地文件路径（可替代位置参数）' }
@@ -264,6 +272,7 @@ const ossObjectGetCommand = defineCliCommand({
 const ossObjectRmCommand = defineCliCommand({
   rawName: 'oss object rm <bucket> <key>',
   description: '删除 OSS 对象',
+  region: { scope: 'auth' },
   options: [
     ossRegionOption,
     { rawName: '--yes', description: '跳过二次确认（危险）' }
@@ -281,6 +290,7 @@ const ossObjectRmCommand = defineCliCommand({
 const ossDomainListCommand = defineCliCommand({
   rawName: 'oss domain list <bucket>',
   description: '查看 Bucket 已绑定的原生 OSS 域名',
+  region: { scope: 'auth' },
   options: [ossRegionOption],
   descriptor: {
     examples: ['licell oss domain list my-bucket', 'licell oss domain list my-bucket --output json']
@@ -290,6 +300,7 @@ const ossDomainListCommand = defineCliCommand({
 const ossDomainTokenCommand = defineCliCommand({
   rawName: 'oss domain token <bucket> <domain>',
   description: '为 Bucket 自定义域名生成 TXT 验证 token',
+  region: { scope: 'auth' },
   options: [ossRegionOption],
   descriptor: {
     summary: '为待绑定的 OSS 自定义域名生成 TXT 验证 token。',
@@ -315,6 +326,7 @@ const ossDomainTokenCommand = defineCliCommand({
 const ossDomainBindCommand = defineCliCommand({
   rawName: 'oss domain bind <bucket> <domain>',
   description: '为 Bucket 绑定原生 OSS 自定义域名',
+  region: { scope: 'auth' },
   options: [ossRegionOption],
   descriptor: {
     safety: {
@@ -337,6 +349,7 @@ const ossDomainBindCommand = defineCliCommand({
 const ossDomainUnbindCommand = defineCliCommand({
   rawName: 'oss domain unbind <bucket> <domain>',
   description: '解绑 Bucket 原生 OSS 自定义域名',
+  region: { scope: 'auth' },
   options: [
     ossRegionOption,
     { rawName: '--yes', description: '跳过二次确认（危险）' }
@@ -362,6 +375,7 @@ const ossDomainUnbindCommand = defineCliCommand({
 const ossUploadCommand = defineCliCommand({
   rawName: 'oss upload [bucket]',
   description: '上传本地目录到 OSS Bucket 指定目录',
+  region: { scope: 'auth' },
   options: uploadCommandOptions,
   descriptor: {
     summary: '上传本地目录到指定 Bucket / 目录前缀。',
@@ -373,6 +387,7 @@ const ossUploadCommand = defineCliCommand({
 const ossBucketCommand = defineCliCommand({
   rawName: 'oss bucket [bucket]',
   description: '上传本地目录到 OSS Bucket 指定目录（兼容命令，等同 oss upload）',
+  region: { scope: 'auth' },
   options: uploadCommandOptions,
   descriptor: {
     summary: '兼容命令；等同 `licell oss upload`。',
@@ -383,6 +398,7 @@ const ossBucketCommand = defineCliCommand({
 const ossSyncUpCommand = defineCliCommand({
   rawName: 'oss sync up [bucket]',
   description: '同步本地目录到 OSS Bucket（等同 oss upload）',
+  region: { scope: 'auth' },
   options: uploadCommandOptions,
   descriptor: {
     summary: '同步本地目录到指定 Bucket / 目录前缀（等同 `licell oss upload`）。',
@@ -393,6 +409,7 @@ const ossSyncUpCommand = defineCliCommand({
 const ossSyncDownCommand = defineCliCommand({
   rawName: 'oss sync down <bucket> [prefix]',
   description: '批量下载 Bucket 对象到本地目录',
+  region: { scope: 'auth' },
   options: [
     ossRegionOption,
     { rawName: '--dest-dir <dir>', description: '本地目标目录（默认 oss-download/<bucket>）' }

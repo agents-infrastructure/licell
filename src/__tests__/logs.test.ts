@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { cac } from 'cac';
+import { initOutputContext, LICELL_JSON_PREFIX } from '../utils/output';
 
 const mocks = vi.hoisted(() => ({
   getFunctionInfo: vi.fn()
@@ -15,6 +17,20 @@ import {
 vi.mock('../providers/fc/function-ops', () => ({
   getFunctionInfo: mocks.getFunctionInfo
 }));
+
+vi.mock('../utils/auth-recovery', () => ({
+  executeWithAuthRecovery: async (_options: unknown, task: () => Promise<unknown>) => task()
+}));
+
+vi.mock('../utils/cli-shared', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../utils/cli-shared')>();
+  return {
+    ...actual,
+    ensureAuthOrExit: vi.fn(),
+    isInteractiveTTY: vi.fn(() => false),
+    showIntro: vi.fn()
+  };
+});
 
 vi.mock('../utils/config', () => ({
   Config: {
@@ -40,6 +56,11 @@ vi.mock('@alicloud/sls20201230', () => {
     static createLogStoreMock = vi.fn();
     static createIndexMock = vi.fn();
     static updateIndexMock = vi.fn();
+    static configs: Array<Record<string, unknown>> = [];
+
+    constructor(config?: Record<string, unknown>) {
+      MockSlsClient.configs.push(config || {});
+    }
 
     getLogs(project: string, logstore: string, request: { query?: string }) {
       return MockSlsClient.getLogsMock(project, logstore, request);
@@ -86,6 +107,7 @@ beforeEach(async () => {
     createLogStoreMock: ReturnType<typeof vi.fn>;
     createIndexMock: ReturnType<typeof vi.fn>;
     updateIndexMock: ReturnType<typeof vi.fn>;
+    configs: Array<Record<string, unknown>>;
   };
   mockSls.getLogsMock.mockReset();
   mockSls.createProjectMock.mockReset();
@@ -96,6 +118,8 @@ beforeEach(async () => {
   mockSls.createIndexMock.mockResolvedValue({});
   mockSls.updateIndexMock.mockReset();
   mockSls.updateIndexMock.mockResolvedValue({});
+  mockSls.configs.length = 0;
+  initOutputContext('text', ['node', 'src/cli.ts']);
 });
 
 describe('sanitizeQueryValue', () => {
@@ -374,5 +398,58 @@ describe('tailLogs', () => {
       expect.objectContaining({ query: 'functionName: "demo-api"' })
     );
     expect(result && 'logs' in result ? result.logs : []).toHaveLength(1);
+  });
+});
+
+describe('logs command region override', () => {
+  it('routes logs query to the selected SLS endpoint and structured result', async () => {
+    const sls = await import('@alicloud/sls20201230');
+    const mockSls = sls.default as unknown as {
+      getLogsMock: ReturnType<typeof vi.fn>;
+      configs: Array<Record<string, unknown>>;
+    };
+    mockSls.getLogsMock.mockResolvedValue({
+      body: [{ __time__: '1700000000', message: 'hello' }]
+    });
+
+    const argv = ['node', 'src/cli.ts', 'logs', 'query', '*', '--region', 'cn-shanghai'];
+    initOutputContext('json', argv);
+    const stdoutWriteSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    try {
+      const cli = cac('licell');
+      const { registerLogsCommand } = await import('../commands/logs');
+      registerLogsCommand(cli);
+      await cli.parse([
+        'node',
+        'src/cli.ts',
+        'logs query',
+        '*',
+        '--project',
+        'demo-project',
+        '--store',
+        'demo-store',
+        '--region',
+        'cn-shanghai'
+      ]);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(mockSls.configs).toContainEqual(expect.objectContaining({
+        endpoint: 'cn-shanghai.log.aliyuncs.com'
+      }));
+      const result = stdoutWriteSpy.mock.calls
+        .flatMap(([chunk]) => String(chunk).split('\n'))
+        .filter((line) => line.startsWith(LICELL_JSON_PREFIX))
+        .map((line) => JSON.parse(line.slice(LICELL_JSON_PREFIX.length)) as Record<string, unknown>)
+        .find((record) => record.type === 'result');
+      expect(result).toMatchObject({
+        type: 'result',
+        stage: 'logs.query',
+        region: 'cn-shanghai',
+        callRegionId: 'cn-shanghai'
+      });
+    } finally {
+      stdoutWriteSpy.mockRestore();
+      initOutputContext('text', ['node', 'src/cli.ts']);
+    }
   });
 });

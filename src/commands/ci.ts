@@ -134,6 +134,7 @@ function buildCiPayload(input: {
 
 const ciInitGithubCommand = defineCliCommand({
   rawName: 'ci init github',
+  regionExclusion: 'local',
   description: '生成 GitHub Actions 的 deploy-only workflow（只调用 licell，不负责编译）',
   options: [
     { rawName: '--apply', description: `把 workflow 写入 \`${GITHUB_WORKFLOW_DEFAULT_PATH}\`` },
@@ -196,6 +197,7 @@ const ciInitGithubCommand = defineCliCommand({
 
 const ciInitGitlabCommand = defineCliCommand({
   rawName: 'ci init gitlab',
+  regionExclusion: 'local',
   description: '生成 GitLab CI 的 deploy-only pipeline（只调用 licell，不负责编译）',
   options: [
     { rawName: '--apply', description: `把 pipeline 写入 \`${GITLAB_PIPELINE_DEFAULT_PATH}\`` },

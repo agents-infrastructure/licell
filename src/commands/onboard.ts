@@ -39,6 +39,7 @@ function resolveInstalledAgents(agent: OnboardAgent): InstalledAgent[] {
 
 const onboardCommand = defineCliCommand({
   rawName: 'onboard',
+  regionExclusion: 'local',
   description: '全局安装 licell 的 agent-facing skill contract；默认同时安装 Codex 与 Claude',
   options: [
     { rawName: '--agent <agent>', description: '安装目标：codex / claude / all（默认 all）' },

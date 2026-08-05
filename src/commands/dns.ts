@@ -22,11 +22,13 @@ import { DELIVERY_SECTION } from './sections';
 
 const dnsRecordsListCommand = defineCliCommand({
   rawName: 'dns records list [domain]',
+  regionExclusion: 'region-agnostic',
   description: '查看域名解析记录'
 });
 
 const dnsRecordsAddCommand = defineCliCommand({
   rawName: 'dns records add <domain>',
+  regionExclusion: 'region-agnostic',
   description: '添加域名解析记录',
   descriptor: {
     summary: '添加一条 DNS 解析记录。',
@@ -48,6 +50,7 @@ const dnsRecordsAddCommand = defineCliCommand({
 
 const dnsRecordsRmCommand = defineCliCommand({
   rawName: 'dns records rm <recordId>',
+  regionExclusion: 'region-agnostic',
   description: '删除域名解析记录',
   descriptor: {
     summary: '删除一条 DNS 解析记录。',

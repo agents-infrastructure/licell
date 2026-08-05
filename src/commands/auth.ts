@@ -39,11 +39,12 @@ const DEFAULT_AUTH_EXPORT_EXPIRES_HOURS = 168;
 const loginCommand = defineCliCommand({
   rawName: 'login',
   description: '配置阿里云凭证',
+  regionOptionMode: 'auth-default',
   options: [
     { rawName: '--account-id <id>', description: '阿里云 Account ID（CI 场景）' },
     { rawName: '--ak <accessKeyId>', description: '阿里云 AccessKey ID（CI 场景）' },
     { rawName: '--sk <accessKeySecret>', description: '阿里云 AccessKey Secret（CI 场景）' },
-    { rawName: '--region <region>', description: `默认地域，默认 ${DEFAULT_ALI_REGION}` },
+    { rawName: '--region <region>', description: `写入 auth 默认地域（不是单次调用覆盖），默认 ${DEFAULT_ALI_REGION}` },
     { rawName: '--bootstrap-ram', description: '使用高权限 AK/SK 自动创建 licell 专用 RAM 用户与最小权限 AK/SK（仅保存新 key）' },
     { rawName: '--bootstrap-user <name>', description: 'bootstrap 模式下 RAM 用户名，默认 licell-operator' },
     { rawName: '--bootstrap-policy <name>', description: 'bootstrap 模式下自定义策略名，默认 LicellOperatorPolicy' }
@@ -69,11 +70,12 @@ const loginCommand = defineCliCommand({
 const authRepairCommand = defineCliCommand({
   rawName: 'auth repair',
   description: '修复凭证权限（推荐：用超级 AK/SK 自动补齐 licell 最小权限并继续使用）',
+  regionOptionMode: 'auth-default',
   options: [
     { rawName: '--account-id <id>', description: '阿里云 Account ID（CI 场景）' },
     { rawName: '--ak <accessKeyId>', description: '超级 AccessKey ID（仅用于本次修复，不会保存）' },
     { rawName: '--sk <accessKeySecret>', description: '超级 AccessKey Secret（仅用于本次修复，不会保存）' },
-    { rawName: '--region <region>', description: `默认地域，默认 ${DEFAULT_ALI_REGION}` },
+    { rawName: '--region <region>', description: `写入 auth 默认地域（不是单次调用覆盖），默认 ${DEFAULT_ALI_REGION}` },
     { rawName: '--bootstrap-user <name>', description: '修复目标 RAM 用户名（默认自动识别当前 key 所属用户）' },
     { rawName: '--bootstrap-policy <name>', description: '修复使用的自定义策略名（默认 LicellOperatorPolicy）' }
   ],
@@ -140,12 +142,32 @@ const authExportCommand = defineCliCommand({
       preferredOutput: 'json',
       explicitInputs: ['[passkey]'],
       notes: ['自动化导出时建议显式传入 passkey，避免等待终端交互。']
+    },
+    result: {
+      summary: '返回 OSS 备份位置、有效期、加密 bundle 摘要、restore token 及恢复/撤销命令。',
+      fields: [
+        { name: 'action', description: '固定为 `export`。', required: true },
+        { name: 'bucket', description: '加密 auth bundle 所在的私有 OSS Bucket。', required: true },
+        { name: 'key', description: '加密 auth bundle 的 OSS Object Key。', required: true },
+        { name: 'bucketCreated', description: '本次是否新建了 Bucket。', required: true },
+        { name: 'bucketPreferenceSaved', description: '是否成功按账号和调用地域保存默认 auth transfer Bucket。' },
+        { name: 'expiresAt', description: 'restore token 内签名下载 URL 的过期时间。', required: true },
+        { name: 'fileCount', description: '加密 bundle 中包含的文件数。', required: true },
+        { name: 'includes', description: 'auth、全局配置和 ACME 文件的包含摘要。', required: true },
+        { name: 'includes.auth', description: 'bundle 是否包含 auth 配置。', required: true },
+        { name: 'includes.globalConfig', description: 'bundle 是否包含全局配置。', required: true },
+        { name: 'includes.acmeFiles', description: 'bundle 是否包含 ACME 文件。', required: true },
+        { name: 'token', description: '跨机器 restore 使用的加密传输 token。', required: true },
+        { name: 'restoreCommand', description: '目标机器上的恢复命令模板。', required: true },
+        { name: 'revokeCommand', description: '删除远端 bundle 的撤销命令。', required: true }
+      ]
     }
   }
 });
 
 const authRestoreCommand = defineCliCommand({
   rawName: 'auth restore <token> [passkey]',
+  regionExclusion: 'token-owned',
   cliRawName: 'auth restore [token] [passkey]',
   description: '使用 restore token + passkey 一键恢复 licell 全局凭证状态',
   options: [
@@ -189,6 +211,7 @@ const authRestoreCommand = defineCliCommand({
 
 const authInspectCommand = defineCliCommand({
   rawName: 'auth inspect <token>',
+  regionExclusion: 'local',
   cliRawName: 'auth inspect [token]',
   description: '解析并查看 restore token 的内容与有效期',
   descriptor: {
@@ -241,19 +264,22 @@ const authInspectCommand = defineCliCommand({
 
 const logoutCommand = defineCliCommand({
   rawName: 'logout',
+  regionExclusion: 'local',
   description: '清除本地凭证'
 });
 
 const whoamiCommand = defineCliCommand({
   rawName: 'whoami',
+  regionExclusion: 'local',
   description: '查看当前登录身份'
 });
 
 const switchCommand = defineCliCommand({
   rawName: 'switch',
   description: '切换默认 region',
+  regionOptionMode: 'auth-default',
   options: [
-    { rawName: '--region <region>', description: '目标 region（如 cn-hangzhou）' }
+    { rawName: '--region <region>', description: '写入 auth 默认地域（不是单次调用覆盖，如 cn-hangzhou）' }
   ]
 });
 

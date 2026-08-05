@@ -38,6 +38,7 @@ vi.mock('../utils/config', () => ({
       sk: 'demo-sk',
       region: 'cn-hangzhou'
     })),
+    getDefaultRegion: vi.fn(() => 'cn-hangzhou'),
     setProject: setProjectMock
   }
 }));
@@ -62,10 +63,16 @@ vi.mock('../utils/output', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../utils/output')>();
   return {
     ...actual,
-    emitCommandResult: emitCommandResultMock,
+    emitCommandResult: (result: object, options?: Parameters<typeof actual.emitCommandResult>[1]) => {
+      if (options === undefined) emitCommandResultMock(result);
+      else emitCommandResultMock(result, options);
+      return actual.emitCommandResult(result, options);
+    },
     isJsonOutput: isJsonOutputMock
   };
 });
+
+import { initOutputContext, LICELL_JSON_PREFIX } from '../utils/output';
 
 async function createCli() {
   const cli = cac('licell');
@@ -80,9 +87,12 @@ function stripAnsi(value: string) {
 
 describe('ecs commands', () => {
   let consoleLogSpy: ReturnType<typeof vi.spyOn>;
+  let stdoutWriteSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
+    initOutputContext('text', ['node', 'src/cli.ts']);
     consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    stdoutWriteSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
     emitCommandResultMock.mockReset();
     executeWithAuthRecoveryMock.mockClear();
     isJsonOutputMock.mockReset();
@@ -142,6 +152,8 @@ describe('ecs commands', () => {
   });
 
   afterEach(() => {
+    initOutputContext('text', ['node', 'src/cli.ts']);
+    stdoutWriteSpy.mockRestore();
     consoleLogSpy.mockRestore();
   });
 
@@ -384,6 +396,7 @@ describe('ecs commands', () => {
       }
     });
 
+    initOutputContext('json', ['node', 'src/cli.ts', 'ecs', 'info', 'i-demo', '--region', 'cn-shanghai']);
     const cli = await createCli();
     await cli.parse(['node', 'src/cli.ts', 'ecs info', ' i-demo ', '--region', 'cn-shanghai']);
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -404,6 +417,16 @@ describe('ecs commands', () => {
       }
     });
     expect(JSON.stringify(emitCommandResultMock.mock.calls[0]?.[0])).not.toMatch(/rawAttribute|userData|vncUrl|consoleOutput|password|keyPairPrivateKey/);
+    const structuredResult = (stdoutWriteSpy.mock.calls as unknown[][])
+      .flatMap((call) => String(call[0]).split('\n'))
+      .filter((line) => line.startsWith(LICELL_JSON_PREFIX))
+      .map((line) => JSON.parse(line.slice(LICELL_JSON_PREFIX.length)) as Record<string, unknown>)
+      .find((record) => record.type === 'result');
+    expect(structuredResult).toMatchObject({
+      type: 'result',
+      instanceId: 'i-demo',
+      callRegionId: 'cn-shanghai'
+    });
     expect(setProjectMock).not.toHaveBeenCalled();
   });
 

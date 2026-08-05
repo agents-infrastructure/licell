@@ -36,6 +36,7 @@ export interface SkillsInitExecutionResult {
 
 const skillsInitCommand = defineCliCommand({
   rawName: 'skills init [agent]',
+  regionExclusion: 'local',
   description: '为 AI Agent 写入 licell skill contract（claude / codex）',
   options: [
     { rawName: '--global', description: '全局配置（所有项目生效）' },

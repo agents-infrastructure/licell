@@ -396,6 +396,7 @@ function resolveBatchBootstrapProposal(options: BootstrapOptions): BatchBootstra
 const bootstrapCommand = defineCliCommand({
   rawName: 'bootstrap',
   description: '把已确认的部署方案初始化到 `.licell/project.json` / `.licell/state.json`',
+  regionOptionMode: 'project-default',
   options: [
     { rawName: '--component <name>', description: '单组件模式：component 名称，例如 web / api' },
     { rawName: '--path <path>', description: '单组件模式：component 相对 repo 根路径' },
@@ -414,7 +415,7 @@ const bootstrapCommand = defineCliCommand({
     { rawName: '--enable-vpc', description: '单组件模式：初始化为启用 VPC' },
     { rawName: '--disable-vpc', description: '单组件模式：初始化为禁用 VPC' },
     { rawName: '--default', description: '单组件模式：将该 component 设为默认 component' },
-    { rawName: '--region <region>', description: '单组件模式：默认 region' },
+    { rawName: '--region <region>', description: '单组件模式：写入项目默认 region（不是单次调用覆盖）' },
     { rawName: '--all-discovered', description: '批量模式：把 `workspace discover` 找到的所有候选 components 一次性初始化' },
     { rawName: '--include <names>', description: '批量模式：仅初始化这些 discovered components（逗号分隔）' },
     { rawName: '--exclude <names>', description: '批量模式：跳过这些 discovered components（逗号分隔）' },

@@ -75,6 +75,8 @@ export interface AgentCommandCatalogEntry {
   optionInsights: CommandOptionInsight[];
   recommendedFlow: CommandFlowStep[];
   result?: AgentCommandResult;
+  region?: CatalogCommand['region'];
+  regionOptionMode?: CatalogCommand['regionOptionMode'];
   sectionId: string;
   sectionTitle: string;
 }
@@ -285,6 +287,13 @@ export function buildAgentCommandCatalog(catalog: CommandCatalog = getCommandCat
         optionInsights: help.optionInsights.map((insight) => ({ ...insight, cautions: [...insight.cautions] })),
         recommendedFlow: help.recommendedFlow.map((step) => ({ ...step })),
         result: cloneResolvedCommandResultDescriptor(help.result),
+        region: help.region
+          ? {
+              ...help.region,
+              target: help.region.target ? { ...help.region.target } : undefined
+            }
+          : undefined,
+        regionOptionMode: help.regionOptionMode,
         sectionId: sectionByRoot.get(command.rootCommand)?.id || section.id,
         sectionTitle: sectionByRoot.get(command.rootCommand)?.title || section.title
       };
@@ -340,7 +349,13 @@ export function filterAgentCommandCatalog(
       : undefined,
     optionInsights: command.optionInsights.map((insight) => ({ ...insight, cautions: [...insight.cautions] })),
     recommendedFlow: command.recommendedFlow.map((step) => ({ ...step })),
-    result: cloneResolvedCommandResultDescriptor(command.result)
+    result: cloneResolvedCommandResultDescriptor(command.result),
+    region: command.region
+      ? {
+          ...command.region,
+          target: command.region.target ? { ...command.region.target } : undefined
+        }
+      : undefined
   }));
 
   const allowedKeys = new Set(commands.map((command) => command.key));

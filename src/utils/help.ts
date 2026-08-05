@@ -162,6 +162,8 @@ export interface HelpSemanticDocument {
   optionInsights: HelpOptionInsight[];
   recommendedFlow: HelpFlowStep[];
   nextActions: ResolvedCommandNextAction[];
+  region?: CatalogCommand['region'];
+  regionOptionMode?: CatalogCommand['regionOptionMode'];
 }
 
 export interface HelpDocument extends HelpSemanticDocument {
@@ -916,6 +918,13 @@ export function serializeHelpDocument(doc: HelpDocument): SerializedHelpDocument
     result: doc.result
       ? cloneResolvedCommandResultDescriptor(doc.result)
       : undefined,
+    region: doc.region
+      ? {
+          ...doc.region,
+          target: doc.region.target ? { ...doc.region.target } : undefined
+        }
+      : undefined,
+    regionOptionMode: doc.regionOptionMode,
     optionInsights: doc.optionInsights.map((insight) => ({
       ...insight,
       cautions: [...insight.cautions]
@@ -1076,6 +1085,13 @@ export function buildHelpSemanticDocument(input: {
     subcommandGroups: buildSubcommandGroups(subcommands),
     safety: surface.safety,
     result: surface.result,
+    region: command.region
+      ? {
+          ...command.region,
+          target: command.region.target ? { ...command.region.target } : undefined
+        }
+      : undefined,
+    regionOptionMode: command.regionOptionMode,
     optionInsights: surface.optionInsights,
     recommendedFlow: surface.recommendedFlow
   };

@@ -16,6 +16,7 @@ const SUPPORTED_AGENTS = new Set<AgentType>(['claude', 'codex']);
 
 const setupCommand = defineCliCommand({
   rawName: 'setup',
+  regionExclusion: 'local',
   description: '安装后引导：交互式配置 AI Agent 的 licell skill contract',
   options: [
     { rawName: '--agent <agent>', description: '目标 Agent（claude / codex）' },

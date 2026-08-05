@@ -109,7 +109,21 @@ const e2eRunCommand = defineCliCommand({
     { rawName: '--cleanup', description: '执行完后自动清理' },
     { rawName: '--workspace <dir>', description: '指定 E2E 工作目录（默认 .licell/e2e-work/<runId>）' },
     { rawName: '--yes', description: '自动清理时跳过二次确认' }
-  ]
+  ],
+  descriptor: {
+    result: {
+      summary: '返回 E2E run 的状态、资源摘要和隔离 workspace；完整运行归属与步骤记录保存在 manifest。',
+      fields: [
+        { name: 'runId', description: '本次 E2E 运行 ID。', required: true },
+        { name: 'suite', description: '执行的 smoke/full 套件。', required: true },
+        { name: 'status', description: 'E2E 运行状态。', required: true },
+        { name: 'appName', description: '本次创建或复用的应用名；没有对应资源时为 null。', required: true },
+        { name: 'domain', description: '本次测试使用的固定域名；没有对应资源时为 null。', required: true },
+        { name: 'staticBucket', description: 'full 套件创建或使用的静态 Bucket；没有对应资源时为 null。', required: true },
+        { name: 'workspaceDir', description: '本次运行的隔离 workspace。', required: true }
+      ]
+    }
+  }
 });
 
 const e2eCleanupCommand = defineCliCommand({
@@ -120,11 +134,23 @@ const e2eCleanupCommand = defineCliCommand({
     { rawName: '--manifest <path>', description: '直接指定 manifest 文件路径' },
     { rawName: '--keep-workspace', description: '保留本地 workspace 目录' },
     { rawName: '--yes', description: '跳过二次确认（危险）' }
-  ]
+  ],
+  descriptor: {
+    result: {
+      summary: '返回 cleanup 状态、逐项清理记录与未能清理的错误。',
+      fields: [
+        { name: 'runId', description: '被清理的 E2E 运行 ID。', required: true },
+        { name: 'status', description: 'cleanup 最终状态。', required: true },
+        { name: 'details', description: '逐项清理结果。', required: true },
+        { name: 'errors', description: '未能清理的错误列表。', required: true }
+      ]
+    }
+  }
 });
 
 const e2eListCommand = defineCliCommand({
   rawName: 'e2e list',
+  regionExclusion: 'local',
   description: '查看本项目 e2e 运行记录'
 });
 

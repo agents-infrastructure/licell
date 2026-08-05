@@ -106,6 +106,7 @@ function renderWorkspaceList(snapshot: ReturnType<typeof Config.getWorkspace>) {
 
 const workspaceListCommand = defineCliCommand({
   rawName: 'workspace list',
+  regionExclusion: 'local',
   description: '列出当前 repo / workspace 中可部署的 components',
   options: [
     { rawName: '--component <name>', description: '高亮或精确查看指定 component' }
@@ -129,6 +130,7 @@ const workspaceListCommand = defineCliCommand({
 const workspaceInitCommand = defineCliCommand({
   rawName: 'workspace init',
   description: '在 repo 根目录创建或更新 licell workspace component',
+  regionOptionMode: 'project-default',
   options: [
     { rawName: '--component <name>', description: 'component 名称，例如 web / api' },
     { rawName: '--path <path>', description: 'component 相对根目录路径，例如 apps/web' },
@@ -145,7 +147,7 @@ const workspaceInitCommand = defineCliCommand({
     { rawName: '--enable-vpc', description: 'API / task 默认启用 VPC' },
     { rawName: '--disable-vpc', description: 'API / task 默认禁用 VPC' },
     { rawName: '--default', description: '把该 component 设为 workspace 默认 component' },
-    { rawName: '--region <region>', description: 'component 默认 region（可选）' }
+    { rawName: '--region <region>', description: '写入 component 默认 region（不是单次调用覆盖，可选）' }
   ],
   descriptor: {
     title: 'Create or update a workspace component',
@@ -163,6 +165,7 @@ const workspaceInitCommand = defineCliCommand({
 
 const workspaceDiscoverCommand = defineCliCommand({
   rawName: 'workspace discover',
+  regionExclusion: 'local',
   description: '扫描 repo，给出候选 components 与部署提案',
   descriptor: {
     title: 'Discover deployable workspace components',
@@ -217,6 +220,7 @@ const workspaceDoctorCommand = defineCliCommand({
 
 const workspaceMigrateCommand = defineCliCommand({
   rawName: 'workspace migrate',
+  regionExclusion: 'local',
   description: '把旧单项目 `.licell/project.json` 升级成兼容旧版的 workspace/component 格式',
   options: [
     { rawName: '--component <name>', description: '迁移后的默认 component 名称，默认 web' },

@@ -9,6 +9,7 @@ import { SETUP_SECTION } from './sections';
 
 const configDomainCommand = defineCliCommand({
   rawName: 'config domain [suffix]',
+  regionExclusion: 'local',
   description: '查看或设置全局默认域名后缀',
   options: [
     { rawName: '--unset', description: '清除已设置的全局域名后缀' }

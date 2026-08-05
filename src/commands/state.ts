@@ -12,6 +12,7 @@ interface StateShowOptions {
 
 const stateShowCommand = defineCliCommand({
   rawName: 'state show',
+  regionExclusion: 'local',
   description: '查看当前 repo 的 `.licell/state.json`',
   options: [
     { rawName: '--component <name>', description: '只读取指定 component 的 state' }

@@ -129,6 +129,12 @@ export type CommandManifestIssueCode =
   | 'descriptor_key_invalid'
   | 'descriptor_key_duplicate'
   | 'descriptor_key_root_mismatch'
+  | 'command_region_metadata_conflict'
+  | 'command_region_classification_missing'
+  | 'command_region_option_unclassified'
+  | 'command_region_option_count_invalid'
+  | 'command_region_binding_missing'
+  | 'command_region_target_unknown'
   | 'section_invalid'
   | 'section_inconsistent';
 
@@ -160,6 +166,9 @@ export interface CommandRegionMetadata {
   target?: CommandRegionBindingTarget;
 }
 
+export type CommandRegionOptionMode = 'auth-default' | 'project-default';
+export type CommandRegionExclusion = 'local' | 'region-agnostic' | 'token-owned';
+
 export interface DeclaredCliCommand {
   rawName: string;
   /**
@@ -173,6 +182,8 @@ export interface DeclaredCliCommand {
   options?: readonly DeclaredCliOption[];
   descriptor?: CommandDescriptor;
   region?: CommandRegionMetadata;
+  regionOptionMode?: CommandRegionOptionMode;
+  regionExclusion?: CommandRegionExclusion;
 }
 
 function normalizeDescriptorKey(key: string) {
@@ -231,6 +242,65 @@ export function collectCommandManifestIssues(manifest: LicellCommandManifest): C
     const descriptorKeys = Object.keys(surface.descriptors);
     if (kind === 'module' && descriptorKeys.length === 0) {
       pushIssue({ code: 'module_descriptors_empty', subject: owner, message: `${owner} must expose at least one descriptor.` });
+    }
+
+    for (const command of surface.declaredCommands || []) {
+      const key = toCommandKey(command.rawName);
+      const regionOptionCount = (command.options || [])
+        .filter((option) => /(?:^|[,\s])--region(?:[\s=]|$)/.test(option.rawName))
+        .length;
+      const classificationCount = [command.region, command.regionOptionMode, command.regionExclusion]
+        .filter(Boolean)
+        .length;
+      if (classificationCount > 1) {
+        pushIssue({
+          code: 'command_region_metadata_conflict',
+          subject: key,
+          message: `Command \`${key}\` must declare only one region classification.`
+        });
+      }
+      if (classificationCount === 0) {
+        pushIssue({
+          code: 'command_region_classification_missing',
+          subject: key,
+          message: `Command \`${key}\` must declare invocation metadata, regionOptionMode, or regionExclusion.`
+        });
+      }
+      if (regionOptionCount > 0 && !command.region && !command.regionOptionMode) {
+        pushIssue({
+          code: 'command_region_option_unclassified',
+          subject: key,
+          message: `Command \`${key}\` exposes --region without declaring invocation metadata or regionOptionMode.`
+        });
+      }
+      if ((command.region || command.regionOptionMode) && regionOptionCount !== 1) {
+        pushIssue({
+          code: 'command_region_option_count_invalid',
+          subject: key,
+          message: `Command \`${key}\` must expose exactly one --region option; found ${regionOptionCount}.`
+        });
+      }
+      if (command.region?.scope === 'binding' && !command.region.binding) {
+        pushIssue({
+          code: 'command_region_binding_missing',
+          subject: key,
+          message: `Binding-scoped command \`${key}\` must declare a binding.`
+        });
+      }
+      if (command.region?.target?.option) {
+        const optionKeys = new Set((command.options || []).flatMap((option) => {
+          return [...option.rawName.matchAll(/--([A-Za-z0-9-]+)/g)].map((match) => {
+            return match[1]!.replace(/-([a-z0-9])/g, (_, char: string) => char.toUpperCase());
+          });
+        }));
+        if (!optionKeys.has(command.region.target.option)) {
+          pushIssue({
+            code: 'command_region_target_unknown',
+            subject: key,
+            message: `Command \`${key}\` targets unknown option \`${command.region.target.option}\`.`
+          });
+        }
+      }
     }
 
     for (const root of surface.roots) {

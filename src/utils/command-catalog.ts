@@ -28,6 +28,8 @@ export interface CatalogCommand {
   aliases: string[];
   rootCommand: string;
   region?: DeclaredCliCommand['region'];
+  regionOptionMode?: DeclaredCliCommand['regionOptionMode'];
+  regionExclusion?: DeclaredCliCommand['regionExclusion'];
 }
 
 export interface CommandCatalog {
@@ -105,7 +107,9 @@ function buildCommandCatalog(): CommandCatalog {
       options,
       aliases: [...(command.aliasNames || [])],
       rootCommand: commandTokens[0] || '',
-      region: declared?.region
+      region: declared?.region,
+      regionOptionMode: declared?.regionOptionMode,
+      regionExclusion: declared?.regionExclusion
     } satisfies CatalogCommand;
   }).filter((command) => command.commandTokens.length > 0);
 
