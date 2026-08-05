@@ -57,6 +57,7 @@ describe('e2e utils', () => {
         workspaceDir: join(root, '.licell', 'e2e-work', '20260219-000000-0001'),
         target: 'preview',
         runtime: 'nodejs22',
+        region: 'cn-shanghai',
         resources: {
           dnsRecordIds: ['123'],
           managedBuckets: ['licell-oss-demo-1494'],
@@ -68,6 +69,7 @@ describe('e2e utils', () => {
       expect(path).toBe(getE2eManifestPath(manifest.runId, root));
       const loaded = loadE2eManifest(manifest.runId, root);
       expect(loaded?.runId).toBe(manifest.runId);
+      expect(loaded?.region).toBe('cn-shanghai');
       expect(loaded?.resources.managedBuckets).toEqual(['licell-oss-demo-1494']);
       expect(listE2eManifestRunIds(root)).toEqual([manifest.runId]);
       const raw = JSON.parse(readFileSync(path, 'utf8')) as E2eManifest;

@@ -94,6 +94,7 @@ const authRepairCommand = defineCliCommand({
 const authExportCommand = defineCliCommand({
   rawName: 'auth export [passkey]',
   description: '加密打包当前 licell 全局凭证状态到私有 OSS，并生成 restore token',
+  region: { scope: 'auth' },
   options: [
     { rawName: '--bucket <bucket>', description: '指定导出到哪个 OSS Bucket；默认按账号+region 推导并自动创建' },
     { rawName: '--expires <duration>', description: 'restore token 内签名下载链接的有效期（如 12h、30d；默认 7d）' },

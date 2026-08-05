@@ -51,6 +51,12 @@ import {
 import { sleep } from '../utils/runtime';
 import { readLicellEnv } from '../utils/env';
 import { AUTOMATION_SECTION } from './sections';
+import type { CatalogCommand, CommandCatalog } from '../utils/command-catalog';
+import {
+  getInvocationRegionId,
+  normalizeRegionId,
+  runWithInvocationRegion
+} from '../utils/region-context';
 
 interface E2eRunOptions {
   suite?: unknown;
@@ -86,6 +92,7 @@ interface E2eStepContext {
 const e2eRunCommand = defineCliCommand({
   rawName: 'e2e run',
   description: '执行固定 E2E 套件（默认 smoke）',
+  region: { scope: 'auth' },
   options: [
     { rawName: '--suite <suite>', description: '套件：smoke/full（默认 smoke）' },
     { rawName: '--run-id <id>', description: '指定 runId（默认自动生成）' },
@@ -108,6 +115,7 @@ const e2eRunCommand = defineCliCommand({
 const e2eCleanupCommand = defineCliCommand({
   rawName: 'e2e cleanup [runId]',
   description: '清理指定 E2E run 产生的资源',
+  region: { scope: 'manifest' },
   options: [
     { rawName: '--manifest <path>', description: '直接指定 manifest 文件路径' },
     { rawName: '--keep-workspace', description: '保留本地 workspace 目录' },
@@ -271,17 +279,14 @@ export function seedE2eChildHome(
   mkdirSync(globalDir, { recursive: true });
 
   const authPath = join(globalDir, 'auth.json');
-  if (!existsSync(authPath)) {
-    const auth = options.auth ?? Config.requireAuth();
-    writeFileSync(authPath, `${JSON.stringify(auth, null, 2)}\n`);
-  }
+  const auth = options.auth ?? Config.getAuth();
+  if (!auth) throw new Error('E2E 隔离环境准备失败：未检测到可用的原始 auth 配置');
+  writeFileSync(authPath, `${JSON.stringify(auth, null, 2)}\n`);
 
   const globalConfigPath = join(globalDir, 'config.json');
-  if (!existsSync(globalConfigPath)) {
-    const nextGlobalConfig = { ...(options.globalConfig ?? Config.getGlobalConfig()) };
-    delete nextGlobalConfig.domainSuffix;
-    writeFileSync(globalConfigPath, `${JSON.stringify(nextGlobalConfig, null, 2)}\n`);
-  }
+  const nextGlobalConfig = { ...(options.globalConfig ?? Config.getGlobalConfig()) };
+  delete nextGlobalConfig.domainSuffix;
+  writeFileSync(globalConfigPath, `${JSON.stringify(nextGlobalConfig, null, 2)}\n`);
 
   const sourceAcmeDir = options.sourceAcmeDir ?? join(homedir(), '.licell-cli', 'acme');
   const targetAcmeDir = join(globalDir, 'acme');
@@ -327,9 +332,9 @@ export function classifyE2eCleanupCommandResult(
   return { outcome: ignored ? 'skipped' as const : 'failed' as const, message };
 }
 
-function buildE2eChildEnv(cwd: string) {
+export function buildE2eChildEnv(cwd: string) {
   const tempDir = getE2eTempDir(cwd);
-  const homeDir = seedE2eChildHome(cwd);
+  const homeDir = getE2eHomeDir(cwd);
   const sslAcmeDirectory = readLicellEnv(process.env, 'SSL_ACME_DIRECTORY')?.trim().toLowerCase();
   return {
     ...process.env,
@@ -347,12 +352,59 @@ function buildE2eChildEnv(cwd: string) {
   };
 }
 
+function commandMatchesArgv(command: CatalogCommand, args: string[]) {
+  const candidates = [command.key, ...command.aliases]
+    .map((key) => key.trim().split(/\s+/).filter(Boolean))
+    .sort((left, right) => right.length - left.length);
+  return candidates.some((tokens) => (
+    args.length >= tokens.length
+    && tokens.every((token, index) => args[index] === token)
+  ));
+}
+
+let e2eCommandCatalog: CommandCatalog | null = null;
+
+async function ensureE2eCommandCatalog() {
+  if (!e2eCommandCatalog) {
+    const { getCommandCatalog } = await import('../utils/command-catalog');
+    e2eCommandCatalog = getCommandCatalog();
+  }
+  return e2eCommandCatalog;
+}
+
+export function appendE2eCommandRegion(
+  args: string[],
+  regionId: string | undefined,
+  catalog: CommandCatalog | null = e2eCommandCatalog
+) {
+  const effectiveRegion = normalizeRegionId(regionId);
+  if (!effectiveRegion) return [...args];
+  if (!catalog) throw new Error('E2E regional command catalog 尚未初始化');
+
+  const command = [...catalog.commands]
+    .sort((left, right) => right.commandTokens.length - left.commandTokens.length)
+    .find((candidate) => commandMatchesArgv(candidate, args));
+  if (!command?.region) return [...args];
+  const regionFlags = command.options
+    .filter((option) => option.flags.includes('--region'))
+    .flatMap((option) => option.flags);
+  if (args.some((arg) => regionFlags.some((flag) => arg === flag || arg.startsWith(`${flag}=`)))) {
+    return [...args];
+  }
+  return [...args, '--region', effectiveRegion];
+}
+
+export function resolveE2eCleanupRegion(manifestRegion?: string) {
+  return getInvocationRegionId(manifestRegion) || normalizeRegionId(Config.getDefaultRegion());
+}
+
 function runCliCommand(
   invocation: ReturnType<typeof resolveSelfCliInvocation>,
   args: string[],
   cwd: string
 ) {
-  const argv = [...invocation.prefixArgs, ...args];
+  const childArgs = appendE2eCommandRegion(args, getInvocationRegionId());
+  const argv = [...invocation.prefixArgs, ...childArgs];
   const result = spawnSync(invocation.command, argv, {
     cwd,
     stdio: 'inherit',
@@ -373,7 +425,8 @@ function runCliCommandCapture(
   cwd: string,
   options: { replayOutput?: boolean } = {}
 ) {
-  const argv = [...invocation.prefixArgs, ...args];
+  const childArgs = appendE2eCommandRegion(args, getInvocationRegionId());
+  const argv = [...invocation.prefixArgs, ...childArgs];
   const result = spawnSync(invocation.command, argv, {
     cwd,
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -588,17 +641,18 @@ function runJsonCommandCapture<T extends Record<string, unknown>>(
   cwd: string
 ) {
   const jsonArgs = appendJsonOutputArgs(args);
-  const result = runCliCommandCapture(invocation, jsonArgs, cwd);
+  const childArgs = appendE2eCommandRegion(jsonArgs, getInvocationRegionId());
+  const result = runCliCommandCapture(invocation, childArgs, cwd);
   const combinedOutput = `${result.stdout}\n${result.stderr}`;
   if (result.status !== 0) {
     const signal = result.signal ? ` signal=${result.signal}` : '';
     const message = getLatestCliErrorMessage(combinedOutput)
-      || `命令失败: licell ${jsonArgs.join(' ')} (exit=${String(result.status)}${signal})`;
+      || `命令失败: licell ${childArgs.join(' ')} (exit=${String(result.status)}${signal})`;
     throw new Error(message);
   }
   const payload = getLatestCliResultRecord(combinedOutput);
   if (!payload) {
-    throw new Error(`命令未返回 JSON 结果: licell ${jsonArgs.join(' ')}`);
+    throw new Error(`命令未返回 JSON 结果: licell ${childArgs.join(' ')}`);
   }
   return payload as T;
 }
@@ -685,7 +739,8 @@ function untrackManagedDomain(ctx: E2eStepContext, domainResource: E2eManagedDom
 
 function runStep(ctx: E2eStepContext, name: string, args: string[]) {
   const startedAt = nowIso();
-  const command = `licell ${args.join(' ')}`;
+  const childArgs = appendE2eCommandRegion(args, getInvocationRegionId());
+  const command = `licell ${childArgs.join(' ')}`;
   emitCliEvent({
     stage: `e2e.${name}`,
     action: name,
@@ -693,7 +748,7 @@ function runStep(ctx: E2eStepContext, name: string, args: string[]) {
     data: { command }
   });
   try {
-    runCliCommand(ctx.invocation, args, ctx.workspaceDir);
+    runCliCommand(ctx.invocation, childArgs, ctx.workspaceDir);
     applyStepRecord(ctx.manifest, {
       name,
       command,
@@ -731,7 +786,8 @@ function runJsonStep<T extends Record<string, unknown>>(
 ): T {
   const jsonArgs = appendJsonOutputArgs(args);
   const startedAt = nowIso();
-  const command = `licell ${jsonArgs.join(' ')}`;
+  const childArgs = appendE2eCommandRegion(jsonArgs, getInvocationRegionId());
+  const command = `licell ${childArgs.join(' ')}`;
   emitCliEvent({
     stage: `e2e.${name}`,
     action: name,
@@ -739,19 +795,19 @@ function runJsonStep<T extends Record<string, unknown>>(
     data: { command }
   });
   try {
-    const result = runCliCommandCapture(ctx.invocation, jsonArgs, ctx.workspaceDir);
+    const result = runCliCommandCapture(ctx.invocation, childArgs, ctx.workspaceDir);
     const combinedOutput = `${result.stdout}\n${result.stderr}`;
     if (result.status !== 0) {
       if (result.stdout) process.stdout.write(result.stdout);
       if (result.stderr) process.stderr.write(result.stderr);
       const signal = result.signal ? ` signal=${result.signal}` : '';
       const message = getLatestCliErrorMessage(combinedOutput)
-        || `命令失败: licell ${jsonArgs.join(' ')} (exit=${String(result.status)}${signal})`;
+        || `命令失败: licell ${childArgs.join(' ')} (exit=${String(result.status)}${signal})`;
       throw new Error(message);
     }
     const payload = getLatestCliResultRecord(combinedOutput);
     if (!payload) {
-      throw new Error(`命令未返回 JSON 结果: licell ${jsonArgs.join(' ')}`);
+      throw new Error(`命令未返回 JSON 结果: licell ${childArgs.join(' ')}`);
     }
     const typedPayload = payload as T;
     validate?.(typedPayload);
@@ -1215,7 +1271,7 @@ function resolveFullSmokeRootDomain(domain?: string, domainSuffix?: string) {
   return parseRootAndSubdomain(domain).rootDomain;
 }
 
-async function executeE2eRun(options: E2eRunOptions) {
+export async function executeE2eRun(options: E2eRunOptions) {
   const projectRoot = process.cwd();
   const interactiveTTY = isInteractiveTTY();
   const suite = normalizeE2eSuite(toOptionalString(options.suite));
@@ -1255,6 +1311,7 @@ async function executeE2eRun(options: E2eRunOptions) {
   );
   ensureEmptyOrMissingDir(workspaceDir);
   mkdirSync(workspaceDir, { recursive: true });
+  const initialRegion = getInvocationRegionId();
 
   const manifest: E2eManifest = {
     runId,
@@ -1266,6 +1323,7 @@ async function executeE2eRun(options: E2eRunOptions) {
     workspaceDir,
     target,
     runtime,
+    ...(initialRegion ? { region: initialRegion } : {}),
     resources: {
       appName,
       dnsRecordIds: [],
@@ -1312,6 +1370,7 @@ async function executeE2eRun(options: E2eRunOptions) {
   ]);
 
   let runError: unknown;
+  let preparedChildHomeDir: string | undefined;
   emitCliEvent({
     stage: 'e2e',
     action: 'run',
@@ -1339,6 +1398,13 @@ async function executeE2eRun(options: E2eRunOptions) {
         })
       },
       async () => {
+        await ensureE2eCommandCatalog();
+        const effectiveAuth = Config.requireAuth();
+        manifest.region = getInvocationRegionId(effectiveAuth.region) || effectiveAuth.region;
+        persistManifest(manifest);
+        if (!preparedChildHomeDir) {
+          preparedChildHomeDir = seedE2eChildHome(workspaceDir);
+        }
         runStep(ctx, 'init', ['init', '--runtime', runtime, '--app', appName, '--yes']);
         const appNameFromConfig = readProjectAppName(workspaceDir);
         if (!appNameFromConfig) throw new Error('init 成功后未检测到 appName');
@@ -1787,7 +1853,8 @@ async function executeE2eRun(options: E2eRunOptions) {
         yes: yes || autoCleanup,
         keepWorkspace: false,
         invocation,
-        interactiveTTY
+        interactiveTTY,
+        preparedChildHomeDir
       });
     } catch (cleanupErr: unknown) {
       if (!runError) throw cleanupErr;
@@ -1801,15 +1868,34 @@ async function executeE2eRun(options: E2eRunOptions) {
   showOutro('Done.');
 }
 
-async function cleanupByManifest(
+interface E2eCleanupExecutionOptions {
+  yes: boolean;
+  keepWorkspace: boolean;
+  invocation?: ReturnType<typeof resolveSelfCliInvocation>;
+  interactiveTTY?: boolean;
+  preparedChildHomeDir?: string;
+}
+
+export async function cleanupByManifest(
   manifest: E2eManifest,
-  options: {
-    yes: boolean;
-    keepWorkspace: boolean;
-    invocation?: ReturnType<typeof resolveSelfCliInvocation>;
-    interactiveTTY?: boolean;
-  }
+  options: E2eCleanupExecutionOptions
 ) {
+  const effectiveRegion = resolveE2eCleanupRegion(manifest.region);
+  return runWithInvocationRegion(
+    {
+      scope: 'manifest',
+      regionId: effectiveRegion,
+      resolveFallbackRegion: () => normalizeRegionId(Config.getDefaultRegion())
+    },
+    () => cleanupByManifestInContext(manifest, options)
+  );
+}
+
+async function cleanupByManifestInContext(
+  manifest: E2eManifest,
+  options: E2eCleanupExecutionOptions
+) {
+  await ensureE2eCommandCatalog();
   const previousStatus = manifest.status;
   const interactiveTTY = options.interactiveTTY ?? isInteractiveTTY();
   await ensureDestructiveActionConfirmed(`清理 E2E 运行 ${manifest.runId} 相关云资源`, {
@@ -1822,6 +1908,8 @@ async function cleanupByManifest(
   const details: string[] = [];
   const workspaceDir = manifest.workspaceDir;
   const commandCwd = resolveE2eCleanupCommandCwd(workspaceDir, manifest.projectRoot);
+  const commandHomeDir = getE2eHomeDir(commandCwd);
+  let childHomePrepared = options.preparedChildHomeDir === commandHomeDir;
   const appName = manifest.resources.appName;
   const domain = manifest.resources.domain;
   const staticBucket = manifest.resources.staticBucket;
@@ -1852,14 +1940,15 @@ async function cleanupByManifest(
   ) => {
     const maxAttempts = Math.max(1, cleanupOptions?.maxAttempts || 3);
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-      const result = runCliCommandCapture(invocation, args, commandCwd, { replayOutput: true });
-      const classified = classifyE2eCleanupCommandResult(result, args, cleanupOptions?.ignoreErrorPatterns || []);
+      const childArgs = appendE2eCommandRegion(args, getInvocationRegionId());
+      const result = runCliCommandCapture(invocation, childArgs, commandCwd, { replayOutput: true });
+      const classified = classifyE2eCleanupCommandResult(result, childArgs, cleanupOptions?.ignoreErrorPatterns || []);
       if (classified.outcome === 'ok') {
         details.push(attempt > 1 ? `${name}: ok (attempt=${attempt})` : `${name}: ok`);
         return;
       }
 
-      const message = classified.message || `命令失败: licell ${args.join(' ')}`;
+      const message = classified.message || `命令失败: licell ${childArgs.join(' ')}`;
       if (classified.outcome === 'skipped') {
         details.push(`${name}: skipped (${message})`);
         return;
@@ -1920,6 +2009,10 @@ async function cleanupByManifest(
       ]
     },
     async () => {
+      if (!childHomePrepared) {
+        seedE2eChildHome(commandCwd);
+        childHomePrepared = true;
+      }
       for (const item of [...domainTargets].reverse()) {
         if (item.workflow === 'app') {
           console.log(pc.gray(`清理 app domain: ${item.domain}`));

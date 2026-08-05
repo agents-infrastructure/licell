@@ -16,6 +16,7 @@ import {
   normalizeDoctorRemediationItems
 } from './doctor-guidance';
 import { cloneResolvedCommandNextActions, type ResolvedCommandNextAction } from './command-next-actions';
+import { applyInvocationRegion } from './region-context';
 
 export type LicellDoctorCheckStatus = 'ok' | 'warn' | 'error' | 'skip';
 export type LicellDoctorCheckCategory = 'auth' | 'global' | 'project' | 'deploy' | 'cloud' | 'domain';
@@ -947,7 +948,7 @@ async function runLicellDoctorSingle(
     }));
   } else {
     const cloud = await runDoctorCloudDiagnostics({
-      auth,
+      auth: applyInvocationRegion(auth),
       project: context.project,
       deployTypeHint: context.effectiveRuntime?.deployTypeHint,
       runtime: context.effectiveRuntime?.runtime || null

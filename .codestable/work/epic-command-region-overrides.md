@@ -2,8 +2,8 @@
 epic: ../epics/command-region-overrides.md
 phase: executing
 approved_revision: 4e51507401b921732725f2f78388b214c6a69004e4b3530bf11512e6580f3c62
-current_item: ITEM-4
-next_action: 测试先行接入 auth export、doctor、workspace doctor 与 E2E Region 传播和清理
+current_item: ITEM-5
+next_action: 统一迁移既有 regional metadata，并用机械守卫收口 87 个命令、结果合同与生成表面
 blocked_by: null
 item_progression: continuous
 milestone_commit: authorized
@@ -15,7 +15,7 @@ remote_publish: manual
 - [x] ITEM-1
 - [x] ITEM-2
 - [x] ITEM-3
-- [ ] ITEM-4
+- [x] ITEM-4
 - [ ] ITEM-5
 
 ## 临时决策与证据
@@ -39,3 +39,6 @@ remote_publish: manual
 - 2026-08-05：ITEM-3 第一轮 change review 由 Paseo agent `387fe01a-bf41-4183-a34e-c309e52c4aac` 使用 `claude/claude-opus-5`、plan 模式只读完成；冻结 staged diff SHA-256 `7028548b0d200bbabf9927726db72e1ec9787255514b23f2d06449ae2a5555ed`，结论 `needs changes`，指出已有跨地域 network binding 会绕过重新验证、缺少 project 无 region 回退、Env 写入提示及异构 workspace plan 的 `callRegionId` 语义问题。
 - 2026-08-05：ITEM-3 第二轮复审冻结 SHA-256 `762d92f38f863b095697f95fb5079664768deafc929fec7411dae8155d7dd173`；B1/I1-I3 已核销，reviewer 在确认 `withProcessCwd(resolveDeployWorkingDirectory(ctx.component))` 后撤回 component 目录误判，剩余唯一 important 为已有 network binding 遇瞬时探测错误时不能静默降级公网。
 - 2026-08-05：ITEM-3 第三轮终审冻结 SHA-256 `8aa2d7ea891524e42439a2c13a57d76f3da1d68c27660be63b0753471b6316f0`，同一 reviewer/lineage 结论 `passed`、无 blocking/important；已有 network binding 的 VPC 探测异常会终止部署，fresh 项目保留原有公网回退。Deploy/plan、Task、Release、Function、Env、Domain 共 30 个命令完成 project/auth scope 覆盖，项目默认值、有效调用值与 state 审计值保持分离。`bun run typecheck`、`bun run docs:check`、`bun run build` 通过，`bun run test:integration` 7/7，`bun run test:ci` 146 files / 1067 tests 全绿。
+- 2026-08-05：ITEM-4 第一轮 change review 由 Paseo agent `5cf2bf4c-3651-462f-b962-ae484552ddc6` 使用 `claude/claude-opus-5`、plan 模式只读完成；冻结 staged diff SHA-256 `85408bb09648e4cb334c848a9688d9df42f3f479c4b6781bf063bd8ce0615a10`，结论 `needs changes`，生产地域语义通过但顶层 E2E home 生命周期和 auth export raw/effective 分离仅有 helper/mock 假绿。
+- 2026-08-05：ITEM-4 第二轮复审冻结 SHA-256 `0c362ebee9cc63e60dcb6a8b1734e90ae2ca49d9232f216a7e22191af0da523e`，同一 reviewer 核销 B-1/B-2 及 I-1/I-3/I-4/I-5，结论 `approve`、无新增 blocking/important；真实 spawn runner、auto/standalone cleanup、真实 CAC auth export 加密包和 workspace doctor 聚合均有回归证据。
+- 2026-08-05：ITEM-4 测试卫生修订后最终冻结 SHA-256 `d4382d9fadd6f34454c6d349d666031b4619867d93075b43fda8ede696c35e15`，同一 reviewer 第三轮极窄复核维持 `approve`；测试使用唯一 tmp basename、临时 HOME 与 partial child_process mock，不会触碰并发 E2E home 或本机 ACME。auth export、doctor/workspace doctor、E2E run/cleanup 共 5 个命令完成 scope 覆盖；`bun run typecheck`、`bun run docs:check`、`bun run build` 通过，`bun run test:integration` 7/7，`bun run test:ci` 149 files / 1080 tests 全绿。

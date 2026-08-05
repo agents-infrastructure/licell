@@ -38,6 +38,7 @@ export interface E2eManifest {
   workspaceDir: string;
   target: string;
   runtime: string;
+  region?: string;
   resources: {
     appName?: string;
     domain?: string;

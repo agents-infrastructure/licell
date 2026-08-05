@@ -2,10 +2,27 @@ import { describe, expect, it } from 'vitest';
 import {
   classifyE2eCleanupCommandResult,
   resolveE2eCleanupCommandCwd,
+  resolveE2eCleanupRegion,
   type CapturedCliCommandResult
 } from '../commands/e2e';
+import { runWithInvocationRegion } from '../utils/region-context';
 
 describe('e2e cleanup helpers', () => {
+  it('resolves explicit override before manifest ownership and auth fallback', () => {
+    expect(runWithInvocationRegion(
+      { scope: 'manifest', regionId: 'cn-beijing', resolveFallbackRegion: () => 'cn-hangzhou' },
+      () => resolveE2eCleanupRegion('cn-shanghai')
+    )).toBe('cn-beijing');
+    expect(runWithInvocationRegion(
+      { scope: 'manifest', resolveFallbackRegion: () => 'cn-hangzhou' },
+      () => resolveE2eCleanupRegion('cn-shanghai')
+    )).toBe('cn-shanghai');
+    expect(runWithInvocationRegion(
+      { scope: 'manifest', resolveFallbackRegion: () => 'cn-hangzhou' },
+      () => resolveE2eCleanupRegion()
+    )).toBe('cn-hangzhou');
+  });
+
   it('falls back to project root when workspace was already removed', () => {
     expect(resolveE2eCleanupCommandCwd('/tmp/missing-workspace', '/repo', () => false)).toBe('/repo');
     expect(resolveE2eCleanupCommandCwd('/tmp/existing-workspace', '/repo', (path) => path === '/tmp/existing-workspace')).toBe('/tmp/existing-workspace');

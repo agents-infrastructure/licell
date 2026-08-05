@@ -108,7 +108,7 @@
 | 命令 | 说明 | 关键选项 |
 |------|------|----------|
 | `licell login` | 配置阿里云凭证 | `--account-id`, `--ak`, `--sk` |
-| `licell auth export [passkey]` | 加密打包当前 licell 全局凭证状态到私有 OSS，并生成 restore token | `--bucket`, `--expires`, `--expires-hours` |
+| `licell auth export [passkey]` | 加密打包当前 licell 全局凭证状态到私有 OSS，并生成 restore token | `--region`, `--bucket`, `--expires` |
 | `licell auth inspect <token>` | 解析并查看 restore token 的内容与有效期 | — |
 | `licell auth repair` | 修复凭证权限（推荐：用超级 AK/SK 自动补齐 licell 最小权限并继续使用） | `--account-id`, `--ak`, `--sk` |
 | `licell auth restore <token> [passkey]` | 使用 restore token + passkey 一键恢复 licell 全局凭证状态 | `--yes` |
@@ -118,7 +118,7 @@
 | `licell init` | 初始化 FC 项目（空目录生成脚手架，已有项目写入 licell 配置） | `--runtime`, `--kind`, `--app` |
 | `licell bootstrap` | 把已确认的部署方案初始化到 `.licell/project.json` / `.licell/state.json` | `--component`, `--path`, `--type` |
 | `licell workspace discover` | 扫描 repo，给出候选 components 与部署提案 | — |
-| `licell workspace doctor` | 在 workspace / monorepo 根目录诊断全部或指定 component | `--component`, `--runtime`, `--entry` |
+| `licell workspace doctor` | 在 workspace / monorepo 根目录诊断全部或指定 component | `--region`, `--component`, `--runtime` |
 | `licell workspace init` | 在 repo 根目录创建或更新 licell workspace component | `--component`, `--path`, `--type` |
 | `licell workspace list` | 列出当前 repo / workspace 中可部署的 components | `--component` |
 | `licell workspace migrate` | 把旧单项目 `.licell/project.json` 升级成兼容旧版的 workspace/component 格式 | `--component`, `--path`, `--default` |
@@ -247,7 +247,7 @@
 
 | 命令 | 说明 | 关键选项 |
 |------|------|----------|
-| `licell doctor` | 诊断本机 licell 登录态、云端权限/目标资源/域名入口、项目配置与部署前置条件 | `--component`, `--all-components`, `--runtime` |
+| `licell doctor` | 诊断本机 licell 登录态、云端权限/目标资源/域名入口、项目配置与部署前置条件 | `--region`, `--component`, `--all-components` |
 | `licell catalog` | 输出共享 CLI 命令目录，供 Agent / 自动化发现命令、选项和结构化契约 | `--root-command`, `--command-key` |
 | `licell ci init github` | 生成 GitHub Actions 的 deploy-only workflow（只调用 licell，不负责编译） | `--apply`, `--force`, `--workflow` |
 | `licell ci init gitlab` | 生成 GitLab CI 的 deploy-only pipeline（只调用 licell，不负责编译） | `--apply`, `--force`, `--pipeline` |
@@ -257,9 +257,9 @@
 | `licell state show` | 查看当前 repo 的 `.licell/state.json` | `--component` |
 | `licell completion [shell]` | 输出 shell 补全脚本（bash/zsh） | `--engine` |
 | `licell upgrade` | 按当前安装来源升级 licell | `--channel`, `--target-version`, `--repo` |
-| `licell e2e cleanup [runId]` | 清理指定 E2E run 产生的资源 | `--manifest`, `--keep-workspace`, `--yes` |
+| `licell e2e cleanup [runId]` | 清理指定 E2E run 产生的资源 | `--region`, `--manifest`, `--keep-workspace` |
 | `licell e2e list` | 查看本项目 e2e 运行记录 | — |
-| `licell e2e run` | 执行固定 E2E 套件（默认 smoke） | `--suite`, `--run-id`, `--runtime` |
+| `licell e2e run` | 执行固定 E2E 套件（默认 smoke） | `--region`, `--suite`, `--run-id` |
 
 ## 同步机制
 

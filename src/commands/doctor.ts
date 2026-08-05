@@ -9,6 +9,7 @@ import { renderLicellDoctorReport, runLicellDoctor } from '../utils/doctor';
 const doctorCommand = defineCliCommand({
   rawName: 'doctor',
   description: '诊断本机 licell 登录态、云端权限/目标资源/域名入口、项目配置与部署前置条件',
+  region: { scope: 'auth' },
   options: [
     { rawName: '--component <name>', description: '在 workspace / monorepo 根目录显式选择 component' },
     { rawName: '--all-components', description: 'workspace 模式下扫描所有 components，而不是只诊断当前/默认 component' },

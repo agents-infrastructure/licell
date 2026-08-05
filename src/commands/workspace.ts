@@ -185,6 +185,7 @@ const workspaceDiscoverCommand = defineCliCommand({
 const workspaceDoctorCommand = defineCliCommand({
   rawName: 'workspace doctor',
   description: '在 workspace / monorepo 根目录诊断全部或指定 component',
+  region: { scope: 'auth' },
   options: [
     { rawName: '--component <name>', description: '只诊断指定 component；未传时默认扫描全部 components' },
     { rawName: '--runtime <runtime>', description: '覆盖 runtime 做 deploy 诊断（与 doctor 相同）' },

@@ -300,6 +300,27 @@ describe('buildAuthExportHumanOutput', () => {
 });
 
 describe('registerAuthCommands / auth export', () => {
+  it('routes bucket lookup and token metadata with the effective auth region', async () => {
+    requireAuthMock.mockReturnValue({
+      accountId: '1494910986361453',
+      region: 'cn-shanghai'
+    });
+    getGlobalConfigMock.mockReturnValue({ authTransferBuckets: {} });
+    const { registerAuthCommands } = await import('../commands/auth');
+
+    registerAuthCommands({} as never);
+    await capturedActions['auth export [passkey]']?.('123456789012', {});
+
+    expect(getConfiguredAuthTransferBucketMock).toHaveBeenCalledWith(
+      expect.anything(),
+      '1494910986361453',
+      'cn-shanghai'
+    );
+    expect(encodeAuthTransferTokenMock).toHaveBeenCalledWith(expect.objectContaining({
+      region: 'cn-shanghai'
+    }));
+  });
+
   it('supports human-friendly expiry durations like 30d', async () => {
     const { registerAuthCommands } = await import('../commands/auth');
 

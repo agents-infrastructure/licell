@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { seedE2eChildHome } from '../commands/e2e';
+import { buildE2eChildEnv, seedE2eChildHome } from '../commands/e2e';
 
 describe('seedE2eChildHome', () => {
   const tempDirs: string[] = [];
@@ -48,5 +48,48 @@ describe('seedE2eChildHome', () => {
       }
     });
     expect(existsSync(join(homeDir, '.licell-cli', 'acme', 'account.json'))).toBe(true);
+  });
+
+  it('refreshes once at the next top-level run without overwriting child auth repair between spawns', () => {
+    const workspaceDir = mkdtempSync(join(tmpdir(), 'licell-e2e-env-refresh-'));
+    tempDirs.push(workspaceDir);
+
+    const homeDir = seedE2eChildHome(workspaceDir, {
+      auth: {
+        accountId: '1494910986361453',
+        ak: 'initial-ak',
+        sk: 'initial-sk',
+        region: 'cn-hangzhou'
+      },
+      globalConfig: {}
+    });
+    const authPath = join(homeDir, '.licell-cli', 'auth.json');
+    writeFileSync(authPath, JSON.stringify({
+      accountId: '1494910986361453',
+      ak: 'repaired-ak',
+      sk: 'repaired-sk',
+      region: 'cn-shanghai'
+    }));
+
+    buildE2eChildEnv(workspaceDir);
+    buildE2eChildEnv(workspaceDir);
+    expect(JSON.parse(readFileSync(authPath, 'utf8'))).toMatchObject({
+      ak: 'repaired-ak',
+      region: 'cn-shanghai'
+    });
+
+    seedE2eChildHome(workspaceDir, {
+      auth: {
+        accountId: '1494910986361453',
+        ak: 'next-run-ak',
+        sk: 'next-run-sk',
+        region: 'cn-beijing'
+      },
+      globalConfig: {}
+    });
+    expect(JSON.parse(readFileSync(authPath, 'utf8'))).toMatchObject({
+      ak: 'next-run-ak',
+      region: 'cn-beijing'
+    });
   });
 });

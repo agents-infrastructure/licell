@@ -3,6 +3,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { tmpdir } from 'os';
 import { doctorNextCommands, doctorRemediationCommand } from '../utils/doctor-guidance';
+import { runWithInvocationRegion } from '../utils/region-context';
 
 const { runDoctorCloudDiagnosticsMock } = vi.hoisted(() => ({
   runDoctorCloudDiagnosticsMock: vi.fn()
@@ -171,6 +172,98 @@ describe('runLicellDoctor cloud integration', () => {
       expect(report.checks.find((check) => check.id === 'domain.consistency')?.status).toBe('skip');
       expect(report.checks.find((check) => check.id === 'deploy.target')?.status).toBe('skip');
       expect(report.checks.find((check) => check.id === 'cloud.offline')?.status).toBe('skip');
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps the raw default region in the report while cloud probes use the invocation override', async () => {
+    const { runLicellDoctor } = await import('../utils/doctor');
+    const home = createTempDir('licell-doctor-region-home-');
+    const root = createTempDir('licell-doctor-region-project-');
+    vi.stubEnv('HOME', home);
+    runDoctorCloudDiagnosticsMock.mockResolvedValue({
+      identity: { status: 'ok', summary: 'identity ok', details: [], remediation: [] },
+      ramProfile: { status: 'ok', summary: 'ram ok', details: [], remediation: [] },
+      domainConsistency: { status: 'ok', summary: 'domain ok', details: [], remediation: [] },
+      deployTarget: { status: 'ok', summary: 'target ok', details: [], remediation: [] },
+      capabilities: { status: 'ok', summary: 'capabilities ok', details: [], remediation: [] }
+    });
+
+    try {
+      writeJson(join(home, '.licell-cli', 'auth.json'), {
+        accountId: '1494910986361453',
+        ak: 'demo-ak',
+        sk: 'demo-sk',
+        region: 'cn-hangzhou'
+      });
+      writeJson(join(root, '.licell', 'project.json'), {
+        appName: 'doctor-region-demo',
+        runtime: 'nodejs22',
+        envs: {}
+      });
+      writeText(join(root, 'src', 'index.ts'), 'export default async function app() { return { statusCode: 200 }; }\n');
+
+      const report = await runWithInvocationRegion(
+        { scope: 'auth', regionId: 'cn-shanghai' },
+        () => runLicellDoctor({ cwd: root })
+      );
+
+      expect(report.checks.find((check) => check.id === 'auth.credentials')?.data).toMatchObject({
+        region: 'cn-hangzhou'
+      });
+      expect(runDoctorCloudDiagnosticsMock).toHaveBeenCalledWith(expect.objectContaining({
+        auth: expect.objectContaining({ region: 'cn-shanghai' })
+      }));
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('uses the same invocation override for every workspace cloud probe', async () => {
+    const { runLicellDoctor } = await import('../utils/doctor');
+    const home = createTempDir('licell-doctor-workspace-region-home-');
+    const root = createTempDir('licell-doctor-workspace-region-project-');
+    vi.stubEnv('HOME', home);
+    runDoctorCloudDiagnosticsMock.mockResolvedValue({
+      identity: { status: 'ok', summary: 'identity ok', details: [], remediation: [] },
+      ramProfile: { status: 'ok', summary: 'ram ok', details: [], remediation: [] },
+      domainConsistency: { status: 'ok', summary: 'domain ok', details: [], remediation: [] },
+      deployTarget: { status: 'ok', summary: 'target ok', details: [], remediation: [] },
+      capabilities: { status: 'ok', summary: 'capabilities ok', details: [], remediation: [] }
+    });
+
+    try {
+      writeJson(join(home, '.licell-cli', 'auth.json'), {
+        accountId: '1494910986361453',
+        ak: 'demo-ak',
+        sk: 'demo-sk',
+        region: 'cn-hangzhou'
+      });
+      writeJson(join(root, '.licell', 'project.json'), {
+        defaultComponent: 'api',
+        components: {
+          api: { path: 'apps/api', appName: 'doctor-api', deployType: 'api', runtime: 'nodejs22', envs: {} },
+          web: { path: 'apps/web', appName: 'doctor-web', deployType: 'static', runtime: 'static', envs: {} }
+        }
+      });
+      writeText(join(root, 'apps', 'api', 'src', 'index.ts'), 'export default async function app() { return { statusCode: 200 }; }\n');
+
+      const report = await runWithInvocationRegion(
+        { scope: 'auth', regionId: 'cn-shanghai' },
+        () => runLicellDoctor({ cwd: root, allComponents: true })
+      );
+
+      expect(report.components).toHaveLength(2);
+      expect(runDoctorCloudDiagnosticsMock).toHaveBeenCalledTimes(3);
+      for (const [input] of runDoctorCloudDiagnosticsMock.mock.calls) {
+        expect(input.auth.region).toBe('cn-shanghai');
+      }
+      expect(report.checks.find((check) => check.id === 'auth.credentials')?.data).toMatchObject({
+        region: 'cn-hangzhou'
+      });
     } finally {
       rmSync(home, { recursive: true, force: true });
       rmSync(root, { recursive: true, force: true });
