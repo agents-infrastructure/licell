@@ -1,9 +1,0 @@
-{
-  "gate_id": "dod-contract-gate",
-  "stage": "roadmap_audit.before_complete",
-  "status": "passed",
-  "blocking": [],
-  "warnings": [],
-  "evidence": [{"source": "accepted feature checklist and DoD commands", "note": "retroactive audit marker for pre-existing accepted feature"}],
-  "providers": {}
-}

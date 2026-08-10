@@ -1,9 +1,0 @@
-{
-  "gate_id": "evidence-pack",
-  "stage": "roadmap_audit.before_complete",
-  "status": "passed",
-  "blocking": [],
-  "warnings": [],
-  "evidence": [{"source": "ecs-command-surface-docs-evidence-pack.md", "note": "standardized final-audit evidence-pack marker backed by accepted feature evidence and gates"}],
-  "providers": {}
-}
