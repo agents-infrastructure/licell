@@ -294,6 +294,41 @@ describe('issueAcmeCertificateWithFallback', () => {
     expect(message).toHaveBeenCalledWith(expect.stringContaining('请求超时或暂时不可用'));
   });
 
+  it('falls back from Let\'s Encrypt when getAuthorizations receives an undefined response', async () => {
+    const { spinner, message } = createSpinner();
+    const providers = resolveAcmeProviderPlan({});
+
+    const result = await issueAcmeCertificateWithFallback({
+      domain: 'app.example.com',
+      email: 'admin@example.com',
+      spinner,
+      providers,
+      skipChallengeVerification: true,
+      totalTimeoutMs: 1000,
+      acmeHttpTimeoutMs: 30000,
+      acmeHttpRetryMaxAttempts: 0,
+      createCsr: async () => [Buffer.from('KEY'), Buffer.from('CSR')],
+      resolveProvider: async (provider) => provider.name === 'zerossl'
+        ? { ...provider, externalAccountBinding: { kid: 'kid', hmacKey: 'hmac' } }
+        : provider,
+      getAccountKey: async (provider) => Buffer.from(`ACCOUNT:${provider.name}`),
+      createClient: (provider) => ({ providerName: provider.name } as never),
+      runFlow: async ({ client }) => {
+        const providerName = (client as { providerName?: string }).providerName;
+        if (providerName === 'letsencrypt') {
+          throw new Error("ACME 证书签发(Let's Encrypt/app.example.com)/getAuthorizations: ACME transport 未返回有效响应（可能是 HTTP timeout / 网络抖动; acme-client returned undefined response）");
+        }
+        return 'CERTIFICATE';
+      },
+      onChallengeCreate: async () => {},
+      onChallengeRemove: async () => {}
+    });
+
+    expect(result.provider.name).toBe('zerossl');
+    expect(result.cert).toBe('CERTIFICATE');
+    expect(message).toHaveBeenCalledWith(expect.stringContaining('ZeroSSL'));
+  });
+
   it('does not fallback for non-rate-limit failures', async () => {
     const { spinner } = createSpinner();
     const providers = resolveAcmeProviderPlan({});

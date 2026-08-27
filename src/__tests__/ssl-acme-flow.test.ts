@@ -121,6 +121,27 @@ describe('runAcmeDns01Flow', () => {
     })).rejects.toThrow('createOrder');
   });
 
+  it('normalizes acme-client undefined-response errors from getAuthorizations', async () => {
+    const spinner = createSpinner();
+    const client = createClient({
+      getAuthorizations: vi.fn(async () => {
+        throw new TypeError("Cannot read properties of undefined (reading 'config')");
+      })
+    });
+
+    await expect(runAcmeDns01Flow({
+      client: client as never,
+      domains: ['app.example.com'],
+      csr: Buffer.from('CSR'),
+      email: 'admin@example.com',
+      spinner,
+      skipChallengeVerification: true,
+      totalTimeoutMs: 1000,
+      onChallengeCreate: async () => {},
+      onChallengeRemove: async () => {}
+    })).rejects.toThrow("ACME dns-01/getAuthorizations: ACME transport 未返回有效响应");
+  });
+
   it('deactivates authorization and still removes TXT records when challenge submission fails', async () => {
     const spinner = createSpinner();
     const client = createClient({

@@ -416,6 +416,7 @@ function isAcmeProviderAvailabilityError(error: unknown) {
   if (!isTransientNetworkError(error)) return false;
   return details.includes('/createorder')
     || details.includes('/createaccount')
+    || details.includes('/getauthorizations')
     || details.includes('/finalizeorder')
     || details.includes('/getcertificate')
     || details.includes('acme-v02.api.letsencrypt.org')
@@ -444,6 +445,7 @@ function isAcmeHttpStageLabel(stageLabel: string) {
   const normalized = stageLabel.toLowerCase();
   return normalized.endsWith('/createaccount')
     || normalized.endsWith('/createorder')
+    || normalized.endsWith('/getauthorizations')
     || normalized.endsWith('/finalizeorder')
     || normalized.endsWith('/getcertificate');
 }
