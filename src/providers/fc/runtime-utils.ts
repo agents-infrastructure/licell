@@ -30,17 +30,29 @@ export function hasPythonHandlerSymbol(source: string) {
   return /^\s*(async\s+)?def\s+handler\s*\(/m.test(source);
 }
 
+function hasNamedNodeHandlerExport(source: string) {
+  const exportLists = source.matchAll(/\bexport\s*\{([\s\S]*?)\}/g);
+  for (const match of exportLists) {
+    const specifiers = (match[1] || '').split(',');
+    const exportsHandler = specifiers.some((specifier) => {
+      const normalized = specifier.trim().replace(/\s+/g, ' ');
+      return normalized === 'handler'
+        || /^(?:default|[$A-Z_a-z][$\w]*)\s+as\s+handler$/.test(normalized);
+    });
+    if (exportsHandler) return true;
+  }
+  return false;
+}
+
 export function hasNodeHandlerExport(source: string) {
   const checks = [
     /\bexport\s+(?:async\s+)?function\s+handler\b/,
     /\bexport\s+(?:const|let|var)\s+handler\b/,
-    /\bexport\s*\{\s*handler(?:\s+as\s+\w+)?\s*\}/,
-    /\bexport\s*\{\s*default\s+as\s+handler\s*\}/,
     /\bmodule\.exports\.handler\s*=/,
     /\bexports\.handler\s*=/,
     /\bmodule\.exports\s*=\s*\{[\s\S]*\bhandler\b[\s\S]*\}/
   ];
-  return checks.some((pattern) => pattern.test(source));
+  return checks.some((pattern) => pattern.test(source)) || hasNamedNodeHandlerExport(source);
 }
 
 export function hasNodeDefaultExport(source: string) {

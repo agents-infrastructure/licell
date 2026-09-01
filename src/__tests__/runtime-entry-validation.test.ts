@@ -40,6 +40,24 @@ describe('validateRuntimeEntrypoint', () => {
     });
   });
 
+  it('accepts nodejs20 entry when handler is one of multiple named exports', () => {
+    withTempEntry('const helper = 1; const handler = async () => ({ statusCode: 200 });\nexport { helper, handler };\n', '.mjs', (entry) => {
+      expect(() => validateRuntimeEntrypoint(entry, 'nodejs20')).not.toThrow();
+    });
+  });
+
+  it('accepts nodejs22 entry when a local symbol is exported as handler', () => {
+    withTempEntry('const helper = 1; const internalHandler = async () => ({ statusCode: 200 });\nexport {\n  helper,\n  internalHandler as handler,\n};\n', '.mjs', (entry) => {
+      expect(() => validateRuntimeEntrypoint(entry, 'nodejs22')).not.toThrow();
+    });
+  });
+
+  it('rejects nodejs20 entry when handler is renamed away', () => {
+    withTempEntry('const handler = async () => ({ statusCode: 200 });\nexport { handler as internalHandler };\n', '.mjs', (entry) => {
+      expect(() => validateRuntimeEntrypoint(entry, 'nodejs20')).toThrow('缺少 handler 导出');
+    });
+  });
+
   it('rejects nodejs20 entry when only default export exists', () => {
     withTempEntry('export default async function app() { return { statusCode: 200 }; }\n', '.ts', (entry) => {
       expect(() => validateRuntimeEntrypoint(entry, 'nodejs20')).toThrow('缺少 handler 导出');
