@@ -25,7 +25,13 @@ export function checkDockerAvailable() {
 }
 
 export function dockerBuild(imageTag: string, contextDir: string, dockerfilePath?: string) {
-  const args = ['build', '--platform', 'linux/amd64'];
+  const args = [
+    'build',
+    '--platform',
+    'linux/amd64',
+    '--provenance=false',
+    '--sbom=false'
+  ];
   if (dockerfilePath) args.push('-f', dockerfilePath);
   args.push('-t', imageTag, contextDir);
 

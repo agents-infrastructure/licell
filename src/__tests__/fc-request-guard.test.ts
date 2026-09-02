@@ -374,7 +374,7 @@ describe('fc request guard', () => {
 
     const env = {
       LICELL_FC_QUALIFIER_READY_TIMEOUT_MS: '5',
-      LICELL_FC_MUTATION_READY_TIMEOUT_MS: '40',
+      LICELL_FC_MUTATION_READY_TIMEOUT_MS: '200',
       LICELL_FC_QUALIFIER_READY_INTERVAL_MS: '10'
     };
 
@@ -419,5 +419,81 @@ describe('fc request guard', () => {
 
     expect(fn.functionName).toBe('demo-fn');
     expect(attempts).toBe(3);
+  });
+
+  it('waits for an active function update to finish before reporting readiness', async () => {
+    let attempts = 0;
+    const client = {
+      async getFunctionWithOptions() {
+        attempts += 1;
+        return {
+          body: {
+            functionName: 'demo-fn',
+            state: 'Active',
+            lastUpdateStatus: attempts < 3 ? 'InProgress' : 'Successful',
+            lastUpdateStatusReasonCode: attempts < 3 ? 'ImageOptimizing' : undefined
+          }
+        };
+      }
+    } as unknown as FC20230330;
+
+    const fn = await waitForFcFunctionReadable('demo-fn', client, {
+      timeoutMs: 100,
+      intervalMs: 1,
+      profile: 'mutation'
+    });
+
+    expect(fn.lastUpdateStatus).toBe('Successful');
+    expect(attempts).toBe(3);
+  });
+
+  it('rejects a failed function update even when the function remains active', async () => {
+    let attempts = 0;
+    const client = {
+      async getFunctionWithOptions() {
+        attempts += 1;
+        return {
+          body: {
+            functionName: 'demo-fn',
+            state: 'Active',
+            lastUpdateStatus: 'Failed',
+            lastUpdateStatusReasonCode: 'ImageOptimizingFailed',
+            lastUpdateStatusReason: 'invalid image, platform of image is unknown/unknown'
+          }
+        };
+      }
+    } as unknown as FC20230330;
+
+    await expect(waitForFcFunctionReadable('demo-fn', client, {
+      timeoutMs: 50,
+      intervalMs: 1,
+      profile: 'mutation'
+    })).rejects.toThrow(
+      '函数 demo-fn 更新失败: ImageOptimizingFailed: invalid image, platform of image is unknown/unknown'
+    );
+    expect(attempts).toBe(1);
+  });
+
+  it('keeps active functions readable after a failed update', async () => {
+    const client = {
+      async getFunctionWithOptions() {
+        return {
+          body: {
+            functionName: 'demo-fn',
+            state: 'Active',
+            lastUpdateStatus: 'Failed',
+            lastUpdateStatusReasonCode: 'ImageOptimizingFailed'
+          }
+        };
+      }
+    } as unknown as FC20230330;
+
+    const fn = await waitForFcFunctionReadable('demo-fn', client, {
+      timeoutMs: 50,
+      intervalMs: 1,
+      profile: 'read'
+    });
+
+    expect(fn.functionName).toBe('demo-fn');
   });
 });

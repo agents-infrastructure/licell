@@ -8,12 +8,38 @@ vi.mock('child_process', () => ({
   spawnSync: mockSpawnSync
 }));
 
-import { dockerLogin, dockerPush, setDockerRetrySleepForTest } from '../utils/docker';
+import { dockerBuild, dockerLogin, dockerPush, setDockerRetrySleepForTest } from '../utils/docker';
 
 describe('docker utils retry behavior', () => {
   afterEach(() => {
     vi.clearAllMocks();
     setDockerRetrySleepForTest(null);
+  });
+
+  it('disables build attestations for FC-compatible amd64 images', () => {
+    mockSpawnSync.mockReturnValueOnce({ status: 0 });
+
+    dockerBuild('registry.cn-hangzhou.aliyuncs.com/licell/demo:tag', '/tmp/demo', '/tmp/demo/Dockerfile');
+
+    expect(mockSpawnSync).toHaveBeenCalledWith(
+      'docker',
+      [
+        'build',
+        '--platform',
+        'linux/amd64',
+        '--provenance=false',
+        '--sbom=false',
+        '-f',
+        '/tmp/demo/Dockerfile',
+        '-t',
+        'registry.cn-hangzhou.aliyuncs.com/licell/demo:tag',
+        '/tmp/demo'
+      ],
+      {
+        stdio: 'inherit',
+        timeout: 600_000
+      }
+    );
   });
 
   it('retries docker login before failing the deploy', () => {

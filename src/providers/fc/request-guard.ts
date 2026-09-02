@@ -350,9 +350,27 @@ function getFcFunctionState(fn: $FC.Function | undefined): string | undefined {
   return typeof state === 'string' ? state : undefined;
 }
 
+function getFcFunctionLastUpdateStatus(fn: $FC.Function | undefined): string | undefined {
+  const status = (fn as { lastUpdateStatus?: unknown } | undefined)?.lastUpdateStatus;
+  return typeof status === 'string' ? status : undefined;
+}
+
+function buildFcFunctionUpdateFailure(functionName: string, fn: $FC.Function): Error | null {
+  if (getFcFunctionLastUpdateStatus(fn)?.toLowerCase() !== 'failed') return null;
+  const details = [fn.lastUpdateStatusReasonCode, fn.lastUpdateStatusReason]
+    .filter((value): value is string => typeof value === 'string' && value.length > 0)
+    .join(': ');
+  return new Error(`函数 ${functionName} 更新失败${details ? `: ${details}` : ''}`);
+}
+
 function isFcFunctionActive(fn: $FC.Function | undefined) {
   const state = getFcFunctionState(fn);
   return !state || state.toLowerCase() === 'active';
+}
+
+function isFcFunctionUpdateSuccessful(fn: $FC.Function | undefined) {
+  const status = getFcFunctionLastUpdateStatus(fn);
+  return !status || status.toLowerCase() === 'successful';
 }
 
 function resolveFcReadableTimeoutMs(
@@ -401,11 +419,20 @@ export async function waitForFcFunctionReadable(
       );
       const fn = response.body;
       if (fn?.functionName) {
-        if (isFcFunctionActive(fn)) {
+        const enforceUpdateStatus = profile === 'mutation';
+        const updateFailure = enforceUpdateStatus
+          ? buildFcFunctionUpdateFailure(functionName, fn)
+          : null;
+        if (updateFailure) throw updateFailure;
+        if (isFcFunctionActive(fn) && (!enforceUpdateStatus || isFcFunctionUpdateSuccessful(fn))) {
           trace(operation, 'ready', env);
           return fn;
         }
-        lastError = new Error(`函数 ${functionName} 仍在 ${getFcFunctionState(fn)} 状态`);
+        const state = getFcFunctionState(fn);
+        const updateStatus = getFcFunctionLastUpdateStatus(fn);
+        lastError = updateStatus && isFcFunctionActive(fn)
+          ? new Error(`函数 ${functionName} 更新仍在 ${updateStatus} 状态`)
+          : new Error(`函数 ${functionName} 仍在 ${state} 状态`);
       } else {
         lastError = new Error(`函数 ${functionName} 未返回有效详情`);
       }
