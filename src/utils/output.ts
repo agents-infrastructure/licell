@@ -304,6 +304,7 @@ function detectErrorCode(message: string, err: unknown, category: CliErrorCatego
   const lower = message.toLowerCase();
   const rawCode = extractErrorCode(err);
   if (rawCode === 'DEPLOY_PRECHECK_FAILED') return 'CLI_DEPLOY_PRECHECK_FAILED';
+  if (rawCode === 'K8S_RBAC_FORBIDDEN') return rawCode;
   if (lower.includes('unknown command') || lower.includes('未知命令')) return 'CLI_UNKNOWN_COMMAND';
   if (lower.includes('missing required args for command')) return 'CLI_MISSING_REQUIRED_ARGS';
   if (category === 'auth') {
@@ -582,13 +583,23 @@ function buildCliErrorGuidance(
     }
   }
   if (category === 'permission') {
-    tips.push({
-      type: 'repair_auth',
-      title: '修复授权状态',
-      reason: 'credentials missing/invalid or insufficient permissions',
-      commandTemplate: 'licell auth repair --account-id <id> --ak <super-ak> --sk <super-sk>',
-      phase: 'mutate'
-    });
+    if (rawCode === 'K8S_RBAC_FORBIDDEN') {
+      tips.push({
+        type: 'inspect_capability',
+        title: '查看 Kubernetes RBAC 授权 API',
+        reason: 'cluster RBAC is separate from Alibaba Cloud RAM permissions; review the grant schema before changing access',
+        commandTemplate: 'licell capability describe cs.GrantPermissions --output json',
+        phase: 'inspect'
+      });
+    } else {
+      tips.push({
+        type: 'repair_auth',
+        title: '修复授权状态',
+        reason: 'credentials missing/invalid or insufficient permissions',
+        commandTemplate: 'licell auth repair --account-id <id> --ak <super-ak> --sk <super-sk>',
+        phase: 'mutate'
+      });
+    }
   }
   if (category === 'network') {
     tips.push({

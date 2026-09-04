@@ -16,6 +16,7 @@ import { envCommandModule } from './env';
 import { ecsCommandModule } from './ecs';
 import { fnCommandModule } from './fn';
 import { initCommandModule } from './init';
+import { k8sCommandModule } from './k8s';
 import { logsCommandModule } from './logs';
 import { onboardCommandModule } from './onboard';
 import { ossCommandModule } from './oss';
@@ -49,6 +50,7 @@ export const licellRootHelpSurface = defineCommandBundle({
       ],
       agentTips: [
         '对 Agent / 自动化调用，优先追加 `--output json` 获取结构化结果。',
+        'catalog 没有对应领域命令时，继续用 `capability products/search/describe` 发现阿里云 OpenAPI，并遵循 execution 选择领域命令或 api invoke。',
         '命令族同样支持帮助，例如 `licell db --help`、`licell dns records --help`、`licell skills --help`。'
       ],
       taskHints: [
@@ -66,6 +68,11 @@ export const licellRootHelpSurface = defineCommandBundle({
           title: '把命令接入自动化脚本',
           description: '优先选择支持结构化结果的命令，并统一追加 --output json。',
           commands: ['licell deploy --output json', 'licell fn logs --once --output json']
+        },
+        {
+          title: '探索未封装的阿里云能力',
+          description: '先定位产品和 operation，再按 capability describe 的 execution 字段选择领域命令或 raw fallback。',
+          commands: ['licell capability products <service> --output json', 'licell capability search --product <code> --intent <intent> --output json']
         }
       ]
     }
@@ -94,6 +101,7 @@ export const LICELL_COMMAND_MANIFEST = defineCommandManifest({
     cacheCommandModule,
     supaCommandModule,
     ecsCommandModule,
+    k8sCommandModule,
     doctorCommandModule,
     catalogCommandModule,
     apiCommandModule,

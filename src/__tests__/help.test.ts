@@ -200,7 +200,8 @@ describe('help utils', () => {
     expect(doc?.nextActions.map((action) => action.commandTemplate)).toEqual([
       'licell catalog --output json',
       'licell deploy --help --output json',
-      'licell deploy --output json'
+      'licell deploy --output json',
+      'licell capability products <service> --output json'
     ]);
     expect(doc?.decisionGuide.map((group) => group.phase)).toEqual(expect.arrayContaining(['inspect']));
     expect(doc?.text).toContain('Inspect:');

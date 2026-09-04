@@ -80,9 +80,10 @@ export async function enrichDescribeForAgent(result: CapabilityDescribeResult) {
   const roots = new Set(PRODUCT_COMMAND_ROOTS[result.capability.product.directory.toLowerCase()] || []);
   const operationWords = new Set(capabilityWords(result.capability.operation));
   const candidates = (overlay
-    ? catalog.commands
-      .filter((command) => overlay.commandKeys.includes(command.key))
-      .map((command) => ({ command, overlap: 1, score: 100 }))
+    ? overlay.commandKeys.flatMap((commandKey, index) => {
+      const command = catalog.commands.find((entry) => entry.key === commandKey);
+      return command ? [{ command, overlap: 1, score: 100 - index }] : [];
+    })
     : catalog.commands
     .filter((command) => roots.has(command.rootCommand))
     .map((command) => {

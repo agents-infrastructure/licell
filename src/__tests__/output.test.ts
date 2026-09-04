@@ -272,6 +272,21 @@ describe('output utils', () => {
     writeSpy.mockRestore();
   });
 
+  it('guides Kubernetes RBAC failures without recommending RAM auth repair', () => {
+    const record = buildCliErrorRecord({
+      code: 'K8S_RBAC_FORBIDDEN',
+      message: 'Kubernetes 集群内 RBAC 不足，request forbidden',
+      details: { clusterId: 'c-demo', userId: '123456' }
+    }) as any;
+
+    expect(record.error).toMatchObject({ code: 'K8S_RBAC_FORBIDDEN', category: 'permission' });
+    expect(record.details).toEqual({ clusterId: 'c-demo', userId: '123456' });
+    expect(record.nextActions[0]?.commandTemplate).toBe(
+      'licell capability describe cs.GrantPermissions --output json'
+    );
+    expect(record.nextActions.some((action: any) => action.commandTemplate.includes('auth repair'))).toBe(false);
+  });
+
   it('supports command/stage overrides for command result emission', () => {
     initOutputContext('json', ['node', 'src/cli.ts', 'help']);
     const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);

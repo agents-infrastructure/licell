@@ -11,14 +11,14 @@ export interface SkillFile {
 }
 
 const AGENTS_MD_LICELL_ENTRY =
-  '- licell: Deploy and manage Alibaba Cloud Serverless applications using the licell CLI. Covers deploy, release, functions, env vars, domains, DNS, logs, OSS, database, cache, Supabase, and ECS queries and lifecycle operations. (file: .claude/skills/licell/SKILL.md)';
+  '- licell: Query and manage Alibaba Cloud through curated workflows and all protocol-covered Alibaba Cloud APIs. The Agent routes natural-language intent through catalog/help first, then capability discovery and API invoke fallback. (file: .claude/skills/licell/SKILL.md)';
 
 function getSkillContent(): string {
   return `---
 name: licell
 description: >-
-  Deploy and manage Alibaba Cloud Serverless applications using the licell CLI.
-  Covers deploy, release, functions, env vars, domains, DNS, logs, OSS, database, cache, Supabase, and ECS queries and lifecycle operations.
+  Query and manage Alibaba Cloud through curated workflows and all protocol-covered Alibaba Cloud APIs.
+  Routes natural-language intent through catalog/help first, then capability discovery and API invoke fallback.
 metadata:
   author: licell
   version: "1.0"
@@ -62,6 +62,17 @@ licell <command> --output json
 \`\`\`
 
 Use the first command for discovery, the second for contract lookup, and the third for execution.
+
+## Natural-Language Intent Routing
+
+- The Agent owns natural-language understanding. Extract the service/product, action, resource, region, identifiers, and constraints; do not treat the full user sentence as CLI syntax.
+- Always inspect \`licell catalog --output json\` first. When a curated command covers the outcome, inspect its help contract and execute it.
+- If no curated command covers the outcome, run \`licell capability products <service> --output json\`, then \`licell capability search --product <code> --intent "<action resource>" --action <action> --output json\`.
+- Keep capability search input concise. Use \`inspect|create|update|delete|execute\` for \`--action\` and use the resource name for \`--intent\`.
+- Describe the selected candidate with \`licell capability describe <ref> --output json\`. Follow \`execution.preferred\`; do not infer execution from prose or API names.
+- Do not conclude that Licell cannot handle an Alibaba Cloud request until both the curated catalog and the matching raw protocol capability space have been searched.
+- Raw reads may execute after required inputs are resolved; raw write operations require \`--dry-run\` review and explicit \`--yes\`.
+- After a mutation, follow \`nextActions[]\` and perform a read-back verification before reporting success.
 
 <!-- PLACEHOLDER_COMMAND_REFERENCE -->
 `;

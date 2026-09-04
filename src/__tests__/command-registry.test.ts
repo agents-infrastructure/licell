@@ -52,6 +52,16 @@ describe('LICELL_COMMAND_MANIFEST', () => {
     expect(getCommandDescriptor('api invoke').automation?.preferredOutput).toBe('json');
   });
 
+  it('registers curated Kubernetes inventory commands', () => {
+    const catalog = getCommandCatalog();
+    expect(catalog.commandsByKey['k8s clusters']).toBeDefined();
+    expect(catalog.commandsByKey['k8s workloads']).toBeDefined();
+    expect(getCommandDescriptor('k8s workloads').safety?.level).toBe('safe');
+    expect(getCommandDescriptor('k8s workloads').agentTips).toEqual(expect.arrayContaining([
+      expect.stringContaining('KubeConfig')
+    ]));
+  });
+
   it('registers ecs inspect and lifecycle commands in the infrastructure section only', () => {
     const catalog = getCommandCatalog();
     expect(catalog.commandsByKey['ecs list']).toBeDefined();

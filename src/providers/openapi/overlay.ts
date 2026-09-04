@@ -13,6 +13,27 @@ export interface AlicloudCapabilityOverlay {
 // for capabilities that have not been promoted into a curated surface.
 const OVERLAYS: AlicloudCapabilityOverlay[] = [
   {
+    product: 'cs',
+    operation: 'DescribeClusters',
+    commandKeys: ['k8s clusters'],
+    confidence: 'curated',
+    notes: ['k8s clusters lists ACK and ACS clusters through the CS read API.']
+  },
+  {
+    product: 'cs',
+    operation: 'DescribeClustersV1',
+    commandKeys: ['k8s clusters'],
+    confidence: 'curated',
+    notes: ['k8s clusters provides the curated cluster inventory surface.']
+  },
+  {
+    product: 'cs',
+    operation: 'DescribeClusterUserKubeconfig',
+    commandKeys: ['k8s workloads'],
+    confidence: 'curated',
+    notes: ['k8s workloads consumes a 15-minute KubeConfig internally and never returns the credential.']
+  },
+  {
     product: 'ecs',
     operation: 'DescribeInstances',
     commandKeys: ['ecs list', 'ecs info'],

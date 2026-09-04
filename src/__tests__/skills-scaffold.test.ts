@@ -27,7 +27,7 @@ describe('getSkillFiles', () => {
 
   it('content is contract-first and points agents back to CLI help', () => {
     const [file] = getSkillFiles('claude');
-    expect(file.content).toContain('ECS queries and lifecycle operations');
+    expect(file.content).toContain('all protocol-covered Alibaba Cloud APIs');
     expect(file.content).toContain('## Scope');
     expect(file.content).toContain('## Operating Contract');
     expect(file.content).toContain('## Canonical Invocation Sequence');
@@ -35,6 +35,12 @@ describe('getSkillFiles', () => {
     expect(file.content).toContain('`licell catalog --output json`');
     expect(file.content).toContain('`licell <command> --help --output json`');
     expect(file.content).toContain('`licell <command> --output json`');
+    expect(file.content).toContain('## Natural-Language Intent Routing');
+    expect(file.content).toContain('Do not conclude that Licell cannot handle an Alibaba Cloud request');
+    expect(file.content).toContain('`licell capability products <service> --output json`');
+    expect(file.content).toContain('`licell capability search --product <code> --intent "<action resource>" --action <action> --output json`');
+    expect(file.content).toContain('Follow `execution.preferred`; do not infer execution from prose or API names.');
+    expect(file.content).toContain('raw write operations require `--dry-run` review and explicit `--yes`');
     expect(file.content).toContain('## Schema Contracts');
     expect(file.content).toContain('licell-help@1.0');
     expect(file.content).toContain('CLI Event Record');
@@ -155,7 +161,7 @@ describe('ensureAgentsMdEntry', () => {
       expect(filePath).toBe(join(dir, 'AGENTS.md'));
       const content = readFileSync(filePath, 'utf8');
       expect(content).toContain('.claude/skills/licell/SKILL.md');
-      expect(content).toContain('ECS queries and lifecycle operations');
+      expect(content).toContain('protocol-covered Alibaba Cloud APIs');
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

@@ -48,7 +48,7 @@ const skillsInitCommand = defineCliCommand({
     notes: [
       '未传 `[agent]` 且处于交互终端时，会提示选择 `claude` 或 `codex`。',
       '`licell setup` 是它的交互式包装；真正的 skill contract 写入逻辑与结果字段保持一致。',
-      '这些文件用于指导 Agent 通过 `licell catalog --output json`、`licell <command> --help --output json`、`licell ... --output json` 使用 Licell，而不是复制整份命令参考。'
+      '这些文件指导 Agent 从自然语言意图出发，先走 catalog/help 的领域命令，再用 capability products/search/describe 与 API invoke 兜底。'
     ],
     examples: [
       'licell skills init codex',
@@ -102,7 +102,7 @@ const skillsInitCommand = defineCliCommand({
       ]
     },
     agentTips: [
-      'skill contract 只负责把 licell 的使用契约注入给 Agent；命令发现与执行统一走 `licell catalog --output json`、`licell <command> --help --output json`、`licell ... --output json`。',
+      'skill contract 负责注入 curated-first 路由契约；领域命令未覆盖时继续走 capability products/search/describe，并严格遵循 execution.preferred。',
       '自动化调用时，project/global scope 最好显式传清楚，不要依赖外部包装命令的默认行为。'
     ]
   }

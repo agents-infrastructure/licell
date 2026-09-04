@@ -11,9 +11,9 @@ function regionOptions(commandKey: string) {
 }
 
 describe('regional command surface contract', () => {
-  it('derives all 88 invocation overrides from shared registry metadata', () => {
+  it('derives all 90 invocation overrides from shared registry metadata', () => {
     const regionalCommands = catalog.commands.filter((command) => command.region);
-    expect(regionalCommands).toHaveLength(88);
+    expect(regionalCommands).toHaveLength(90);
 
     for (const command of regionalCommands) {
       expect(regionOptions(command.key), command.key).toHaveLength(1);
@@ -30,7 +30,7 @@ describe('regional command surface contract', () => {
 
   it('classifies every region option as invocation override or explicit default configuration', () => {
     const commandsWithRegionOption = catalog.commands.filter((command) => regionOptions(command.key).length > 0);
-    expect(commandsWithRegionOption).toHaveLength(93);
+    expect(commandsWithRegionOption).toHaveLength(95);
     expect(commandsWithRegionOption.every((command) => Boolean(command.region) !== Boolean(command.regionOptionMode))).toBe(true);
 
     expect(Object.fromEntries(
@@ -47,7 +47,7 @@ describe('regional command surface contract', () => {
   });
 
   it('requires every registered command to declare exactly one region classification', () => {
-    expect(catalog.commands).toHaveLength(121);
+    expect(catalog.commands).toHaveLength(123);
     expect(catalog.commands.filter((command) => command.regionExclusion)).toHaveLength(28);
 
     for (const command of catalog.commands) {

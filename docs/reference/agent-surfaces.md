@@ -15,6 +15,7 @@
 - `licell <command> --help --output json`：读取 `help.kind` / `help.schemaVersion`；当前为 `licell-help@1.0`。
 - `licell catalog --output json`：读取 `kind` / `schemaVersion`；当前为 `licell-agent-command-catalog@1.0`。
 - `licell catalog --output json` 还会显式声明 help schema 与 CLI record schema：`licell-help@1.0` / `licell-cli-record@1.0`。
+- 读取 `catalog.agentWorkflow` 获取“领域命令优先、raw capability 兜底”的自然语言路由契约；只有两层发现都失败，才可判定不支持。
 - Agent 优先读取 `nextActions[]` 作为稳定下一步入口；`recommendedFlow` / `decisionGuide` / `remediation[]` 作为补充语义层。
 - 命令自己的业务结果字段继续读取对应命令 help / catalog 里的 `result`；下面三组 contract 只描述公共 CLI record 包络。
 
@@ -235,6 +236,8 @@
 | `licell ecs rm <instanceId>` | 删除（释放）ECS 实例（delete 的别名） | `--region`, `--dry-run`, `--yes` |
 | `licell ecs start <instanceId>` | 启动 ECS 实例 | `--region`, `--dry-run` |
 | `licell ecs stop <instanceId>` | 停止 ECS 实例 | `--region`, `--dry-run`, `--yes` |
+| `licell k8s clusters` | 列出当前地域的 ACK / ACS Kubernetes 集群 | `--region`, `--name` |
+| `licell k8s workloads <cluster>` | 只读查询 ACK / ACS 集群内已部署的工作负载和 Service | `--region`, `--private`, `--request-timeout` |
 
 ### Automation & Tooling
 

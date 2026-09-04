@@ -35,7 +35,9 @@ describe('buildCommandReferenceSections', () => {
       'ecs reboot',
       'ecs rm',
       'ecs start',
-      'ecs stop'
+      'ecs stop',
+      'k8s clusters',
+      'k8s workloads'
     ]);
   });
 });
@@ -54,6 +56,31 @@ describe('buildAgentCommandCatalog', () => {
       kind: 'licell-cli-record',
       schemaVersion: '1.0'
     });
+    expect(catalog.agentWorkflow).toMatchObject({
+      naturalLanguageOwner: 'agent',
+      policy: 'curated-first',
+      unsupportedConclusion: 'after-curated-and-raw-search'
+    });
+    expect(catalog.agentWorkflow.steps.map((step) => step.id)).toEqual([
+      'discover-curated',
+      'inspect-curated',
+      'discover-product',
+      'search-capability',
+      'inspect-capability',
+      'execute-preferred',
+      'verify-outcome'
+    ]);
+    expect(catalog.agentWorkflow.executionStrategies).toEqual({
+      curatedCommand: 'Follow execution.preferred.helpCommand, then execute the curated command.',
+      rawApiFallback: 'Use execution.preferred.previewCommand; writes require dry-run review and explicit --yes.'
+    });
+    expect(catalog.agentWorkflow.steps.find((step) => step.id === 'inspect-capability')?.reads).toContain(
+      'execution.preferred'
+    );
+    expect(catalog.agentWorkflow.steps.find((step) => step.id === 'execute-preferred')?.reads).toEqual(
+      expect.arrayContaining(['execution.strategy', 'execution.preferred.kind'])
+    );
+    expect(catalog.agentWorkflow.steps.flatMap((step) => step.reads)).not.toContain('execution.preferred.mode');
     expect(catalog.globalOptions).toContain('--output');
     expect(catalog.rootCommands).toContain('doctor');
     expect(catalog.rootCommands).toContain('deploy');
@@ -238,6 +265,7 @@ describe('buildAgentCommandCatalog', () => {
     expect(filtered.commands.map((command) => command.key)).toEqual(
       expect.arrayContaining(['deploy', 'deploy spec', 'deploy check'])
     );
+    expect(filtered.agentWorkflow).toEqual(buildAgentCommandCatalog().agentWorkflow);
   });
 });
 

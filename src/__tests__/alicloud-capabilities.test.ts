@@ -89,6 +89,24 @@ describe('Alibaba Cloud capability index', () => {
     expect(instances.capabilities[0]?.shorthand).toBe('ecs.DescribeInstances');
   });
 
+  it('ignores conversational modifiers after identifying a product and collection intent', () => {
+    const products = searchAlicloudProducts({
+      query: '杭州区域有几个容器服务，都部署了什么服务',
+      limit: 5
+    });
+    expect(products.products[0]?.directory).toBe('cs');
+
+    const capabilities = searchAlicloudCapabilities({
+      intent: '杭州区域有几个容器服务，都部署了什么服务',
+      action: 'inspect',
+      limit: 5
+    });
+    expect(capabilities.capabilities[0]?.shorthand).toBe('cs.DescribeClusters');
+    expect(capabilities.nextActions[0]?.commandTemplate).toBe(
+      'licell capability describe cs.DescribeClusters --output json'
+    );
+  });
+
   it('filters by product, action, transport style and method', () => {
     const result = searchAlicloudCapabilities({
       product: 'Ecs',
@@ -103,6 +121,17 @@ describe('Alibaba Cloud capability index', () => {
       && capability.action === 'inspect'
       && capability.apiStyle === 'rpc'
     ))).toBe(true);
+  });
+
+  it.each([
+    ['vpc', 'list vpcs', 'vpc.DescribeVpcs'],
+    ['ram', 'list users', 'ram.ListUsers'],
+    ['cdn', 'describe user domains', 'cdn.DescribeUserDomains'],
+    ['sls', 'list project', 'sls.ListProject'],
+    ['rds', 'list db instances', 'rds.DescribeDBInstances']
+  ])('routes a concise agent intent for %s through the raw capability index', (product, intent, expected) => {
+    const result = searchAlicloudCapabilities({ product, intent, action: 'inspect', limit: 5 });
+    expect(result.capabilities[0]?.shorthand).toBe(expected);
   });
 
   it('describes input JSON Schema and raw provenance case-insensitively', () => {

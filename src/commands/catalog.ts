@@ -22,6 +22,7 @@ const catalogCommand = defineCliCommand({
     summary: '返回 licell 共享命令目录；供 Skills、Agent 和自动化脚本发现命令、选项、help schema 与 CLI record contract。',
     notes: [
       '优先用 `licell catalog --output json` 做命令发现；再用 `licell <command> --help --output json` 读取单命令细节。',
+      '若 catalog 没有覆盖目标阿里云能力，继续用 `licell capability products/search/describe` 发现 protocol 能力，并按 `execution` 选择领域命令或 raw API fallback。',
       '输出里显式包含 `help` schema 和 CLI `event/result/error` record contract。'
     ],
     examples: [
@@ -32,7 +33,7 @@ const catalogCommand = defineCliCommand({
     automation: {
       preferredOutput: 'json',
       explicitInputs: ['--root-command', '--command-key'],
-      notes: ['自动化场景应始终追加 `--output json`，并优先消费 `commands[]`、`schemas`、`cliRecords`。']
+      notes: ['自动化场景应始终追加 `--output json`，并优先消费 `agentWorkflow`、`commands[]`、`schemas`、`cliRecords`。']
     },
     optionInsights: {
       '--root-command': {
@@ -55,6 +56,12 @@ const catalogCommand = defineCliCommand({
         title: '给 Agent 做命令发现',
         description: '先过滤 root 或 command key，再决定下一条 help / execute 命令。',
         commands: ['licell catalog --output json']
+      },
+      {
+        phase: 'inspect',
+        title: '探索未封装的阿里云能力',
+        description: '领域命令未覆盖时，从产品定位到 operation，再遵循 describe.execution 执行。',
+        commands: ['licell capability products <service> --output json', 'licell capability search --product <code> --intent <intent> --output json']
       }
     ],
     result: {
@@ -68,6 +75,7 @@ const catalogCommand = defineCliCommand({
         { name: 'schemas.help.schemaVersion', description: 'help 文档 schema 版本。', required: true },
         { name: 'schemas.cliRecord.kind', description: 'CLI record kind。', required: true },
         { name: 'schemas.cliRecord.schemaVersion', description: 'CLI record schema 版本。', required: true },
+        { name: 'agentWorkflow', description: '自然语言意图的 curated-first 路由、raw API fallback 与安全执行契约。', required: true },
         { name: 'sections[]', description: '命令分组目录。', required: true },
         { name: 'commands[]', description: '命令明细数组。', required: true },
         { name: 'cliRecords.event', description: '稳定 event record 字段清单。', required: true },
@@ -77,6 +85,7 @@ const catalogCommand = defineCliCommand({
     },
     agentTips: [
       'Agent 应先读 `commands[].key` / `commands[].options[]` / `commands[].nextActions[]`，不要硬编码 README 文案。',
+      '用户意图没有对应领域命令时，不要停止在 catalog；继续执行 capability products/search/describe。',
       '命令执行阶段统一过滤 `@@LICELL_JSON@@` 前缀，再按 `type=event|result|error` 消费。'
     ]
   }
@@ -87,6 +96,7 @@ function renderCatalogText(catalog: ReturnType<typeof buildAgentCommandCatalog>)
     `kind:           ${catalog.kind}@${catalog.schemaVersion}`,
     `help schema:    ${catalog.schemas.help.kind}@${catalog.schemas.help.schemaVersion}`,
     `cli record:     ${catalog.schemas.cliRecord.kind}@${catalog.schemas.cliRecord.schemaVersion}`,
+    `agent workflow: ${catalog.agentWorkflow.policy}`,
     `sections:       ${catalog.sections.length}`,
     `commands:       ${catalog.commands.length}`
   ];
@@ -112,7 +122,13 @@ function renderCatalogText(catalog: ReturnType<typeof buildAgentCommandCatalog>)
     }
   }
 
-  lines.push('', 'next:', '- licell <command> --help --output json', '- licell <command> --output json');
+  lines.push(
+    '',
+    'next:',
+    '- licell <command> --help --output json',
+    '- licell capability products <service> --output json  # when no curated command matches',
+    '- follow execution.preferred and nextActions[]'
+  );
   return `${lines.join('\n')}\n`;
 }
 

@@ -18,6 +18,8 @@ export interface OpenApiRunnerContext {
   runnerPath?: string;
   env?: Record<string, string | undefined>;
   spawnProcess?: SpawnProcess;
+  /** Internal consumers only. Generic `api invoke` must keep sensitive response fields redacted. */
+  exposeSensitiveResponse?: boolean;
 }
 
 export interface OpenApiRunnerPlan {
@@ -286,14 +288,22 @@ function isSensitiveName(name: string) {
   return /(secret|token|password|credential|authorization|cookie|session[_-]?id|private[_-]?key|access[_-]?key|api[_-]?key)/i.test(name);
 }
 
-function redactValue(value: unknown, secrets: string[] = []): unknown {
-  if (Array.isArray(value)) return value.map((child) => redactValue(child, secrets));
+function redactValue(value: unknown, secrets: string[] = [], sensitiveNames = new Set<string>()): unknown {
+  if (Array.isArray(value)) return value.map((child) => redactValue(child, secrets, sensitiveNames));
   if (typeof value === 'string') return redactText(value, secrets);
   if (!value || typeof value !== 'object') return value;
   return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, child]) => [
     key,
-    isSensitiveName(key) ? '[REDACTED]' : redactValue(child, secrets)
+    isSensitiveName(key) || sensitiveNames.has(key.toLowerCase())
+      ? '[REDACTED]'
+      : redactValue(child, secrets, sensitiveNames)
   ]));
+}
+
+function sensitiveResponseNames(operationRef: string) {
+  return operationRef.toLowerCase() === 'cs.describeclusteruserkubeconfig'
+    ? new Set(['config'])
+    : new Set<string>();
 }
 
 function redactText(value: string, secrets: string[]) {
@@ -349,13 +359,17 @@ export async function executeAlicloudApi(
 
   const processResult = await (context.spawnProcess || defaultSpawnProcess)(runner, args, { env });
   const rawResponse = parseRunnerResponse(processResult.stdout);
-  const response = redactValue(rawResponse, [auth?.ak || '', auth?.sk || '']);
+  const secrets = [auth?.ak || '', auth?.sk || ''];
+  const sensitiveNames = sensitiveResponseNames(capability.shorthand);
+  const response = context.exposeSensitiveResponse
+    ? rawResponse
+    : redactValue(rawResponse, secrets, sensitiveNames);
   return {
     ok: processResult.exitCode === 0,
     exitCode: processResult.exitCode,
     signal: processResult.signal,
-    stdout: redactText(processResult.stdout, [auth?.ak || '', auth?.sk || '']),
-    stderr: redactText(processResult.stderr, [auth?.ak || '', auth?.sk || '']),
+    stdout: sensitiveNames.size > 0 && processResult.stdout ? '[REDACTED]' : redactText(processResult.stdout, secrets),
+    stderr: redactText(processResult.stderr, secrets),
     response,
     ...(findRequestId(response) ? { requestId: findRequestId(response) } : {}),
     plan,

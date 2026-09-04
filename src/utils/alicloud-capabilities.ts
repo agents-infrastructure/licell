@@ -32,6 +32,15 @@ const INTENT_ALIASES: Array<[RegExp, string]> = [
   [/(执行|调用|触发|运行)/g, ' execute ']
 ];
 
+const ENGLISH_QUERY_INTENT_ALIASES: Array<[RegExp, string]> = [
+  [/\b(?:list|all|count|how\s+many)\b/gi, ' inspect collection '],
+  [/\b(?:get|describe|show|find|search|inspect)\b/gi, ' inspect '],
+  [/\b(?:create|add|provision)\b/gi, ' create '],
+  [/\b(?:update|modify|set|upgrade)\b/gi, ' update '],
+  [/\b(?:delete|remove|release)\b/gi, ' delete '],
+  [/\b(?:execute|invoke|run|trigger)\b/gi, ' execute ']
+];
+
 const QUERY_NOISE = /(?:用\s*licell|licell|阿里云上|阿里云|帮我|给我|我想|我要|我有|请|一下|当前|现在)/gi;
 const QUERY_STOP_WORDS = new Set(['我', '有', '的', '上', '台', '个', '服务']);
 const PRODUCT_SEARCH_RESOURCE_WORDS = new Set(['实例', 'instance', 'instances', '集群', 'cluster', 'clusters', '节点', 'node', 'nodes']);
@@ -119,6 +128,7 @@ function words(value: string) {
     normalized = normalized.replaceAll(phrase, ` ${phrase} `);
   }
   return normalized
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
     .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
     .replace(/([a-z0-9])([\u4e00-\u9fff])/gi, '$1 $2')
     .replace(/([\u4e00-\u9fff])([a-z0-9])/gi, '$1 $2')
@@ -126,6 +136,14 @@ function words(value: string) {
     .toLowerCase()
     .split(/[^a-z0-9\u4e00-\u9fff]+/)
     .filter((word) => Boolean(word) && !QUERY_STOP_WORDS.has(word));
+}
+
+function tokenizeQuery(value: string) {
+  let normalized = value;
+  for (const [pattern, replacement] of ENGLISH_QUERY_INTENT_ALIASES) {
+    normalized = normalized.replace(pattern, replacement);
+  }
+  return words(normalized);
 }
 
 function termAlternatives(word: string) {
@@ -148,8 +166,28 @@ function productText(product: GeneratedCapabilityProduct | undefined) {
     : '';
 }
 
+function queryContainsTerm(query: string, term: string) {
+  const normalizedQuery = query.toLowerCase();
+  const normalizedTerm = term.trim().toLowerCase();
+  if (!normalizedTerm) return false;
+  if (/[^\x00-\x7f]/.test(normalizedTerm)) return normalizedQuery.includes(normalizedTerm);
+  const escaped = normalizedTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(?:^|[^a-z0-9])${escaped}(?:$|[^a-z0-9])`, 'i').test(normalizedQuery);
+}
+
+function hasProductSignal(product: GeneratedCapabilityProduct | undefined, query: string) {
+  if (!product) return false;
+  return [
+    product.directory,
+    product.code,
+    product.name.en,
+    product.name.zh,
+    ...productAliases(product)
+  ].some((term) => queryContainsTerm(query, term));
+}
+
 function scoreCapability(capability: GeneratedCapability, product: GeneratedCapabilityProduct | undefined, query: string) {
-  const queryWords = [...new Set(words(query))];
+  const queryWords = [...new Set(tokenizeQuery(query))];
   if (queryWords.length === 0) return 1;
   const operationWords = words(capability.operation);
   const productWords = words(productText(product));
@@ -172,16 +210,25 @@ function scoreCapability(capability: GeneratedCapability, product: GeneratedCapa
   const lowerQuery = query.toLowerCase();
   const referencePrefix = capability.ref.toLowerCase().startsWith(lowerQuery)
     || capability.shorthand.toLowerCase().startsWith(lowerQuery);
-  if (!referencePrefix && !queryWords.every(matches)) return 0;
+  const productSignal = hasProductSignal(product, query);
+  const matchedWords = queryWords.filter(matches);
+  if (!referencePrefix && !productSignal && !queryWords.every(matches)) return 0;
+  if (!referencePrefix && productSignal && matchedWords.length === 0) return 0;
 
-  let score = queryWords.length * 10;
+  let score = matchedWords.length * 10;
   if (capability.ref.toLowerCase() === lowerQuery || capability.shorthand.toLowerCase() === lowerQuery) score += 1000;
   if (capability.operation.toLowerCase() === lowerQuery) score += 800;
   if (referencePrefix) score += 600;
   if (capability.product.toLowerCase() === lowerQuery || capability.productCode.toLowerCase() === lowerQuery) score += 400;
   if (queryWords.includes(capability.product.toLowerCase()) || queryWords.includes(capability.productCode.toLowerCase())) score += 300;
   if (queryWords.some((word) => productAliases(product).includes(word))) score += 300;
+  if (productSignal) score += 300;
   if (queryWords.includes('collection') && collection) score += 100;
+  const hasOnlyImplicitRegionRequirement = capability.parameters.every((parameter) => (
+    !parameter.required || parameter.name.replace(/[^a-z0-9]/gi, '').toLowerCase() === 'regionid'
+  ));
+  if (productSignal && queryWords.includes('collection') && collection && hasOnlyImplicitRegionRequirement) score += 80;
+  if (queryWords.includes('collection') && collection && resourceWords.length === 1) score += 40;
   const resourceQueryWords = queryWords.filter((word) => ![
     'inspect', 'create', 'update', 'delete', 'execute', 'collection'
   ].includes(word)
@@ -191,6 +238,14 @@ function scoreCapability(capability: GeneratedCapability, product: GeneratedCapa
   if (resourceQueryWords.length > 0 && resourceQueryWords.every((word) => termAlternatives(word).some((alternative) => (
     resourceWords.some((candidate) => matchesSearchTerm(candidate, alternative))
   )))) score += 100;
+  const resourceSignalWords = queryWords.filter((word) => ![
+    'inspect', 'create', 'update', 'delete', 'execute', 'collection'
+  ].includes(word)
+    && word !== capability.product.toLowerCase()
+    && word !== capability.productCode.toLowerCase());
+  score += resourceSignalWords.filter((word) => termAlternatives(word).some((alternative) => (
+    resourceWords.some((candidate) => matchesSearchTerm(candidate, alternative))
+  ))).length * 40;
   if (capability.product.toLowerCase() === capability.resource.toLowerCase()) score += 50;
   if (operationWords.join(' ') === queryWords.join(' ')) score += 200;
   return score - operationWords.length;
@@ -275,16 +330,19 @@ export function searchAlicloudCapabilities(options: CapabilitySearchOptions = {}
 }
 
 function scoreProduct(product: GeneratedCapabilityProduct, query: string) {
-  const queryWords = [...new Set(words(query))].filter((word) => ![
+  const queryWords = [...new Set(tokenizeQuery(query))].filter((word) => ![
     'inspect', 'create', 'update', 'delete', 'execute', 'collection'
   ].includes(word) && !PRODUCT_SEARCH_RESOURCE_WORDS.has(word));
   if (queryWords.length === 0) return 1;
   const haystack = new Set([...words(productText(product)), ...productAliases(product).flatMap(words)]);
-  const matched = queryWords.every((word) => termAlternatives(word).some((alternative) => (
+  const matchedWords = queryWords.filter((word) => termAlternatives(word).some((alternative) => (
     [...haystack].some((candidate) => matchesSearchTerm(candidate, alternative))
   )));
-  if (!matched) return 0;
-  let score = queryWords.length * 10;
+  const productSignal = hasProductSignal(product, query);
+  if (!productSignal && matchedWords.length !== queryWords.length) return 0;
+  if (productSignal && matchedWords.length === 0) return 0;
+  let score = matchedWords.length * 10;
+  if (productSignal) score += 300;
   if (queryWords.includes(product.directory.toLowerCase()) || queryWords.includes(product.code.toLowerCase())) score += 400;
   if (queryWords.some((word) => productAliases(product).includes(word))) score += 300;
   return score;

@@ -156,6 +156,28 @@ describe('aliyun cli OpenAPI runner adapter', () => {
     });
   });
 
+  it('redacts kubeconfig from generic raw API results', async () => {
+    const result = await executeAlicloudApi('cs.DescribeClusterUserKubeconfig', {
+      ClusterId: 'cluster-id',
+      TemporaryDurationMinutes: 15
+    }, {
+      auth: { accountId: 'account', ak: 'test-ak', sk: 'test-sk', region: 'cn-hangzhou' },
+      runnerPath: process.execPath,
+      spawnProcess: async () => ({
+        exitCode: 0,
+        signal: null,
+        stdout: '{"config":"apiVersion: v1\\nusers: []","expiration":"2026-09-04T03:00:00Z"}',
+        stderr: ''
+      })
+    });
+
+    expect(result.response).toEqual({
+      config: '[REDACTED]',
+      expiration: '2026-09-04T03:00:00Z'
+    });
+    expect(result.stdout).not.toContain('apiVersion');
+  });
+
   it('generates a nested request template from the capability schema', () => {
     const result = buildAlicloudApiScaffold('vpc.CreateVpc');
     expect(result.template).toMatchObject({

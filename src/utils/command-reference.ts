@@ -46,6 +46,32 @@ export interface AgentCommandCatalogSection {
   commandKeys: string[];
 }
 
+export interface AgentWorkflowStep {
+  id:
+    | 'discover-curated'
+    | 'inspect-curated'
+    | 'discover-product'
+    | 'search-capability'
+    | 'inspect-capability'
+    | 'execute-preferred'
+    | 'verify-outcome';
+  when: string;
+  commandTemplate?: string;
+  reads: string[];
+}
+
+export interface AgentWorkflow {
+  naturalLanguageOwner: 'agent';
+  policy: 'curated-first';
+  unsupportedConclusion: 'after-curated-and-raw-search';
+  steps: AgentWorkflowStep[];
+  executionStrategies: {
+    curatedCommand: string;
+    rawApiFallback: string;
+  };
+  safetyRules: string[];
+}
+
 export type AgentCommandResult = ResolvedCommandResultDescriptor;
 
 export interface AgentCommandCatalogEntry {
@@ -96,6 +122,7 @@ export interface AgentCommandCatalogDocument {
     };
   };
   cliRecords: ReturnType<typeof getCliRecordContractDocument>;
+  agentWorkflow: AgentWorkflow;
   globalOptions: string[];
   rootCommands: string[];
   childCommands: CommandCatalog['childCommands'];
@@ -103,6 +130,63 @@ export interface AgentCommandCatalogDocument {
   sections: AgentCommandCatalogSection[];
   commands: AgentCommandCatalogEntry[];
 }
+
+const AGENT_WORKFLOW: AgentWorkflow = {
+  naturalLanguageOwner: 'agent',
+  policy: 'curated-first',
+  unsupportedConclusion: 'after-curated-and-raw-search',
+  steps: [
+    {
+      id: 'discover-curated',
+      when: 'Always start here. Translate the user request into service, action, resource, region, identifiers, and constraints.',
+      commandTemplate: 'licell catalog --output json',
+      reads: ['commands[].key', 'commands[].summary', 'commands[].tasks[]', 'commands[].nextActions[]']
+    },
+    {
+      id: 'inspect-curated',
+      when: 'A curated command matches the requested outcome.',
+      commandTemplate: 'licell <command> --help --output json',
+      reads: ['help.options[]', 'help.safety', 'help.result', 'help.nextActions[]']
+    },
+    {
+      id: 'discover-product',
+      when: 'No curated command covers the requested outcome.',
+      commandTemplate: 'licell capability products <service> --output json',
+      reads: ['products[].directory', 'products[].apiCount', 'products[].searchCommand']
+    },
+    {
+      id: 'search-capability',
+      when: 'A protocol product was identified. Use concise action/resource vocabulary instead of the full conversation.',
+      commandTemplate: 'licell capability search --product <code> --intent "<action resource>" --action <action> --output json',
+      reads: ['capabilities[].shorthand', 'capabilities[].action', 'capabilities[].safetyHint', 'nextActions[]']
+    },
+    {
+      id: 'inspect-capability',
+      when: 'A candidate capability matches the requested operation.',
+      commandTemplate: 'licell capability describe <ref> --output json',
+      reads: ['capability.inputSchema', 'execution.preferred', 'capability.safety', 'nextActions[]']
+    },
+    {
+      id: 'execute-preferred',
+      when: 'The capability description is understood and all required inputs are known.',
+      reads: ['execution.strategy', 'execution.preferred.kind', 'execution.preferred.helpCommand', 'execution.preferred.previewCommand', 'execution.preferred.executeCommand']
+    },
+    {
+      id: 'verify-outcome',
+      when: 'After execution, especially after a mutation.',
+      reads: ['nextActions[]', 'result', 'error', 'details']
+    }
+  ],
+  executionStrategies: {
+    curatedCommand: 'Follow execution.preferred.helpCommand, then execute the curated command.',
+    rawApiFallback: 'Use execution.preferred.previewCommand; writes require dry-run review and explicit --yes.'
+  },
+  safetyRules: [
+    'Raw read operations may execute after required inputs and region are resolved.',
+    'Raw write operations require dry-run review and explicit --yes.',
+    'After a write, follow nextActions[] to perform a read-back verification.'
+  ]
+};
 
 function unique<T>(values: T[]) {
   return [...new Set(values)];
@@ -213,6 +297,12 @@ export function buildAgentCommandCatalog(catalog: CommandCatalog = getCommandCat
       }
     },
     cliRecords: cliRecord,
+    agentWorkflow: {
+      ...AGENT_WORKFLOW,
+      steps: AGENT_WORKFLOW.steps.map((step) => ({ ...step, reads: [...step.reads] })),
+      executionStrategies: { ...AGENT_WORKFLOW.executionStrategies },
+      safetyRules: [...AGENT_WORKFLOW.safetyRules]
+    },
     globalOptions: [...catalog.globalOptions],
     rootCommands: [...catalog.rootCommands],
     childCommands: Object.fromEntries(
@@ -372,6 +462,12 @@ export function filterAgentCommandCatalog(
       }
     },
     cliRecords: getCliRecordContractDocument(),
+    agentWorkflow: {
+      ...catalog.agentWorkflow,
+      steps: catalog.agentWorkflow.steps.map((step) => ({ ...step, reads: [...step.reads] })),
+      executionStrategies: { ...catalog.agentWorkflow.executionStrategies },
+      safetyRules: [...catalog.agentWorkflow.safetyRules]
+    },
     globalOptions: [...catalog.globalOptions],
     rootCommands: catalog.rootCommands.filter((root) => allowedRoots.has(root)),
     childCommands: Object.fromEntries(
