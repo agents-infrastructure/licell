@@ -1,0 +1,14 @@
+{
+  "name": "EnableSiteMonitors",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "TaskIds",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

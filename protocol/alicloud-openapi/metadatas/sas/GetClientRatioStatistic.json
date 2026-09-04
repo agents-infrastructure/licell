@@ -1,0 +1,32 @@
+{
+  "name": "GetClientRatioStatistic",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "ResourceDirectoryAccountId",
+      "position": "Query",
+      "type": "Long",
+      "required": false
+    },
+    {
+      "name": "StatisticTypes",
+      "position": "Query",
+      "type": "Array",
+      "required": false
+    },
+    {
+      "name": "TimeEnd",
+      "position": "Query",
+      "type": "Long",
+      "required": false
+    },
+    {
+      "name": "TimeStart",
+      "position": "Query",
+      "type": "Long",
+      "required": false
+    }
+  ]
+}

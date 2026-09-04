@@ -1,0 +1,26 @@
+{
+  "name": "GetEdgeInstanceDeployment",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "DeploymentId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "InstanceId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "IotInstanceId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

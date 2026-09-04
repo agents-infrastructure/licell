@@ -1,0 +1,32 @@
+{
+  "name": "ImportKeyMaterial",
+  "protocol": "HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "EncryptedKeyMaterial",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "ImportToken",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "KeyId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "KeyMaterialExpireUnix",
+      "position": "Query",
+      "type": "Long",
+      "required": true
+    }
+  ]
+}

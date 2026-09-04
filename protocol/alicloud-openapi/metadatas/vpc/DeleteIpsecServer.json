@@ -1,0 +1,32 @@
+{
+  "name": "DeleteIpsecServer",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "ClientToken",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "DryRun",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "IpsecServerId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

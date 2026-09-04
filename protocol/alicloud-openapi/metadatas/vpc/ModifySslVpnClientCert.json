@@ -1,0 +1,32 @@
+{
+  "name": "ModifySslVpnClientCert",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "ClientToken",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "Name",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "SslVpnClientCertId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

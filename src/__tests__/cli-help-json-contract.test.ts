@@ -203,4 +203,28 @@ describe('cli help json contract', () => {
     expect(record?.help?.result?.fields.map((field: { name?: string }) => field.name).join(' ')).not.toMatch(/rawAttribute|userData|vncUrl|consoleOutput|password|keyPairPrivateKey/);
     expect(JSON.stringify(record)).not.toMatch(ECS_LIFECYCLE_HELP_PATTERN);
   }, 10000);
+
+  it('locks capability describe help as a local raw metadata contract', () => {
+    const result = runCliHelpJson(['capability', 'describe']);
+    const records = extractJsonRecordsFromOutput(result.stdout) as Array<Record<string, any>>;
+
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(records).toHaveLength(1);
+    const record = records[0];
+    expect(record?.key).toBe('capability describe');
+    expect(record?.help?.scope).toBe('command');
+    expect(record?.help?.safety?.level).toBe('safe');
+    expect(record?.help?.automation?.preferredOutput).toBe('json');
+    expect(record?.help?.result?.fields.map((field: { name?: string }) => field.name)).toEqual(expect.arrayContaining([
+      'capability.ref',
+      'capability.maturity',
+      'capability.inputSchema',
+      'capability.provenance',
+      'execution.strategy',
+      'execution.preferred',
+      'limitations[]'
+    ]));
+  }, 10000);
 });

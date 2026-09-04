@@ -1,0 +1,20 @@
+{
+  "name": "DescribeClusterAddonsUpgradeStatus",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET",
+  "pathPattern": "/clusters/[ClusterId]/components/upgradestatus",
+  "parameters": [
+    {
+      "name": "ClusterId",
+      "position": "Path",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "componentIds",
+      "position": "Query",
+      "type": "Json",
+      "required": true
+    }
+  ]
+}

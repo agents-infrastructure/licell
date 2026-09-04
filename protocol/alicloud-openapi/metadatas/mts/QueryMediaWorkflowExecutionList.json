@@ -1,0 +1,14 @@
+{
+  "name": "QueryMediaWorkflowExecutionList",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "RunIds",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

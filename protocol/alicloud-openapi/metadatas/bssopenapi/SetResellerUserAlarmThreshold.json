@@ -1,0 +1,20 @@
+{
+  "name": "SetResellerUserAlarmThreshold",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "AlarmThresholds",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "AlarmType",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

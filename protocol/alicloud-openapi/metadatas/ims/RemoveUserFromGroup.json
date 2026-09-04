@@ -1,0 +1,20 @@
+{
+  "name": "RemoveUserFromGroup",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "GroupName",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "UserPrincipalName",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

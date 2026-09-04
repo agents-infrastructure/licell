@@ -1,6 +1,6 @@
 {
   "name": "licell",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Deploy and manage Alibaba Cloud Serverless applications — FC, OSS, ACR, DNS, SSL, CDN in one CLI",
   "type": "module",
   "bin": {
@@ -31,6 +31,10 @@
     "build:bin": "./scripts/build-bin-wrapper.sh",
     "build:standalone": "./scripts/build-standalone-artifact.sh",
     "docs:sync": "./scripts/sync-docs.sh",
+    "protocol:update": "bun run scripts/update-alicloud-protocol.ts",
+    "protocol:check": "bun run scripts/check-alicloud-protocol.ts && bun run scripts/check-alicloud-capabilities.ts && bun run scripts/check-alicloud-runner.ts",
+    "runner:check": "bun run scripts/check-alicloud-runner.ts",
+    "capability:generate": "bun run scripts/generate-alicloud-capabilities.ts",
     "typecheck": "bun x tsc --noEmit",
     "test": "vitest run",
     "test:ci": "vitest run --no-file-parallelism --exclude src/__tests__/cli-help.integration.test.ts",

@@ -1,0 +1,32 @@
+{
+  "name": "DeleteRumApp",
+  "protocol": "HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "AppGroup",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "AppId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "RealRegionId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

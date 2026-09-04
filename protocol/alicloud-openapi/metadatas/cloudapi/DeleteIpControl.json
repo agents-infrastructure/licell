@@ -1,0 +1,14 @@
+{
+  "name": "DeleteIpControl",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "IpControlId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

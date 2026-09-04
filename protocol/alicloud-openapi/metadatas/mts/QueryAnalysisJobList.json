@@ -1,0 +1,14 @@
+{
+  "name": "QueryAnalysisJobList",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "AnalysisJobIds",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

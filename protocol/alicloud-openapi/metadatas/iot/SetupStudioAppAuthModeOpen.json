@@ -1,0 +1,32 @@
+{
+  "name": "SetupStudioAppAuthModeOpen",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "AppId",
+      "position": "Body",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "AuthMode",
+      "position": "Body",
+      "type": "Integer",
+      "required": true
+    },
+    {
+      "name": "IotInstanceId",
+      "position": "Body",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "ProjectId",
+      "position": "Body",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "name": "AddDataForApiSource",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "ApiId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "Content",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "IotInstanceId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

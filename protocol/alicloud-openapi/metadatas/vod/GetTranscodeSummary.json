@@ -1,0 +1,14 @@
+{
+  "name": "GetTranscodeSummary",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "VideoIds",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

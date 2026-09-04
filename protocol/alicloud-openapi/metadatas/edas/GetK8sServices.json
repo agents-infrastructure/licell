@@ -1,0 +1,14 @@
+{
+  "name": "GetK8sServices",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET",
+  "pathPattern": "/pop/v5/k8s/acs/k8s_service",
+  "parameters": [
+    {
+      "name": "AppId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

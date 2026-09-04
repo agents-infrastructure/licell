@@ -1,0 +1,14 @@
+{
+  "name": "DescribeLiveCertificateDetail",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "CertName",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "name": "ModifyNetworkInterfaceAttribute",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "Description",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "NetworkInterfaceId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "NetworkInterfaceName",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

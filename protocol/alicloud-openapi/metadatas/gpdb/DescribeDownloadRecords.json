@@ -1,0 +1,20 @@
+{
+  "name": "DescribeDownloadRecords",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "DBInstanceId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "DownloadTaskType",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

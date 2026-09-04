@@ -1,0 +1,20 @@
+{
+  "name": "GetSpeechDeviceDetail",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "IotId",
+      "position": "Body",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "IotInstanceId",
+      "position": "Body",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

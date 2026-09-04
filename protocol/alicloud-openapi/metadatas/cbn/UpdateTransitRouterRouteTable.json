@@ -1,0 +1,44 @@
+{
+  "name": "UpdateTransitRouterRouteTable",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "ClientToken",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "DryRun",
+      "position": "Query",
+      "type": "Boolean",
+      "required": false
+    },
+    {
+      "name": "RouteTableOptions",
+      "position": "Query",
+      "type": "Struct",
+      "required": false
+    },
+    {
+      "name": "TransitRouterRouteTableDescription",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "TransitRouterRouteTableId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "TransitRouterRouteTableName",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

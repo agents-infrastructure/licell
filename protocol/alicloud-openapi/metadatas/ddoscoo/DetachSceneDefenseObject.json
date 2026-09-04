@@ -1,0 +1,26 @@
+{
+  "name": "DetachSceneDefenseObject",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "ObjectType",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "Objects",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "PolicyId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

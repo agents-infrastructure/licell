@@ -1,0 +1,26 @@
+{
+  "name": "GetChangeSet",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "ChangeSetId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "ShowTemplate",
+      "position": "Query",
+      "type": "Boolean",
+      "required": false
+    }
+  ]
+}

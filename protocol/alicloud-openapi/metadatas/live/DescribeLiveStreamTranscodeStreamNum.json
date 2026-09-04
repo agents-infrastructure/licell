@@ -1,0 +1,26 @@
+{
+  "name": "DescribeLiveStreamTranscodeStreamNum",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "DomainName",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "SplitType",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

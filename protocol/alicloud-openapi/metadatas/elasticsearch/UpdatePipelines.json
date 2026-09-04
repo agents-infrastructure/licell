@@ -1,0 +1,32 @@
+{
+  "name": "UpdatePipelines",
+  "protocol": "HTTP|HTTPS",
+  "method": "PUT",
+  "pathPattern": "/openapi/logstashes/[InstanceId]/pipelines",
+  "parameters": [
+    {
+      "name": "InstanceId",
+      "position": "Path",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "body",
+      "position": "Body",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "clientToken",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "trigger",
+      "position": "Query",
+      "type": "Boolean",
+      "required": false
+    }
+  ]
+}

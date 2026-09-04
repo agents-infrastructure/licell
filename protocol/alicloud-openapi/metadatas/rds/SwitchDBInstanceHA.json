@@ -1,0 +1,32 @@
+{
+  "name": "SwitchDBInstanceHA",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "DBInstanceId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "EffectiveTime",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "Force",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "NodeId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

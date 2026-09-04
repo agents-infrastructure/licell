@@ -1,0 +1,32 @@
+{
+  "name": "SendPredefinedShortMessage",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "ConfigId",
+      "position": "Query",
+      "type": "Long",
+      "required": true
+    },
+    {
+      "name": "InstanceId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "PhoneNumbers",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "TemplateParam",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

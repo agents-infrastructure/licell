@@ -1,0 +1,26 @@
+{
+  "name": "GetDataCorrectBackupFiles",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "ActionDetail",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "OrderId",
+      "position": "Query",
+      "type": "Long",
+      "required": true
+    },
+    {
+      "name": "Tid",
+      "position": "Query",
+      "type": "Long",
+      "required": false
+    }
+  ]
+}

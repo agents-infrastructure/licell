@@ -1,0 +1,14 @@
+{
+  "name": "DeleteContact",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "ContactName",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "name": "DoInsightsAction",
+  "protocol": "HTTPS",
+  "method": "POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "Data",
+      "position": "Body",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "Module",
+      "position": "Body",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

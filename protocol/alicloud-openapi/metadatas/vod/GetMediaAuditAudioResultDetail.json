@@ -1,0 +1,20 @@
+{
+  "name": "GetMediaAuditAudioResultDetail",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "MediaId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "PageNo",
+      "position": "Query",
+      "type": "Integer",
+      "required": false
+    }
+  ]
+}

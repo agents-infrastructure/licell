@@ -1,0 +1,26 @@
+{
+  "name": "SetAccessControlListAttribute",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "AclId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "AclName",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

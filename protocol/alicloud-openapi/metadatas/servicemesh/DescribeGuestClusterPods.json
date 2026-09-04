@@ -1,0 +1,26 @@
+{
+  "name": "DescribeGuestClusterPods",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "GuestClusterID",
+      "position": "Body",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "Namespace",
+      "position": "Body",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "ServiceMeshId",
+      "position": "Body",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "name": "DeleteBackendModel",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "BackendId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "BackendModelId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "StageName",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

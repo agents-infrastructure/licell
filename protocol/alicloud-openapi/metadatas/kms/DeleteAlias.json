@@ -1,0 +1,14 @@
+{
+  "name": "DeleteAlias",
+  "protocol": "HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "AliasName",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "name": "DescribeCategory",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "AgentKey",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "CategoryId",
+      "position": "Query",
+      "type": "Long",
+      "required": true
+    }
+  ]
+}

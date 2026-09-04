@@ -1,0 +1,32 @@
+{
+  "name": "DescribeVpcAttribute",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "DryRun",
+      "position": "Query",
+      "type": "Boolean",
+      "required": false
+    },
+    {
+      "name": "IsDefault",
+      "position": "Query",
+      "type": "Boolean",
+      "required": false
+    },
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "VpcId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

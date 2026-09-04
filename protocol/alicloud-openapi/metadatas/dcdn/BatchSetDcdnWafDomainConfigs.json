@@ -1,0 +1,26 @@
+{
+  "name": "BatchSetDcdnWafDomainConfigs",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "ClientIpTag",
+      "position": "Body",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "DefenseStatus",
+      "position": "Body",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "DomainNames",
+      "position": "Body",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

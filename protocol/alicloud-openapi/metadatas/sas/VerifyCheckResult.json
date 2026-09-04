@@ -1,0 +1,26 @@
+{
+  "name": "VerifyCheckResult",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "CheckIds",
+      "position": "Query",
+      "type": "RepeatList",
+      "required": false
+    },
+    {
+      "name": "InstanceIds",
+      "position": "Query",
+      "type": "RepeatList",
+      "required": false
+    },
+    {
+      "name": "TaskSource",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

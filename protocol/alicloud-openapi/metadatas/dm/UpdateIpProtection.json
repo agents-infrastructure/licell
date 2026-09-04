@@ -1,0 +1,14 @@
+{
+  "name": "UpdateIpProtection",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "IpProtection",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "name": "ListCallMeasureSummaryReports",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "IntervalType",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

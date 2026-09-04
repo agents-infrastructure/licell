@@ -1,0 +1,14 @@
+{
+  "name": "DetectMainBody",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "ImageURL",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

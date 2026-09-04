@@ -1,0 +1,26 @@
+{
+  "name": "DeleteLiveAISubtitle",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "SubtitleId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "SubtitleName",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

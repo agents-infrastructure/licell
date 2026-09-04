@@ -1,0 +1,14 @@
+{
+  "name": "GetPADiagnosisTask",
+  "protocol": "HTTPS",
+  "method": "GET",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "DiagnoseId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

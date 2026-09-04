@@ -1,0 +1,26 @@
+{
+  "name": "UpdateIntent",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "AgentKey",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "IntentDefinition",
+      "position": "Query",
+      "type": "Json",
+      "required": true
+    },
+    {
+      "name": "IntentId",
+      "position": "Query",
+      "type": "Long",
+      "required": true
+    }
+  ]
+}

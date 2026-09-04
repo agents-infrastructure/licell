@@ -1,0 +1,26 @@
+{
+  "name": "DescribeClusters",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET",
+  "pathPattern": "/clusters",
+  "parameters": [
+    {
+      "name": "clusterType",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "name",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "resource_group_id",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

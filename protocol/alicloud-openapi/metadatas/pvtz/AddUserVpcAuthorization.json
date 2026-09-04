@@ -1,0 +1,32 @@
+{
+  "name": "AddUserVpcAuthorization",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "AuthChannel",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "AuthCode",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "AuthType",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "AuthorizedUserId",
+      "position": "Query",
+      "type": "Long",
+      "required": true
+    }
+  ]
+}

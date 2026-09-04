@@ -1,0 +1,26 @@
+{
+  "name": "UpdateVodTemplate",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "Name",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "TemplateConfig",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "VodTemplateId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

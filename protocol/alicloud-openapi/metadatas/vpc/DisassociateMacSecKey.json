@@ -1,0 +1,26 @@
+{
+  "name": "DisassociateMacSecKey",
+  "protocol": "HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "Ckn",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "PhysicalConnectionId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

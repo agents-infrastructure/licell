@@ -1,0 +1,20 @@
+{
+  "name": "ModifyAnycastEipAddressSpec",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "AnycastId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "Bandwidth",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

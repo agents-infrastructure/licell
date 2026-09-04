@@ -1,0 +1,20 @@
+{
+  "name": "ListFaceDbs",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "Limit",
+      "position": "Body",
+      "type": "Long",
+      "required": false
+    },
+    {
+      "name": "Offset",
+      "position": "Body",
+      "type": "Long",
+      "required": false
+    }
+  ]
+}

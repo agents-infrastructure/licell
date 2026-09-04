@@ -1,0 +1,14 @@
+{
+  "name": "DeleteJob",
+  "protocol": "HTTP|HTTPS",
+  "method": "DELETE",
+  "pathPattern": "/pop/v1/sam/job/deleteJob",
+  "parameters": [
+    {
+      "name": "AppId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

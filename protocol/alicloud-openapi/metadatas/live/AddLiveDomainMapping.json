@@ -1,0 +1,20 @@
+{
+  "name": "AddLiveDomainMapping",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "PullDomain",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "PushDomain",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "name": "ModifyDBInstanceSSL",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "DBInstanceId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "ForceEncryption",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "SSLAction",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "SwitchMode",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "name": "DeleteIntent",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "AgentKey",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "IntentId",
+      "position": "Query",
+      "type": "Long",
+      "required": true
+    }
+  ]
+}

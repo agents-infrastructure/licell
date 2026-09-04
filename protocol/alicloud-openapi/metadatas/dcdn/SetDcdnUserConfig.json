@@ -1,0 +1,20 @@
+{
+  "name": "SetDcdnUserConfig",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "Configs",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "FunctionId",
+      "position": "Query",
+      "type": "Integer",
+      "required": true
+    }
+  ]
+}

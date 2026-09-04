@@ -1,0 +1,20 @@
+{
+  "name": "DeleteRuleAction",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "ActionId",
+      "position": "Query",
+      "type": "Long",
+      "required": true
+    },
+    {
+      "name": "IotInstanceId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

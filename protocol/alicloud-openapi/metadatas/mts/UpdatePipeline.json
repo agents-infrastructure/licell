@@ -1,0 +1,44 @@
+{
+  "name": "UpdatePipeline",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "ExtendConfig",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "Name",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "NotifyConfig",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "PipelineId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "Role",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "State",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

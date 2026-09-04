@@ -1,0 +1,14 @@
+{
+  "name": "GetEditingProject",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "ProjectId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

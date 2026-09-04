@@ -1,0 +1,14 @@
+{
+  "name": "DeleteAccessToken",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "AccessTokenId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

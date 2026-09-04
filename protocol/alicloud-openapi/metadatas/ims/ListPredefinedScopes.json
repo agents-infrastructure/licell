@@ -1,0 +1,14 @@
+{
+  "name": "ListPredefinedScopes",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "AppType",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "name": "SubmitAIJob",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "Config",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "MediaId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "Types",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "UserData",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "name": "DeleteRole",
+  "protocol": "HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "RoleName",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

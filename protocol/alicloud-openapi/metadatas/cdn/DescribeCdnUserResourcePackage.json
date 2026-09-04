@@ -1,0 +1,14 @@
+{
+  "name": "DescribeCdnUserResourcePackage",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "Status",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "name": "DescribeAuditLogFilter",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "DBInstanceId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "RoleType",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

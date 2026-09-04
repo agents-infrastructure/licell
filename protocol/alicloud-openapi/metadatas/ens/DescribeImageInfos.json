@@ -1,0 +1,14 @@
+{
+  "name": "DescribeImageInfos",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "OsType",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

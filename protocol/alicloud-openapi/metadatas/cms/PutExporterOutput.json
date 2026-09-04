@@ -1,0 +1,32 @@
+{
+  "name": "PutExporterOutput",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "ConfigJson",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "Desc",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "DestName",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "DestType",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

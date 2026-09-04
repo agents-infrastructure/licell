@@ -1,0 +1,14 @@
+{
+  "name": "ListAIImageInfo",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "VideoId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

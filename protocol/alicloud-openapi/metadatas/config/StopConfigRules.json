@@ -1,0 +1,14 @@
+{
+  "name": "StopConfigRules",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "ConfigRuleIds",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

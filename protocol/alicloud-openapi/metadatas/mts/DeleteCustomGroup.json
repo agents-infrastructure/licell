@@ -1,0 +1,20 @@
+{
+  "name": "DeleteCustomGroup",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "Algorithm",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "CustomGroupId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

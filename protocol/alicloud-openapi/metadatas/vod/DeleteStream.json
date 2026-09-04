@@ -1,0 +1,26 @@
+{
+  "name": "DeleteStream",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "JobIds",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "ReferenceId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "VideoId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

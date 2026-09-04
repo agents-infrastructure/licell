@@ -1,0 +1,14 @@
+{
+  "name": "SetDefaultDomain",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "DefaultDomainName",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

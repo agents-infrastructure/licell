@@ -1,0 +1,26 @@
+{
+  "name": "GetThingTemplate",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "CategoryKey",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "IotInstanceId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "ResourceGroupId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

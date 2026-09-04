@@ -1,0 +1,26 @@
+{
+  "name": "MassPushV2",
+  "protocol": "HTTPS",
+  "method": "POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "AppKey",
+      "position": "Query",
+      "type": "Long",
+      "required": true
+    },
+    {
+      "name": "IdempotentToken",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "PushTasks",
+      "position": "Query",
+      "type": "Json",
+      "required": true
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "name": "ClearLogStoreStorage",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "Site",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

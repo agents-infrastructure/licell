@@ -1,0 +1,20 @@
+{
+  "name": "QueryDevicesByAccount",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "Account",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "AppKey",
+      "position": "Query",
+      "type": "Long",
+      "required": true
+    }
+  ]
+}

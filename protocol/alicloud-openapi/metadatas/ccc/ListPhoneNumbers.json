@@ -1,0 +1,20 @@
+{
+  "name": "ListPhoneNumbers",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "InstanceId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "OutboundOnly",
+      "position": "Query",
+      "type": "Boolean",
+      "required": true
+    }
+  ]
+}

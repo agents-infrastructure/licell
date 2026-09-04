@@ -1,0 +1,20 @@
+{
+  "name": "ListWorkFlowNodes",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "SearchName",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "Tid",
+      "position": "Query",
+      "type": "Long",
+      "required": false
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "name": "DescribeDomainsBySource",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "Sources",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

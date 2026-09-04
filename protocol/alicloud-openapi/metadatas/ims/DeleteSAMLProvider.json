@@ -1,0 +1,14 @@
+{
+  "name": "DeleteSAMLProvider",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "SAMLProviderName",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

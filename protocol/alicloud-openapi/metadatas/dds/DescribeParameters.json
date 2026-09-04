@@ -1,0 +1,32 @@
+{
+  "name": "DescribeParameters",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "CharacterType",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "DBInstanceId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "ExtraParam",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "NodeId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

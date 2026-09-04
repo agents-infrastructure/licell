@@ -1,0 +1,14 @@
+{
+  "name": "DescribeScalingActivityDetail",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "ScalingActivityId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

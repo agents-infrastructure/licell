@@ -1,0 +1,26 @@
+{
+  "name": "SetProductCertInfo",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "IotInstanceId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "IssueModel",
+      "position": "Query",
+      "type": "Integer",
+      "required": true
+    },
+    {
+      "name": "ProductKey",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

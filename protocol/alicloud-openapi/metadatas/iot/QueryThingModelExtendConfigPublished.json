@@ -1,0 +1,32 @@
+{
+  "name": "QueryThingModelExtendConfigPublished",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "FunctionBlockId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "IotInstanceId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "ModelVersion",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "ProductKey",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

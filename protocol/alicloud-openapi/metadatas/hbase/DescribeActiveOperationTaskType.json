@@ -1,0 +1,14 @@
+{
+  "name": "DescribeActiveOperationTaskType",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "IsHistory",
+      "position": "Query",
+      "type": "Integer",
+      "required": false
+    }
+  ]
+}

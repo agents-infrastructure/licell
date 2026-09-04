@@ -1,0 +1,14 @@
+{
+  "name": "ModifyGroupProperty",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "Data",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

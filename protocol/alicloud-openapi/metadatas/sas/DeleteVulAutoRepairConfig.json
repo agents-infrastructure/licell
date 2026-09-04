@@ -1,0 +1,26 @@
+{
+  "name": "DeleteVulAutoRepairConfig",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "AliasName",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "ConfigIdList",
+      "position": "Query",
+      "type": "RepeatList",
+      "required": false
+    },
+    {
+      "name": "Type",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

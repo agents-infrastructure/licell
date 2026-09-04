@@ -1,0 +1,14 @@
+{
+  "name": "ListResourceTypeVersions",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "ResourceType",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

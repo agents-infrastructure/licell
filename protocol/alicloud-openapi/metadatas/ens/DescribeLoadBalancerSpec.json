@@ -1,0 +1,14 @@
+{
+  "name": "DescribeLoadBalancerSpec",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "LoadBalancerSpec",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

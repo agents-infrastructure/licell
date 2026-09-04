@@ -1,0 +1,20 @@
+{
+  "name": "SubmitWorkflowJob",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "MediaId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "WorkflowId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

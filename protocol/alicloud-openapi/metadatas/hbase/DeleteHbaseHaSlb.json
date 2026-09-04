@@ -1,0 +1,26 @@
+{
+  "name": "DeleteHbaseHaSlb",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "BdsId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "HaId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "HaTypes",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

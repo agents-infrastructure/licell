@@ -1,0 +1,26 @@
+{
+  "name": "SetDomainExtensionAttribute",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "DomainExtensionId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "ServerCertificateId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

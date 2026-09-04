@@ -1,0 +1,26 @@
+{
+  "name": "QueryDeviceStatistics",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "GroupId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "IotInstanceId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "ProductKey",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

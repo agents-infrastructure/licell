@@ -1,0 +1,14 @@
+{
+  "name": "DescribeKernelReleaseNotes",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "KernelVersion",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

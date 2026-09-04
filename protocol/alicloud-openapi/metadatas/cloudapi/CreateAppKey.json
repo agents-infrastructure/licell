@@ -1,0 +1,26 @@
+{
+  "name": "CreateAppKey",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "AppId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "AppKey",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "AppSecret",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

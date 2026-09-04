@@ -68,9 +68,10 @@ export const AUTOMATION_SECTION: CommandSectionMembership = {
   title: 'Automation & Tooling',
   summary: '面向 Agent、开发体验与 CLI 生命周期的自动化命令。',
   notes: [
-    '`licell skills init`、`licell onboard`、`licell catalog`、`licell completion` 都基于同一套 CLI 命令目录生成外部表面。',
+    '`licell skills init`、`licell onboard`、`licell catalog`、`licell capability`、`licell completion` 都基于版本化的本地注册表或 protocol 快照生成外部表面。',
     '`licell skills init` / `setup` / `onboard` 写入的是 agent-facing 的 licell skill contract；命令参考与字段细节应继续通过 `catalog` / `--help --output json` 获取。',
     '`licell onboard` 默认会同时安装 Codex + Claude 的全局 licell skill contract；当安装目标包含 Codex 时，还会额外安装 `licell-glab` subagent。',
+    '`licell api invoke` 优先使用 PATH 中的 aliyun；缺失时按固定版本下载并校验后缓存到 `~/.licell/bin`。',
     '`licell completion` 的候选命令同样来自共享命令目录。'
   ],
   taskHints: [

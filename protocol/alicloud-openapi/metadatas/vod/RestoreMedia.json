@@ -1,0 +1,32 @@
+{
+  "name": "RestoreMedia",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "MediaIds",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "RestoreDays",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "RestoreTier",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "Scope",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

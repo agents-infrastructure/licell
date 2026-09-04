@@ -1,0 +1,20 @@
+{
+  "name": "DisableKnowledge",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "AgentKey",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "KnowledgeId",
+      "position": "Query",
+      "type": "Long",
+      "required": true
+    }
+  ]
+}

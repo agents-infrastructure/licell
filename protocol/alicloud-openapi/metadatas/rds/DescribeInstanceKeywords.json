@@ -1,0 +1,14 @@
+{
+  "name": "DescribeInstanceKeywords",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "Key",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

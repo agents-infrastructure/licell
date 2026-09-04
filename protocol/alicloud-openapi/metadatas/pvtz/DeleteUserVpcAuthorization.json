@@ -1,0 +1,20 @@
+{
+  "name": "DeleteUserVpcAuthorization",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "AuthType",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "AuthorizedUserId",
+      "position": "Query",
+      "type": "Long",
+      "required": true
+    }
+  ]
+}

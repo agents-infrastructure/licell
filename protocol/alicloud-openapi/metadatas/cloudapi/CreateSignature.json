@@ -1,0 +1,26 @@
+{
+  "name": "CreateSignature",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "SignatureKey",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "SignatureName",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "SignatureSecret",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

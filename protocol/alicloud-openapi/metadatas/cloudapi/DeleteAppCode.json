@@ -1,0 +1,20 @@
+{
+  "name": "DeleteAppCode",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "AppCode",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "AppId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

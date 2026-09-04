@@ -1,0 +1,26 @@
+{
+  "name": "RemoveApplicationFromAuthorizationRule",
+  "protocol": "HTTPS",
+  "method": "POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "ApplicationId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "AuthorizationRuleId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "InstanceId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "name": "SubmitHotExpandPreCheckTask",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "DbInstType",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "DbName",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "DrdsInstanceId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "TableList",
+      "position": "Query",
+      "type": "RepeatList",
+      "required": false
+    }
+  ]
+}

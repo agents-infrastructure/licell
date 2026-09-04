@@ -1,0 +1,32 @@
+{
+  "name": "AddTranscodeTemplateGroup",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "AppId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "Name",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "TranscodeTemplateGroupId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "TranscodeTemplateList",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

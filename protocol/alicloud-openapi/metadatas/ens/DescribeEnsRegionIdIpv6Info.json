@@ -1,0 +1,14 @@
+{
+  "name": "DescribeEnsRegionIdIpv6Info",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "EnsRegionId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

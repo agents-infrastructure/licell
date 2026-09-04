@@ -1,0 +1,20 @@
+{
+  "name": "LockDBInstanceWrite",
+  "protocol": "HTTPS",
+  "method": "POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "DBInstanceId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "LockReason",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

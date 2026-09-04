@@ -1,0 +1,32 @@
+{
+  "name": "ListUserDefinedEventSources",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "EventBusName",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "Limit",
+      "position": "Query",
+      "type": "Integer",
+      "required": false
+    },
+    {
+      "name": "NamePrefix",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "NextToken",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

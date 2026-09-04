@@ -1,0 +1,20 @@
+{
+  "name": "SubmitCheck",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "ScanRange",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "TaskSource",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

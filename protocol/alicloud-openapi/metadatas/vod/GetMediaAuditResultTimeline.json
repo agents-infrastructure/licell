@@ -1,0 +1,14 @@
+{
+  "name": "GetMediaAuditResultTimeline",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "MediaId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

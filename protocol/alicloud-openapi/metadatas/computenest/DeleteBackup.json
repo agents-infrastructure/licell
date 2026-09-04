@@ -1,0 +1,14 @@
+{
+  "name": "DeleteBackup",
+  "protocol": "HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "BackupId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

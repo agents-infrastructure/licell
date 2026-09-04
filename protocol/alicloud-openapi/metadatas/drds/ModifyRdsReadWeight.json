@@ -1,0 +1,32 @@
+{
+  "name": "ModifyRdsReadWeight",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "DbName",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "DrdsInstanceId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "InstanceNames",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "Weights",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

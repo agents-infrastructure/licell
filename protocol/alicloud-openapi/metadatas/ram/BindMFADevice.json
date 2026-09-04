@@ -1,0 +1,32 @@
+{
+  "name": "BindMFADevice",
+  "protocol": "HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "AuthenticationCode1",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "AuthenticationCode2",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "SerialNumber",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "UserName",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

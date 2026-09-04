@@ -1,0 +1,32 @@
+{
+  "name": "DescribeDBInstanceEncryptionKey",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "DBInstanceId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "EncryptionKey",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "TargetRegionId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

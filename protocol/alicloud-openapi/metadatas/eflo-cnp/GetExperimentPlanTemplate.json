@@ -1,0 +1,14 @@
+{
+  "name": "GetExperimentPlanTemplate",
+  "protocol": "HTTPS",
+  "method": "POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "TemplateId",
+      "position": "Query",
+      "type": "Long",
+      "required": true
+    }
+  ]
+}

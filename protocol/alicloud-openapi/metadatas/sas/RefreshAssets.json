@@ -1,0 +1,32 @@
+{
+  "name": "RefreshAssets",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "AssetType",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "CloudAssetSubType",
+      "position": "Query",
+      "type": "Integer",
+      "required": false
+    },
+    {
+      "name": "CloudAssetType",
+      "position": "Query",
+      "type": "Integer",
+      "required": false
+    },
+    {
+      "name": "Vendor",
+      "position": "Query",
+      "type": "Integer",
+      "required": false
+    }
+  ]
+}

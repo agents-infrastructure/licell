@@ -1,0 +1,14 @@
+{
+  "name": "GetServiceLinkedRoleDeletionStatus",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "DeletionTaskId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "name": "DeleteContactGroup",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "ContactGroupName",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

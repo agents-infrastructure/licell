@@ -1,0 +1,20 @@
+{
+  "name": "DeleteReceiverDetail",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "Email",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "ReceiverId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

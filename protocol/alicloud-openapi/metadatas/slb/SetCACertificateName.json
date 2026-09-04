@@ -1,0 +1,26 @@
+{
+  "name": "SetCACertificateName",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "CACertificateId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "CACertificateName",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

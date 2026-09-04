@@ -1,0 +1,32 @@
+{
+  "name": "QueryUniqueDeviceStat",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "AppKey",
+      "position": "Query",
+      "type": "Long",
+      "required": true
+    },
+    {
+      "name": "EndTime",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "Granularity",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "StartTime",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

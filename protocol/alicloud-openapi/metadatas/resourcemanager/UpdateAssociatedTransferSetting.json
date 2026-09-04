@@ -1,0 +1,20 @@
+{
+  "name": "UpdateAssociatedTransferSetting",
+  "protocol": "HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "EnableExistingResourcesTransfer",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "RuleSettings",
+      "position": "Query",
+      "type": "Array",
+      "required": false
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "name": "ListHBaseInstances",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "VpcId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

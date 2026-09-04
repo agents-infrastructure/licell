@@ -1,0 +1,14 @@
+{
+  "name": "CancelAutoSnapshotPolicy",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "FileSystemIds",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

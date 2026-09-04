@@ -1,0 +1,14 @@
+{
+  "name": "ListFpShotDB",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "FpDBIds",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "name": "CreateMailAddress",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "AccountName",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "ReplyAddress",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "Sendtype",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

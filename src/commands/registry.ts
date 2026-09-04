@@ -1,6 +1,8 @@
 import { authCommandModule } from './auth';
+import { apiCommandModule } from './api';
 import { bootstrapCommandModule } from './bootstrap';
 import { cacheCommandModule } from './cache';
+import { capabilityCommandModule } from './capability';
 import { catalogCommandModule } from './catalog';
 import { ciCommandModule } from './ci';
 import { configCommandModule } from './config';
@@ -94,6 +96,8 @@ export const LICELL_COMMAND_MANIFEST = defineCommandManifest({
     ecsCommandModule,
     doctorCommandModule,
     catalogCommandModule,
+    apiCommandModule,
+    capabilityCommandModule,
     ciCommandModule,
     onboardCommandModule,
     skillsCommandModule,

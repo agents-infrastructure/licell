@@ -1,0 +1,20 @@
+{
+  "name": "DescribeMonitoringAgentStatuses",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "HostAvailabilityTaskId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "InstanceIds",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

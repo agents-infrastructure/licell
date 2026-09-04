@@ -1,0 +1,14 @@
+{
+  "name": "DeleteDynamicTagGroup",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST|PUT",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "DynamicTagRuleId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

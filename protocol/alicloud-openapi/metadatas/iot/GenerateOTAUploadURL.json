@@ -1,0 +1,20 @@
+{
+  "name": "GenerateOTAUploadURL",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "FileSuffix",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "IotInstanceId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

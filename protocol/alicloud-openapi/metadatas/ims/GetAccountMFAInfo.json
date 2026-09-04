@@ -1,0 +1,7 @@
+{
+  "name": "GetAccountMFAInfo",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": []
+}

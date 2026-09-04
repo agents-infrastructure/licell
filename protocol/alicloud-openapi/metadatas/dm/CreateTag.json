@@ -1,0 +1,20 @@
+{
+  "name": "CreateTag",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "TagDescription",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "TagName",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

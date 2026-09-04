@@ -1,0 +1,26 @@
+{
+  "name": "DeleteApiStageVariable",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "GroupId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "StageId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "VariableName",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

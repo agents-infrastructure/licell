@@ -1,0 +1,32 @@
+{
+  "name": "DescribeApiHistory",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "ApiId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "GroupId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "HistoryVersion",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "StageName",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

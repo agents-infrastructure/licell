@@ -1,0 +1,38 @@
+{
+  "name": "DescribeRangeDataByLocateAndIspService",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "DomainNames",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "EndTime",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "IspNames",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "LocationNames",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "StartTime",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "name": "DeleteSiteMonitors",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "IsDeleteAlarms",
+      "position": "Query",
+      "type": "Boolean",
+      "required": false
+    },
+    {
+      "name": "TaskIds",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

@@ -34,6 +34,24 @@ describe('LICELL_COMMAND_MANIFEST', () => {
     expect(catalog.commandsByKey['catalog']).toBeDefined();
   });
 
+  it('registers capability discovery commands in the command catalog', () => {
+    const catalog = getCommandCatalog();
+    expect(catalog.commandsByKey['capability products']).toBeDefined();
+    expect(catalog.commandsByKey['capability search']).toBeDefined();
+    expect(catalog.commandsByKey['capability describe']).toBeDefined();
+    expect(getCommandDescriptor('capability products').result?.outcomeKey).toBe('products');
+    expect(getCommandDescriptor('capability search').result?.outcomeKey).toBe('capabilities');
+    expect(getCommandDescriptor('capability describe').result?.outcomeKey).toBe('capability');
+  });
+
+  it('registers raw API scaffold and invoke commands in the automation section', () => {
+    const catalog = getCommandCatalog();
+    expect(catalog.commandsByKey['api scaffold']).toBeDefined();
+    expect(catalog.commandsByKey['api invoke']).toBeDefined();
+    expect(getCommandDescriptor('api invoke').safety?.confirmFlags).toEqual(['--yes', '--dry-run']);
+    expect(getCommandDescriptor('api invoke').automation?.preferredOutput).toBe('json');
+  });
+
   it('registers ecs inspect and lifecycle commands in the infrastructure section only', () => {
     const catalog = getCommandCatalog();
     expect(catalog.commandsByKey['ecs list']).toBeDefined();

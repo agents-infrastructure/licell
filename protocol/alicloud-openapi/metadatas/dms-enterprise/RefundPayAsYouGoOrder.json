@@ -1,0 +1,26 @@
+{
+  "name": "RefundPayAsYouGoOrder",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "InstanceId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "OrderId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "Tid",
+      "position": "Query",
+      "type": "Long",
+      "required": false
+    }
+  ]
+}

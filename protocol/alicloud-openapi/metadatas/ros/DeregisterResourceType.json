@@ -1,0 +1,20 @@
+{
+  "name": "DeregisterResourceType",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "ResourceType",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "VersionId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

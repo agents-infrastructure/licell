@@ -1,0 +1,14 @@
+{
+  "name": "DeleteLogConfig",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "LogType",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

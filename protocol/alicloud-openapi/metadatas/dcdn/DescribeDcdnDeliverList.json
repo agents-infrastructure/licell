@@ -1,0 +1,14 @@
+{
+  "name": "DescribeDcdnDeliverList",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "DeliverId",
+      "position": "Query",
+      "type": "Long",
+      "required": false
+    }
+  ]
+}

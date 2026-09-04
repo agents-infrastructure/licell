@@ -1,0 +1,14 @@
+{
+  "name": "DescribeWebAccessMode",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "Domains",
+      "position": "Query",
+      "type": "RepeatList",
+      "required": true
+    }
+  ]
+}

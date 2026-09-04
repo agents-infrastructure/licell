@@ -1,0 +1,32 @@
+{
+  "name": "PublishStudioApp",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "AppId",
+      "position": "Body",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "Description",
+      "position": "Body",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "IotInstanceId",
+      "position": "Body",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "ProjectId",
+      "position": "Body",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

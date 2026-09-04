@@ -1,0 +1,26 @@
+{
+  "name": "DescribeNodePoolVuls",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET",
+  "pathPattern": "/clusters/[cluster_id]/nodepools/[nodepool_id]/vuls",
+  "parameters": [
+    {
+      "name": "cluster_id",
+      "position": "Path",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "necessity",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "nodepool_id",
+      "position": "Path",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

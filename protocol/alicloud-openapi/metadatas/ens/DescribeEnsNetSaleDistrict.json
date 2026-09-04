@@ -1,0 +1,20 @@
+{
+  "name": "DescribeEnsNetSaleDistrict",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "NetDistrictCode",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "NetLevelCode",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

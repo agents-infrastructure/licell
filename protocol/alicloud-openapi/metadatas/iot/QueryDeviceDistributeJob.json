@@ -1,0 +1,14 @@
+{
+  "name": "QueryDeviceDistributeJob",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "JobId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

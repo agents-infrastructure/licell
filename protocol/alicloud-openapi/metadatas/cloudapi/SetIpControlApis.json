@@ -1,0 +1,32 @@
+{
+  "name": "SetIpControlApis",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "ApiIds",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "GroupId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "IpControlId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "StageName",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

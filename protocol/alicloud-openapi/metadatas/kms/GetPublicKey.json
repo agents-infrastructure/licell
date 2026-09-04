@@ -1,0 +1,26 @@
+{
+  "name": "GetPublicKey",
+  "protocol": "HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "DryRun",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "KeyId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "KeyVersionId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

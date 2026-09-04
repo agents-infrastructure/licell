@@ -1,0 +1,14 @@
+{
+  "name": "AddIpfilter",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "IpAddress",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

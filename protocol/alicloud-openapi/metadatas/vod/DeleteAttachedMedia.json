@@ -1,0 +1,14 @@
+{
+  "name": "DeleteAttachedMedia",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "MediaIds",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

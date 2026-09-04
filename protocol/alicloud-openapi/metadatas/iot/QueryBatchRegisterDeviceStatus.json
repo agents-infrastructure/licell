@@ -1,0 +1,26 @@
+{
+  "name": "QueryBatchRegisterDeviceStatus",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "ApplyId",
+      "position": "Query",
+      "type": "Long",
+      "required": true
+    },
+    {
+      "name": "IotInstanceId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "ProductKey",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

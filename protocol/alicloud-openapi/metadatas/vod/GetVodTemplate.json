@@ -1,0 +1,14 @@
+{
+  "name": "GetVodTemplate",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "VodTemplateId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

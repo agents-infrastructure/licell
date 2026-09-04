@@ -1,0 +1,20 @@
+{
+  "name": "ModifyCenBandwidthPackageSpec",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "Bandwidth",
+      "position": "Query",
+      "type": "Integer",
+      "required": false
+    },
+    {
+      "name": "CenBandwidthPackageId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

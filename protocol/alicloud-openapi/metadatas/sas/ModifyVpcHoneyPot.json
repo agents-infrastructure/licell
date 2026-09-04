@@ -1,0 +1,20 @@
+{
+  "name": "ModifyVpcHoneyPot",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "HoneyPotAction",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "VpcId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

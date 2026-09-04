@@ -1,0 +1,26 @@
+{
+  "name": "DescribeServerLoadBalancerMonitor",
+  "protocol": "HTTPS",
+  "method": "GET",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "EndTime",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "LoadBalancerId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "StartTime",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

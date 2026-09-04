@@ -1,0 +1,20 @@
+{
+  "name": "CreateAdvancedQueryHistory",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "QuerySql",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "SimpleQuery",
+      "position": "Query",
+      "type": "Boolean",
+      "required": true
+    }
+  ]
+}

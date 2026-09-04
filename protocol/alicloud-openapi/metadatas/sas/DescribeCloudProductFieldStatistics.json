@@ -1,0 +1,7 @@
+{
+  "name": "DescribeCloudProductFieldStatistics",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": []
+}

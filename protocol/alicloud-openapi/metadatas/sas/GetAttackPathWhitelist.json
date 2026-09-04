@@ -1,0 +1,14 @@
+{
+  "name": "GetAttackPathWhitelist",
+  "protocol": "HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "AttackPathWhitelistId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

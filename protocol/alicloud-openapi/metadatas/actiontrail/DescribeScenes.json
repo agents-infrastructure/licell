@@ -1,0 +1,14 @@
+{
+  "name": "DescribeScenes",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "SearchCode",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

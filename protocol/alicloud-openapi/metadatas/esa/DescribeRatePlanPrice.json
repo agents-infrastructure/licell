@@ -1,0 +1,26 @@
+{
+  "name": "DescribeRatePlanPrice",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "Amount",
+      "position": "Query",
+      "type": "Integer",
+      "required": false
+    },
+    {
+      "name": "Period",
+      "position": "Query",
+      "type": "Integer",
+      "required": false
+    },
+    {
+      "name": "PlanName",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

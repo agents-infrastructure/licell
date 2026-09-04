@@ -1,0 +1,14 @@
+{
+  "name": "UnbindOutputBucket",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "Bucket",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

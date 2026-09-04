@@ -1,0 +1,26 @@
+{
+  "name": "TransformClientId",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "ClientId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "IotId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "IotInstanceId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

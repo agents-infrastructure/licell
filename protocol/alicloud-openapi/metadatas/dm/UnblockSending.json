@@ -1,0 +1,26 @@
+{
+  "name": "UnblockSending",
+  "protocol": "HTTPS",
+  "method": "POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "BlockEmail",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "BlockType",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "SenderEmail",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

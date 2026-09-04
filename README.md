@@ -756,15 +756,21 @@ licell e2e cleanup <runId>
 
 面向 Agent、开发体验与 CLI 生命周期的自动化命令。
 
-- `licell skills init`、`licell onboard`、`licell catalog`、`licell completion` 都基于同一套 CLI 命令目录生成外部表面。
+- `licell skills init`、`licell onboard`、`licell catalog`、`licell capability`、`licell completion` 都基于版本化的本地注册表或 protocol 快照生成外部表面。
 - `licell skills init` / `setup` / `onboard` 写入的是 agent-facing 的 licell skill contract；命令参考与字段细节应继续通过 `catalog` / `--help --output json` 获取。
 - `licell onboard` 默认会同时安装 Codex + Claude 的全局 licell skill contract；当安装目标包含 Codex 时，还会额外安装 `licell-glab` subagent。
+- `licell api invoke` 优先使用 PATH 中的 aliyun；缺失时按固定版本下载并校验后缓存到 `~/.licell/bin`。
 - `licell completion` 的候选命令同样来自共享命令目录。
 
 | 命令 | 说明 | 关键选项 |
 |------|------|----------|
 | `licell doctor` | 诊断本机 licell 登录态、云端权限/目标资源/域名入口、项目配置与部署前置条件 | `--region`, `--component`, `--all-components` |
 | `licell catalog` | 输出共享 CLI 命令目录，供 Agent / 自动化发现命令、选项和结构化契约 | `--root-command`, `--command-key` |
+| `licell api invoke <ref>` | 通过固定版本 aliyun-cli runner 调用 raw API | `--region`, `--params-file`, `--param` |
+| `licell api scaffold <ref>` | 从 raw capability 生成 API 请求模板 | — |
+| `licell capability describe <ref>` | 查看一个 raw capability 的完整 OpenAPI 输入和来源 | — |
+| `licell capability products [query]` | 列出 protocol 快照覆盖的阿里云产品和 capability 数量 | `--limit`, `--offset` |
+| `licell capability search [query]` | 从仓库内阿里云 OpenAPI 快照搜索原始 capability | `--intent`, `--product`, `--action` |
 | `licell ci init github` | 生成 GitHub Actions 的 deploy-only workflow（只调用 licell，不负责编译） | `--apply`, `--force`, `--workflow` |
 | `licell ci init gitlab` | 生成 GitLab CI 的 deploy-only pipeline（只调用 licell，不负责编译） | `--apply`, `--force`, `--pipeline` |
 | `licell onboard` | 全局安装 licell 的 agent-facing skill contract；默认同时安装 Codex 与 Claude | `--agent`, `--force` |

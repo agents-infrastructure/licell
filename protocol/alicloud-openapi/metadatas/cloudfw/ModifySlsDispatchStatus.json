@@ -1,0 +1,38 @@
+{
+  "name": "ModifySlsDispatchStatus",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "DispatchValue",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "EnableStatus",
+      "position": "Query",
+      "type": "Boolean",
+      "required": false
+    },
+    {
+      "name": "FilterKeys",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "NewRegionId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "Site",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "name": "DescribeCdnSMCertificateDetail",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "CertIdentifier",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "name": "DescribeLiveStreamRecordIndexFile",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "AppName",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "DomainName",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "RecordId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "StreamName",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

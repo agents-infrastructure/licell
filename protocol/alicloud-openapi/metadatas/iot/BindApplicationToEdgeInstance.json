@@ -1,0 +1,32 @@
+{
+  "name": "BindApplicationToEdgeInstance",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "ApplicationId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "ApplicationVersion",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "InstanceId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "IotInstanceId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "name": "TerminateMigrateTask",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "DBInstanceId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "MigrateTaskId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "name": "DescribeFieldStatistics",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "MachineTypes",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "ResourceDirectoryAccountId",
+      "position": "Query",
+      "type": "Long",
+      "required": false
+    }
+  ]
+}

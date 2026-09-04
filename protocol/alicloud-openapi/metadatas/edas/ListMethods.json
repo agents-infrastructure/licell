@@ -1,0 +1,20 @@
+{
+  "name": "ListMethods",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET",
+  "pathPattern": "/pop/v5/service/list_methods",
+  "parameters": [
+    {
+      "name": "AppId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "ServiceName",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

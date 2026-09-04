@@ -1,0 +1,20 @@
+{
+  "name": "DeleteScanRule",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "InstanceId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "ScanRuleId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

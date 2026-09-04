@@ -1,0 +1,32 @@
+{
+  "name": "CopyGtmConfig",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "CopyType",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "Lang",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "SourceId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "TargetId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

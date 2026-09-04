@@ -1,0 +1,20 @@
+{
+  "name": "DeleteVideo",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "ReferenceIds",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "VideoIds",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "name": "DeleteGlobalDataNetwork",
+  "protocol": "HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "NetworkId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

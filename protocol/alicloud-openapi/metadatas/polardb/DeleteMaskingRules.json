@@ -1,0 +1,26 @@
+{
+  "name": "DeleteMaskingRules",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "DBClusterId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "InterfaceVersion",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "RuleNameList",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

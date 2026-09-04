@@ -1,0 +1,26 @@
+{
+  "name": "DescribeCharset",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "InstanceId",
+      "position": "Body",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "Series",
+      "position": "Body",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "TenantMode",
+      "position": "Body",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

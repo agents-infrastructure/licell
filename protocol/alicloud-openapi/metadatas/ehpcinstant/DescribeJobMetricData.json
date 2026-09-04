@@ -1,0 +1,32 @@
+{
+  "name": "DescribeJobMetricData",
+  "protocol": "HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "ArrayIndex",
+      "position": "Query",
+      "type": "Json",
+      "required": true
+    },
+    {
+      "name": "JobId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "MetricName",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "TaskName",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

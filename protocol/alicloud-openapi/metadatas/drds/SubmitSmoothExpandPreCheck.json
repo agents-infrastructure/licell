@@ -1,0 +1,26 @@
+{
+  "name": "SubmitSmoothExpandPreCheck",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "DbInstType",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "DbName",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "DrdsInstanceId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

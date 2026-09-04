@@ -1,0 +1,20 @@
+{
+  "name": "RefreshUploadVideo",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "ReferenceId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "VideoId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

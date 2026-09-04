@@ -1,0 +1,26 @@
+{
+  "name": "UpdatePerspective",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "AgentKey",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "Name",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "PerspectiveId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

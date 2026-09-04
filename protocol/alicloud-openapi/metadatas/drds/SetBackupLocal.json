@@ -1,0 +1,32 @@
+{
+  "name": "SetBackupLocal",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "DrdsInstanceId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "HighSpaceUsageProtection",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "LocalLogRetentionHours",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "LocalLogRetentionSpace",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

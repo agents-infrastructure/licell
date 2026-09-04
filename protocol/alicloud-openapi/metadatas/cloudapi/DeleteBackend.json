@@ -1,0 +1,14 @@
+{
+  "name": "DeleteBackend",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "BackendId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

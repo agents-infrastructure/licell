@@ -1,0 +1,20 @@
+{
+  "name": "GetAttackPathSensitiveAssetConfig",
+  "protocol": "HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "AttackPathSensitiveAssetConfigId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "ConfigType",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

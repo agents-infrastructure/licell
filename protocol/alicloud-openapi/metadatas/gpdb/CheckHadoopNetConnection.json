@@ -1,0 +1,32 @@
+{
+  "name": "CheckHadoopNetConnection",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "DBInstanceId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "DataSourceId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "EmrInstanceId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "name": "QueryResellerAvailableQuota",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "ItemCodes",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

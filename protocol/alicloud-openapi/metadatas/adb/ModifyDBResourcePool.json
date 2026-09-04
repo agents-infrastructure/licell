@@ -1,0 +1,32 @@
+{
+  "name": "ModifyDBResourcePool",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "DBClusterId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "NodeNum",
+      "position": "Query",
+      "type": "Integer",
+      "required": false
+    },
+    {
+      "name": "PoolName",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "QueryType",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

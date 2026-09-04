@@ -1,0 +1,26 @@
+{
+  "name": "GetRumAppInfo",
+  "protocol": "HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "AppGroup",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "Pid",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

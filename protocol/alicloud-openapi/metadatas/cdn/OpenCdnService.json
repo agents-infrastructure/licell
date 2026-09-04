@@ -1,0 +1,14 @@
+{
+  "name": "OpenCdnService",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "InternetChargeType",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

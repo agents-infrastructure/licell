@@ -1,0 +1,14 @@
+{
+  "name": "GetRetcodeShareUrl",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "Pid",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

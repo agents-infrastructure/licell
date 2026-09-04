@@ -1,0 +1,32 @@
+{
+  "name": "UpdateNamespaceSlsConfigs",
+  "protocol": "HTTPS",
+  "method": "POST",
+  "pathPattern": "/pop/cas/namespace/updateNamespaceSlsConfigs",
+  "parameters": [
+    {
+      "name": "NameSpaceShortId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "NamespaceId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "SlsConfigs",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "SlsLogEnvTags",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

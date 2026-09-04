@@ -1,0 +1,32 @@
+{
+  "name": "ConvertK8sResource",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST",
+  "pathPattern": "/pop/v5/oam/k8s_resource_convert",
+  "parameters": [
+    {
+      "name": "ClusterId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "Namespace",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "ResourceName",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "ResourceType",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

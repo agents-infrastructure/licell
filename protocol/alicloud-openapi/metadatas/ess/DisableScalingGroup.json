@@ -1,0 +1,14 @@
+{
+  "name": "DisableScalingGroup",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "ScalingGroupId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

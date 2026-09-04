@@ -1,0 +1,26 @@
+{
+  "name": "DescribeNatFirewallPrecheckDetail",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "Lang",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "NatGatewayId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "RegionNo",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

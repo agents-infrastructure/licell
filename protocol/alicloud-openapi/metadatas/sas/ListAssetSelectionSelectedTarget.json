@@ -1,0 +1,20 @@
+{
+  "name": "ListAssetSelectionSelectedTarget",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "SelectionKey",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "TargetList",
+      "position": "Query",
+      "type": "RepeatList",
+      "required": false
+    }
+  ]
+}

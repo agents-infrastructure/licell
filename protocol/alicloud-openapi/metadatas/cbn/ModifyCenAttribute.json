@@ -1,0 +1,32 @@
+{
+  "name": "ModifyCenAttribute",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "CenId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "Description",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "Name",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "ProtectionLevel",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

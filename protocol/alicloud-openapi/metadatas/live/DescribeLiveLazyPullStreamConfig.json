@@ -1,0 +1,26 @@
+{
+  "name": "DescribeLiveLazyPullStreamConfig",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "AppName",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "DomainName",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "name": "CreateKubernetesTrigger",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST",
+  "pathPattern": "/triggers",
+  "parameters": [
+    {
+      "name": "body",
+      "position": "Body",
+      "type": "Struct",
+      "required": false
+    }
+  ]
+}

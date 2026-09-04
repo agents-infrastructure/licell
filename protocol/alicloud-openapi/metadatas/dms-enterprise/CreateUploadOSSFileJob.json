@@ -1,0 +1,32 @@
+{
+  "name": "CreateUploadOSSFileJob",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "FileName",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "FileSource",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "Tid",
+      "position": "Query",
+      "type": "Long",
+      "required": false
+    },
+    {
+      "name": "UploadTarget",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

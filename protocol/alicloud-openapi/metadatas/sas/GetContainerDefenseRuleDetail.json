@@ -1,0 +1,20 @@
+{
+  "name": "GetContainerDefenseRuleDetail",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "Lang",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "RuleId",
+      "position": "Query",
+      "type": "Long",
+      "required": false
+    }
+  ]
+}

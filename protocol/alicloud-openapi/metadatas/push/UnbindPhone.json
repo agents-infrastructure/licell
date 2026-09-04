@@ -1,0 +1,20 @@
+{
+  "name": "UnbindPhone",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "AppKey",
+      "position": "Query",
+      "type": "Long",
+      "required": true
+    },
+    {
+      "name": "DeviceId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "name": "DeleteMailAddress",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "MailAddressId",
+      "position": "Query",
+      "type": "Integer",
+      "required": true
+    }
+  ]
+}

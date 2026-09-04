@@ -1,0 +1,14 @@
+{
+  "name": "SetBuildRiskDefineRuleConfig",
+  "protocol": "HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "Config",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

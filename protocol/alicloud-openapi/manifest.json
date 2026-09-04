@@ -1,0 +1,1271 @@
+{
+  "schemaVersion": "licell-alicloud-openapi-snapshot@1.0",
+  "source": {
+    "repository": "https://github.com/aliyun/aliyun-openapi-meta.git",
+    "aliyunCliCommit": "eadd68d9a13dd0734a2236e2c70e38f4888ae65f",
+    "metadataCommit": "2563691c22229a0b493606e11166b95896707095",
+    "metadataCommitDate": "2026-04-21T12:25:26Z"
+  },
+  "scope": {
+    "mode": "full",
+    "products": []
+  },
+  "content": {
+    "fileCount": 16244,
+    "treeSha256": "beec2a930a5118376370a4313cef523dcf8c78dc8ad8f8d150baeed27201ee96"
+  },
+  "products": [
+    {
+      "directory": "actiontrail",
+      "code": "Actiontrail",
+      "version": "2020-07-06",
+      "apiStyle": "rpc",
+      "apiCount": 46,
+      "treeSha256": "4cec63d2a79ed700027d52357edac9629491df15a1e8b2de94df6ed66cbe5c2a"
+    },
+    {
+      "directory": "adb",
+      "code": "adb",
+      "version": "2019-03-15",
+      "apiStyle": "rpc",
+      "apiCount": 144,
+      "treeSha256": "d81a74b472b4ce12bd1f2671ce26eb1c53c270ddc8ae6d398719008bb7bf3e23"
+    },
+    {
+      "directory": "adcp",
+      "code": "adcp",
+      "version": "2022-01-01",
+      "apiStyle": "rpc",
+      "apiCount": 23,
+      "treeSha256": "46976a8c2075331a591bea99ced00617429aa22525f18d1952eaf8c0db561196"
+    },
+    {
+      "directory": "aiworkspace",
+      "code": "AIWorkSpace",
+      "version": "2021-02-04",
+      "apiStyle": "restful",
+      "apiCount": 116,
+      "treeSha256": "5eab7641527abb3abf2da72c17fbf68d9bde482618752a2c709964613f3e4cb9"
+    },
+    {
+      "directory": "alb",
+      "code": "Alb",
+      "version": "2020-06-16",
+      "apiStyle": "rpc",
+      "apiCount": 85,
+      "treeSha256": "b5647d02691e3000d405c0f829975e8c2f549e84c1aabb34bb088e1506427865"
+    },
+    {
+      "directory": "alidns",
+      "code": "Alidns",
+      "version": "2015-01-09",
+      "apiStyle": "rpc",
+      "apiCount": 237,
+      "treeSha256": "0170f3330271414f10cc548260088a83887707a627cf62092fe06f9b0ff5cd3e"
+    },
+    {
+      "directory": "alikafka",
+      "code": "alikafka",
+      "version": "2019-09-16",
+      "apiStyle": "rpc",
+      "apiCount": 54,
+      "treeSha256": "b1f1786207690a5d968614ee9fd018ef621b613bb3f81cfb8470a8fc9df2fb26"
+    },
+    {
+      "directory": "amqp-open",
+      "code": "amqp-open",
+      "version": "2019-12-12",
+      "apiStyle": "rpc",
+      "apiCount": 25,
+      "treeSha256": "94f79fd77f3ab0af404031062422ba23616464e983eb30ba3edff4b9cf2478fd"
+    },
+    {
+      "directory": "apig",
+      "code": "APIG",
+      "version": "2024-03-27",
+      "apiStyle": "restful",
+      "apiCount": 107,
+      "treeSha256": "7eaaa1a73f765c8ad6ae8b966bf49c0bfdd2ace0ae91a6700a7015e77896ef47"
+    },
+    {
+      "directory": "arms",
+      "code": "ARMS",
+      "version": "2019-08-08",
+      "apiStyle": "rpc",
+      "apiCount": 249,
+      "treeSha256": "5926e6a55aa8490fffb3cf0b496058dc3edf5f8b8749b9bb085e3c1e3e023eb2"
+    },
+    {
+      "directory": "bdrc",
+      "code": "BDRC",
+      "version": "2023-08-08",
+      "apiStyle": "restful",
+      "apiCount": 30,
+      "treeSha256": "641ebb292b3299e2f0d0a0d9221138db94c7be608ff25ab2b97447a5927eae46"
+    },
+    {
+      "directory": "bssopenapi",
+      "code": "BssOpenApi",
+      "version": "2017-12-14",
+      "apiStyle": "rpc",
+      "apiCount": 94,
+      "treeSha256": "2d17a0143f0765c76d35fc47e7b537914c47543bb88a5b03de532cfb2b08fe61"
+    },
+    {
+      "directory": "cas",
+      "code": "cas",
+      "version": "2020-04-07",
+      "apiStyle": "rpc",
+      "apiCount": 68,
+      "treeSha256": "0001a50acd0d3e5946a6a379d316dcd759499f01970c945cc300a8a06ff4a91d"
+    },
+    {
+      "directory": "cbn",
+      "code": "Cbn",
+      "version": "2017-09-12",
+      "apiStyle": "rpc",
+      "apiCount": 150,
+      "treeSha256": "4c7012dcbf4cb68a8473d10a3406a86f90dfcee0ca076b9e17415b06f83120ec"
+    },
+    {
+      "directory": "ccc",
+      "code": "CCC",
+      "version": "2017-07-05",
+      "apiStyle": "rpc",
+      "apiCount": 104,
+      "treeSha256": "f279cc1192a8452fb2715b18d7631946c21cc97071f8a4ff6d5643e77455c75c"
+    },
+    {
+      "directory": "cdn",
+      "code": "Cdn",
+      "version": "2018-05-10",
+      "apiStyle": "rpc",
+      "apiCount": 168,
+      "treeSha256": "932f73b691e8afcf9bfaa5a4033ca5c05413cbbb560c0732dc385c2634ac0ed2"
+    },
+    {
+      "directory": "chatbot",
+      "code": "Chatbot",
+      "version": "2017-10-11",
+      "apiStyle": "rpc",
+      "apiCount": 71,
+      "treeSha256": "27b975d72213f3941644555bb8fe80629a48de3a5e69518a58fc09e990c7664d"
+    },
+    {
+      "directory": "clickhouse",
+      "code": "clickhouse",
+      "version": "2023-05-22",
+      "apiStyle": "rpc",
+      "apiCount": 49,
+      "treeSha256": "67967894c48734e985990d48310cd8a73eb8e250a117607f4c3c3741f83a4c22"
+    },
+    {
+      "directory": "cloud-siem",
+      "code": "cloud-siem",
+      "version": "2022-06-16",
+      "apiStyle": "rpc",
+      "apiCount": 87,
+      "treeSha256": "056963241dd8b5ba02bf0b6f2bf9ef3b749f61194411f21d813f8a1d0caf066f"
+    },
+    {
+      "directory": "cloudapi",
+      "code": "CloudAPI",
+      "version": "2016-07-14",
+      "apiStyle": "rpc",
+      "apiCount": 215,
+      "treeSha256": "f5ec0fb956d84a2c2b09b64c4baaeea1e3361ab99ae25ab4caf923126f5dcec6"
+    },
+    {
+      "directory": "cloudauth",
+      "code": "Cloudauth",
+      "version": "2019-03-07",
+      "apiStyle": "rpc",
+      "apiCount": 100,
+      "treeSha256": "c8131406c2e70b168bbeb437550d76d77c23eb67303e31fb7217f29d392aaec5"
+    },
+    {
+      "directory": "cloudfw",
+      "code": "Cloudfw",
+      "version": "2017-12-07",
+      "apiStyle": "rpc",
+      "apiCount": 273,
+      "treeSha256": "006aa4cd97c74a25c6579bf6be4ba400c566324ad55189a1e9c5720cd89777f8"
+    },
+    {
+      "directory": "cloudsso",
+      "code": "cloudsso",
+      "version": "2021-05-15",
+      "apiStyle": "rpc",
+      "apiCount": 85,
+      "treeSha256": "5dae50b3e7b90c2e4bf40c69f6f4bc6634b9504d3fc81ed97c52b805878a9093"
+    },
+    {
+      "directory": "cms",
+      "code": "Cms",
+      "version": "2019-01-01",
+      "apiStyle": "rpc",
+      "apiCount": 164,
+      "treeSha256": "2cccb30b010394ce1de4815d0fe154b8ca7fe23beda968b7ac8f834a8329a5d4"
+    },
+    {
+      "directory": "computenest",
+      "code": "ComputeNest",
+      "version": "2021-06-01",
+      "apiStyle": "rpc",
+      "apiCount": 49,
+      "treeSha256": "a2b988f8895dab2762efe7e49d8f53ee2e11e93feda224071e05e21fa16b579d"
+    },
+    {
+      "directory": "computenestsupplier",
+      "code": "ComputeNestSupplier",
+      "version": "2021-05-21",
+      "apiStyle": "rpc",
+      "apiCount": 84,
+      "treeSha256": "101979b060977b59f106c163dc474cf9b37e48212f388f2226797e1231e781bb"
+    },
+    {
+      "directory": "config",
+      "code": "Config",
+      "version": "2019-01-08",
+      "apiStyle": "rpc",
+      "apiCount": 25,
+      "treeSha256": "d4d86656885124c0210f530a3d9ecd49e7f202918710a2f05a2ff73f09e0be16"
+    },
+    {
+      "directory": "cr",
+      "code": "cr",
+      "version": "2018-12-01",
+      "apiStyle": "rpc",
+      "apiCount": 115,
+      "treeSha256": "908c1d6d8cbb22e72ba4e1731bfaf7734a1196e26c4c76bb8c703f5319181b10"
+    },
+    {
+      "directory": "cs",
+      "code": "CS",
+      "version": "2015-12-15",
+      "apiStyle": "restful",
+      "apiCount": 139,
+      "treeSha256": "cd076292dba1bc2d8fd3464408fc49aa97ac5c4ea8ee364c468b6d760c652a66"
+    },
+    {
+      "directory": "csas",
+      "code": "csas",
+      "version": "2023-01-20",
+      "apiStyle": "rpc",
+      "apiCount": 115,
+      "treeSha256": "28a9aefcee67c3f803dd36a51656db9628ecf439211e9d0b99bc1554a4da8037"
+    },
+    {
+      "directory": "das",
+      "code": "DAS",
+      "version": "2020-01-16",
+      "apiStyle": "rpc",
+      "apiCount": 110,
+      "treeSha256": "b681adcb7b9619078662255d4866f09101250e5c336009ea1b7d4d115c0d3192"
+    },
+    {
+      "directory": "dataworks-public",
+      "code": "dataworks-public",
+      "version": "2024-05-18",
+      "apiStyle": "rpc",
+      "apiCount": 269,
+      "treeSha256": "4ae9629a98370e10d09953b45e69db5a272a36c2a5322e17dca42bfe1e31bd1c"
+    },
+    {
+      "directory": "dbs",
+      "code": "Dbs",
+      "version": "2019-03-06",
+      "apiStyle": "rpc",
+      "apiCount": 36,
+      "treeSha256": "15ae492f7d9505adcd63e6c8ee02c033195d3d6803e7cfecb0c3b92a72368de5"
+    },
+    {
+      "directory": "dcdn",
+      "code": "dcdn",
+      "version": "2018-01-15",
+      "apiStyle": "rpc",
+      "apiCount": 227,
+      "treeSha256": "bac1cd669ea6c4b02c9b5db8bab5e928850685fb7f8a0a94f0a50ba3a780511f"
+    },
+    {
+      "directory": "ddosbgp",
+      "code": "ddosbgp",
+      "version": "2018-07-20",
+      "apiStyle": "rpc",
+      "apiCount": 39,
+      "treeSha256": "4c2f361bc74117cb82f72eaaecc066debfdb8aa1ded34f2f6a67abff6cfd16a1"
+    },
+    {
+      "directory": "ddoscoo",
+      "code": "ddoscoo",
+      "version": "2020-01-01",
+      "apiStyle": "rpc",
+      "apiCount": 187,
+      "treeSha256": "4827c202964263e41ff62a3129b3073e77a1a29648681fef0d8dcc91808fe098"
+    },
+    {
+      "directory": "ddosdiversion",
+      "code": "DdosDiversion",
+      "version": "2023-07-01",
+      "apiStyle": "rpc",
+      "apiCount": 3,
+      "treeSha256": "0f6de416e79d5ca6b4dcacf3640842b1c9d99488861e7f8a04f3c6c4d11bd962"
+    },
+    {
+      "directory": "dds",
+      "code": "Dds",
+      "version": "2015-12-01",
+      "apiStyle": "rpc",
+      "apiCount": 131,
+      "treeSha256": "4a2f59fd877a5b7f86ddb7b93f25105d4db774c751fda908ddc757e7a587c5bd"
+    },
+    {
+      "directory": "devops",
+      "code": "devops",
+      "version": "2021-06-25",
+      "apiStyle": "restful",
+      "apiCount": 241,
+      "treeSha256": "f0aa50206b09c70dba21c17dc108aaf91f4b455a33529d67e0b746c8dc3893c8"
+    },
+    {
+      "directory": "dm",
+      "code": "Dm",
+      "version": "2015-11-23",
+      "apiStyle": "rpc",
+      "apiCount": 69,
+      "treeSha256": "a8fa984d0df8775f5fbc83455d0963a19558ff8f9de59f5b2ccbcdb672a5fae4"
+    },
+    {
+      "directory": "dms-dg",
+      "code": "dms-dg",
+      "version": "2023-09-14",
+      "apiStyle": "rpc",
+      "apiCount": 20,
+      "treeSha256": "90f687447292c51639d74dee131ce027e28b70970dbf4aa1536ff98676235a0f"
+    },
+    {
+      "directory": "dms-enterprise",
+      "code": "dms-enterprise",
+      "version": "2018-11-01",
+      "apiStyle": "rpc",
+      "apiCount": 307,
+      "treeSha256": "ed5604fdf0193990046e8a08106b7c9ce4d9cfcaf6e31eba37e2353eba83775a"
+    },
+    {
+      "directory": "domain",
+      "code": "Domain",
+      "version": "2016-05-11",
+      "apiStyle": "rpc",
+      "apiCount": 17,
+      "treeSha256": "31c885309858725177bbea7ef2857b3d7e146fca2245d12d667599511e2ba8ea"
+    },
+    {
+      "directory": "drds",
+      "code": "Drds",
+      "version": "2019-01-23",
+      "apiStyle": "rpc",
+      "apiCount": 106,
+      "treeSha256": "295f22ec3b913e931302cfb113a8ad00c6d33f6393a9f87027ac3b8ce07a89e5"
+    },
+    {
+      "directory": "dts",
+      "code": "Dts",
+      "version": "2020-01-01",
+      "apiStyle": "rpc",
+      "apiCount": 124,
+      "treeSha256": "69f6c74b3f3476a42134b89ec8ea844fbc0b03308b2ab54bc7e283c27c75bffa"
+    },
+    {
+      "directory": "eais",
+      "code": "eais",
+      "version": "2019-06-24",
+      "apiStyle": "rpc",
+      "apiCount": 23,
+      "treeSha256": "94ba0a6356bcc0e776e786a893947ebde603209d4b2502daeb06af5515720442"
+    },
+    {
+      "directory": "eas",
+      "code": "eas",
+      "version": "2021-07-01",
+      "apiStyle": "restful",
+      "apiCount": 108,
+      "treeSha256": "d2e50b836986fb112180903c4b7a3fc824fd47d22ebb4f1a7b4d05f4ed63606b"
+    },
+    {
+      "directory": "ebs",
+      "code": "ebs",
+      "version": "2021-07-30",
+      "apiStyle": "rpc",
+      "apiCount": 65,
+      "treeSha256": "27a29c2a412b47c6d7314165a840baf008a0c05e75afa7bd75397731e3cab579"
+    },
+    {
+      "directory": "eci",
+      "code": "Eci",
+      "version": "2018-08-08",
+      "apiStyle": "rpc",
+      "apiCount": 36,
+      "treeSha256": "3a1ced581e7760abf2840fcca7efebf4deb9a27c764a292e6770d40aec609e41"
+    },
+    {
+      "directory": "ecs",
+      "code": "Ecs",
+      "version": "2014-05-26",
+      "apiStyle": "rpc",
+      "apiCount": 366,
+      "treeSha256": "ed626853e87aa8f55a41731937aee4d6e9a133f76cc1aa76df62d40ff3024b26"
+    },
+    {
+      "directory": "edas",
+      "code": "Edas",
+      "version": "2017-08-01",
+      "apiStyle": "restful",
+      "apiCount": 160,
+      "treeSha256": "ddc723ba26241abe9c42182a3aa950df20a0e51433bd241e860dd3ca8c05bfb0"
+    },
+    {
+      "directory": "eflo",
+      "code": "eflo",
+      "version": "2022-05-30",
+      "apiStyle": "rpc",
+      "apiCount": 77,
+      "treeSha256": "f4524b511b39aca270bc8c33c1d647078b5565d261a6f0ac6e7ae2af29923b7f"
+    },
+    {
+      "directory": "eflo-cnp",
+      "code": "eflo-cnp",
+      "version": "2023-08-28",
+      "apiStyle": "rpc",
+      "apiCount": 26,
+      "treeSha256": "1433b539eb0b8899fce01141e320856bdde2c28a6053890cdc38aeb9e523db13"
+    },
+    {
+      "directory": "eflo-controller",
+      "code": "eflo-controller",
+      "version": "2022-12-15",
+      "apiStyle": "rpc",
+      "apiCount": 58,
+      "treeSha256": "a6b017ac5c90e55e0c28e1752686da35a5a0ae91279e3c40627778c630304cac"
+    },
+    {
+      "directory": "ehpc",
+      "code": "EHPC",
+      "version": "2018-04-12",
+      "apiStyle": "rpc",
+      "apiCount": 102,
+      "treeSha256": "097e7a026157d658a7c65a8d7211e7cfcbf27755328110d50d31be8ca4614849"
+    },
+    {
+      "directory": "ehpcinstant",
+      "code": "EhpcInstant",
+      "version": "2023-07-01",
+      "apiStyle": "rpc",
+      "apiCount": 31,
+      "treeSha256": "29f123f4c2b685dcbe01f106389734bbd2c314a51371a47673758f13f31d1706"
+    },
+    {
+      "directory": "eiam",
+      "code": "Eiam",
+      "version": "2021-12-01",
+      "apiStyle": "rpc",
+      "apiCount": 344,
+      "treeSha256": "365b7c7c8a9d87bba56123d0deecf17597ecc3fec85f88dc14493c6d4083fef5"
+    },
+    {
+      "directory": "eipanycast",
+      "code": "Eipanycast",
+      "version": "2020-03-09",
+      "apiStyle": "rpc",
+      "apiCount": 15,
+      "treeSha256": "73737f6f3859536e6c8c1ad5dc3d274a962eebdc6fed6d1ec822c94ea6a0cff7"
+    },
+    {
+      "directory": "elasticsearch",
+      "code": "elasticsearch",
+      "version": "2017-06-13",
+      "apiStyle": "restful",
+      "apiCount": 205,
+      "treeSha256": "567df163d02810107f478e36eae91aa8570fc191ca7f1dc63c47ba4ecb21d1cd"
+    },
+    {
+      "directory": "emr",
+      "code": "Emr",
+      "version": "2021-03-20",
+      "apiStyle": "rpc",
+      "apiCount": 74,
+      "treeSha256": "dcd55d3e52a307aeb8ecb081d0bf294c5b61808bc67d6d22b9da18d1ce78eb6f"
+    },
+    {
+      "directory": "energyexpertexternal",
+      "code": "energyExpertExternal",
+      "version": "2022-09-23",
+      "apiStyle": "restful",
+      "apiCount": 59,
+      "treeSha256": "51d5477ecba4ff442d46c06ab33e4d20c35db491db2e97aa9c62982f32572cdb"
+    },
+    {
+      "directory": "ens",
+      "code": "Ens",
+      "version": "2017-11-10",
+      "apiStyle": "rpc",
+      "apiCount": 319,
+      "treeSha256": "c753b32bbaa6b8c9325f85a71e47c1db69f8d1612977faea973b1475b32ee121"
+    },
+    {
+      "directory": "esa",
+      "code": "ESA",
+      "version": "2024-09-10",
+      "apiStyle": "rpc",
+      "apiCount": 393,
+      "treeSha256": "58153d94fca6764980a493280e2dd3bda16268c354f48fe72f94d3c9d0e10c96"
+    },
+    {
+      "directory": "ess",
+      "code": "Ess",
+      "version": "2014-08-28",
+      "apiStyle": "rpc",
+      "apiCount": 89,
+      "treeSha256": "c946a1cf3084ec9ae6edb480e1532d66de59f843d9fbef67f1c6504160155611"
+    },
+    {
+      "directory": "eventbridge",
+      "code": "eventbridge",
+      "version": "2020-04-01",
+      "apiStyle": "rpc",
+      "apiCount": 48,
+      "treeSha256": "25df93d8a8e0d1fc462e9861f70f0c59257f21e1477b731d5d12c44f404fc6e7"
+    },
+    {
+      "directory": "expressconnectrouter",
+      "code": "ExpressConnectRouter",
+      "version": "2023-09-01",
+      "apiStyle": "rpc",
+      "apiCount": 38,
+      "treeSha256": "145453c6e274fdff5e9d555e7c5cc1fa199b925c07c003df162ffbc388f47b1f"
+    },
+    {
+      "directory": "facebody",
+      "code": "facebody",
+      "version": "2019-12-30",
+      "apiStyle": "rpc",
+      "apiCount": 43,
+      "treeSha256": "0e5dbfa214ca47a9bdaf3b0edae145c2f94d8972b3cf00cba1cd0ffe5e969b9c"
+    },
+    {
+      "directory": "fc",
+      "code": "FC",
+      "version": "2023-03-30",
+      "apiStyle": "restful",
+      "apiCount": 69,
+      "treeSha256": "48dabb877d375c9b64f836b661ac9c4e7062149eea5c7b64d3753da5560acb97"
+    },
+    {
+      "directory": "fc-open",
+      "code": "FC-Open",
+      "version": "2021-04-06",
+      "apiStyle": "restful",
+      "apiCount": 65,
+      "treeSha256": "f566b55b0f0dc80e8a926b0090300228f509ac8178500c5c2ae11ea30b0ef4e5"
+    },
+    {
+      "directory": "fnf",
+      "code": "fnf",
+      "version": "2019-03-15",
+      "apiStyle": "rpc",
+      "apiCount": 29,
+      "treeSha256": "6b85b77ae38a054a2ce4cc06b91a8d0a99e183b6b6d53b46ba2e3a77dff9003a"
+    },
+    {
+      "directory": "foasconsole",
+      "code": "foasconsole",
+      "version": "2021-10-28",
+      "apiStyle": "rpc",
+      "apiCount": 26,
+      "treeSha256": "7176c6ec50376ace597bfd28164507cfee16d16006ba4698870d478302aa2f4a"
+    },
+    {
+      "directory": "ga",
+      "code": "Ga",
+      "version": "2019-11-20",
+      "apiStyle": "rpc",
+      "apiCount": 160,
+      "treeSha256": "3365cf725e14d3f6c5fa679d19c7e138eded7e5498507550a5d3727fda73afa3"
+    },
+    {
+      "directory": "goodstech",
+      "code": "goodstech",
+      "version": "2019-12-30",
+      "apiStyle": "rpc",
+      "apiCount": 1,
+      "treeSha256": "511796e498eb91f1be2f4ba23637f44ae1cd8b47661e97655871cc49cbc87da1"
+    },
+    {
+      "directory": "gpdb",
+      "code": "gpdb",
+      "version": "2016-05-03",
+      "apiStyle": "rpc",
+      "apiCount": 248,
+      "treeSha256": "bcc2f404b638e4ccef2223250eca5b8b4348d3c3deab80ab25843e519e8af12f"
+    },
+    {
+      "directory": "green",
+      "code": "Green",
+      "version": "2022-03-02",
+      "apiStyle": "rpc",
+      "apiCount": 25,
+      "treeSha256": "205d7ddfe0d9b7a133d84707ad3be54091dc134b6ebe6b3594fcfafc841f5a98"
+    },
+    {
+      "directory": "gwlb",
+      "code": "Gwlb",
+      "version": "2024-04-15",
+      "apiStyle": "rpc",
+      "apiCount": 25,
+      "treeSha256": "d0becac970bfb49415ba1b30c4906239bdf792a815e7216d70756d63090293b8"
+    },
+    {
+      "directory": "hbase",
+      "code": "HBase",
+      "version": "2019-01-01",
+      "apiStyle": "rpc",
+      "apiCount": 103,
+      "treeSha256": "3ea1227de570cc52cac6dbe62bc51fd7917883a59d29a148a1ef7b38d6991069"
+    },
+    {
+      "directory": "hbr",
+      "code": "hbr",
+      "version": "2017-09-08",
+      "apiStyle": "rpc",
+      "apiCount": 94,
+      "treeSha256": "45857e7da9233a54ad2cae8cb8c22257332e0950aef27da7182eccd050ff9b20"
+    },
+    {
+      "directory": "hitsdb",
+      "code": "hitsdb",
+      "version": "2020-06-15",
+      "apiStyle": "rpc",
+      "apiCount": 25,
+      "treeSha256": "fcd415571fb6c29aab325b8535610e0da98150fd07c1adcc35b3bb7b38b8bb3e"
+    },
+    {
+      "directory": "hologram",
+      "code": "hologram",
+      "version": "2022-06-01",
+      "apiStyle": "restful",
+      "apiCount": 39,
+      "treeSha256": "7accf8d9767ffc0459be820f9c945fd5753fcc49487318eea6ffdd92c5d0859f"
+    },
+    {
+      "directory": "httpdns",
+      "code": "Httpdns",
+      "version": "2016-02-01",
+      "apiStyle": "rpc",
+      "apiCount": 8,
+      "treeSha256": "bca187b2ba82ae664e8e630b8acb019515505a7288d8e0e3c933ea5c15f7249f"
+    },
+    {
+      "directory": "iacservice",
+      "code": "IaCService",
+      "version": "2021-08-06",
+      "apiStyle": "restful",
+      "apiCount": 98,
+      "treeSha256": "7e8af3634b981f5f298555d07c8b9e2010e164204e688495889019d5d74bd530"
+    },
+    {
+      "directory": "imageaudit",
+      "code": "imageaudit",
+      "version": "2019-12-30",
+      "apiStyle": "rpc",
+      "apiCount": 2,
+      "treeSha256": "46361bc3f1e039e7b1ce64802a26b2f8b652ab504fd142d096944eda0b471464"
+    },
+    {
+      "directory": "imageenhan",
+      "code": "imageenhan",
+      "version": "2019-09-30",
+      "apiStyle": "rpc",
+      "apiCount": 20,
+      "treeSha256": "694102712dec50695b77ae06168894d30bdf0277f89d5d9b5d68015b206f440b"
+    },
+    {
+      "directory": "imagerecog",
+      "code": "imagerecog",
+      "version": "2019-09-30",
+      "apiStyle": "rpc",
+      "apiCount": 10,
+      "treeSha256": "781c233d2bbc834808a9386258478f21084688ceadc3a4fe78a657b89d4c11c1"
+    },
+    {
+      "directory": "imageseg",
+      "code": "imageseg",
+      "version": "2019-12-30",
+      "apiStyle": "rpc",
+      "apiCount": 16,
+      "treeSha256": "fbac481691b23801d440000fa8f19998008c405e15e7da93876409864dc8cf61"
+    },
+    {
+      "directory": "imm",
+      "code": "imm",
+      "version": "2020-09-30",
+      "apiStyle": "rpc",
+      "apiCount": 104,
+      "treeSha256": "c4c40152721bf5ed86afbbd863849fb81ff9a5fa395535e21f23fddc0d5a1a0d"
+    },
+    {
+      "directory": "ims",
+      "code": "Ims",
+      "version": "2019-08-15",
+      "apiStyle": "rpc",
+      "apiCount": 98,
+      "treeSha256": "0f0c4f7f76ce610340f5376e31188df409e6e0b1c401abab9e671af62189d72f"
+    },
+    {
+      "directory": "iot",
+      "code": "Iot",
+      "version": "2018-01-20",
+      "apiStyle": "rpc",
+      "apiCount": 423,
+      "treeSha256": "8603089d0238e45a57aaa45294ed908f0f203f9f157df9beffa92c44d92c2ce3"
+    },
+    {
+      "directory": "iqs",
+      "code": "IQS",
+      "version": "2024-11-11",
+      "apiStyle": "restful",
+      "apiCount": 12,
+      "treeSha256": "295fb9d3446d148f7e10d33af8e08a8e9164993ae90f01372cf7807a46cf76c6"
+    },
+    {
+      "directory": "kms",
+      "code": "Kms",
+      "version": "2016-01-20",
+      "apiStyle": "rpc",
+      "apiCount": 85,
+      "treeSha256": "59aff6404e5bf0ab6b8c7b2edf47a399e2ad340c4b536b406770929d909ed453"
+    },
+    {
+      "directory": "live",
+      "code": "live",
+      "version": "2016-11-01",
+      "apiStyle": "rpc",
+      "apiCount": 423,
+      "treeSha256": "04f54429b70133f1815f94fdb059f63ac37e414947630dc677e511d5dcd0a6df"
+    },
+    {
+      "directory": "maxcompute",
+      "code": "MaxCompute",
+      "version": "2022-01-04",
+      "apiStyle": "restful",
+      "apiCount": 111,
+      "treeSha256": "01d1d9eff3081cdc6d65d1a90242f46b4d91526a038217f72629c905f0671e74"
+    },
+    {
+      "directory": "mse",
+      "code": "mse",
+      "version": "2019-05-31",
+      "apiStyle": "rpc",
+      "apiCount": 242,
+      "treeSha256": "6b7ff7f220119251d691e93fe50953768f13576d9d8a96124c129761751214d1"
+    },
+    {
+      "directory": "mssp",
+      "code": "mssp",
+      "version": "2016-12-28",
+      "apiStyle": "rpc",
+      "apiCount": 29,
+      "treeSha256": "5ea467a71a4d9a60a82ba92a05003f89981d491fece4f722ea08f6acb92e496d"
+    },
+    {
+      "directory": "mts",
+      "code": "Mts",
+      "version": "2014-06-18",
+      "apiStyle": "rpc",
+      "apiCount": 97,
+      "treeSha256": "981368350907ced65c97fbe33156cf8af437f7cfcab872e9f28fa1d9f594b646"
+    },
+    {
+      "directory": "nas",
+      "code": "NAS",
+      "version": "2017-06-26",
+      "apiStyle": "rpc",
+      "apiCount": 125,
+      "treeSha256": "6a4e8f4aa981ccd1d5606ff2740c6011db544c4b5c06434acbe0f6e574172bd9"
+    },
+    {
+      "directory": "nis",
+      "code": "nis",
+      "version": "2021-12-16",
+      "apiStyle": "rpc",
+      "apiCount": 26,
+      "treeSha256": "20149cff17b8f98b033957e5895d5d17bd5ade233e028f4222fcb021fef01e12"
+    },
+    {
+      "directory": "nlb",
+      "code": "Nlb",
+      "version": "2022-04-30",
+      "apiStyle": "rpc",
+      "apiCount": 50,
+      "treeSha256": "17a9fea98383df08b8d5d1c0e0ca113cf80dbe422c09d8f1172642ce5f778f60"
+    },
+    {
+      "directory": "objectdet",
+      "code": "objectdet",
+      "version": "2019-12-30",
+      "apiStyle": "rpc",
+      "apiCount": 10,
+      "treeSha256": "78ab31ebdb46bd3dd21de790e4f82b9b83d4647e0853fd8b85a8444de6386868"
+    },
+    {
+      "directory": "oceanbasepro",
+      "code": "OceanBasePro",
+      "version": "2019-09-01",
+      "apiStyle": "rpc",
+      "apiCount": 140,
+      "treeSha256": "4f54dd35d4fe4d2ccab1a46e42a99e3feca316d33d2c1aec2fed67660e1a24b1"
+    },
+    {
+      "directory": "ocr",
+      "code": "ocr",
+      "version": "2019-12-30",
+      "apiStyle": "rpc",
+      "apiCount": 18,
+      "treeSha256": "209bdf6ec714fa41b3ef4e92585bb7056ee42507ba7c6b51d5484c4afdfc61f4"
+    },
+    {
+      "directory": "ons",
+      "code": "Ons",
+      "version": "2019-02-14",
+      "apiStyle": "rpc",
+      "apiCount": 40,
+      "treeSha256": "54e2e0cc9674018be05b7ccb2c892718820c3b9e824082378238b430f3495274"
+    },
+    {
+      "directory": "onsmqtt",
+      "code": "OnsMqtt",
+      "version": "2020-04-20",
+      "apiStyle": "rpc",
+      "apiCount": 50,
+      "treeSha256": "b0d18b83e3330237fab89d9e407f14d413695909eb0fa373cd7c0b7f2ee4e9d3"
+    },
+    {
+      "directory": "oos",
+      "code": "oos",
+      "version": "2019-06-01",
+      "apiStyle": "rpc",
+      "apiCount": 103,
+      "treeSha256": "26820434136812c466d1ab682c0f31c9b3b06c40a627159d731009e8c01f17a7"
+    },
+    {
+      "directory": "openapiexplorer",
+      "code": "OpenAPIExplorer",
+      "version": "2024-11-30",
+      "apiStyle": "restful",
+      "apiCount": 17,
+      "treeSha256": "8a1d9d7285f69f4b5286238b7ffacc73b795fc6f0e7e4c690bfbed3f17bc8b39"
+    },
+    {
+      "directory": "openitag",
+      "code": "OpenITag",
+      "version": "2022-06-16",
+      "apiStyle": "restful",
+      "apiCount": 38,
+      "treeSha256": "c9f1ad8aa27cf344f98ad47851c75a220dd130a6418f9ffe85b373dbbf1073a3"
+    },
+    {
+      "directory": "ossadmin",
+      "code": "OssAdmin",
+      "version": "2019-04-22",
+      "apiStyle": "rpc",
+      "apiCount": 1,
+      "treeSha256": "4a723b22d0ec6d3869c2efa023388ef52e9822ac4a110c927dd9732ad6760a24"
+    },
+    {
+      "directory": "pai-dlc",
+      "code": "pai-dlc",
+      "version": "2020-12-03",
+      "apiStyle": "restful",
+      "apiCount": 25,
+      "treeSha256": "8bf172cd2735f2412fb9cd0a194bc32e6423abac518516edc751f18556b78011"
+    },
+    {
+      "directory": "pai-dsw",
+      "code": "pai-dsw",
+      "version": "2022-01-01",
+      "apiStyle": "restful",
+      "apiCount": 45,
+      "treeSha256": "64d0ec830f18d7f7ade1da1136094a8d8844c34af5f102b44ee4978f7c529517"
+    },
+    {
+      "directory": "paiautoml",
+      "code": "paiAutoML",
+      "version": "2022-08-28",
+      "apiStyle": "restful",
+      "apiCount": 18,
+      "treeSha256": "d42e0bd75f345c8c4dc3293ed708fa502eea02c32ac65b49eba7f0e65eb2f411"
+    },
+    {
+      "directory": "paielasticdatasetaccelerator",
+      "code": "PAIElasticDatasetAccelerator",
+      "version": "2022-08-01",
+      "apiStyle": "restful",
+      "apiCount": 27,
+      "treeSha256": "740e1ea114c90b1fdc0f717eebcf4b5211a950ce23807a4a0e661d71d2f8c45b"
+    },
+    {
+      "directory": "paifeaturestore",
+      "code": "PaiFeatureStore",
+      "version": "2023-06-21",
+      "apiStyle": "restful",
+      "apiCount": 60,
+      "treeSha256": "5d200e1d197dd735326397037cba0e95bf7146e4c9e3c8a487188bef4b75a81d"
+    },
+    {
+      "directory": "paiflow",
+      "code": "PAIFlow",
+      "version": "2021-02-02",
+      "apiStyle": "restful",
+      "apiCount": 18,
+      "treeSha256": "84e23f4db29dcf363fb876e0393d08b60e2f0ace014f7f1b06327b8f79b72b75"
+    },
+    {
+      "directory": "paillmtrace",
+      "code": "PaiLLMTrace",
+      "version": "2024-03-11",
+      "apiStyle": "restful",
+      "apiCount": 14,
+      "treeSha256": "e5003d2cfe1a2bb57c14dbe537881f6e8e1fb0c8ed0de3f232303eb5bc3996d2"
+    },
+    {
+      "directory": "paiplugin",
+      "code": "PAIPlugin",
+      "version": "2022-01-12",
+      "apiStyle": "restful",
+      "apiCount": 36,
+      "treeSha256": "f0e1a6ef9eb6204d6bd61f1e867dc0114377f67b422601e0653065d1c9ceb507"
+    },
+    {
+      "directory": "paistudio",
+      "code": "PaiStudio",
+      "version": "2022-01-12",
+      "apiStyle": "restful",
+      "apiCount": 56,
+      "treeSha256": "73f4887b0b67d1450a392049fdd76e10324149e71af33e4ee13efa325e38e08a"
+    },
+    {
+      "directory": "polardb",
+      "code": "polardb",
+      "version": "2017-08-01",
+      "apiStyle": "rpc",
+      "apiCount": 306,
+      "treeSha256": "f601875b30474ecabce60c9787daa0961108cd447551d4d3506b09ec1e5df6bb"
+    },
+    {
+      "directory": "polardbx",
+      "code": "polardbx",
+      "version": "2020-02-02",
+      "apiStyle": "rpc",
+      "apiCount": 137,
+      "treeSha256": "bf04a208c17ad8e63a263a1001f0f63db36e2d3d4c26f2e96df11af696a9e3eb"
+    },
+    {
+      "directory": "privatelink",
+      "code": "Privatelink",
+      "version": "2020-04-15",
+      "apiStyle": "rpc",
+      "apiCount": 39,
+      "treeSha256": "f11f6c4e404f854beaf9f05e3ede88aff1364b3bdfc92acc1837a2fa7a1faf9d"
+    },
+    {
+      "directory": "push",
+      "code": "Push",
+      "version": "2016-08-01",
+      "apiStyle": "rpc",
+      "apiCount": 33,
+      "treeSha256": "8252ad3cce0ab53b87badc9d1719dfc2aca9dfb14bd5b16fe753681d41f77994"
+    },
+    {
+      "directory": "pvtz",
+      "code": "pvtz",
+      "version": "2018-01-01",
+      "apiStyle": "rpc",
+      "apiCount": 50,
+      "treeSha256": "27b3a195b36ac707bd13f7c875783d44dd7226f2ce6224a0d5e2124bfa1a754d"
+    },
+    {
+      "directory": "quotas",
+      "code": "quotas",
+      "version": "2020-05-10",
+      "apiStyle": "rpc",
+      "apiCount": 27,
+      "treeSha256": "4acd4f284166d9728a6768cc4da11714fbe2949adfd30bf23d806e81a78e57f2"
+    },
+    {
+      "directory": "r-kvstore",
+      "code": "R-kvstore",
+      "version": "2015-01-01",
+      "apiStyle": "rpc",
+      "apiCount": 146,
+      "treeSha256": "70f7c42e225e9b5afaf62dc943458a53b6343079938ed912c6668aaf4ac4a988"
+    },
+    {
+      "directory": "rai",
+      "code": "RAI",
+      "version": "2024-07-01",
+      "apiStyle": "rpc",
+      "apiCount": 35,
+      "treeSha256": "64b751293c669a57fe2049a0a193b793d757b60687de7cdb53e79004b4c73222"
+    },
+    {
+      "directory": "ram",
+      "code": "Ram",
+      "version": "2015-05-01",
+      "apiStyle": "rpc",
+      "apiCount": 66,
+      "treeSha256": "f2be4d1e7bd5eccd0b51a94280c7545b72a707b7aeab9c312e5be9ae38eb9744"
+    },
+    {
+      "directory": "rds",
+      "code": "Rds",
+      "version": "2014-08-15",
+      "apiStyle": "rpc",
+      "apiCount": 364,
+      "treeSha256": "8b50863614b6bb017bff58eb58dca355164e02e95b49eeaed52f73344285668c"
+    },
+    {
+      "directory": "resourcecenter",
+      "code": "ResourceCenter",
+      "version": "2022-12-01",
+      "apiStyle": "rpc",
+      "apiCount": 48,
+      "treeSha256": "9bbd5eb16c26b316ca46d8ad22e4c9ed6ba16035b69ddfe403013f0ab3d11cd6"
+    },
+    {
+      "directory": "resourcedirectorymaster",
+      "code": "ResourceDirectoryMaster",
+      "version": "2022-04-19",
+      "apiStyle": "rpc",
+      "apiCount": 74,
+      "treeSha256": "b0c33236f5a8959d98fc19058ce03107c3e02c069c2f56328a99f203251357ea"
+    },
+    {
+      "directory": "resourcemanager",
+      "code": "ResourceManager",
+      "version": "2020-03-31",
+      "apiStyle": "rpc",
+      "apiCount": 114,
+      "treeSha256": "02f8211201bcf9c0c169f6ffbc424e512d03398b341861f0497c11b59d44bf04"
+    },
+    {
+      "directory": "resourcesharing",
+      "code": "ResourceSharing",
+      "version": "2020-01-10",
+      "apiStyle": "rpc",
+      "apiCount": 25,
+      "treeSha256": "155506414daad73da43bf83c7b9b87c439d6e5d012fb60d5ea42eb1a97ccea01"
+    },
+    {
+      "directory": "rocketmq",
+      "code": "RocketMQ",
+      "version": "2022-08-01",
+      "apiStyle": "restful",
+      "apiCount": 69,
+      "treeSha256": "d620a61ca1e753c6220128a662ad32080f432ec5eb8530c8b64f161749638d13"
+    },
+    {
+      "directory": "ros",
+      "code": "ROS",
+      "version": "2019-09-10",
+      "apiStyle": "rpc",
+      "apiCount": 90,
+      "treeSha256": "72d7f42947c412563f1304d9f5c6e8033ce8b0122dd22715ca1056d5129b01f7"
+    },
+    {
+      "directory": "sae",
+      "code": "sae",
+      "version": "2019-05-06",
+      "apiStyle": "restful",
+      "apiCount": 150,
+      "treeSha256": "cc62a95996ac58e8ffedfcb0434e61d7b01cce1dcbc2856ef373a0e83e67cac7"
+    },
+    {
+      "directory": "saf",
+      "code": "saf",
+      "version": "2019-05-21",
+      "apiStyle": "rpc",
+      "apiCount": 4,
+      "treeSha256": "8d791c0c3527c372e34f5d77477ebc21ecc075e2becb007dd1581650b2c1e57e"
+    },
+    {
+      "directory": "sas",
+      "code": "Sas",
+      "version": "2018-12-03",
+      "apiStyle": "rpc",
+      "apiCount": 929,
+      "treeSha256": "85b333e474b87ee3b9dae48942488159c14adc5d3996169b4a9364702bfc1dde"
+    },
+    {
+      "directory": "scdn",
+      "code": "scdn",
+      "version": "2017-11-15",
+      "apiStyle": "rpc",
+      "apiCount": 61,
+      "treeSha256": "82c8c1fdcb5d9e3cb5686799c40c0f1455aaf89dce5da3990fdd6a97c37ef846"
+    },
+    {
+      "directory": "schedulerx2",
+      "code": "schedulerx2",
+      "version": "2019-04-30",
+      "apiStyle": "rpc",
+      "apiCount": 61,
+      "treeSha256": "83d1aa20a71d1a410d2b6c184b2dc9514d4ff35bc04835837bf8e097b01ed9a7"
+    },
+    {
+      "directory": "sddp",
+      "code": "Sddp",
+      "version": "2019-01-03",
+      "apiStyle": "rpc",
+      "apiCount": 53,
+      "treeSha256": "245059de06a85161a23dbf9995cfa948e61fe21647f334a4633b3e31a006c076"
+    },
+    {
+      "directory": "searchengine",
+      "code": "searchengine",
+      "version": "2021-10-25",
+      "apiStyle": "restful",
+      "apiCount": 114,
+      "treeSha256": "30cde71e4b40e4d804601e00062ed521a8d0a4e97f065466c106cd0e74ffc3b3"
+    },
+    {
+      "directory": "servicemesh",
+      "code": "servicemesh",
+      "version": "2020-01-11",
+      "apiStyle": "rpc",
+      "apiCount": 94,
+      "treeSha256": "fde00719c51bdea401e6471795e9bac78558a8d2e6f8f25459600d5916606698"
+    },
+    {
+      "directory": "sgw",
+      "code": "sgw",
+      "version": "2018-05-11",
+      "apiStyle": "rpc",
+      "apiCount": 68,
+      "treeSha256": "d4beaf5d1d843ea0ca21c862ed471aeb7711b004c459b4e929b716004d5bc5d8"
+    },
+    {
+      "directory": "slb",
+      "code": "Slb",
+      "version": "2014-05-15",
+      "apiStyle": "rpc",
+      "apiCount": 93,
+      "treeSha256": "e3656533c4de6bc3f347e02a2a1e7b758d7bb55eb83cd31e4c0f935a78ebd43c"
+    },
+    {
+      "directory": "sls",
+      "code": "Sls",
+      "version": "2020-12-30",
+      "apiStyle": "restful",
+      "apiCount": 221,
+      "treeSha256": "e84aecfdba855d4c39f2ba0431b8e455bc753024c9759cb5079b9747c0dc3f9b"
+    },
+    {
+      "directory": "smc",
+      "code": "smc",
+      "version": "2019-06-01",
+      "apiStyle": "rpc",
+      "apiCount": 24,
+      "treeSha256": "76acea1fb4cdc15789f73602df58784a19b50b5ff9174c63b8a6cf5f922218d5"
+    },
+    {
+      "directory": "sophonsoar",
+      "code": "sophonsoar",
+      "version": "2022-07-28",
+      "apiStyle": "rpc",
+      "apiCount": 58,
+      "treeSha256": "cef49313438d6d7f5114268294c2d57c681db9316a072f8e950215ab6d59c6df"
+    },
+    {
+      "directory": "starrocks",
+      "code": "starrocks",
+      "version": "2022-10-19",
+      "apiStyle": "restful",
+      "apiCount": 92,
+      "treeSha256": "63a178e2cd03b87ce70c8d6d8df954dc9cdcfa897f2055cc405e1df31f42a526"
+    },
+    {
+      "directory": "sts",
+      "code": "Sts",
+      "version": "2015-04-01",
+      "apiStyle": "rpc",
+      "apiCount": 4,
+      "treeSha256": "8615ba9fad1d948d6a3d97f5f2971d256713f8f5f7aa7f32a78a65d98a4031bc"
+    },
+    {
+      "directory": "tag",
+      "code": "Tag",
+      "version": "2018-08-28",
+      "apiStyle": "rpc",
+      "apiCount": 33,
+      "treeSha256": "4ca67b1b4b05f349e29a6ba14ba5e55d67a55d6eb80b99270162c98fa03032d7"
+    },
+    {
+      "directory": "ververica",
+      "code": "ververica",
+      "version": "2022-07-18",
+      "apiStyle": "restful",
+      "apiCount": 86,
+      "treeSha256": "b667297ed1f0499b5b384c54c9172815e3fcf4b3b3cafea7f299ad309d7d7ea6"
+    },
+    {
+      "directory": "vod",
+      "code": "vod",
+      "version": "2017-03-21",
+      "apiStyle": "rpc",
+      "apiCount": 186,
+      "treeSha256": "d064b49522a02ccd1affe54e756318d99717292c1174b6b48267ebcd71fecb95"
+    },
+    {
+      "directory": "vpc",
+      "code": "Vpc",
+      "version": "2016-04-28",
+      "apiStyle": "rpc",
+      "apiCount": 404,
+      "treeSha256": "ababad05a5a0d9d69060dbeea42aa7d4942c578726fa7831256272235e211d87"
+    },
+    {
+      "directory": "vpcipam",
+      "code": "VpcIpam",
+      "version": "2023-02-28",
+      "apiStyle": "rpc",
+      "apiCount": 40,
+      "treeSha256": "108a1a5f2cde7fbb43125944cadbba72481b8fa05488d9e1d3ea847488e2cef5"
+    },
+    {
+      "directory": "vpcpeer",
+      "code": "VpcPeer",
+      "version": "2022-01-01",
+      "apiStyle": "rpc",
+      "apiCount": 11,
+      "treeSha256": "e9b1d9976891afc9dade6171a954e4c46eaf828cdc582d861610b08c9fd8bb26"
+    },
+    {
+      "directory": "waf-openapi",
+      "code": "waf-openapi",
+      "version": "2021-10-01",
+      "apiStyle": "rpc",
+      "apiCount": 240,
+      "treeSha256": "6118d5d06bd3f9dae89440debe5c07752ff7164a800a306fe4bb3687d20661c7"
+    },
+    {
+      "directory": "yundun-bastionhost",
+      "code": "Yundun-bastionhost",
+      "version": "2019-12-09",
+      "apiStyle": "rpc",
+      "apiCount": 153,
+      "treeSha256": "70c5e7ba57c65d2802a3e4dc30a778d0537275d87a7d6f0d80f836fd75f62601"
+    }
+  ],
+  "generator": {
+    "path": "scripts/update-alicloud-protocol.ts",
+    "version": 1
+  }
+}

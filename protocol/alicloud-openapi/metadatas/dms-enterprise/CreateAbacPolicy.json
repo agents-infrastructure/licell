@@ -1,0 +1,32 @@
+{
+  "name": "CreateAbacPolicy",
+  "protocol": "HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "AbacPolicyContent",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "AbacPolicyDesc",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "AbacPolicyName",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "Tid",
+      "position": "Query",
+      "type": "Long",
+      "required": false
+    }
+  ]
+}

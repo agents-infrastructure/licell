@@ -1,0 +1,32 @@
+{
+  "name": "ModifyDBClusterVpc",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "DBClusterId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "ExistedEndpointSwitchType",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "VPCId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "VSwitchId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

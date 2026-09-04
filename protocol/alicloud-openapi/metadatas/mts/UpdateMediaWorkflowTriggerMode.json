@@ -1,0 +1,20 @@
+{
+  "name": "UpdateMediaWorkflowTriggerMode",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "MediaWorkflowId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "TriggerMode",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

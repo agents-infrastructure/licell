@@ -1,0 +1,14 @@
+{
+  "name": "DeleteAutoSnapshotPolicy",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "AutoSnapshotPolicyId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

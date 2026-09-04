@@ -1,0 +1,20 @@
+{
+  "name": "CreateOriginProtection",
+  "protocol": "HTTPS",
+  "method": "POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "AutoConfirmIPList",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "SiteId",
+      "position": "Query",
+      "type": "Long",
+      "required": true
+    }
+  ]
+}

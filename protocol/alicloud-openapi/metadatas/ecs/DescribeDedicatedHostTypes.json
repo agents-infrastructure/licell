@@ -1,0 +1,26 @@
+{
+  "name": "DescribeDedicatedHostTypes",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "DedicatedHostType",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "SupportedInstanceTypeFamily",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

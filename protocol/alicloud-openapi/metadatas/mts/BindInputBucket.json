@@ -1,0 +1,20 @@
+{
+  "name": "BindInputBucket",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "Bucket",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "Referer",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

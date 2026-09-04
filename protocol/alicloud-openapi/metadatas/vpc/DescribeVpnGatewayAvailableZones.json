@@ -1,0 +1,32 @@
+{
+  "name": "DescribeVpnGatewayAvailableZones",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "AcceptLanguage",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "GatewayType",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "Spec",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

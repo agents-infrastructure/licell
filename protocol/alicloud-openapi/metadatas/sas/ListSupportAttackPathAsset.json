@@ -1,0 +1,32 @@
+{
+  "name": "ListSupportAttackPathAsset",
+  "protocol": "HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "NodeType",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "PathName",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "PathType",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "SupportType",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

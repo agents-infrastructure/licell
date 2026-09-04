@@ -1,0 +1,26 @@
+{
+  "name": "ClearAddress",
+  "protocol": "HTTPS",
+  "method": "POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "InstanceId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "ResourceManagerResourceGroupId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "RuleId",
+      "position": "Query",
+      "type": "Long",
+      "required": true
+    }
+  ]
+}

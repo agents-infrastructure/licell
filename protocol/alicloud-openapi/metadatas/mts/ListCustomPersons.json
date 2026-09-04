@@ -1,0 +1,20 @@
+{
+  "name": "ListCustomPersons",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "CategoryId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "PersonId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

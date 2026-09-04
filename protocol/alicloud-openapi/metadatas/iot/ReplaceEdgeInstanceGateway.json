@@ -1,0 +1,32 @@
+{
+  "name": "ReplaceEdgeInstanceGateway",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "CurrentGatewayId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "InstanceId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "IotInstanceId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "NewGatewayId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

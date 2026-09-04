@@ -1,0 +1,14 @@
+{
+  "name": "DecryptKMSDataKey",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "CipherText",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

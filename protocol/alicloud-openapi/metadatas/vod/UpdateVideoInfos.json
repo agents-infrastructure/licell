@@ -1,0 +1,14 @@
+{
+  "name": "UpdateVideoInfos",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "UpdateContent",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

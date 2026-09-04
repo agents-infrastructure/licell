@@ -1,0 +1,32 @@
+{
+  "name": "ListNodesNoPaging",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "ClusterId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "HostName",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "Role",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "Sequence",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

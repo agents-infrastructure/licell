@@ -1,0 +1,14 @@
+{
+  "name": "CancelOrder",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "OrderId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

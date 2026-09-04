@@ -1,0 +1,7 @@
+{
+  "name": "ListServiceGroups",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET",
+  "pathPattern": "/pop/v5/service/serviceGroups",
+  "parameters": []
+}

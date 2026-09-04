@@ -1,0 +1,14 @@
+{
+  "name": "DeleteMediaWorkflow",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "MediaWorkflowId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

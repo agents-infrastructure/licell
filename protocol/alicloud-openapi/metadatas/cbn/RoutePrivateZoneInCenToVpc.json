@@ -1,0 +1,32 @@
+{
+  "name": "RoutePrivateZoneInCenToVpc",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "AccessRegionId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "CenId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "HostRegionId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "HostVpcId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "name": "GenerateFileUploadURL",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "BizCode",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "FileName",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "FileSuffix",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "IotInstanceId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

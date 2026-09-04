@@ -1,0 +1,20 @@
+{
+  "name": "DescDomain",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "DomainId",
+      "position": "Query",
+      "type": "Integer",
+      "required": true
+    },
+    {
+      "name": "RequireRealTimeDnsRecords",
+      "position": "Query",
+      "type": "Boolean",
+      "required": false
+    }
+  ]
+}

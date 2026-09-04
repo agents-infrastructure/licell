@@ -1,0 +1,26 @@
+{
+  "name": "DescribeBackupDbs",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "BackupId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "DrdsInstanceId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "PreferredRestoreTime",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

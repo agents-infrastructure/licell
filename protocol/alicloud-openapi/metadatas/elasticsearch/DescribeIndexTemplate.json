@@ -1,0 +1,20 @@
+{
+  "name": "DescribeIndexTemplate",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET",
+  "pathPattern": "/openapi/instances/[InstanceId]/index-templates/[IndexTemplate]",
+  "parameters": [
+    {
+      "name": "IndexTemplate",
+      "position": "Path",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "InstanceId",
+      "position": "Path",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

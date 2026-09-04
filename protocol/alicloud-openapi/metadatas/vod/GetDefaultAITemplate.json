@@ -1,0 +1,14 @@
+{
+  "name": "GetDefaultAITemplate",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "TemplateType",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

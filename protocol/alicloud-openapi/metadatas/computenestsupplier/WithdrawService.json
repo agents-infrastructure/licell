@@ -1,0 +1,32 @@
+{
+  "name": "WithdrawService",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "ClientToken",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "ServiceId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "ServiceVersion",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

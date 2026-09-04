@@ -1,0 +1,26 @@
+{
+  "name": "GenerateWebAuthnAuthenticatorRegistrationUrl",
+  "protocol": "HTTPS",
+  "method": "POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "DomainId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "InstanceId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "UserId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

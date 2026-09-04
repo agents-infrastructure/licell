@@ -1,0 +1,26 @@
+{
+  "name": "UnregisterCustomFace",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "CategoryId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "FaceId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "PersonId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

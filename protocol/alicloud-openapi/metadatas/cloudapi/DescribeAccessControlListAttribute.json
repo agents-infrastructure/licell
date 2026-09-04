@@ -1,0 +1,14 @@
+{
+  "name": "DescribeAccessControlListAttribute",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "AclId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

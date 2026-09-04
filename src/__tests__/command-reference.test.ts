@@ -127,6 +127,20 @@ describe('buildAgentCommandCatalog', () => {
     expect(commandCatalog?.examples).toContain('licell catalog --output json');
     expect(commandCatalog?.result?.fields.some((field) => field.name === 'cliRecords.event')).toBe(true);
 
+    const capabilitySearch = catalog.commands.find((command) => command.key === 'capability search');
+    expect(capabilitySearch?.safety?.level).toBe('safe');
+    expect(capabilitySearch?.examples).toContain('licell capability search --intent "创建 VPC" --output json');
+    expect(capabilitySearch?.result?.fields.some((field) => field.name === 'capabilities[]')).toBe(true);
+
+    const capabilityProducts = catalog.commands.find((command) => command.key === 'capability products');
+    expect(capabilityProducts?.safety?.level).toBe('safe');
+    expect(capabilityProducts?.result?.fields.some((field) => field.name === 'products[].searchCommand')).toBe(true);
+
+    const capabilityDescribe = catalog.commands.find((command) => command.key === 'capability describe');
+    expect(capabilityDescribe?.automation?.preferredOutput).toBe('json');
+    expect(capabilityDescribe?.result?.fields.some((field) => field.name === 'capability.inputSchema')).toBe(true);
+    expect(capabilityDescribe?.result?.fields.some((field) => field.name === 'execution.strategy')).toBe(true);
+
     const doctor = catalog.commands.find((command) => command.key === 'doctor');
     expect(doctor?.title).toBe('Diagnose local licell readiness');
     expect(doctor?.summary).toContain('诊断本机登录态');

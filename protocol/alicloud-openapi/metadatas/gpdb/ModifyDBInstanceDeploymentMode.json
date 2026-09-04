@@ -1,0 +1,32 @@
+{
+  "name": "ModifyDBInstanceDeploymentMode",
+  "protocol": "HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "DBInstanceId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "DeployMode",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "StandbyVSwitchId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "StandbyZoneId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

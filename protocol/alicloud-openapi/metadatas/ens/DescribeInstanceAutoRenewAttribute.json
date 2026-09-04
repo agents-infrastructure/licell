@@ -1,0 +1,14 @@
+{
+  "name": "DescribeInstanceAutoRenewAttribute",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "InstanceIds",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

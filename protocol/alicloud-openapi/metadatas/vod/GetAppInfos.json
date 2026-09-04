@@ -1,0 +1,14 @@
+{
+  "name": "GetAppInfos",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "AppIds",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

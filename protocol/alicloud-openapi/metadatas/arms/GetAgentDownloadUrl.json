@@ -1,0 +1,14 @@
+{
+  "name": "GetAgentDownloadUrl",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

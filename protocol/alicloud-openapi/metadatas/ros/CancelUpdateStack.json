@@ -1,0 +1,26 @@
+{
+  "name": "CancelUpdateStack",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "/V2/CancelUpdateStack",
+  "parameters": [
+    {
+      "name": "CancelType",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "StackId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

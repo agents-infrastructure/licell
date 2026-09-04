@@ -1,0 +1,14 @@
+{
+  "name": "AddInstanceMembers",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "Members",
+      "position": "Query",
+      "type": "Array",
+      "required": true
+    }
+  ]
+}

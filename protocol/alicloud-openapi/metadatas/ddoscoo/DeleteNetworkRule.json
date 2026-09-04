@@ -1,0 +1,14 @@
+{
+  "name": "DeleteNetworkRule",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "NetworkRule",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

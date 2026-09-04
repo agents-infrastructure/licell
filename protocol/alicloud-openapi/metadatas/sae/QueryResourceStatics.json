@@ -1,0 +1,14 @@
+{
+  "name": "QueryResourceStatics",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET",
+  "pathPattern": "/pop/v1/paas/quota/queryResourceStatics",
+  "parameters": [
+    {
+      "name": "AppId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

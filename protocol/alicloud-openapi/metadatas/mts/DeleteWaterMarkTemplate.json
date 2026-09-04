@@ -1,0 +1,14 @@
+{
+  "name": "DeleteWaterMarkTemplate",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "WaterMarkTemplateId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

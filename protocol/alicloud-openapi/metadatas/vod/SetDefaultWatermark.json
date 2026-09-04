@@ -1,0 +1,14 @@
+{
+  "name": "SetDefaultWatermark",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "WatermarkId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

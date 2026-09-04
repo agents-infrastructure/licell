@@ -1,0 +1,14 @@
+{
+  "name": "GetTranscodeTemplateGroup",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "TranscodeTemplateGroupId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "name": "ModifyDtsJobDuLimit",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "DtsJobId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "DuLimit",
+      "position": "Query",
+      "type": "Long",
+      "required": true
+    },
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "ResourceGroupId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

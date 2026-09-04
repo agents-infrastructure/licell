@@ -1,0 +1,20 @@
+{
+  "name": "DeleteUser",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "UserId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "UserPrincipalName",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

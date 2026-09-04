@@ -1,0 +1,20 @@
+{
+  "name": "UpdateTemplate",
+  "protocol": "HTTP|HTTPS",
+  "method": "PUT",
+  "pathPattern": "/templates/[TemplateId]",
+  "parameters": [
+    {
+      "name": "TemplateId",
+      "position": "Path",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "body",
+      "position": "Body",
+      "type": "Struct",
+      "required": false
+    }
+  ]
+}

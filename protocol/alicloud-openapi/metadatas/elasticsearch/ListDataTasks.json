@@ -1,0 +1,14 @@
+{
+  "name": "ListDataTasks",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET",
+  "pathPattern": "/openapi/instances/[InstanceId]/data-task",
+  "parameters": [
+    {
+      "name": "InstanceId",
+      "position": "Path",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

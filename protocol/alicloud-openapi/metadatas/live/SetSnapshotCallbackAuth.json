@@ -1,0 +1,32 @@
+{
+  "name": "SetSnapshotCallbackAuth",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "CallbackAuthKey",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "CallbackReqAuth",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "DomainName",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

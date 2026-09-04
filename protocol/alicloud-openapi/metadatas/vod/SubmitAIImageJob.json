@@ -1,0 +1,32 @@
+{
+  "name": "SubmitAIImageJob",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "AIPipelineId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "AITemplateId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "UserData",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "VideoId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

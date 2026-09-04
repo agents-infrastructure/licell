@@ -1,0 +1,14 @@
+{
+  "name": "QueryTemplateList",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "TemplateIds",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

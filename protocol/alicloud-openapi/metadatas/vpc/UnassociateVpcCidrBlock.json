@@ -1,0 +1,32 @@
+{
+  "name": "UnassociateVpcCidrBlock",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "IPv6CidrBlock",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "SecondaryCidrBlock",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "VpcId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}

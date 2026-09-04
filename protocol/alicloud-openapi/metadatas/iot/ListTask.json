@@ -1,0 +1,44 @@
+{
+  "name": "ListTask",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "Device",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "IotInstanceId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "JobId",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "Limit",
+      "position": "Query",
+      "type": "Integer",
+      "required": true
+    },
+    {
+      "name": "NextToken",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    },
+    {
+      "name": "Status",
+      "position": "Query",
+      "type": "String",
+      "required": false
+    }
+  ]
+}

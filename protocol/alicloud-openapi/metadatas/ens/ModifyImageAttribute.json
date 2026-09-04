@@ -1,0 +1,20 @@
+{
+  "name": "ModifyImageAttribute",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "parameters": [
+    {
+      "name": "ImageId",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    },
+    {
+      "name": "ImageName",
+      "position": "Query",
+      "type": "String",
+      "required": true
+    }
+  ]
+}
