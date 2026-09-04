@@ -1,7 +1,7 @@
 {
   "name": "licell",
-  "version": "1.0.6",
-  "description": "Deploy and manage Alibaba Cloud Serverless applications — FC, OSS, ACR, DNS, SSL, CDN in one CLI",
+  "version": "1.0.7",
+  "description": "Workflow-first Alibaba Cloud CLI for humans and agents — curated workflows with protocol-driven API fallback",
   "type": "module",
   "bin": {
     "licell": "dist/licell.js"

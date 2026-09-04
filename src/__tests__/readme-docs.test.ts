@@ -38,6 +38,9 @@ describe('syncReadmeQuickReferenceSection', () => {
     expect(output).toContain('licell-cli-record');
     expect(output).toContain('licell-help@1.0');
     expect(output).toContain('`nextActions[]`');
+    expect(output).toContain('`capability products/search/describe --output json`');
+    expect(output).toContain('`execution.preferred`');
+    expect(output).toContain('raw 写操作必须先 `--dry-run`');
     expect(output).toContain('### 命令总览');
     expect(output).toContain('**Task 函数工作流**');
     expect(output).toContain('#### Cloud Infrastructure');

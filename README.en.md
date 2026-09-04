@@ -9,7 +9,7 @@ It is not just a bag of cloud commands. It is organized around one primary deliv
 - one main entry: `deploy`
 - one project state file: `.licell/project.json`
 - one set of atomic resource commands: `fn` / `oss` / `dns` / `domain`
-- one agent-facing surface: `--help` / `--output json` / `mcp` / `skills`
+- one agent-facing surface: `catalog` / `--help` / `--output json` / `capability` / `skills`
 
 Default region is `cn-hangzhou`. For agent automation, use a dedicated test account or isolated region instead of sharing a production environment directly. For team sharing, use the team auth distribution workflow described below.
 
@@ -30,6 +30,8 @@ Licell currently covers:
 - custom domains, HTTPS, CDN, DNS
 - ACR / Docker image deployment
 - serverless database and cache helpers
+- ACK / ACS cluster and workload inventory
+- protocol-driven discovery and controlled raw API fallback across 16,242 Alibaba Cloud APIs
 - MCP / skills / JSON output / shared-doc generation for agent automation
 
 ---
@@ -246,6 +248,14 @@ Usage and security guidance:
 ---
 
 ## Agent Interfaces
+
+Start every natural-language Alibaba Cloud task with the curated command catalog:
+
+```bash
+licell catalog --output json
+```
+
+If no curated command covers the outcome, continue with `capability products/search/describe`, then follow `execution.preferred`. Raw writes require `--dry-run`, explicit `--yes`, and read-back verification through `nextActions[]`.
 
 ### 1. Structured help
 

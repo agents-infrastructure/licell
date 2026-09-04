@@ -4,9 +4,11 @@
 
 ## Recommended Agent Flow
 
-- 发现命令目录：`licell catalog --output json`。
-- 读取命令 help：`licell <command> --help --output json`。
-- 执行命令：`licell <command> --output json`。
+- 始终先发现领域命令：`licell catalog --output json`。
+- 命中领域命令：读取 `licell <command> --help --output json`，再执行该命令。
+- 未命中领域命令：依次执行 `capability products/search/describe --output json`，并读取 `execution.preferred`。
+- raw 读操作可在参数明确后执行；raw 写操作必须先 `--dry-run`，再显式 `--yes`，最后按 `nextActions[]` 回读验证。
+- 领域命令与 raw capability 都未命中后，才可判定当前请求不受支持。
 - 对于流式输出：过滤 `@@LICELL_JSON@@` 前缀，再按 `type=event|result|error` 消费。
 
 ## Schema Contracts

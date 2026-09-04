@@ -3,6 +3,7 @@
 > 调研快照：2026-09-03。源码目录：`/Users/wyattfang/work/aliyun-cli`；Licell：`/Users/wyattfang/work/licell`。
 > aliyun-cli 当前 HEAD：`eadd68d9a13dd0734a2236e2c70e38f4888ae65f`（v3.4.11 代码线）；OpenAPI 子模块：`2563691c22229a0b493606e11166b95896707095`。
 > 统计基于本地子模块，不依赖网络实时产品目录。阿里云 API 与产品元数据会变化，发布前应重新生成统计。
+> 实施状态更新：2026-09-04。Phase 0 已完成；Phase 1 核心完成、共享增强待办；Phase 2 已通过 CS/K8s 首个垂直切片启动；Phase 3/4 尚未完成。当前版本准备为 v1.0.7。
 
 本方案的协议源采用仓库内快照：将 `aliyun-openapi-meta` 的协议文件复制到
 `protocol/alicloud-openapi/`，由 Git 记录版本和变更。运行时、生成器和 Agent
@@ -11,14 +12,14 @@
 
 ## 1. 结论先行
 
-1. **最大能力差距是通用 OpenAPI 调用层**：aliyun-cli 通过 `aliyun <product> <ApiName>` 覆盖 323 个产品、156 个有 API 元数据的产品、16,242 个 API；Licell 只有面向少数工作流的强类型命令，没有任意 RPC/REST API 入口。
-2. **Licell 已覆盖的核心产品是“部分工作流覆盖”而非产品 API 全覆盖**：FC、OSS、Alidns、CDN、ACR、ECS、RDS、Redis/Tair、RAM、SLS、VPC 等已有 provider/命令，但每个产品只实现了部署、查询或域名等选定路径。
-3. **P0 不应是面向 Agent 的万能 `api call`**：裸 API 转发接口浅且泄漏云厂商复杂度；P0 应建设内部 OpenAPI runtime、仓库内 protocol 快照、脚手架生成和人工维护的 capability overlay。
+1. **通用 OpenAPI 调用层的基础差距已经关闭**：Licell 的仓库内快照覆盖 156 个有 API 元数据的产品、16,242 个 API；`capability products/search/describe` 与受控 `api invoke` 已支持 RPC/REST raw fallback。剩余差距是共享 runtime 增强和领域语义深度，不是 API 可达性。
+2. **Licell 已覆盖的核心产品仍是“部分工作流覆盖”而非产品 API 全覆盖**：FC、OSS、Alidns、CDN、ACR、ECS、RDS、Redis/Tair、RAM、SLS、VPC、CS/K8s 等已有 provider、工作流或 raw fallback，但每个产品只有部分能力晋级为 curated command。
+3. **P0 的边界已经按 Agent-first 方案落地**：raw API 不是主产品接口；Agent 先从 catalog 选择领域命令，未覆盖时再通过 protocol capability 发现与执行，并遵循 `execution.preferred`。
 4. **迁移策略应分三层**：
    - P0：protocol 快照与生成基础设施，外加受控的 `api invoke` 诊断逃生口。
    - P1/P2：把高频且需要工作流语义的产品逐个“深度化”，每个产品增加 Licell 原生命令、状态模型、幂等与测试。
    - P3：外部 CLI/plugin 兼容层。
-4. **不要把 aliyun-cli 的插件/外部二进制直接搬进 Licell 核心**：它们的实现是下载并透传子进程，应该先做兼容 wrapper 或独立 package，等需求稳定后再抽象成 Licell provider。
+5. **不要把 aliyun-cli 的插件/外部二进制直接搬进 Licell 核心**：它们的实现是下载并透传子进程，应该先做兼容 wrapper 或独立 package，等需求稳定后再抽象成 Licell provider。
 
 ## 2. 两套 CLI 的架构
 
@@ -131,10 +132,10 @@ API 级参考文件规则：
 
 ### 4.1 命令面
 
-`licell catalog --output json`（本地 v1.0.5）返回：
+`licell catalog --output json`（v1.0.7 预发布候选）返回：
 
-- 32 个 root commands；
-- 116 个 concrete command entries；
+- 35 个 root commands；
+- 123 个 concrete command entries；
 - 统一 `licell-help@1.0` / `licell-cli-record@1.0`；
 - 命令注册源：`src/commands/registry.ts`；描述器/区域/安全元数据：`src/commands/module.ts`。
 
@@ -148,6 +149,8 @@ API 级参考文件规则：
 | OSS | `oss`（19 entries） | `src/commands/oss.ts` |
 | Data | `db cache supa` | `src/commands/db.ts`、`cache.ts`、`supa.ts` |
 | ECS | `ecs list/info/start/reboot/stop/delete/rm` | `src/commands/ecs.ts`、`ecs-lifecycle.ts` |
+| Kubernetes | `k8s clusters/workloads` | `src/commands/k8s.ts`、`src/providers/k8s.ts` |
+| Cloud Capability | `capability products/search/describe`、`api scaffold/invoke` | `src/commands/capability.ts`、`api.ts`；`src/providers/openapi/**` |
 | Automation | `doctor catalog ci onboard skills setup state completion upgrade e2e` | 对应 `src/commands/*.ts` |
 
 ### 4.2 Provider 覆盖边界
@@ -160,6 +163,7 @@ API 级参考文件规则：
 | CDN | 静态域名接入、刷新等部署联动；无完整 CDN 资源命令组 | `src/providers/cdn.ts` |
 | ACR（cr） | 镜像部署/实例查询等部署链路能力；无完整 registry/repository 命令组 | `src/providers/cr.ts` |
 | ECS | list/info 与 start/reboot/stop/delete 生命周期 | `src/providers/ecs/**`、`src/commands/ecs*.ts` |
+| CS / ACK / ACS | 集群列表与集群内 deployment/daemonset/service 只读盘点；其他 CS API 走 raw fallback | `src/providers/k8s.ts`、`src/commands/k8s.ts` |
 | RDS | 数据库实例创建/查询/连接/公网白名单/删除；Supabase 依赖 RDS | `src/providers/infra/**`、`src/commands/db.ts` |
 | Redis/Tair（R-kvstore） | classic/serverless 创建、查询、连接、密码轮换、公网白名单 | `src/providers/redis/**`、`src/commands/cache.ts` |
 | RAM | 仅 bootstrap policy/权限修复与认证辅助，不是 RAM 管理 CLI | `src/providers/ram.ts`、`src/utils/auth-recovery.ts` |
@@ -174,10 +178,10 @@ API 级参考文件规则：
 
 | 优先级 | Licell 目标命令/服务 | aliyun-cli 对应命令 | 当前差距 | 参考实现 | Licell 落点 |
 |---|---|---|---|---|---|
-| P0 | OpenAPI runtime（内部 module） | `aliyun <product> <ApiName>`、REST path | 完全缺失；不作为 Agent 主命令暴露 | `openapi/commando.go`、`invoker.go`、`rpc.go`、`restful.go`、`http_context.go` | 新增 `src/providers/openapi/**`；以 `execute(operationRef, input, context)` 为小接口，隐藏签名/重试/endpoint 复杂度 |
-| P0 | protocol snapshot + scaffold | `aliyun-openapi-meta`、`aliyun help <product> [ApiName]` | Licell 没有仓库内、可审查的 API schema 快照与生成链 | `meta/repository.go`、`meta/reader.go`、`openapi/commando_help.go`、`aliyun-openapi-meta/metadatas/**` | `protocol/alicloud-openapi/**`、`scripts/update-alicloud-protocol.ts`、`scripts/generate-openapi.ts`、`licell api scaffold`；人工升级快照，CI 只校验一致性 |
-| P0 | capability registry / Agent surface | aliyun 产品/API 列表 | 原始 API 元数据没有意图、风险、前置条件和 nextActions | `openapi/commando_help.go`、`src/commands/module.ts`、`src/utils/command-metadata.ts` | `capability search/describe`；生成 schema 与人工 overlay 合并后才进入 catalog |
-| P0 | `api invoke`（受控逃生口） | `aliyun <product> <ApiName>`、REST path | 仅用于未封装能力/诊断；不能替代 workflow | `openapi/commando.go`、`invoker.go`、`waiter.go`、`output_filter.go` | 新增低优先级命令，标记 `maturity=raw`；写操作默认 dry-run + yes，脱敏并提示无 workflow 语义 |
+| P0 | OpenAPI runtime（内部 module） | `aliyun <product> <ApiName>`、REST path | 核心已完成；pager、query/table、waiter 等共享增强待办 | `openapi/commando.go`、`invoker.go`、`rpc.go`、`restful.go`、`http_context.go` | `src/providers/openapi/**`；以 `execute(operationRef, input, context)` 为小接口，隐藏 runner、凭证、RPC/REST 与 endpoint 复杂度 |
+| P0 | protocol snapshot + scaffold | `aliyun-openapi-meta`、`aliyun help <product> [ApiName]` | 已完成；当前固定 156 个产品、16,242 个 API | `meta/repository.go`、`meta/reader.go`、`openapi/commando_help.go`、`aliyun-openapi-meta/metadatas/**` | `protocol/alicloud-openapi/**`、`scripts/update-alicloud-protocol.ts`、`scripts/generate-alicloud-capabilities.ts`、`licell api scaffold`；人工升级快照，CI 只校验一致性 |
+| P0 | capability registry / Agent surface | aliyun 产品/API 列表 | 核心已完成；当前 8 个 operation 晋级 curated overlay，其余保持 raw | `openapi/commando_help.go`、`src/commands/module.ts`、`src/utils/command-metadata.ts` | `capability products/search/describe`；生成 schema 与人工 overlay 合并，`catalog.agentWorkflow` 声明 Agent 路由 |
+| P0 | `api invoke`（受控逃生口） | `aliyun <product> <ApiName>`、REST path | 已完成受控 fallback；仍不能替代 workflow | `openapi/commando.go`、`invoker.go`、`waiter.go`、`output_filter.go` | 低优先级命令，标记 `maturity=raw`；写操作默认 dry-run + yes，脱敏并提示无 workflow 语义 |
 | P0 | 认证 profile 兼容 | `configure --mode ...` | Licell 不支持多 profile/多种链式凭证 | `config/configure*.go`、`config/profile.go` | `src/utils/auth/**` 增加 profile 解析与显式 `--profile`；安全地映射到 SDK credential |
 | P1 | OSS 完整资源命令 | `ossutil` 47 命令 | set-meta、CORS、生命周期、版本、复制、WORM、加密、策略、QOS、符号链接、multipart 等缺失 | `oss/lib/<command>.go`；注册表 `oss/lib/command.go:867-918` | 扩展 `src/commands/oss.ts` + `src/providers/oss.ts`，按对象/桶配置分组 |
 | P1 | VPC 网络资源 | `aliyun vpc <ApiName>`（404 APIs） | 无用户可调用 `vpc` 命令；当前只被工作流内部调用 | `metadatas/vpc/*.json`、通用 invoker | `src/commands/vpc.ts`、`src/providers/vpc/**`；先 query，再 mutate |
@@ -226,7 +230,7 @@ bun run protocol:check
 licell api invoke vpc.DescribeVpcs --params-file request.json --output json
 ```
 
-Agent 主路径是 `catalog -> capability products/search -> capability describe -> execution.preferred`。`describe.execution.strategy` 明确返回 `curated-command` 或 `raw-api-fallback`；不要求 Agent 从描述文本猜测。`api invoke` 只在没有经过人工确认的领域命令覆盖时使用。
+Agent 主路径是 `catalog -> curated help/execute`；没有领域命令时进入 `capability products/search -> capability describe -> execution.preferred`。`describe.execution.strategy` 明确返回 `curated-command` 或 `raw-api-fallback`；不要求 Agent 从描述文本猜测。只有两层发现都未命中后，Agent 才能判定请求不受支持。
 
 参数设计：
 
@@ -286,6 +290,14 @@ Agent 主路径是 `catalog -> capability products/search -> capability describe
 
 ## 7. 分阶段落地计划
 
+| 阶段 | 当前状态 | 已交付 | 下一验收点 |
+|---|---|---|---|
+| Phase 0 | 已完成 | protocol 快照、生成器、capability 索引、`api scaffold` | 维持人工同步与 CI 一致性校验 |
+| Phase 1 | 核心完成 | 固定 runner、RPC/REST invoke、Path 编译、脱敏、安全确认、Agent execution 决策 | pager、JMESPath query/table、waiter、profile、body-file、Windows runner |
+| Phase 2 | 进行中 | 全局 curated-first Agent 路由；CS/K8s 集群与 workloads 首个垂直切片 | VPC、RAM、CAS、CDN、SLS 首批领域 overlay 与 inspect -> mutate -> verify |
+| Phase 3 | 未完成 | 复用现有 OSS/FC/RDS/Redis 等部分工作流 | 按统一模板完成十个 P1 产品的原生化 |
+| Phase 4 | 未开始 | 无 | P2 专业服务与 P3 plugin runtime |
+
 ### Phase 0：能力编译基础（已完成）
 
 - 固化统计脚本和快照（产品数、API 数、Licell catalog 数）。
@@ -304,9 +316,11 @@ Agent 主路径是 `catalog -> capability products/search -> capability describe
 - 实现 raw invoke 的 `--force`、`--dry-run`、敏感字段脱敏和危险操作阻断。
 - 实现 `capability products/search/describe` 与 `execution.strategy`，但不把 16,000 个原始 API 全量塞入推荐 catalog。
 
-验收：RPC/REST、多段 Path、metadata 异常和命名冲突 fixture 通过；真实账号已通过 VPC/FC/ECS 只读调用，并通过 CS `DescribeClusters`、`DescribeClusterDetail` 验证集合查询与 Path API。剩余项为 pager、JMESPath query/table 和 waiter。
+验收：RPC/REST、多段 Path、metadata 异常和命名冲突 fixture 通过；真实账号已通过 VPC/FC/ECS 只读调用，并通过 CS `DescribeClusters`、`DescribeClusterDetail` 验证集合查询与 Path API。剩余项为 pager、JMESPath query/table、waiter、profile、body-file 和 Windows runner 自动下载。
 
-### Phase 2：语义 overlay 与首批领域命令（每个产品 3-7 天）
+### Phase 2：语义 overlay 与首批领域命令（进行中，每个产品 3-7 天）
+
+已完成：`catalog.agentWorkflow` 固化 Agent 的 curated-first 路由；CS 的 `DescribeClusters`、`DescribeClustersV1`、`DescribeClusterUserKubeconfig` 已晋级到 `k8s clusters/workloads`，并完成敏感 KubeConfig 脱敏、临时文件清理和只读 workloads 验证。
 
 - 为一个产品补齐资源模型、风险、幂等性、nextActions、结果投影和状态验证。
 - 通过 `api scaffold` 生成 transport；人工维护 overlay；命令进入 registry/catalog。
@@ -315,7 +329,7 @@ Agent 主路径是 `catalog -> capability products/search -> capability describe
 
 验收：Agent 能从 `capability search` 找到领域命令，并通过 `nextActions` 完成 inspect -> mutate -> verify；凭证不出现在日志/错误里。
 
-### Phase 3：P1 高频资源原生化（每个产品 3-7 天）
+### Phase 3：P1 高频资源原生化（未完成，每个产品 3-7 天）
 
 推荐顺序：OSS -> VPC -> RAM -> CAS -> CDN -> SLS -> FC advanced -> RDS -> Redis -> ACR。
 
@@ -327,7 +341,7 @@ Agent 主路径是 `catalog -> capability products/search -> capability describe
 4. 在 `src/commands/<service>.ts` 注册 descriptor、示例、result fields。
 5. 加 provider mock、命令 contract、integration smoke 与 docs sync。
 
-### Phase 4：P2 专业服务与 P3 扩展兼容（按需求）
+### Phase 4：P2 专业服务与 P3 扩展兼容（未开始，按需求）
 
 - P2：Tablestore、KMS、MaxCompute、MSE、SAE、CMS、ROS/IaC、Codeup/Flow。
 - P3：通用 plugin runtime，支持版本锁、checksum、exec path、环境注入、JSON passthrough；不得默认自动下载未验证二进制。
@@ -404,7 +418,7 @@ jq '{name,method,pathPattern,parameters}' \
 | CC5G | 2022-03-14 | rpc | 0 | 缺失 |
 | CCC | 2017-07-05 | rpc | 104 | 缺失 |
 | CGCS | 2021-11-11 | rpc | 0 | 缺失 |
-| CS | 2015-12-15 | restful | 139 | 缺失 |
+| CS | 2015-12-15 | restful | 139 | 部分支持（`k8s clusters/workloads`） |
 | CarbonFootprint | 2023-07-11 | rpc | 0 | 缺失 |
 | Cassandra | 2019-01-01 | rpc | 0 | 缺失 |
 | Cbn | 2017-09-12 | rpc | 150 | 缺失 |

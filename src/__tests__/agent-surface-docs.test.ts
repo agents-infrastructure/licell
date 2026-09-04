@@ -19,6 +19,8 @@ describe('renderSkillAgentUsageGuide', () => {
     expect(output).toContain('`licell catalog --output json`');
     expect(output).toContain('`licell <command> --help --output json`');
     expect(output).toContain('`nextActions[]`');
+    expect(output).toContain('`licell capability products/search/describe --output json`');
+    expect(output).toContain('`execution.preferred`');
     expect(output).toContain('\n- `kind`: Fixed to `licell-cli-record`.');
     expect(output).not.toContain('\n  - `kind`: Fixed to `licell-cli-record`.');
     expect(output).not.toContain('命令发现');
@@ -47,6 +49,8 @@ describe('renderAgentSurfaceReferenceDoc', () => {
     expect(output.indexOf('### Data Services')).toBeLessThan(output.indexOf('### Cloud Infrastructure'));
     expect(output.indexOf('### Cloud Infrastructure')).toBeLessThan(output.indexOf('### Automation & Tooling'));
     expect(output).toContain('## Recommended Agent Flow');
+    expect(output).toContain('`capability products/search/describe --output json`');
+    expect(output).toContain('raw 写操作必须先 `--dry-run`');
     expect(output).toContain('`licell deploy check`');
     expect(output).toMatch(/\| `licell db add` \|[^\n]+\| `--region`,/);
     expect(output).toMatch(/\| `licell cache add` \|[^\n]+\| `--region`,/);
