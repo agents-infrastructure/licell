@@ -13,6 +13,41 @@ export interface AlicloudCapabilityOverlay {
 // for capabilities that have not been promoted into a curated surface.
 const OVERLAYS: AlicloudCapabilityOverlay[] = [
   {
+    product: 'vpc',
+    operation: 'DescribeVpcs',
+    commandKeys: ['vpc list', 'vpc info', 'vpc topology'],
+    confidence: 'curated',
+    notes: ['vpc list and info project VPC inventory; vpc topology adds related core network resources.']
+  },
+  {
+    product: 'vpc',
+    operation: 'DescribeVSwitches',
+    commandKeys: ['vpc topology'],
+    confidence: 'curated',
+    notes: ['vpc topology inventories VSwitches for the selected VPC.']
+  },
+  {
+    product: 'vpc',
+    operation: 'DescribeRouteTables',
+    commandKeys: ['vpc topology'],
+    confidence: 'curated',
+    notes: ['vpc topology inventories route tables for the selected VPC router.']
+  },
+  {
+    product: 'vpc',
+    operation: 'DescribeNatGateways',
+    commandKeys: ['vpc topology'],
+    confidence: 'curated',
+    notes: ['vpc topology inventories NAT gateways for the selected VPC.']
+  },
+  {
+    product: 'vpc',
+    operation: 'DescribeEipAddresses',
+    commandKeys: ['vpc topology'],
+    confidence: 'curated',
+    notes: ['vpc topology filters EIPs associated with the selected VPC or its NAT gateways.']
+  },
+  {
     product: 'cs',
     operation: 'DescribeClusters',
     commandKeys: ['k8s clusters'],

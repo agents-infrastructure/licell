@@ -488,6 +488,7 @@ describe('help utils', () => {
     expect(doc?.key).toBe('upgrade');
     expect(doc?.optionInsights.some((insight) => insight.flag.includes('--dry-run'))).toBe(true);
     expect(doc?.recommendedFlow[0]?.command).toBe('licell upgrade --dry-run --output json');
+    expect(doc?.result?.fields.some((field) => field.name === 'pathResolution.hasConflict')).toBe(true);
     expect(doc?.text).toContain('Option Guidance:');
     expect(doc?.text).toContain('Recommended Flow:');
   });

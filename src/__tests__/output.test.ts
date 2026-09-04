@@ -102,6 +102,24 @@ describe('output utils', () => {
     expect(record.nextActions.every((action: any) => action.source === 'error-remediation')).toBe(true);
   });
 
+  it('guides agents to a safe curated route for blocked sensitive responses', () => {
+    initOutputContext('json', ['node', 'src/cli.ts', 'api', 'invoke', 'cs.DescribeClusterUserKubeconfig']);
+    const error = Object.assign(new Error('raw API 返回敏感字段'), {
+      code: 'SENSITIVE_RESPONSE_BLOCKED',
+      details: {
+        operationRef: 'cs.DescribeClusterUserKubeconfig',
+        safeRoute: 'k8s workloads',
+        sensitiveFields: ['config']
+      }
+    });
+    const record = buildCliErrorRecord(error) as any;
+    expect(record.error.code).toBe('SENSITIVE_RESPONSE_BLOCKED');
+    expect(record.error.category).toBe('input');
+    expect(record.details.safeRoute).toBe('k8s workloads');
+    expect(record.nextCommands[0].commandTemplate).toBe('licell k8s workloads <cluster> --output json');
+    expect(record.nextCommands[1].commandTemplate).toBe('licell catalog --output json');
+  });
+
   it('prefers login and restore guidance for missing auth state', () => {
     initOutputContext('json', ['node', 'src/cli.ts', 'deploy']);
     const record = buildCliErrorRecord(new Error('未登录，请先执行 `licell login`')) as any;

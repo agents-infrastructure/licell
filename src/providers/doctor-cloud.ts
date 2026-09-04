@@ -1216,6 +1216,14 @@ const CAPABILITY_PROBES: Record<AuthCapability, (auth: AuthConfig) => Promise<Do
   dns: probeDnsCapability,
   cdn: probeCdnCapability,
   vpc: probeVpcCapability,
+  'vpc-read': async (auth) => {
+    const probe = await probeVpcCapability(auth);
+    return {
+      ...probe,
+      capability: 'vpc-read',
+      label: AUTH_CAPABILITY_LABELS['vpc-read']
+    };
+  },
   cr: probeCrCapability,
   rds: async (auth) => {
     void auth;

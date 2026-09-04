@@ -14,6 +14,11 @@ const UPGRADE_GUIDANCE_ITEMS: GuidanceItem[] = [
     en: '`licell upgrade` follows the current installation source by default.'
   },
   {
+    id: 'single-source',
+    zh: '不要同时保留多个全局安装来源；PATH 中排在最前的 `licell` 会遮蔽其它已升级版本，可用 `licell upgrade --dry-run --output json` 查看冲突入口',
+    en: 'Do not keep multiple global installation sources; the first `licell` on PATH shadows other upgraded copies, and `licell upgrade --dry-run --output json` reports conflicts.'
+  },
+  {
     id: 'package-manager',
     zh: '如果当前是 `npm` / `pnpm` / `yarn` / `bun` 全局安装，会调用对应包管理器执行全局升级',
     en: 'If licell was installed globally via `npm` / `pnpm` / `yarn` / `bun`, `licell upgrade` will reuse that package manager automatically.'

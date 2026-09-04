@@ -40,6 +40,7 @@ describe('renderAgentSurfaceReferenceDoc', () => {
     expect(output).toContain('## CLI 命令目录');
     expect(output).toContain('### Cloud Infrastructure');
     expect(output).toContain('licell ecs list');
+    expect(output).toContain('licell vpc topology');
     expect(output).toContain('licell ecs info <instanceId>');
     expect(output).toContain('licell ecs start <instanceId>');
     expect(output).toContain('licell ecs reboot <instanceId>');

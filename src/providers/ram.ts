@@ -119,6 +119,9 @@ export const LICELL_POLICY_ACTIONS = [
   'cdn:SetCdnDomainSSLCertificate',
   // VPC (read + managed VSwitch creation)
   'vpc:DescribeVpcs',
+  'vpc:DescribeRouteTables',
+  'vpc:DescribeNatGateways',
+  'vpc:DescribeEipAddresses',
   'vpc:DescribeZones',
   'vpc:DescribeVSwitchAttributes',
   'vpc:DescribeVSwitches',

@@ -55,11 +55,24 @@ describe('LICELL_COMMAND_MANIFEST', () => {
   it('registers curated Kubernetes inventory commands', () => {
     const catalog = getCommandCatalog();
     expect(catalog.commandsByKey['k8s clusters']).toBeDefined();
+    expect(catalog.commandsByKey['k8s logs']).toBeDefined();
     expect(catalog.commandsByKey['k8s workloads']).toBeDefined();
     expect(getCommandDescriptor('k8s workloads').safety?.level).toBe('safe');
     expect(getCommandDescriptor('k8s workloads').agentTips).toEqual(expect.arrayContaining([
       expect.stringContaining('KubeConfig')
     ]));
+  });
+
+  it('registers curated VPC inventory and topology commands', () => {
+    const catalog = getCommandCatalog();
+    expect(catalog.commandsByKey['vpc list']).toBeDefined();
+    expect(catalog.commandsByKey['vpc info']).toBeDefined();
+    expect(catalog.commandsByKey['vpc topology']).toBeDefined();
+    const topologyDescriptor = getCommandDescriptor('vpc topology')!;
+    expect(topologyDescriptor.safety?.level).toBe('safe');
+    expect(topologyDescriptor.result?.fields?.map((field) => field.name)).toEqual(
+      expect.arrayContaining(['counts', 'vSwitches[]', 'routeTables[]', 'natGateways[]', 'eipAddresses[]', 'relationships'])
+    );
   });
 
   it('registers ecs inspect and lifecycle commands in the infrastructure section only', () => {

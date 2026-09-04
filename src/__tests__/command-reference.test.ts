@@ -37,7 +37,11 @@ describe('buildCommandReferenceSections', () => {
       'ecs start',
       'ecs stop',
       'k8s clusters',
-      'k8s workloads'
+      'k8s logs',
+      'k8s workloads',
+      'vpc info',
+      'vpc list',
+      'vpc topology'
     ]);
   });
 });

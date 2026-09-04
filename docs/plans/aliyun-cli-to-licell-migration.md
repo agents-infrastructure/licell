@@ -3,7 +3,7 @@
 > 调研快照：2026-09-03。源码目录：`/Users/wyattfang/work/aliyun-cli`；Licell：`/Users/wyattfang/work/licell`。
 > aliyun-cli 当前 HEAD：`eadd68d9a13dd0734a2236e2c70e38f4888ae65f`（v3.4.11 代码线）；OpenAPI 子模块：`2563691c22229a0b493606e11166b95896707095`。
 > 统计基于本地子模块，不依赖网络实时产品目录。阿里云 API 与产品元数据会变化，发布前应重新生成统计。
-> 实施状态更新：2026-09-04。Phase 0 已完成；Phase 1 核心完成、共享增强待办；Phase 2 已通过 CS/K8s 首个垂直切片启动；Phase 3/4 尚未完成。当前版本准备为 v1.0.7。
+> 实施状态更新：2026-09-04。Phase 0 已完成；Phase 1 核心完成、共享增强待办；Phase 2 已完成 CS/K8s 与 VPC 只读垂直切片；Phase 3/4 尚未完成。当前开发目标为 v1.0.8。
 
 本方案的协议源采用仓库内快照：将 `aliyun-openapi-meta` 的协议文件复制到
 `protocol/alicloud-openapi/`，由 Git 记录版本和变更。运行时、生成器和 Agent
@@ -132,10 +132,10 @@ API 级参考文件规则：
 
 ### 4.1 命令面
 
-`licell catalog --output json`（v1.0.7 预发布候选）返回：
+`licell catalog --output json`（v1.0.8 预发布候选）返回：
 
-- 35 个 root commands；
-- 123 个 concrete command entries；
+- 36 个 root commands；
+- 126 个 concrete command entries；
 - 统一 `licell-help@1.0` / `licell-cli-record@1.0`；
 - 命令注册源：`src/commands/registry.ts`；描述器/区域/安全元数据：`src/commands/module.ts`。
 
@@ -168,7 +168,7 @@ API 级参考文件规则：
 | Redis/Tair（R-kvstore） | classic/serverless 创建、查询、连接、密码轮换、公网白名单 | `src/providers/redis/**`、`src/commands/cache.ts` |
 | RAM | 仅 bootstrap policy/权限修复与认证辅助，不是 RAM 管理 CLI | `src/providers/ram.ts`、`src/utils/auth-recovery.ts` |
 | SLS | 日志 query/tail 与 FC 日志桥接，无完整 project/logstore/仪表盘管理 | `src/providers/logs.ts`、`src/commands/logs.ts` |
-| VPC | 作为 FC/RDS/Redis 基础设施依赖，能发现/创建部分 VPC/NAT/EIP/安全配置；无 `vpc` 命令族 | `src/providers/vpc.ts`、`src/providers/infra/**` |
+| VPC | `vpc list/info/topology` 只读盘点 VPC、交换机、路由表、NAT 网关和 EIP；部署链路还能发现/创建部分网络资源 | `src/providers/vpc.ts`、`src/providers/vpc/query.ts`、`src/commands/vpc.ts` |
 | SSL | Let’s Encrypt ACME 证书签发/续签，非阿里云 CAS 全功能 | `src/providers/ssl.ts` |
 | CMS | 仅 doctor capability probe，不提供云监控资源管理命令 | `src/providers/doctor-cloud.ts` |
 
@@ -180,11 +180,11 @@ API 级参考文件规则：
 |---|---|---|---|---|---|
 | P0 | OpenAPI runtime（内部 module） | `aliyun <product> <ApiName>`、REST path | 核心已完成；pager、query/table、waiter 等共享增强待办 | `openapi/commando.go`、`invoker.go`、`rpc.go`、`restful.go`、`http_context.go` | `src/providers/openapi/**`；以 `execute(operationRef, input, context)` 为小接口，隐藏 runner、凭证、RPC/REST 与 endpoint 复杂度 |
 | P0 | protocol snapshot + scaffold | `aliyun-openapi-meta`、`aliyun help <product> [ApiName]` | 已完成；当前固定 156 个产品、16,242 个 API | `meta/repository.go`、`meta/reader.go`、`openapi/commando_help.go`、`aliyun-openapi-meta/metadatas/**` | `protocol/alicloud-openapi/**`、`scripts/update-alicloud-protocol.ts`、`scripts/generate-alicloud-capabilities.ts`、`licell api scaffold`；人工升级快照，CI 只校验一致性 |
-| P0 | capability registry / Agent surface | aliyun 产品/API 列表 | 核心已完成；当前 8 个 operation 晋级 curated overlay，其余保持 raw | `openapi/commando_help.go`、`src/commands/module.ts`、`src/utils/command-metadata.ts` | `capability products/search/describe`；生成 schema 与人工 overlay 合并，`catalog.agentWorkflow` 声明 Agent 路由 |
+| P0 | capability registry / Agent surface | aliyun 产品/API 列表 | 核心已完成；当前 13 个 operation 晋级 curated overlay，其余保持 raw | `openapi/commando_help.go`、`src/commands/module.ts`、`src/utils/command-metadata.ts` | `capability products/search/describe`；生成 schema 与人工 overlay 合并，`catalog.agentWorkflow` 声明 Agent 路由 |
 | P0 | `api invoke`（受控逃生口） | `aliyun <product> <ApiName>`、REST path | 已完成受控 fallback；仍不能替代 workflow | `openapi/commando.go`、`invoker.go`、`waiter.go`、`output_filter.go` | 低优先级命令，标记 `maturity=raw`；写操作默认 dry-run + yes，脱敏并提示无 workflow 语义 |
 | P0 | 认证 profile 兼容 | `configure --mode ...` | Licell 不支持多 profile/多种链式凭证 | `config/configure*.go`、`config/profile.go` | `src/utils/auth/**` 增加 profile 解析与显式 `--profile`；安全地映射到 SDK credential |
 | P1 | OSS 完整资源命令 | `ossutil` 47 命令 | set-meta、CORS、生命周期、版本、复制、WORM、加密、策略、QOS、符号链接、multipart 等缺失 | `oss/lib/<command>.go`；注册表 `oss/lib/command.go:867-918` | 扩展 `src/commands/oss.ts` + `src/providers/oss.ts`，按对象/桶配置分组 |
-| P1 | VPC 网络资源 | `aliyun vpc <ApiName>`（404 APIs） | 无用户可调用 `vpc` 命令；当前只被工作流内部调用 | `metadatas/vpc/*.json`、通用 invoker | `src/commands/vpc.ts`、`src/providers/vpc/**`；先 query，再 mutate |
+| P1 | VPC 网络资源 | `aliyun vpc <ApiName>`（404 APIs） | 只读 `list/info/topology` 已完成；创建、修改、删除仍通过受控 raw fallback | `metadatas/vpc/*.json`、通用 invoker | `src/commands/vpc.ts`、`src/providers/vpc/**`；下一步补 plan -> mutate -> verify |
 | P1 | RAM/IAM | `aliyun ram <ApiName>`、`resourcemanager` | 仅权限 bootstrap | `metadatas/ram/*.json`、`src/providers/ram.ts` | `ram user/role/policy/attach`；所有写操作带 safety + dry-run |
 | P1 | CAS/证书 | `aliyun cas <ApiName>` | 只有 ACME，不支持证书订单、上传、部署、撤销 | `metadatas/cas/*.json`、`openapi/commando.go` | `cert list/import/issue/renew/revoke/deploy`；与现有 `ssl.ts` 分离 |
 | P1 | CDN 全生命周期 | `aliyun cdn <ApiName>`、`dcdn` | 只有域名 workflow/刷新联动 | `metadatas/cdn/*.json`、`src/providers/cdn.ts` | `cdn domain/cache/https/refresh/quota`；长任务用 waiter |
@@ -294,7 +294,7 @@ Agent 主路径是 `catalog -> curated help/execute`；没有领域命令时进�
 |---|---|---|---|
 | Phase 0 | 已完成 | protocol 快照、生成器、capability 索引、`api scaffold` | 维持人工同步与 CI 一致性校验 |
 | Phase 1 | 核心完成 | 固定 runner、RPC/REST invoke、Path 编译、脱敏、安全确认、Agent execution 决策 | pager、JMESPath query/table、waiter、profile、body-file、Windows runner |
-| Phase 2 | 进行中 | 全局 curated-first Agent 路由；CS/K8s 集群与 workloads 首个垂直切片 | VPC、RAM、CAS、CDN、SLS 首批领域 overlay 与 inspect -> mutate -> verify |
+| Phase 2 | 进行中 | 全局 curated-first Agent 路由；CS/K8s 集群与 workloads；VPC `list/info/topology` 只读切片 | RAM、CAS、CDN、SLS 首批领域 overlay；VPC 再进入 plan -> mutate -> verify |
 | Phase 3 | 未完成 | 复用现有 OSS/FC/RDS/Redis 等部分工作流 | 按统一模板完成十个 P1 产品的原生化 |
 | Phase 4 | 未开始 | 无 | P2 专业服务与 P3 plugin runtime |
 
@@ -320,11 +320,13 @@ Agent 主路径是 `catalog -> curated help/execute`；没有领域命令时进�
 
 ### Phase 2：语义 overlay 与首批领域命令（进行中，每个产品 3-7 天）
 
-已完成：`catalog.agentWorkflow` 固化 Agent 的 curated-first 路由；CS 的 `DescribeClusters`、`DescribeClustersV1`、`DescribeClusterUserKubeconfig` 已晋级到 `k8s clusters/workloads`，并完成敏感 KubeConfig 脱敏、临时文件清理和只读 workloads 验证。
+已完成：`catalog.agentWorkflow` 固化 Agent 的 curated-first 路由；CS 的 `DescribeClusters`、`DescribeClustersV1`、`DescribeClusterUserKubeconfig` 已晋级到 `k8s clusters/workloads`，并完成敏感 KubeConfig 脱敏、临时文件清理和只读 workloads 验证。VPC 的 `DescribeVpcs`、`DescribeVSwitches`、`DescribeRouteTables`、`DescribeNatGateways`、`DescribeEipAddresses` 已晋级到 `vpc list/info/topology`，提供统一资源关系投影。
+
+真实账号 smoke：`cn-hangzhou` 的 `vpc list` 与 `vpc topology` 已通过，验证了 VPC、交换机、路由表、NAT 网关、关联 EIP 的读取与关系投影；未执行写操作。
 
 - 为一个产品补齐资源模型、风险、幂等性、nextActions、结果投影和状态验证。
 - 通过 `api scaffold` 生成 transport；人工维护 overlay；命令进入 registry/catalog。
-- 首批建议 VPC、RAM、CAS、CDN、SLS；优先只读和 plan，再做 mutate。
+- 首批建议 RAM、CAS、CDN、SLS；VPC 只读已完成，后续优先 plan，再做 mutate。
 - pager、JMESPath query/table、waiter 和 profile 兼容作为 runtime 共享能力，不作为领域命令的公开复杂度。
 
 验收：Agent 能从 `capability search` 找到领域命令，并通过 `nextActions` 完成 inspect -> mutate -> verify；凭证不出现在日志/错误里。

@@ -62,8 +62,12 @@ export const INFRA_SECTION: CommandSectionMembership = {
     },
     {
       title: '盘点 Kubernetes 容器服务',
-      description: '先列出 ACK / ACS 集群，再查询目标集群内已部署的工作负载。',
-      commands: ['licell k8s clusters --output json', 'licell k8s workloads <cluster> --output json']
+      description: '先列出 ACK / ACS 集群，再查询工作负载并按需读取日志。',
+      commands: [
+        'licell k8s clusters --output json',
+        'licell k8s workloads <cluster> --output json',
+        'licell k8s logs <cluster> deployment/<name> --namespace <namespace> --output json'
+      ]
     }
   ]
 };

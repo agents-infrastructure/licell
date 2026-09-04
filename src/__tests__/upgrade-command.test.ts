@@ -1,9 +1,10 @@
 import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
 import { describe, it, expect } from 'vitest';
 import {
   detectInstallSource,
+  findLicellExecutablesOnPath,
   buildPackageManagerUpgradeCommand,
   formatInstallSourceDisplay,
   formatUpgradeDryRunText,
@@ -187,6 +188,32 @@ describe('detectInstallSource', () => {
     })).toMatchObject({
       kind: 'project'
     });
+  });
+});
+
+describe('findLicellExecutablesOnPath', () => {
+  it('reports the PATH winner and deduplicates shadowed installs by real path', () => {
+    const tempRoot = mkdtempSync(join(tmpdir(), 'licell-upgrade-path-'));
+    try {
+      const releaseBin = join(tempRoot, 'release-bin');
+      const npmBin = join(tempRoot, 'npm-bin');
+      const npmPackageBin = join(tempRoot, 'npm-package', 'dist', 'licell.js');
+      mkdirSync(releaseBin, { recursive: true });
+      mkdirSync(npmBin, { recursive: true });
+      mkdirSync(join(tempRoot, 'npm-package', 'dist'), { recursive: true });
+      writeFileSync(join(releaseBin, 'licell'), '#!/bin/sh\n', { mode: 0o755 });
+      writeFileSync(npmPackageBin, '#!/usr/bin/env node\n', { mode: 0o755 });
+      symlinkSync(npmPackageBin, join(npmBin, 'licell'));
+
+      expect(findLicellExecutablesOnPath({
+        env: { PATH: [releaseBin, npmBin, npmBin].join(delimiter) }
+      })).toEqual([
+        join(releaseBin, 'licell'),
+        join(npmBin, 'licell')
+      ]);
+    } finally {
+      rmSync(tempRoot, { recursive: true, force: true });
+    }
   });
 });
 

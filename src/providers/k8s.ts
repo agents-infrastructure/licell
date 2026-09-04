@@ -34,6 +34,17 @@ export interface KubernetesQueryOptions {
   auth?: AuthConfig;
 }
 
+export interface KubernetesLogsOptions extends KubernetesQueryOptions {
+  privateIpAddress?: boolean;
+  requestTimeout?: string;
+  namespace?: string;
+  container?: string;
+  tail?: number;
+  since?: string;
+  previous?: boolean;
+  timestamps?: boolean;
+}
+
 export interface KubernetesClusterSummary {
   clusterId: string;
   name: string;
@@ -103,6 +114,59 @@ function normalizeCluster(value: Record<string, unknown>): KubernetesClusterSumm
 
 function assertApiSuccess(ref: string, result: Pick<OpenApiRunnerResult, 'ok' | 'exitCode' | 'stderr'>) {
   if (!result.ok) throw new Error(`${ref} 调用失败: ${result.stderr.trim() || `aliyun-cli exited with code ${result.exitCode}`}`);
+}
+
+interface KubernetesCredentialsContext {
+  kubectl: string;
+  cluster: KubernetesClusterSummary;
+  regionId: string;
+  kubeconfigExpiration: string | null;
+  kubeconfigPath: string;
+}
+
+async function withTemporaryKubeconfig<T>(
+  identity: string,
+  options: KubernetesQueryOptions & { privateIpAddress?: boolean } = {},
+  dependencies: KubernetesProviderDependencies,
+  callback: (context: KubernetesCredentialsContext) => Promise<T>
+) {
+  const findExecutable = dependencies.findExecutable || findExecutableOnPath;
+  const kubectl = await findExecutable(process.platform === 'win32' ? 'kubectl.exe' : 'kubectl');
+  if (!kubectl) throw new Error('未找到 kubectl；请先安装 kubectl 并确保它在 PATH 中');
+
+  const auth = options.auth || Config.requireAuth();
+  const regionId = options.regionId || auth.region;
+  const clusterList = await listKubernetesClusters({ regionId, auth }, dependencies);
+  const cluster = resolveCluster(clusterList.clusters, identity);
+  const executeApi = dependencies.executeApi || executeAlicloudApi;
+  const kubeconfigResult = await executeApi('cs.DescribeClusterUserKubeconfig', {
+    ClusterId: cluster.clusterId,
+    PrivateIpAddress: options.privateIpAddress ?? false,
+    TemporaryDurationMinutes: 15
+  }, {
+    auth,
+    region: cluster.regionId || regionId,
+    exposeSensitiveResponse: true
+  });
+  assertApiSuccess('cs.DescribeClusterUserKubeconfig', kubeconfigResult);
+  const kubeconfigResponse = record(kubeconfigResult.response);
+  const config = kubeconfigResponse && stringField(kubeconfigResponse, 'config');
+  if (!config) throw new Error('DescribeClusterUserKubeconfig 未返回可用的 KubeConfig');
+
+  const tempDirectory = await mkdtemp(join(dependencies.tempRoot || tmpdir(), 'licell-k8s-'));
+  const kubeconfigPath = join(tempDirectory, 'config');
+  try {
+    await writeFile(kubeconfigPath, config, { mode: 0o600 });
+    return await callback({
+      kubectl,
+      cluster,
+      regionId,
+      kubeconfigExpiration: stringField(kubeconfigResponse, 'expiration') || null,
+      kubeconfigPath
+    });
+  } finally {
+    await rm(tempDirectory, { recursive: true, force: true });
+  }
 }
 
 export async function listKubernetesClusters(
@@ -236,33 +300,7 @@ export async function inspectKubernetesWorkloads(
   options: KubernetesQueryOptions & { privateIpAddress?: boolean; requestTimeout?: string } = {},
   dependencies: KubernetesProviderDependencies = {}
 ) {
-  const findExecutable = dependencies.findExecutable || findExecutableOnPath;
-  const kubectl = await findExecutable(process.platform === 'win32' ? 'kubectl.exe' : 'kubectl');
-  if (!kubectl) throw new Error('未找到 kubectl；请先安装 kubectl 并确保它在 PATH 中');
-
-  const auth = options.auth || Config.requireAuth();
-  const regionId = options.regionId || auth.region;
-  const clusterList = await listKubernetesClusters({ regionId, auth }, dependencies);
-  const cluster = resolveCluster(clusterList.clusters, identity);
-  const executeApi = dependencies.executeApi || executeAlicloudApi;
-  const kubeconfigResult = await executeApi('cs.DescribeClusterUserKubeconfig', {
-    ClusterId: cluster.clusterId,
-    PrivateIpAddress: options.privateIpAddress ?? false,
-    TemporaryDurationMinutes: 15
-  }, {
-    auth,
-    region: cluster.regionId || regionId,
-    exposeSensitiveResponse: true
-  });
-  assertApiSuccess('cs.DescribeClusterUserKubeconfig', kubeconfigResult);
-  const kubeconfigResponse = record(kubeconfigResult.response);
-  const config = kubeconfigResponse && stringField(kubeconfigResponse, 'config');
-  if (!config) throw new Error('DescribeClusterUserKubeconfig 未返回可用的 KubeConfig');
-
-  const tempDirectory = await mkdtemp(join(dependencies.tempRoot || tmpdir(), 'licell-k8s-'));
-  const kubeconfigPath = join(tempDirectory, 'config');
-  try {
-    await writeFile(kubeconfigPath, config, { mode: 0o600 });
+  return withTemporaryKubeconfig(identity, options, dependencies, async ({ kubectl, cluster, regionId, kubeconfigExpiration, kubeconfigPath }) => {
     const args = [
       '--kubeconfig', kubeconfigPath,
       `--request-timeout=${options.requestTimeout || '30s'}`,
@@ -283,7 +321,7 @@ export async function inspectKubernetesWorkloads(
       source: 'kubernetes-api',
       regionId,
       cluster,
-      kubeconfigExpiration: stringField(kubeconfigResponse, 'expiration') || null,
+      kubeconfigExpiration,
       counts: {
         deployments: workloads.deployments.length,
         statefulSets: workloads.statefulSets.length,
@@ -292,7 +330,68 @@ export async function inspectKubernetesWorkloads(
       },
       workloads
     };
-  } finally {
-    await rm(tempDirectory, { recursive: true, force: true });
+  });
+}
+
+function normalizeLogsTarget(value: string) {
+  const target = value.trim();
+  if (!target || target.includes('..') || !/^(?:(?:pod|deployment|statefulset|daemonset)\/)?[a-z0-9][a-z0-9_.-]*$/i.test(target)) {
+    throw new Error(`Kubernetes 日志 target 无效: ${value}；请使用 name 或 deployment/name、pod/name`);
   }
+  return target.includes('/') ? target : `deployment/${target}`;
+}
+
+function redactKubernetesLogs(value: string, auth: AuthConfig) {
+  return String([auth.ak, auth.sk].filter(Boolean).reduce((text, secret) => text.split(secret).join('[REDACTED]'), value));
+}
+
+export async function inspectKubernetesLogs(
+  identity: string,
+  targetInput: string,
+  options: KubernetesLogsOptions = {},
+  dependencies: KubernetesProviderDependencies = {}
+) {
+  const auth = options.auth || Config.requireAuth();
+  const target = normalizeLogsTarget(targetInput);
+  const tail = options.tail ?? 100;
+  if (!Number.isInteger(tail) || tail < 1 || tail > 10_000) {
+    throw new Error('--tail 必须是 1 到 10000 之间的整数');
+  }
+  const namespace = options.namespace?.trim();
+  if (options.namespace !== undefined && !namespace) throw new Error('--namespace 不能为空');
+
+  return withTemporaryKubeconfig(identity, options, dependencies, async ({ kubectl, cluster, regionId, kubeconfigExpiration, kubeconfigPath }) => {
+    const args = [
+      '--kubeconfig', kubeconfigPath,
+      `--request-timeout=${options.requestTimeout || '30s'}`,
+      'logs', target,
+      '--tail', String(tail)
+    ];
+    if (namespace) args.push('--namespace', namespace);
+    if (options.container?.trim()) args.push('--container', options.container.trim());
+    if (options.since?.trim()) args.push('--since', options.since.trim());
+    if (options.previous) args.push('--previous');
+    if (options.timestamps) args.push('--timestamps');
+
+    const processResult = await (dependencies.spawnKubectl || defaultSpawnKubectl)(kubectl, args);
+    if (processResult.exitCode !== 0) {
+      if (/\bforbidden\b/i.test(processResult.stderr)) {
+        throw new KubernetesRbacForbiddenError(cluster, processResult.stderr);
+      }
+      throw new Error(`kubectl 日志查询失败: ${processResult.stderr.trim() || `exited with code ${processResult.exitCode}`}`);
+    }
+    const logs = redactKubernetesLogs(processResult.stdout, auth);
+    return {
+      source: 'kubernetes-api',
+      regionId,
+      cluster,
+      kubeconfigExpiration,
+      target,
+      namespace: namespace || null,
+      container: options.container?.trim() || null,
+      tail,
+      lineCount: logs ? logs.split(/\r?\n/).filter(Boolean).length : 0,
+      logs
+    };
+  });
 }

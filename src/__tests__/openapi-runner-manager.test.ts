@@ -129,4 +129,28 @@ describe('aliyun cli runner manager', () => {
       process.env.PATH = previousPath;
     }
   });
+
+  it('uses the configured runner before PATH discovery', async () => {
+    const root = tempRoot();
+    const configured = join(root, 'configured-aliyun');
+    writeFileSync(configured, '#!/bin/sh\n');
+    chmodSync(configured, 0o755);
+
+    await expect(resolveAlicloudRunner(undefined, {
+      env: { PATH: '', LICELL_ALIYUN_BIN: configured },
+      ensureRunner: vi.fn(async () => join(root, 'managed-aliyun'))
+    })).resolves.toBe(configured);
+  });
+
+  it('falls back to the managed runner when PATH has no aliyun executable', async () => {
+    const root = tempRoot();
+    const managed = join(root, 'managed-aliyun');
+    const ensureRunner = vi.fn(async () => managed);
+
+    await expect(resolveAlicloudRunner(undefined, {
+      env: { PATH: '' },
+      ensureRunner
+    })).resolves.toBe(managed);
+    expect(ensureRunner).toHaveBeenCalledOnce();
+  });
 });

@@ -188,4 +188,18 @@ describe('command manifest invariants', () => {
       'ecs rm <instanceId>'
     ]);
   });
+
+  it('places the VPC readonly module after Kubernetes and before doctor', () => {
+    const roots = LICELL_COMMAND_MANIFEST.modules.map((module) => module.roots[0]);
+    expect(roots.indexOf('vpc')).toBeGreaterThan(roots.indexOf('k8s'));
+    expect(roots.indexOf('vpc')).toBeLessThan(roots.indexOf('doctor'));
+
+    const vpcModule = LICELL_COMMAND_MANIFEST.modules.find((module) => module.roots.includes('vpc'));
+    expect(vpcModule?.section).toMatchObject({ id: 'infra', title: 'Cloud Infrastructure' });
+    expect(vpcModule?.declaredCommands?.map((command) => command.rawName)).toEqual([
+      'vpc list',
+      'vpc info <vpc>',
+      'vpc topology <vpc>'
+    ]);
+  });
 });

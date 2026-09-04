@@ -11,6 +11,7 @@ describe('install-upgrade-docs', () => {
     expect(output).toContain('`licell upgrade` 会优先按“当前正在执行的安装来源”升级');
     expect(output).toContain('`--channel auto|release|npm|pnpm|yarn|bun`');
     expect(output).toContain('`licell upgrade --dry-run`');
+    expect(output).toContain('不要同时保留多个全局安装来源');
   });
 
   it('renders skills upgrade notes in English', () => {
@@ -18,6 +19,7 @@ describe('install-upgrade-docs', () => {
     expect(output).toContain('follows the current installation source');
     expect(output).toContain('project-local `node_modules`');
     expect(output).toContain('`licell upgrade --dry-run`');
+    expect(output).toContain('Do not keep multiple global installation sources');
   });
 
   it('exposes a concise builtin safety hint', () => {

@@ -41,7 +41,7 @@ const PRODUCT_COMMAND_ROOTS: Record<string, string[]> = {
   cdn: ['domain'],
   cr: ['deploy'],
   ram: ['auth'],
-  vpc: ['deploy', 'db', 'cache']
+  vpc: ['vpc', 'deploy', 'db', 'cache']
 };
 
 function capabilityWords(value: string) {

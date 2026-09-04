@@ -68,4 +68,15 @@ describe('resolveAuthCapabilityActions', () => {
       expect(actions).not.toContain(action);
     }
   });
+
+  it('keeps VPC inventory permission hints read-only', () => {
+    expect(AUTH_CAPABILITY_LABELS['vpc-read']).toBe('VPC 只读查询');
+    expect(resolveAuthCapabilityActions(['vpc-read'])).toEqual([
+      'vpc:DescribeEipAddresses',
+      'vpc:DescribeNatGateways',
+      'vpc:DescribeRouteTables',
+      'vpc:DescribeVSwitches',
+      'vpc:DescribeVpcs'
+    ]);
+  });
 });

@@ -156,13 +156,36 @@ describe('aliyun cli OpenAPI runner adapter', () => {
     });
   });
 
-  it('redacts kubeconfig from generic raw API results', async () => {
+  it('blocks generic raw KubeConfig access before a redacted value can be reused', async () => {
+    const spawnProcess = vi.fn(async () => ({
+      exitCode: 0,
+      signal: null,
+      stdout: '{"config":"apiVersion: v1\\nusers: []"}',
+      stderr: ''
+    }));
+    await expect(executeAlicloudApi('cs.DescribeClusterUserKubeconfig', {
+      ClusterId: 'cluster-id',
+      TemporaryDurationMinutes: 15
+    }, {
+      auth: { accountId: 'account', ak: 'test-ak', sk: 'test-sk', region: 'cn-hangzhou' },
+      runnerPath: process.execPath,
+      spawnProcess
+    })).rejects.toMatchObject({
+      name: 'SensitiveResponseAccessError',
+      code: 'SENSITIVE_RESPONSE_BLOCKED',
+      details: { operationRef: 'cs.DescribeClusterUserKubeconfig', safeRoute: 'k8s workloads' }
+    });
+    expect(spawnProcess).not.toHaveBeenCalled();
+  });
+
+  it('allows internal consumers to receive KubeConfig without exposing it in stdout', async () => {
     const result = await executeAlicloudApi('cs.DescribeClusterUserKubeconfig', {
       ClusterId: 'cluster-id',
       TemporaryDurationMinutes: 15
     }, {
       auth: { accountId: 'account', ak: 'test-ak', sk: 'test-sk', region: 'cn-hangzhou' },
       runnerPath: process.execPath,
+      exposeSensitiveResponse: true,
       spawnProcess: async () => ({
         exitCode: 0,
         signal: null,
@@ -171,11 +194,8 @@ describe('aliyun cli OpenAPI runner adapter', () => {
       })
     });
 
-    expect(result.response).toEqual({
-      config: '[REDACTED]',
-      expiration: '2026-09-04T03:00:00Z'
-    });
-    expect(result.stdout).not.toContain('apiVersion');
+    expect(result.response).toMatchObject({ config: 'apiVersion: v1\nusers: []' });
+    expect(result.stdout).toBe('[REDACTED]');
   });
 
   it('generates a nested request template from the capability schema', () => {

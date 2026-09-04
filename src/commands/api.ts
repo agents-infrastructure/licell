@@ -161,7 +161,8 @@ const apiInvokeCommand = defineCliCommand({
       '优先复用 PATH 中的 aliyun；缺失时下载固定版本并校验 SHA-256，缓存到 `~/.licell/bin`。',
       '参数按 protocol 的 Path/Query/Header/Body 位置编译；Path 段会 URL 编码并替换模板，未知或缺失的必填参数会在调用前报错。',
       'Licell 的 `--output json` 只控制外层 CLI record；不会透传为 aliyun-cli 的 `--output json`（上游该选项仅支持 `cols=...` 表格过滤）。',
-      '当前 raw API 不包含业务幂等性、回滚和状态验证语义。'
+      '当前 raw API 不包含业务幂等性、回滚和状态验证语义。',
+      'Kubernetes KubeConfig 等敏感响应只允许 Licell 内部 workflow 消费；generic raw invoke 会返回结构化阻断和安全替代路径。'
     ],
     examples: [
       'licell api invoke vpc.DescribeVpcs --param RegionId=cn-hangzhou --dry-run --output json',
@@ -274,7 +275,10 @@ export const apiCommandModule = defineCommandModule({
         'licell api scaffold vpc.CreateVpc --output json',
         'licell api invoke vpc.DescribeVpcs --dry-run --output json'
       ],
-      agentTips: ['api invoke 是 raw fallback，不代表对应 API 已晋级为 Licell curated capability。']
+      agentTips: [
+        'api invoke 是 raw fallback，不代表对应 API 已晋级为 Licell curated capability。',
+        '不要把 raw API 的 [REDACTED] 敏感字段当作后续命令的输入；优先使用对应的 Licell 原生命令。'
+      ]
     }
   },
   commands: [apiScaffoldCommand, apiInvokeCommand]

@@ -87,10 +87,10 @@ That means command-surface changes can converge across help, MCP, skills, and do
 
 ## Installation
 
-### Recommended: install script
+### Recommended: global npm install
 
 ```bash
-curl -fsSL https://github.com/team-harness/licell/releases/latest/download/install.sh | bash
+npm install -g licell
 ```
 
 After installation, run:
@@ -121,7 +121,8 @@ For team usage, see the [Team Auth Distribution](#team-auth-distribution) sectio
 
 ### Other install sources and upgrades
 
-- npm global install and GitHub Release binaries are also supported
+- If you do not want a Node.js dependency, use the GitHub Release installer instead: `curl -fsSL https://github.com/team-harness/licell/releases/latest/download/install.sh | bash`
+- Choose either npm or the release installer; the first `licell` on PATH shadows the other copy
 - for upgrades, run `licell upgrade`
 - read the detailed upgrade rules below only when needed
 
@@ -256,6 +257,14 @@ licell catalog --output json
 ```
 
 If no curated command covers the outcome, continue with `capability products/search/describe`, then follow `execution.preferred`. Raw writes require `--dry-run`, explicit `--yes`, and read-back verification through `nextActions[]`.
+
+For VPC inventory, agents can stay on the curated surface and inspect the network relationships directly:
+
+```bash
+licell vpc list --region cn-hangzhou --output json
+licell vpc info <vpc> --output json
+licell vpc topology <vpc> --output json
+```
 
 ### 1. Structured help
 

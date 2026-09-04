@@ -1,7 +1,5 @@
 import { access, constants as fsConstants } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
-import { dirname, join, resolve } from 'node:path';
 import { Config, type AuthConfig } from '../../utils/config';
 import { describeAlicloudCapability } from '../../utils/alicloud-capabilities';
 import type { GeneratedCapabilityParameter } from '../../utils/alicloud-capability-generator';
@@ -46,11 +44,38 @@ export interface OpenApiRunnerResult {
   maturity: 'raw';
 }
 
+/**
+ * KubeConfig is an internal transport credential. Generic raw invocation must
+ * fail before a redacted response can be mistaken for usable kubectl input.
+ */
+export class SensitiveResponseAccessError extends Error {
+  readonly code = 'SENSITIVE_RESPONSE_BLOCKED';
+  readonly details: { operationRef: string; safeRoute: string; sensitiveFields: string[] };
+
+  constructor(operationRef: string, sensitiveFields: string[]) {
+    super(
+      `raw API ${operationRef} 返回仅供 Licell 内部使用的敏感字段；` +
+      '该响应不能传递给 Agent 或 kubectl，请使用对应的 Licell 原生命令。'
+    );
+    this.name = 'SensitiveResponseAccessError';
+    this.details = {
+      operationRef,
+      safeRoute: 'k8s workloads',
+      sensitiveFields
+    };
+  }
+}
+
 export type SpawnProcess = (
   command: string,
   args: string[],
   options: { env: NodeJS.ProcessEnv }
 ) => Promise<{ exitCode: number; signal: string | null; stdout: string; stderr: string }>;
+
+export interface ResolveAlicloudRunnerOptions {
+  env?: NodeJS.ProcessEnv;
+  ensureRunner?: () => Promise<string>;
+}
 
 function scalarArgs(name: string, value: unknown) {
   if (value === undefined || value === null) return [];
@@ -207,18 +232,12 @@ function buildRunnerArgs(
   return { args, requestPath };
 }
 
-function packagedRunnerCandidates() {
-  const platform = `${process.platform}-${process.arch === 'x64' ? 'x64' : process.arch === 'arm64' ? 'arm64' : process.arch}`;
-  const executable = process.platform === 'win32' ? 'aliyun.exe' : 'aliyun';
-  const moduleRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
-  return [
-    join(moduleRoot, 'bin', 'aliyun', platform, executable),
-    join(process.cwd(), 'bin', 'aliyun', platform, executable)
-  ];
-}
-
-export async function resolveAlicloudRunner(explicitPath?: string) {
-  const configuredPath = explicitPath || process.env.LICELL_ALIYUN_BIN;
+export async function resolveAlicloudRunner(
+  explicitPath?: string,
+  options: ResolveAlicloudRunnerOptions = {}
+) {
+  const env = options.env || process.env;
+  const configuredPath = explicitPath || env.LICELL_ALIYUN_BIN;
   if (configuredPath) {
     try {
       await access(configuredPath, fsConstants.X_OK);
@@ -228,19 +247,12 @@ export async function resolveAlicloudRunner(explicitPath?: string) {
     }
   }
 
-  const globalRunner = await findExecutableOnPath(process.platform === 'win32' ? 'aliyun.exe' : 'aliyun');
+  const globalRunner = await findExecutableOnPath(
+    process.platform === 'win32' ? 'aliyun.exe' : 'aliyun',
+    env
+  );
   if (globalRunner) return globalRunner;
-
-  const candidates = packagedRunnerCandidates();
-  for (const candidate of candidates) {
-    try {
-      await access(candidate, fsConstants.X_OK);
-      return candidate;
-    } catch {
-      // Continue to the next candidate.
-    }
-  }
-  return ensureAlicloudRunner();
+  return (options.ensureRunner || ensureAlicloudRunner)();
 }
 
 const defaultSpawnProcess: SpawnProcess = (command, args, options) => new Promise((resolvePromise, reject) => {
@@ -328,10 +340,14 @@ export async function executeAlicloudApi(
 ): Promise<OpenApiRunnerResult> {
   const described = describeAlicloudCapability(operationRef);
   const capability = described.capability;
-  const auth = context.auth || (context.dryRun ? undefined : Config.requireAuth());
-  const region = context.region || auth?.region || 'cn-hangzhou';
-  const runner = context.dryRun ? (context.runnerPath || '<aliyun-cli-runner>') : await resolveAlicloudRunner(context.runnerPath);
+  const sensitiveNames = sensitiveResponseNames(capability.shorthand);
+  const region = context.region || context.auth?.region || 'cn-hangzhou';
   const compiled = buildRunnerArgs(capability, input, { ...context, region });
+  if (!context.dryRun && sensitiveNames.size > 0 && !context.exposeSensitiveResponse) {
+    throw new SensitiveResponseAccessError(capability.shorthand, [...sensitiveNames]);
+  }
+  const auth = context.auth || (context.dryRun ? undefined : Config.requireAuth());
+  const runner = context.dryRun ? (context.runnerPath || '<aliyun-cli-runner>') : await resolveAlicloudRunner(context.runnerPath);
   const args = compiled.args;
   const env: NodeJS.ProcessEnv = {
     ...process.env,
@@ -360,7 +376,6 @@ export async function executeAlicloudApi(
   const processResult = await (context.spawnProcess || defaultSpawnProcess)(runner, args, { env });
   const rawResponse = parseRunnerResponse(processResult.stdout);
   const secrets = [auth?.ak || '', auth?.sk || ''];
-  const sensitiveNames = sensitiveResponseNames(capability.shorthand);
   const response = context.exposeSensitiveResponse
     ? rawResponse
     : redactValue(rawResponse, secrets, sensitiveNames);

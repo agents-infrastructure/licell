@@ -239,7 +239,11 @@
 | `licell ecs start <instanceId>` | 启动 ECS 实例 | `--region`, `--dry-run` |
 | `licell ecs stop <instanceId>` | 停止 ECS 实例 | `--region`, `--dry-run`, `--yes` |
 | `licell k8s clusters` | 列出当前地域的 ACK / ACS Kubernetes 集群 | `--region`, `--name` |
+| `licell k8s logs <cluster> <target>` | 只读读取 ACK / ACS 集群内工作负载日志 | `--region`, `--namespace`, `--container` |
 | `licell k8s workloads <cluster>` | 只读查询 ACK / ACS 集群内已部署的工作负载和 Service | `--region`, `--private`, `--request-timeout` |
+| `licell vpc info <vpc>` | 按 VPC ID 或唯一名称查看网络详情 | `--region` |
+| `licell vpc list` | 列出当前地域的 VPC 网络 | `--region`, `--name`, `--limit` |
+| `licell vpc topology <vpc>` | 聚合查看 VPC、交换机、路由表、NAT 网关和 EIP 拓扑 | `--region` |
 
 ### Automation & Tooling
 

@@ -3,8 +3,8 @@ import { defineCommandModule, defineCliCommand, registerCliCommand } from './mod
 import pc from 'picocolors';
 import { createHash } from 'crypto';
 import { spawnSync } from 'child_process';
-import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'fs';
-import { dirname, join, resolve } from 'path';
+import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'fs';
+import { delimiter, dirname, join, resolve } from 'path';
 import { tmpdir } from 'os';
 import { createSpinner, showIntro, showOutro, toOptionalString } from '../utils/cli-shared';
 import { emitCliEvent, emitCommandEvent, emitCommandResult, isJsonOutput } from '../utils/output';
@@ -29,7 +29,10 @@ const upgradeCommand = defineCliCommand({
   ],
   descriptor: {
     summary: '按当前安装来源执行自升级，支持 dry-run 查看计划。',
-    notes: ['推荐先执行 `licell upgrade --dry-run` 确认升级渠道与动作。'],
+    notes: [
+      '推荐先执行 `licell upgrade --dry-run` 确认升级渠道与动作。',
+      '不要同时保留多个全局安装来源；PATH 中排在最前的 licell 会遮蔽其它版本。'
+    ],
     safety: {
       level: 'mutating',
       reason: '会修改本机 licell 安装，建议先 dry-run 再执行。'
@@ -48,7 +51,22 @@ const upgradeCommand = defineCliCommand({
       { title: '执行升级', command: 'licell upgrade', reason: '在 dry-run 结果符合预期后再真正修改安装。' }
     ],
     examples: ['licell upgrade --dry-run', 'licell upgrade', 'licell upgrade --channel release --target-version v0.10.1'],
-    agentTips: ['Agent 优先使用 `--dry-run --output json` 判断升级来源与命令。']
+    agentTips: [
+      'Agent 优先使用 `--dry-run --output json` 判断升级来源与命令。',
+      '读取 `pathResolution.hasConflict`；为 true 时先向用户报告 activeExecutable 与 shadowedExecutables。'
+    ],
+    result: {
+      summary: '返回升级计划或执行结果，并报告 PATH 实际命中与被遮蔽的 licell 安装。',
+      fields: [
+        { name: 'dryRun', description: '是否仅预览升级计划。', required: true },
+        { name: 'channel', description: '请求的升级渠道。', required: true },
+        { name: 'mode', description: '实际使用 release 或 package-manager。', required: true },
+        { name: 'installSource', description: '当前进程检测到的安装来源。', required: false },
+        { name: 'pathResolution.activeExecutable', description: '当前 PATH 中实际优先命中的 licell 入口。', required: true },
+        { name: 'pathResolution.shadowedExecutables[]', description: '被优先入口遮蔽的其它 licell 安装。', required: true },
+        { name: 'pathResolution.hasConflict', description: 'PATH 中是否存在多个不同的 licell 安装。', required: true }
+      ]
+    }
   }
 });
 
@@ -60,6 +78,12 @@ export interface InstallSourceInfo {
   packageManager?: PackageManagerName;
   runtimePath: string | null;
   execPath: string;
+}
+
+export interface LicellPathResolution {
+  activeExecutable: string | null;
+  shadowedExecutables: string[];
+  hasConflict: boolean;
 }
 
 export type UpgradePlan =
@@ -92,6 +116,7 @@ export function formatUpgradeDryRunText(input: {
   installSource: InstallSourceInfo;
   channel: UpgradeChannel;
   plan: UpgradePlan;
+  pathResolution?: LicellPathResolution;
 }) {
   const lines = [
     `detected install source: ${formatInstallSourceDisplay(input.installSource)}`,
@@ -104,12 +129,57 @@ export function formatUpgradeDryRunText(input: {
     lines.push(`package manager command: ${input.plan.displayCommand}`);
   }
 
+  if (input.pathResolution?.activeExecutable) {
+    lines.push(`active executable: ${input.pathResolution.activeExecutable}`);
+  }
+  if (input.pathResolution?.shadowedExecutables.length) {
+    lines.push(`shadowed executables: ${input.pathResolution.shadowedExecutables.join(', ')}`);
+  }
+
   return lines.join('\n');
 }
 
 function normalizePathForMatch(value: string | null | undefined) {
   if (typeof value !== 'string' || value.length === 0) return '';
   return value.replace(/\\/g, '/').toLowerCase();
+}
+
+export function findLicellExecutablesOnPath(input: {
+  env?: NodeJS.ProcessEnv;
+  platform?: NodeJS.Platform;
+} = {}) {
+  const env = input.env || process.env;
+  const platform = input.platform || process.platform;
+  const names = platform === 'win32' ? ['licell.exe', 'licell.cmd', 'licell'] : ['licell'];
+  const seenRealPaths = new Set<string>();
+  const executables: string[] = [];
+
+  for (const directory of (env.PATH || '').split(delimiter).filter(Boolean)) {
+    for (const name of names) {
+      const candidate = join(directory, name);
+      try {
+        if (!statSync(candidate).isFile()) continue;
+        const realPath = realpathSync(candidate);
+        const key = normalizePathForMatch(realPath);
+        if (seenRealPaths.has(key)) continue;
+        seenRealPaths.add(key);
+        executables.push(candidate);
+      } catch {
+        // Continue searching PATH.
+      }
+    }
+  }
+
+  return executables;
+}
+
+export function resolveLicellPathResolution(env: NodeJS.ProcessEnv = process.env): LicellPathResolution {
+  const executables = findLicellExecutablesOnPath({ env });
+  return {
+    activeExecutable: executables[0] || null,
+    shadowedExecutables: executables.slice(1),
+    hasConflict: executables.length > 1
+  };
 }
 
 function getRuntimePath(argv: string[]) {
@@ -410,6 +480,7 @@ export function registerUpgradeCommand(cli: CAC) {
       }
 
       const installSource = detectInstallSource();
+      const pathResolution = resolveLicellPathResolution();
       const plan = resolveUpgradePlan({
         channel,
         repo,
@@ -424,6 +495,7 @@ export function registerUpgradeCommand(cli: CAC) {
               dryRun: true,
               channel,
               installSource: installSource.kind,
+              pathResolution,
               mode: plan.mode,
               ...(plan.mode === 'release'
                 ? { scriptUrl: plan.scriptUrl }
@@ -436,7 +508,8 @@ export function registerUpgradeCommand(cli: CAC) {
           console.log(formatUpgradeDryRunText({
             installSource,
             channel,
-            plan
+            plan,
+            pathResolution
           }));
           showOutro('Done.');
         }
@@ -492,7 +565,8 @@ export function registerUpgradeCommand(cli: CAC) {
             channel,
             mode: plan.mode,
             packageManager: plan.packageManager,
-            command: plan.displayCommand
+            command: plan.displayCommand,
+            pathResolution: resolveLicellPathResolution()
           });
         } else {
           showOutro(pc.green(`✅ 升级完成（${plan.packageManager}）`));
@@ -594,7 +668,8 @@ export function registerUpgradeCommand(cli: CAC) {
             mode: plan.mode,
             scriptUrl: plan.scriptUrl,
             checksumSkipped: skipChecksum,
-            installSource: installSource.kind
+            installSource: installSource.kind,
+            pathResolution: resolveLicellPathResolution()
           });
         } else {
           showOutro(pc.green('✅ 升级完成'));

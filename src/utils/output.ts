@@ -274,6 +274,7 @@ function detectErrorCategory(message: string, err: unknown): CliErrorCategory {
   const lower = message.toLowerCase();
   const rawCode = extractErrorCode(err);
   if (rawCode === 'DEPLOY_PRECHECK_FAILED') return 'input';
+  if (rawCode === 'SENSITIVE_RESPONSE_BLOCKED') return 'input';
   if (
     lower.includes('unknown command')
     || lower.includes('未知命令')
@@ -304,6 +305,7 @@ function detectErrorCode(message: string, err: unknown, category: CliErrorCatego
   const lower = message.toLowerCase();
   const rawCode = extractErrorCode(err);
   if (rawCode === 'DEPLOY_PRECHECK_FAILED') return 'CLI_DEPLOY_PRECHECK_FAILED';
+  if (rawCode === 'SENSITIVE_RESPONSE_BLOCKED') return rawCode;
   if (rawCode === 'K8S_RBAC_FORBIDDEN') return rawCode;
   if (lower.includes('unknown command') || lower.includes('未知命令')) return 'CLI_UNKNOWN_COMMAND';
   if (lower.includes('missing required args for command')) return 'CLI_MISSING_REQUIRED_ARGS';
@@ -535,7 +537,23 @@ function buildCliErrorGuidance(
       phase: 'verify'
     });
   }
-  if (category === 'input' && !usage && rawCode !== 'DEPLOY_PRECHECK_FAILED') {
+  if (rawCode === 'SENSITIVE_RESPONSE_BLOCKED') {
+    tips.push({
+      type: 'safe_route',
+      title: '使用安全的 Kubernetes 命令',
+      reason: 'KubeConfig 仅在 Licell 进程内使用，不能作为 raw API 响应交给 Agent 或 kubectl',
+      commandTemplate: 'licell k8s workloads <cluster> --output json',
+      phase: 'inspect'
+    });
+    tips.push({
+      type: 'inspect_capability',
+      title: '检查可用的 Kubernetes 能力',
+      reason: '先从 catalog/help 确认当前版本已实现的安全命令，再决定是否存在能力缺口',
+      commandTemplate: 'licell catalog --output json',
+      phase: 'inspect'
+    });
+  }
+  if (category === 'input' && !usage && rawCode !== 'DEPLOY_PRECHECK_FAILED' && rawCode !== 'SENSITIVE_RESPONSE_BLOCKED') {
     const isUnknownCommand = lower.includes('unknown command') || lower.includes('未知命令');
     const helpTarget = isUnknownCommand
       ? (suggestions[0] ? `licell ${suggestions[0]} --help` : 'licell --help')

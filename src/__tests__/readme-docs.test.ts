@@ -45,6 +45,7 @@ describe('syncReadmeQuickReferenceSection', () => {
     expect(output).toContain('**Task 函数工作流**');
     expect(output).toContain('#### Cloud Infrastructure');
     expect(output).toContain('licell ecs list');
+    expect(output).toContain('licell vpc topology');
     expect(output).toContain('licell ecs info <instanceId>');
     expect(output).toContain('licell ecs start <instanceId>');
     expect(output).toContain('licell ecs stop <instanceId>');

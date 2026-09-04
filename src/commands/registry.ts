@@ -28,6 +28,7 @@ import { stateCommandModule } from './state';
 import { supaCommandModule } from './supa';
 import { taskCommandModule } from './task';
 import { upgradeCommandModule } from './upgrade';
+import { vpcCommandModule } from './vpc';
 import { workspaceCommandModule } from './workspace';
 import { defineCommandBundle, defineCommandManifest } from './module';
 
@@ -102,6 +103,7 @@ export const LICELL_COMMAND_MANIFEST = defineCommandManifest({
     supaCommandModule,
     ecsCommandModule,
     k8sCommandModule,
+    vpcCommandModule,
     doctorCommandModule,
     catalogCommandModule,
     apiCommandModule,

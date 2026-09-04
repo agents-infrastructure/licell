@@ -87,10 +87,10 @@ Licell 最新架构里，命令不再只是“能执行”，还要“能自我�
 
 ## 安装
 
-### 推荐：安装脚本
+### 推荐：npm 全局安装
 
 ```bash
-curl -fsSL https://github.com/team-harness/licell/releases/latest/download/install.sh | bash
+npm install -g licell
 ```
 
 安装完成后，可直接运行：
@@ -121,7 +121,8 @@ licell auth restore '<token>' '<passkey>' --yes
 
 ### 其他安装方式与升级
 
-- 也支持 npm 全局安装和 GitHub Release 二进制分发
+- 不希望依赖 Node.js 时，可改用 GitHub Release 安装脚本：`curl -fsSL https://github.com/team-harness/licell/releases/latest/download/install.sh | bash`
+- npm 与安装脚本二选一，不要同时安装；PATH 中第一条 `licell` 会遮蔽另一份
 - 升级时直接运行 `licell upgrade`
 - 如需了解升级来源或升级渠道，再看下面这份说明
 
@@ -130,6 +131,7 @@ licell auth restore '<token>' '<passkey>' --yes
 
 <!-- BEGIN GENERATED:README_UPGRADE_GUIDANCE -->
 - `licell upgrade` 会优先按“当前正在执行的安装来源”升级
+- 不要同时保留多个全局安装来源；PATH 中排在最前的 `licell` 会遮蔽其它已升级版本，可用 `licell upgrade --dry-run --output json` 查看冲突入口
 - 如果当前是 `npm` / `pnpm` / `yarn` / `bun` 全局安装，会调用对应包管理器执行全局升级
 - 如果当前是项目内依赖、`node_modules/.bin/licell` 或开发链接，默认不会自动做全局升级
 - 安装脚本和二进制都来自同一个 `releases/latest`，优先下载预构建单文件可执行；若当前平台暂无预构建资产，自动回退源码安装
@@ -755,7 +757,11 @@ licell e2e cleanup <runId>
 | `licell ecs start <instanceId>` | 启动 ECS 实例 | `--region`, `--dry-run` |
 | `licell ecs stop <instanceId>` | 停止 ECS 实例 | `--region`, `--dry-run`, `--yes` |
 | `licell k8s clusters` | 列出当前地域的 ACK / ACS Kubernetes 集群 | `--region`, `--name` |
+| `licell k8s logs <cluster> <target>` | 只读读取 ACK / ACS 集群内工作负载日志 | `--region`, `--namespace`, `--container` |
 | `licell k8s workloads <cluster>` | 只读查询 ACK / ACS 集群内已部署的工作负载和 Service | `--region`, `--private`, `--request-timeout` |
+| `licell vpc info <vpc>` | 按 VPC ID 或唯一名称查看网络详情 | `--region` |
+| `licell vpc list` | 列出当前地域的 VPC 网络 | `--region`, `--name`, `--limit` |
+| `licell vpc topology <vpc>` | 聚合查看 VPC、交换机、路由表、NAT 网关和 EIP 拓扑 | `--region` |
 
 #### Automation & Tooling
 

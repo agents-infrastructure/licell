@@ -3,20 +3,34 @@ import { enrichDescribeForAgent } from '../commands/capability';
 import { describeAlicloudCapability } from '../utils/alicloud-capabilities';
 
 describe('capability agent guidance', () => {
-  it('does not recommend unrelated domain commands when no operation matches', async () => {
+  it('prefers the curated VPC inventory for DescribeVpcs', async () => {
     const result = await enrichDescribeForAgent(describeAlicloudCapability('vpc.DescribeVpcs'));
 
-    expect(result.curatedCommandCandidates).toEqual([]);
+    expect(result.curatedCommandCandidates.map((candidate) => candidate.key)).toEqual([
+      'vpc list',
+      'vpc info',
+      'vpc topology'
+    ]);
     expect(result.execution).toMatchObject({
       policy: 'curated-first',
-      strategy: 'raw-api-fallback',
+      strategy: 'curated-command',
       preferred: {
-        kind: 'raw-api',
-        previewCommand: 'licell api invoke vpc.DescribeVpcs --output json'
+        kind: 'curated-command',
+        commandKey: 'vpc list'
       }
     });
-    expect(result.nextActions[0]?.commandTemplate).toBe('licell api invoke vpc.DescribeVpcs --output json');
+    expect(result.nextActions[0]?.commandTemplate).toBe('licell catalog --root-command vpc --output json');
     expect(result.nextActions.some((action) => action.commandTemplate.includes('api invoke vpc.DescribeVpcs'))).toBe(true);
+  }, 20_000);
+
+  it.each([
+    ['vpc.DescribeVSwitches', 'vpc topology'],
+    ['vpc.DescribeRouteTables', 'vpc topology'],
+    ['vpc.DescribeNatGateways', 'vpc topology'],
+    ['vpc.DescribeEipAddresses', 'vpc topology']
+  ])('routes %s to the curated topology command', async (ref, commandKey) => {
+    const result = await enrichDescribeForAgent(describeAlicloudCapability(ref));
+    expect(result.execution.preferred).toMatchObject({ kind: 'curated-command', commandKey });
   }, 20_000);
 
   it('prefers the function list command for FC ListFunctions', async () => {
