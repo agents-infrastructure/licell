@@ -142,7 +142,7 @@ describe('Redis/Tair backup policy desired-state provider', () => {
     const describeBackupPolicy = vi.fn()
       .mockResolvedValueOnce(policyResponse())
       .mockResolvedValueOnce(policyResponse({ backupRetentionPeriod: '30' }));
-    const modifyBackupPolicy = vi.fn(async () => ({ body: { requestId: 'request-a' } }));
+    const modifyBackupPolicy = vi.fn(async (_request: unknown) => ({ body: { requestId: 'request-a' } }));
     const client = createClient(describeBackupPolicy, modifyBackupPolicy);
 
     await applyCacheBackupPolicy(
