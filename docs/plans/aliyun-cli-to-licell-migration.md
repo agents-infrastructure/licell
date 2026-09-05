@@ -3,7 +3,7 @@
 > 调研快照：2026-09-03。源码目录：`/Users/wyattfang/work/aliyun-cli`；Licell：`/Users/wyattfang/work/licell`。
 > aliyun-cli 当前 HEAD：`eadd68d9a13dd0734a2236e2c70e38f4888ae65f`（v3.4.11 代码线）；OpenAPI 子模块：`2563691c22229a0b493606e11166b95896707095`。
 > 统计基于本地子模块，不依赖网络实时产品目录。阿里云 API 与产品元数据会变化，发布前应重新生成统计。
-> 实施状态更新：2026-09-05。Phase 0 已完成；Phase 1 核心完成、共享增强待办；Phase 2 首批语义 overlay 已完成；Phase 3 已完成 FC advanced、RDS、Redis/Tair、ACR、OSS 的首批只读切片，以及 v1.0.10 ACR scan / OSS config inspect+apply、v1.0.11 VPC config / RDS restore plan；v1.0.12 Redis/Tair 自动备份策略 desired-state workflow 已完成并待发布，Phase 4 尚未开始。
+> 实施状态更新：2026-09-05。Phase 0 已完成；Phase 1 核心完成、共享增强待办；Phase 2 首批语义 overlay 已完成；Phase 3 已完成 FC advanced、RDS、Redis/Tair、ACR、OSS 的首批只读切片，以及 v1.0.10 ACR scan / OSS config inspect+apply、v1.0.11 VPC config / RDS restore plan、v1.0.12 Redis/Tair 自动备份策略 desired-state workflow，Phase 4 尚未开始。
 
 本方案的协议源采用仓库内快照：将 `aliyun-openapi-meta` 的协议文件复制到
 `protocol/alicloud-openapi/`，由 Git 记录版本和变更。运行时、生成器和 Agent
@@ -132,7 +132,7 @@ API 级参考文件规则：
 
 ### 4.1 命令面
 
-`licell catalog --output json`（v1.0.12 待发布）返回：
+`licell catalog --output json`（v1.0.12）返回：
 
 - 40 个 root commands；
 - 159 个 concrete command entries；
@@ -390,7 +390,7 @@ Agent 主路径是 `catalog -> curated help/execute`；没有领域命令时进�
 
 ### Phase 3：P1 高频资源原生化（未完成，每个产品 3-7 天）
 
-当前状态：RAM、CAS、CDN、SLS、FC advanced、RDS、Redis/Tair、ACR、OSS 已完成首批只读切片；ACR scan 与 OSS config inspect+apply 已进入 v1.0.10；VPC config 与 RDS restore plan 已进入 v1.0.11；Redis/Tair 自动备份策略 desired-state workflow 已完成真实账号写入/恢复 smoke，作为 v1.0.12 范围待发布。下一顺序：评估小范围 RDS mutate/verify。
+当前状态：RAM、CAS、CDN、SLS、FC advanced、RDS、Redis/Tair、ACR、OSS 已完成首批只读切片；ACR scan 与 OSS config inspect+apply 已进入 v1.0.10；VPC config 与 RDS restore plan 已进入 v1.0.11；Redis/Tair 自动备份策略 desired-state workflow 已完成真实账号写入/恢复 smoke，并进入 v1.0.12。下一顺序：评估小范围 RDS mutate/verify。
 
 #### v1.0.10：ACR scan 与 OSS config inspect+apply
 
@@ -414,7 +414,7 @@ Agent 主路径是 `catalog -> curated help/execute`；没有领域命令时进�
 
 `rds.CloneDBInstance` 和 `rds.DescribeLocalAvailableRecoveryTime` 已进入人工 overlay，Agent 从“恢复 RDS 到新实例”的自然语言检索会先进入 `db restore plan`，而不是直接执行 raw 写 API。
 
-#### v1.0.12：Redis/Tair 自动备份策略（待发布）
+#### v1.0.12：Redis/Tair 自动备份策略（已发布）
 
 已实现：新增 `cache backup-policy apply <instanceId>`，以 `DescribeBackupPolicy -> ModifyBackupPolicy -> DescribeBackupPolicy` 管理自动备份周期、UTC 整点时段、7-730 天保留期和可选增量备份开关。省略字段保持现状；命令支持 `--payload/--file`、`--dry-run`、`--yes`、字段级 set/noop 计划、无变化幂等跳过和写后重试读回验证。
 
