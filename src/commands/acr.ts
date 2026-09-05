@@ -1,6 +1,6 @@
 import type { CAC } from 'cac';
 import pc from 'picocolors';
-import { listAcrInstances, listAcrNamespaces, listAcrRepositories, listAcrTags } from '../providers/cr-inventory';
+import { inspectAcrScan, listAcrInstances, listAcrNamespaces, listAcrRepositories, listAcrTags } from '../providers/cr-inventory';
 import { executeWithAuthRecovery } from '../utils/auth-recovery';
 import { ensureAuthOrExit, isInteractiveTTY, parseListLimit, toOptionalString } from '../utils/cli-shared';
 import { emitCommandResult, isJsonOutput } from '../utils/output';
@@ -72,6 +72,45 @@ const acrTagsCommand = defineCliCommand({
   }
 });
 
+const acrScanCommand = defineCliCommand({
+  rawName: 'acr scan <instanceId> <repositoryId> <tag>', description: '查看 ACR 企业版镜像的已有安全扫描结果（只读）', region: { scope: 'auth' },
+  options: [
+    { rawName: '--digest <digest>', description: '镜像 digest，用于精确选择扫描对象' },
+    { rawName: '--task-id <taskId>', description: '已有扫描任务 ID' },
+    { rawName: '--severity <severity>', description: '按严重级别过滤：High、Medium、Low、Unknown' },
+    { rawName: '--type <type>', description: '按漏洞类型过滤：cve 或 sca' },
+    { rawName: '--query <keyword>', description: '按 CVE 或漏洞关键字过滤' },
+    { rawName: '--limit <n>', description: '返回漏洞数量，默认 50，最大 200' }
+  ],
+  descriptor: {
+    title: 'Inspect ACR image scan', summary: '读取指定企业版镜像已有扫描的状态、严重级别汇总和漏洞摘要。',
+    examples: [
+      'licell acr scan cri-xxx crr-xxx v1.0.0 --output json',
+      'licell acr scan cri-xxx crr-xxx latest --severity High --limit 20 --output json'
+    ],
+    argumentHints: {
+      instanceId: 'ACR 企业版实例 ID；从 `acr instances` 获取。',
+      repositoryId: '镜像仓库 ID；从 `acr repositories` 获取。',
+      tag: '镜像标签；从 `acr tags` 获取。'
+    },
+    related: ['acr tags', 'acr repositories', 'capability search'],
+    agentTips: [
+      '该命令只读取已有扫描，不创建或重跑扫描任务；status 非 COMPLETE 时返回状态和空漏洞列表。',
+      '输出不会包含修复命令、镜像文件路径、层 ID、漏洞描述或外链；不要从 raw API 结果执行 FixCmd。'
+    ],
+    automation: { preferredOutput: 'json', explicitInputs: ['instanceId', 'repositoryId', 'tag', '--region', '--digest', '--task-id', '--severity', '--type', '--query', '--limit'] },
+    safety: { level: 'safe', reason: '只调用 ACR GetRepoTagScanStatus、GetRepoTagScanSummary 和 ListRepoTagScanResult。', confirmFlags: [] },
+    result: { outcomeKey: 'vulnerabilities', fields: [
+      { name: 'status', description: '扫描状态，例如 SCANNING、COMPLETE 或 FAILED。', required: false },
+      { name: 'complete', description: '扫描是否完成并已读取结果。', required: true },
+      { name: 'summary', description: '各严重级别漏洞数量；未完成时为 null。', required: true },
+      { name: 'count', description: '本次返回漏洞数。', required: true },
+      { name: 'truncated', description: '漏洞结果是否截断。', required: true },
+      { name: 'vulnerabilities[]', description: 'CVE、严重级别、软件包、当前版本和修复版本摘要。', required: true }
+    ] }
+  }
+});
+
 export function registerAcrCommands(cli: CAC) {
   registerCliCommand(cli, acrInstancesCommand).action(async (options: { status?: unknown; limit?: unknown }) => {
     const result = await executeWithAuthRecovery({ commandLabel: commandInvocation(acrInstancesCommand), interactiveTTY: isInteractiveTTY(), requiredCapabilities: ['cr'] }, async () => {
@@ -108,6 +147,21 @@ export function registerAcrCommands(cli: CAC) {
     if (isJsonOutput()) emitCommandResult({ stage: 'acr.tags', ...result });
     if (!isJsonOutput()) printRows('ACR tags', result.tags, (item) => `${item.tag || '-'}  ${item.status || '-'}  ${item.sizeBytes || 0} bytes`);
   });
+
+  registerCliCommand(cli, acrScanCommand).action(async (instanceId: string, repositoryId: string, tag: string, options: { digest?: unknown; taskId?: unknown; severity?: unknown; type?: unknown; query?: unknown; limit?: unknown }) => {
+    const result = await executeWithAuthRecovery({ commandLabel: commandInvocation(acrScanCommand), interactiveTTY: isInteractiveTTY(), requiredCapabilities: ['cr'] }, async () => {
+      ensureAuthOrExit();
+      return inspectAcrScan(instanceId, repositoryId, tag, {
+        digest: toOptionalString(options.digest), taskId: toOptionalString(options.taskId), severity: toOptionalString(options.severity),
+        scanType: toOptionalString(options.type), query: toOptionalString(options.query), limit: parseListLimit(options.limit, 50, 200)
+      });
+    });
+    if (isJsonOutput()) emitCommandResult({ stage: 'acr.scan', ...result });
+    if (!isJsonOutput()) {
+      console.log(pc.bold(`ACR image scan: ${result.status || 'UNKNOWN'}`));
+      printRows('Vulnerabilities', result.vulnerabilities, (item) => `${item.severity || '-'}  ${item.cve || '-'}  ${item.package || '-'}  ${item.installedVersion || '-'} -> ${item.fixedVersion || '-'}`);
+    }
+  });
 }
 
 function printRows(title: string, rows: Array<Record<string, unknown>>, format: (item: Record<string, unknown>) => string) {
@@ -121,10 +175,10 @@ export const acrCommandModule = defineCommandModule({
   namespaces: {
     acr: {
       title: 'Container Registry',
-      summary: '盘点 ACR 企业版实例、命名空间、镜像仓库和 tag；个人版由 deploy 兼容流程管理。',
-      examples: ['licell acr instances --output json', 'licell acr repositories <instanceId> --output json'],
-      agentTips: ['遵循 instances → namespaces/repositories → tags 的只读探索顺序；未封装能力继续走 capability fallback。']
+      summary: '盘点 ACR 企业版实例、命名空间、镜像仓库、tag 和已有镜像扫描；个人版由 deploy 兼容流程管理。',
+      examples: ['licell acr instances --output json', 'licell acr repositories <instanceId> --output json', 'licell acr scan <instanceId> <repositoryId> <tag> --output json'],
+      agentTips: ['遵循 instances → namespaces/repositories → tags → scan 的只读探索顺序；未封装能力继续走 capability fallback。']
     }
   },
-  commands: [acrInstancesCommand, acrNamespacesCommand, acrRepositoriesCommand, acrTagsCommand]
+  commands: [acrInstancesCommand, acrNamespacesCommand, acrRepositoriesCommand, acrTagsCommand, acrScanCommand]
 });

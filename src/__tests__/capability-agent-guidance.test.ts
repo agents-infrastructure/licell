@@ -196,7 +196,10 @@ describe('capability agent guidance', () => {
     ['ListInstance', 'acr instances'],
     ['ListNamespace', 'acr namespaces'],
     ['ListRepository', 'acr repositories'],
-    ['ListRepoTag', 'acr tags']
+    ['ListRepoTag', 'acr tags'],
+    ['GetRepoTagScanStatus', 'acr scan'],
+    ['GetRepoTagScanSummary', 'acr scan'],
+    ['ListRepoTagScanResult', 'acr scan']
   ])('prefers the curated ACR inventory command for %s', async (operation, commandKey) => {
     const result = await enrichDescribeForAgent(describeAlicloudCapability(`cr.${operation}`));
     expect(result.execution.preferred).toMatchObject({ kind: 'curated-command', commandKey });

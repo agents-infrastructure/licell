@@ -7,6 +7,14 @@ export interface AcrInventoryOptions {
   limit?: number;
 }
 
+export interface AcrScanInspectOptions extends AcrInventoryOptions {
+  digest?: string;
+  taskId?: string;
+  severity?: string;
+  scanType?: string;
+  query?: string;
+}
+
 function requiredId(value: string, label: string) {
   const normalized = value.trim();
   if (!normalized) throw new Error(`${label} 不能为空`);
@@ -176,4 +184,112 @@ export async function listAcrTags(
   }
 
   return { instanceId: id, repositoryId: repoId, regionId, limit, totalCount, count: tags.length, truncated: totalCount !== undefined ? tags.length < totalCount : tags.length >= limit, tags };
+}
+
+export async function inspectAcrScan(
+  instanceId: string,
+  repositoryId: string,
+  tag: string,
+  options: AcrScanInspectOptions = {},
+  injected?: CR
+) {
+  const id = requiredId(instanceId, 'instanceId');
+  const repoId = requiredId(repositoryId, 'repositoryId');
+  const imageTag = requiredId(tag, 'tag');
+  const limit = safeLimit(options.limit);
+  const { client, regionId } = resolveClient(options.regionId, injected);
+  const selector = {
+    instanceId: id,
+    repoId,
+    tag: imageTag,
+    digest: options.digest?.trim() || undefined,
+    scanTaskId: options.taskId?.trim() || undefined
+  };
+
+  const statusResponse = await callCrWithRetry(() => client.getRepoTagScanStatus(
+    new $CR.GetRepoTagScanStatusRequest({
+      ...selector,
+      scanType: options.scanType?.trim() || undefined
+    })
+  ));
+  const status = statusResponse.body?.status;
+  const scanService = statusResponse.body?.scanService;
+
+  if (status !== 'COMPLETE') {
+    return {
+      instanceId: id,
+      repositoryId: repoId,
+      tag: imageTag,
+      digest: selector.digest,
+      taskId: selector.scanTaskId,
+      regionId,
+      status,
+      scanService,
+      complete: false,
+      summary: null,
+      limit,
+      totalCount: 0,
+      count: 0,
+      truncated: false,
+      vulnerabilities: []
+    };
+  }
+
+  const summaryResponse = await callCrWithRetry(() => client.getRepoTagScanSummary(
+    new $CR.GetRepoTagScanSummaryRequest(selector)
+  ));
+  const vulnerabilities: Array<Record<string, unknown>> = [];
+  let totalCount: number | undefined;
+
+  for (let pageNo = 1; pageNo <= 20 && vulnerabilities.length < limit; pageNo += 1) {
+    const pageSize = Math.min(100, limit - vulnerabilities.length);
+    const response = await callCrWithRetry(() => client.listRepoTagScanResult(
+      new $CR.ListRepoTagScanResultRequest({
+        ...selector,
+        pageNo,
+        pageSize,
+        severity: options.severity?.trim() || undefined,
+        scanType: options.scanType?.trim() || undefined,
+        vulQueryKey: options.query?.trim() || undefined
+      })
+    ));
+    const rows = response.body?.vulnerabilities || [];
+    const parsedTotal = Number(response.body?.totalCount);
+    if (Number.isFinite(parsedTotal)) totalCount = parsedTotal;
+    vulnerabilities.push(...rows.slice(0, limit - vulnerabilities.length).map((item) => ({
+      cve: item.cveName,
+      severity: item.severity,
+      type: item.scanType,
+      package: item.feature,
+      installedVersion: item.version,
+      fixedVersion: item.versionFixed,
+      packageFormat: item.versionFormat
+    })));
+    if (rows.length < pageSize || (totalCount !== undefined && pageNo * pageSize >= totalCount)) break;
+  }
+
+  const summary = summaryResponse.body;
+  return {
+    instanceId: id,
+    repositoryId: repoId,
+    tag: imageTag,
+    digest: selector.digest,
+    taskId: selector.scanTaskId,
+    regionId,
+    status,
+    scanService,
+    complete: true,
+    summary: {
+      total: summary?.totalSeverity,
+      high: summary?.highSeverity,
+      medium: summary?.mediumSeverity,
+      low: summary?.lowSeverity,
+      unknown: summary?.unknownSeverity
+    },
+    limit,
+    totalCount,
+    count: vulnerabilities.length,
+    truncated: totalCount !== undefined ? vulnerabilities.length < totalCount : vulnerabilities.length >= limit,
+    vulnerabilities
+  };
 }

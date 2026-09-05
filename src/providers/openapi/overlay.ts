@@ -174,6 +174,27 @@ const OVERLAYS: AlicloudCapabilityOverlay[] = [
     notes: ['acr tags reads image tag, digest, size, status, and timestamps.']
   },
   {
+    product: 'cr',
+    operation: 'GetRepoTagScanStatus',
+    commandKeys: ['acr scan'],
+    confidence: 'curated',
+    notes: ['acr scan reads the existing image scan status without creating a scan task.']
+  },
+  {
+    product: 'cr',
+    operation: 'GetRepoTagScanSummary',
+    commandKeys: ['acr scan'],
+    confidence: 'curated',
+    notes: ['acr scan reads vulnerability severity totals for a completed image scan.']
+  },
+  {
+    product: 'cr',
+    operation: 'ListRepoTagScanResult',
+    commandKeys: ['acr scan'],
+    confidence: 'curated',
+    notes: ['acr scan projects CVE and package remediation metadata without fix commands, filesystem paths, layer IDs, descriptions, or external links.']
+  },
+  {
     product: 'ram',
     operation: 'ListUsers',
     commandKeys: ['ram users'],

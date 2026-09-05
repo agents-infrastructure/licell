@@ -8,6 +8,9 @@ const mockPutBucketWithOptions = vi.fn();
 const mockGetBucketInfoWithOptions = vi.fn();
 const mockPutBucketAclWithOptions = vi.fn();
 const mockGetBucketAclWithOptions = vi.fn();
+const mockDeleteBucketLifecycleWithOptions = vi.fn();
+const mockDeleteBucketCorsWithOptions = vi.fn();
+const mockDeleteBucketEncryptionWithOptions = vi.fn();
 const mockPutObjectWithOptions = vi.fn();
 const mockHeadObjectWithOptions = vi.fn();
 const mockExecute = vi.fn();
@@ -42,6 +45,9 @@ vi.mock('@alicloud/oss20190517', () => ({
     getBucketInfoWithOptions = mockGetBucketInfoWithOptions;
     putBucketAclWithOptions = mockPutBucketAclWithOptions;
     getBucketAclWithOptions = mockGetBucketAclWithOptions;
+    deleteBucketLifecycleWithOptions = mockDeleteBucketLifecycleWithOptions;
+    deleteBucketCorsWithOptions = mockDeleteBucketCorsWithOptions;
+    deleteBucketEncryptionWithOptions = mockDeleteBucketEncryptionWithOptions;
     putObjectWithOptions = mockPutObjectWithOptions;
     headObjectWithOptions = mockHeadObjectWithOptions;
     execute = mockExecute;
@@ -85,6 +91,57 @@ vi.mock('@alicloud/oss20190517', () => ({
     constructor(input: unknown) {
       Object.assign(this, input);
     }
+  },
+  ApplyServerSideEncryptionByDefault: class ApplyServerSideEncryptionByDefault {
+    constructor(input: unknown) { Object.assign(this, input); }
+  },
+  CORSConfiguration: class CORSConfiguration {
+    constructor(input: unknown) { Object.assign(this, input); }
+  },
+  CORSRule: class CORSRule {
+    constructor(input: unknown) { Object.assign(this, input); }
+  },
+  LifecycleConfiguration: class LifecycleConfiguration {
+    constructor(input: unknown) { Object.assign(this, input); }
+  },
+  LifecycleRule: class LifecycleRule {
+    constructor(input: unknown) { Object.assign(this, input); }
+  },
+  LifecycleRuleFilter: class LifecycleRuleFilter {
+    constructor(input: unknown) { Object.assign(this, input); }
+  },
+  LifecycleRuleFilterNot: class LifecycleRuleFilterNot {
+    constructor(input: unknown) { Object.assign(this, input); }
+  },
+  LifecycleRuleLifecycleExpiration: class LifecycleRuleLifecycleExpiration {
+    constructor(input: unknown) { Object.assign(this, input); }
+  },
+  LifecycleRuleLifecycleTransition: class LifecycleRuleLifecycleTransition {
+    constructor(input: unknown) { Object.assign(this, input); }
+  },
+  LifecycleRuleLifecycleAbortMultipartUpload: class LifecycleRuleLifecycleAbortMultipartUpload {
+    constructor(input: unknown) { Object.assign(this, input); }
+  },
+  LifecycleRuleNoncurrentVersionExpiration: class LifecycleRuleNoncurrentVersionExpiration {
+    constructor(input: unknown) { Object.assign(this, input); }
+  },
+  LifecycleRuleNoncurrentVersionTransition: class LifecycleRuleNoncurrentVersionTransition {
+    constructor(input: unknown) { Object.assign(this, input); }
+  },
+  PutBucketLifecycleRequest: class PutBucketLifecycleRequest {
+    constructor(input: unknown) { Object.assign(this, input); }
+  },
+  PutBucketCorsRequest: class PutBucketCorsRequest {
+    constructor(input: unknown) { Object.assign(this, input); }
+  },
+  PutBucketEncryptionRequest: class PutBucketEncryptionRequest {
+    constructor(input: unknown) { Object.assign(this, input); }
+  },
+  ServerSideEncryptionRule: class ServerSideEncryptionRule {
+    constructor(input: unknown) { Object.assign(this, input); }
+  },
+  Tag: class Tag {
+    constructor(input: unknown) { Object.assign(this, input); }
   }
 }));
 
@@ -109,7 +166,8 @@ vi.mock('@alicloud/openapi-client', () => ({
 
 vi.mock('@alicloud/openapi-util', () => ({
   default: {
-    query: (input: unknown) => input
+    query: (input: unknown) => input,
+    parseToMap: (input: unknown) => input
   }
 }));
 
@@ -142,6 +200,9 @@ describe('createOssBucket', () => {
     mockGetBucketInfoWithOptions.mockReset();
     mockPutBucketAclWithOptions.mockReset();
     mockGetBucketAclWithOptions.mockReset();
+    mockDeleteBucketLifecycleWithOptions.mockReset();
+    mockDeleteBucketCorsWithOptions.mockReset();
+    mockDeleteBucketEncryptionWithOptions.mockReset();
     mockPutObjectWithOptions.mockReset();
     mockHeadObjectWithOptions.mockReset();
     mockExecute.mockReset();
@@ -162,9 +223,23 @@ describe('createOssBucket', () => {
     });
     mockPutBucketAclWithOptions.mockResolvedValue({});
     mockGetBucketAclWithOptions.mockResolvedValue({ body: { acl: 'private' } });
+    mockDeleteBucketLifecycleWithOptions.mockResolvedValue({});
+    mockDeleteBucketCorsWithOptions.mockResolvedValue({});
+    mockDeleteBucketEncryptionWithOptions.mockResolvedValue({});
     mockPutObjectWithOptions.mockResolvedValue({ headers: { etag: '"etag-demo"' } });
     mockHeadObjectWithOptions.mockResolvedValue({ headers: { etag: '"verified-etag"' } });
-    mockExecute.mockResolvedValue({ body: {} });
+    mockExecute.mockImplementation(async (params: { action?: string }) => {
+      if (params.action === 'GetBucketLifecycle') {
+        return { body: { LifecycleConfiguration: { Rule: [] } } };
+      }
+      if (params.action === 'GetBucketCors') {
+        return { body: { CORSConfiguration: { CORSRule: [], ResponseVary: false } } };
+      }
+      if (params.action === 'GetBucketEncryption') {
+        return { body: { ServerSideEncryptionRule: {} } };
+      }
+      return { body: {} };
+    });
     mockIsConflictError.mockReturnValue(false);
     mockIsAccessDeniedError.mockReturnValue(false);
     mockIsNotFoundError.mockReturnValue(false);
@@ -200,6 +275,234 @@ describe('createOssBucket', () => {
       regionId: 'cn-hangzhou',
       endpoint: 'oss-cn-hangzhou.aliyuncs.com'
     }));
+  });
+
+  it('projects lifecycle, CORS and encryption into the safe bucket config contract', async () => {
+    const { inspectOssBucketConfig } = await import('../providers/oss');
+    mockExecute.mockImplementation(async (params: { action?: string }) => {
+      if (params.action === 'GetBucketLifecycle') return { body: {
+        LifecycleConfiguration: { Rule: {
+          ID: 'archive-assets',
+          Status: 'Enabled',
+          Prefix: 'assets/',
+          Tag: { Key: 'env', Value: 'prod' },
+          Expiration: { Days: 365 },
+          Transition: { Days: 30, StorageClass: 'IA' },
+          AbortMultipartUpload: { Days: 7 },
+          NoncurrentVersionExpiration: { NoncurrentDays: 90 },
+          NoncurrentVersionTransition: { NoncurrentDays: 15, StorageClass: 'IA' },
+          InternalField: 'must-not-leak'
+        } }
+      } };
+      if (params.action === 'GetBucketCors') return { body: {
+        CORSConfiguration: { ResponseVary: true, CORSRule: {
+          AllowedOrigin: 'https://example.com',
+          AllowedMethod: ['GET', 'HEAD'],
+          AllowedHeader: 'authorization',
+          ExposeHeader: 'etag',
+          MaxAgeSeconds: 600,
+          InternalField: 'must-not-leak'
+        } }
+      } };
+      if (params.action === 'GetBucketEncryption') return { body: {
+        ServerSideEncryptionRule: { ApplyServerSideEncryptionByDefault: {
+          SSEAlgorithm: 'KMS',
+          KMSMasterKeyID: 'kms-key-id',
+          KMSDataEncryption: 'SM4',
+          InternalField: 'must-not-leak'
+        } }
+      } };
+      return { body: {} };
+    });
+
+    const result = await inspectOssBucketConfig('demo-bucket', { regionId: 'cn-shanghai' });
+
+    expect(result).toEqual({
+      bucket: 'demo-bucket',
+      regionId: 'cn-shanghai',
+      lifecycle: {
+        configured: true,
+        ruleCount: 1,
+        rules: [{
+          id: 'archive-assets',
+          status: 'Enabled',
+          prefix: 'assets/',
+          tags: [{ key: 'env', value: 'prod' }],
+          filterNot: undefined,
+          expiration: { createdBeforeDate: undefined, days: 365, expiredObjectDeleteMarker: undefined },
+          transitions: [{
+            createdBeforeDate: undefined,
+            days: 30,
+            storageClass: 'IA',
+            isAccessTime: undefined,
+            returnToStdWhenVisit: undefined,
+            allowSmallFile: undefined
+          }],
+          abortMultipartUpload: { createdBeforeDate: undefined, days: 7 },
+          noncurrentVersionExpiration: { noncurrentDays: 90 },
+          noncurrentVersionTransitions: [{
+            noncurrentDays: 15,
+            storageClass: 'IA',
+            isAccessTime: undefined,
+            returnToStdWhenVisit: undefined,
+            allowSmallFile: undefined
+          }]
+        }]
+      },
+      cors: {
+        configured: true,
+        responseVary: true,
+        ruleCount: 1,
+        rules: [{
+          allowedOrigins: ['https://example.com'],
+          allowedMethods: ['GET', 'HEAD'],
+          allowedHeaders: ['authorization'],
+          exposeHeaders: ['etag'],
+          maxAgeSeconds: 600
+        }]
+      },
+      encryption: {
+        configured: true,
+        algorithm: 'KMS',
+        kmsMasterKeyId: 'kms-key-id',
+        kmsDataEncryption: 'SM4'
+      }
+    });
+  });
+
+  it('maps only official absent-config errors to configured=false', async () => {
+    const { inspectOssBucketConfig } = await import('../providers/oss');
+    mockExecute.mockImplementation(async (params: { action?: string }) => {
+      if (params.action === 'GetBucketLifecycle') throw Object.assign(new Error('missing'), { code: 'NoSuchLifecycle' });
+      if (params.action === 'GetBucketCors') throw Object.assign(new Error('missing'), { data: { Code: 'NoSuchCORSConfiguration' } });
+      if (params.action === 'GetBucketEncryption') {
+        throw Object.assign(new Error('missing'), { code: 'NoSuchServerSideEncryptionRule' });
+      }
+      return { body: {} };
+    });
+
+    const result = await inspectOssBucketConfig('demo-bucket');
+
+    expect(result.lifecycle).toEqual({ configured: false, ruleCount: 0, rules: [] });
+    expect(result.cors).toEqual({ configured: false, responseVary: undefined, ruleCount: 0, rules: [] });
+    expect(result.encryption).toEqual({
+      configured: false,
+      algorithm: undefined,
+      kmsMasterKeyId: undefined,
+      kmsDataEncryption: undefined
+    });
+  });
+
+  it('does not hide permission errors as absent bucket configuration', async () => {
+    const { inspectOssBucketConfig } = await import('../providers/oss');
+    mockExecute.mockImplementation(async (params: { action?: string }) => {
+      if (params.action === 'GetBucketCors') throw Object.assign(new Error('AccessDenied'), { code: 'AccessDenied' });
+      return { body: {} };
+    });
+
+    await expect(inspectOssBucketConfig('demo-bucket')).rejects.toMatchObject({ code: 'AccessDenied' });
+  });
+
+  it('validates OSS config desired-state and rejects typo fields', async () => {
+    const { normalizeOssBucketConfigDesiredState } = await import('../providers/oss');
+
+    expect(normalizeOssBucketConfigDesiredState({ encryption: { algorithm: 'aes256' } })).toEqual({
+      encryption: { algorithm: 'AES256', kmsMasterKeyId: undefined, kmsDataEncryption: undefined }
+    });
+    expect(() => normalizeOssBucketConfigDesiredState({ encrypton: { algorithm: 'AES256' } }))
+      .toThrow(/未知字段: encrypton/);
+    expect(() => normalizeOssBucketConfigDesiredState({ lifecycle: { rules: [] } }))
+      .toThrow(/数量必须在 1-1000/);
+  });
+
+  it('plans a config change without calling mutation APIs', async () => {
+    const { planOssBucketConfig } = await import('../providers/oss');
+
+    const plan = await planOssBucketConfig('demo-bucket', { encryption: { algorithm: 'AES256' } });
+
+    expect(plan).toMatchObject({
+      bucket: 'demo-bucket',
+      changeCount: 1,
+      requiresConfirmation: true,
+      willExecute: false,
+      changes: [{ section: 'encryption', action: 'set' }]
+    });
+    expect(mockExecute.mock.calls.some(([params]) => params?.action === 'PutBucketEncryption')).toBe(false);
+    expect(mockDeleteBucketEncryptionWithOptions).not.toHaveBeenCalled();
+  });
+
+  it('applies encryption and verifies the desired state', async () => {
+    const { applyOssBucketConfig } = await import('../providers/oss');
+    let encryptionReadCount = 0;
+    mockExecute.mockImplementation(async (params: { action?: string }) => {
+      if (params.action === 'GetBucketEncryption') {
+        encryptionReadCount += 1;
+        return encryptionReadCount === 1
+          ? { body: { ServerSideEncryptionRule: {} } }
+          : { body: { ServerSideEncryptionRule: {
+              ApplyServerSideEncryptionByDefault: { SSEAlgorithm: 'AES256' }
+            } } };
+      }
+      if (params.action === 'GetBucketLifecycle') throw Object.assign(new Error('missing'), { code: 'NoSuchLifecycle' });
+      if (params.action === 'GetBucketCors') {
+        throw Object.assign(new Error('missing'), { code: 'NoSuchCORSConfiguration' });
+      }
+      return { body: {} };
+    });
+
+    const result = await applyOssBucketConfig('demo-bucket', { encryption: { algorithm: 'AES256' } });
+
+    expect(mockExecute).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'PutBucketEncryption', pathname: '/?encryption', method: 'PUT' }),
+      expect.objectContaining({
+        body: {
+          ServerSideEncryptionRule: expect.anything()
+        }
+      }),
+      expect.anything()
+    );
+    expect(result).toMatchObject({
+      plan: { changeCount: 1, willExecute: true },
+      execution: { appliedSections: ['encryption'] },
+      verify: { performed: true, matched: true, config: { encryption: { configured: true, algorithm: 'AES256' } } }
+    });
+  });
+
+  it('rolls back already applied sections when a later section fails', async () => {
+    const { applyOssBucketConfig } = await import('../providers/oss');
+    const missingLifecycle = Object.assign(new Error('missing'), { code: 'NoSuchLifecycle' });
+    const missingCors = Object.assign(new Error('missing'), { code: 'NoSuchCORSConfiguration' });
+    mockExecute.mockImplementation(async (params: { action?: string }) => {
+      if (params.action === 'GetBucketLifecycle') throw missingLifecycle;
+      if (params.action === 'GetBucketCors') throw missingCors;
+      if (params.action === 'GetBucketEncryption') {
+        throw Object.assign(new Error('missing'), { code: 'NoSuchServerSideEncryptionRule' });
+      }
+      if (params.action === 'PutBucketCors') {
+        throw Object.assign(new Error('AccessDenied'), { code: 'AccessDenied' });
+      }
+      return { body: {} };
+    });
+
+    await expect(applyOssBucketConfig('demo-bucket', {
+      lifecycle: {
+        rules: [{ id: 'test', status: 'Enabled', prefix: 'licell-config-test/', expiration: { days: 365 } }]
+      },
+      cors: {
+        rules: [{ allowedOrigins: ['https://example.com'], allowedMethods: ['GET'] }]
+      }
+    })).rejects.toThrow(/已回滚 1 个已变更配置/);
+
+    expect(mockExecute).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'PutBucketLifecycle', pathname: '/?lifecycle', method: 'PUT' }),
+      expect.objectContaining({
+        body: {
+          LifecycleConfiguration: expect.anything()
+        }
+      }),
+      expect.anything()
+    );
+    expect(mockDeleteBucketLifecycleWithOptions).toHaveBeenCalledWith('demo-bucket', {}, expect.anything());
   });
 
   it('keeps non-default storageClass in createBucketConfiguration', async () => {

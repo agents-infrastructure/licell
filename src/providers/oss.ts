@@ -38,6 +38,109 @@ export interface OssRegionOptions {
   regionId?: string;
 }
 
+export interface OssBucketLifecycleRuleSummary {
+  id?: string;
+  status?: string;
+  prefix?: string;
+  tags: Array<{ key?: string; value?: string }>;
+  filterNot?: { prefix?: string; tag?: { key?: string; value?: string } };
+  expiration?: { createdBeforeDate?: string; days?: number; expiredObjectDeleteMarker?: boolean };
+  transitions: Array<{
+    createdBeforeDate?: string;
+    days?: number;
+    storageClass?: string;
+    isAccessTime?: boolean;
+    returnToStdWhenVisit?: boolean;
+    allowSmallFile?: boolean;
+  }>;
+  abortMultipartUpload?: { createdBeforeDate?: string; days?: number };
+  noncurrentVersionExpiration?: { noncurrentDays?: number };
+  noncurrentVersionTransitions: Array<{
+    noncurrentDays?: number;
+    storageClass?: string;
+    isAccessTime?: boolean;
+    returnToStdWhenVisit?: boolean;
+    allowSmallFile?: boolean;
+  }>;
+}
+
+export interface OssBucketConfigInspection {
+  bucket: string;
+  regionId: string;
+  lifecycle: {
+    configured: boolean;
+    ruleCount: number;
+    rules: OssBucketLifecycleRuleSummary[];
+  };
+  cors: {
+    configured: boolean;
+    responseVary?: boolean;
+    ruleCount: number;
+    rules: Array<{
+      allowedOrigins: string[];
+      allowedMethods: string[];
+      allowedHeaders: string[];
+      exposeHeaders: string[];
+      maxAgeSeconds?: number;
+    }>;
+  };
+  encryption: {
+    configured: boolean;
+    algorithm?: string;
+    kmsMasterKeyId?: string;
+    kmsDataEncryption?: string;
+  };
+}
+
+export interface OssBucketConfigDesiredState {
+  lifecycle?: { rules: OssBucketLifecycleRuleSummary[] } | null;
+  cors?: {
+    responseVary?: boolean;
+    rules: Array<{
+      allowedOrigins: string[];
+      allowedMethods: string[];
+      allowedHeaders: string[];
+      exposeHeaders: string[];
+      maxAgeSeconds?: number;
+    }>;
+  } | null;
+  encryption?: {
+    algorithm: 'AES256' | 'KMS';
+    kmsMasterKeyId?: string;
+    kmsDataEncryption?: 'SM4';
+  } | null;
+}
+
+export interface OssBucketConfigChange {
+  section: 'lifecycle' | 'cors' | 'encryption';
+  action: 'set' | 'delete' | 'noop';
+  before: OssBucketConfigInspection['lifecycle' | 'cors' | 'encryption'];
+  after: OssBucketConfigInspection['lifecycle' | 'cors' | 'encryption'];
+}
+
+export interface OssBucketConfigPlan {
+  bucket: string;
+  regionId: string;
+  current: OssBucketConfigInspection;
+  desiredState: OssBucketConfigDesiredState;
+  changes: OssBucketConfigChange[];
+  changeCount: number;
+  requiresConfirmation: true;
+  willExecute: boolean;
+}
+
+export interface OssBucketConfigApplyResult {
+  plan: OssBucketConfigPlan;
+  execution: {
+    appliedSections: Array<'lifecycle' | 'cors' | 'encryption'>;
+  };
+  verify: {
+    performed: true;
+    matched: true;
+    config: OssBucketConfigInspection;
+  };
+}
+
 export interface OssBucketDomainCertificate {
   certId?: string;
   creationDate?: string;
@@ -183,6 +286,28 @@ function isOssEmptyXmlResponseError(err: unknown) {
   return !code && !statusCode;
 }
 
+function isOssErrorCode(err: unknown, expectedCode: string) {
+  if (typeof err !== 'object' || err === null) return false;
+  const error = err as {
+    code?: unknown;
+    data?: { Code?: unknown; code?: unknown };
+  };
+  return [error.code, error.data?.Code, error.data?.code]
+    .some((value) => String(value || '').toLowerCase() === expectedCode.toLowerCase());
+}
+
+async function readOptionalOssConfig<T>(
+  task: () => Promise<T>,
+  absentErrorCode: string
+): Promise<T | undefined> {
+  try {
+    return await task();
+  } catch (err: unknown) {
+    if (isOssErrorCode(err, absentErrorCode)) return undefined;
+    throw err;
+  }
+}
+
 export function isOssBucketNameUnavailableError(err: unknown) {
   const code = String((err as { code?: unknown })?.code || '').toLowerCase();
   const message = String((err as { message?: unknown })?.message || '').toLowerCase();
@@ -242,6 +367,13 @@ function toOptionalStringValue(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
   const normalized = value.trim();
   return normalized.length > 0 ? normalized : undefined;
+}
+
+function toStringList(value: unknown): string[] {
+  const values = Array.isArray(value) ? value : [value];
+  return values
+    .map((item) => toOptionalStringValue(item))
+    .filter((item): item is string => item !== undefined);
 }
 
 function getHeaderValue(headers: Record<string, string> | undefined, name: string): string | undefined {
@@ -1423,6 +1555,756 @@ export async function getOssBucketInfo(bucketName: string, options: OssRegionOpt
     publicAccessBlock: publicAccessBlockResult.status === 'fulfilled' ? publicAccessBlockResult.value : undefined,
     domains: domainsResult.status === 'fulfilled' ? domainsResult.value : undefined
   };
+}
+
+const OSS_CONFIG_SECTIONS = ['lifecycle', 'cors', 'encryption'] as const;
+type OssBucketConfigSection = typeof OSS_CONFIG_SECTIONS[number];
+
+function requireConfigRecord(value: unknown, label: string): Record<string, unknown> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new Error(`${label} 必须是 JSON object`);
+  }
+  return value as Record<string, unknown>;
+}
+
+function assertKnownConfigKeys(record: Record<string, unknown>, allowed: string[], label: string) {
+  const unknown = Object.keys(record).filter((key) => !allowed.includes(key));
+  if (unknown.length > 0) throw new Error(`${label} 包含未知字段: ${unknown.join(', ')}`);
+}
+
+function requireConfigString(value: unknown, label: string): string {
+  const normalized = toOptionalStringValue(value);
+  if (!normalized) throw new Error(`${label} 必须是非空字符串`);
+  return normalized;
+}
+
+function optionalConfigString(value: unknown, label: string): string | undefined {
+  if (value === undefined) return undefined;
+  return requireConfigString(value, label);
+}
+
+function optionalConfigBoolean(value: unknown, label: string): boolean | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'boolean') throw new Error(`${label} 必须是 boolean`);
+  return value;
+}
+
+function optionalConfigInteger(value: unknown, label: string, minimum = 0): number | undefined {
+  if (value === undefined) return undefined;
+  if (!Number.isInteger(value) || Number(value) < minimum) {
+    throw new Error(`${label} 必须是大于等于 ${minimum} 的整数`);
+  }
+  return Number(value);
+}
+
+function requireConfigStringList(value: unknown, label: string, options: { min?: number; max?: number } = {}): string[] {
+  if (!Array.isArray(value)) throw new Error(`${label} 必须是字符串数组`);
+  const rows = value.map((item, index) => requireConfigString(item, `${label}[${index}]`));
+  const min = options.min ?? 0;
+  const max = options.max ?? Number.POSITIVE_INFINITY;
+  if (rows.length < min || rows.length > max) {
+    throw new Error(`${label} 数量必须在 ${min}-${max} 之间`);
+  }
+  return rows;
+}
+
+function normalizeLifecycleDateOrDays(
+  value: unknown,
+  label: string,
+  options: { allowDeleteMarker?: boolean } = {}
+) {
+  const record = requireConfigRecord(value, label);
+  assertKnownConfigKeys(
+    record,
+    options.allowDeleteMarker ? ['createdBeforeDate', 'days', 'expiredObjectDeleteMarker'] : ['createdBeforeDate', 'days'],
+    label
+  );
+  const createdBeforeDate = optionalConfigString(record.createdBeforeDate, `${label}.createdBeforeDate`);
+  const days = optionalConfigInteger(record.days, `${label}.days`, 1);
+  const expiredObjectDeleteMarker = options.allowDeleteMarker
+    ? optionalConfigBoolean(record.expiredObjectDeleteMarker, `${label}.expiredObjectDeleteMarker`)
+    : undefined;
+  if ([createdBeforeDate, days, expiredObjectDeleteMarker].filter((item) => item !== undefined).length !== 1) {
+    throw new Error(`${label} 必须且只能设置 createdBeforeDate、days${options.allowDeleteMarker ? '、expiredObjectDeleteMarker' : ''} 之一`);
+  }
+  return { createdBeforeDate, days, expiredObjectDeleteMarker };
+}
+
+function normalizeLifecycleTransition(value: unknown, label: string, noncurrent: boolean) {
+  const record = requireConfigRecord(value, label);
+  const allowed = noncurrent
+    ? ['noncurrentDays', 'storageClass', 'isAccessTime', 'returnToStdWhenVisit', 'allowSmallFile']
+    : ['createdBeforeDate', 'days', 'storageClass', 'isAccessTime', 'returnToStdWhenVisit', 'allowSmallFile'];
+  assertKnownConfigKeys(record, allowed, label);
+  const storageClass = requireConfigString(record.storageClass, `${label}.storageClass`);
+  if (!['IA', 'Archive', 'ColdArchive', 'DeepColdArchive', 'Standard'].includes(storageClass)) {
+    throw new Error(`${label}.storageClass 不受支持: ${storageClass}`);
+  }
+  const createdBeforeDate = noncurrent ? undefined : optionalConfigString(record.createdBeforeDate, `${label}.createdBeforeDate`);
+  const days = noncurrent ? undefined : optionalConfigInteger(record.days, `${label}.days`, 1);
+  const noncurrentDays = noncurrent ? optionalConfigInteger(record.noncurrentDays, `${label}.noncurrentDays`, 1) : undefined;
+  if (noncurrent ? noncurrentDays === undefined : [createdBeforeDate, days].filter((item) => item !== undefined).length !== 1) {
+    throw new Error(`${label} 必须设置${noncurrent ? ' noncurrentDays' : '且只能设置 createdBeforeDate 或 days 之一'}`);
+  }
+  return {
+    createdBeforeDate,
+    days,
+    noncurrentDays,
+    storageClass,
+    isAccessTime: optionalConfigBoolean(record.isAccessTime, `${label}.isAccessTime`),
+    returnToStdWhenVisit: optionalConfigBoolean(record.returnToStdWhenVisit, `${label}.returnToStdWhenVisit`),
+    allowSmallFile: optionalConfigBoolean(record.allowSmallFile, `${label}.allowSmallFile`)
+  };
+}
+
+function normalizeLifecycleRule(value: unknown, index: number): OssBucketLifecycleRuleSummary {
+  const label = `lifecycle.rules[${index}]`;
+  const record = requireConfigRecord(value, label);
+  assertKnownConfigKeys(record, [
+    'id', 'status', 'prefix', 'tags', 'filterNot', 'expiration', 'transitions',
+    'abortMultipartUpload', 'noncurrentVersionExpiration', 'noncurrentVersionTransitions'
+  ], label);
+  const status = optionalConfigString(record.status, `${label}.status`) || 'Enabled';
+  if (!['Enabled', 'Disabled'].includes(status)) throw new Error(`${label}.status 仅支持 Enabled / Disabled`);
+  const tags = record.tags === undefined ? [] : (() => {
+    if (!Array.isArray(record.tags)) throw new Error(`${label}.tags 必须是数组`);
+    return record.tags.map((item, tagIndex) => {
+      const tag = requireConfigRecord(item, `${label}.tags[${tagIndex}]`);
+      assertKnownConfigKeys(tag, ['key', 'value'], `${label}.tags[${tagIndex}]`);
+      return {
+        key: requireConfigString(tag.key, `${label}.tags[${tagIndex}].key`),
+        value: requireConfigString(tag.value, `${label}.tags[${tagIndex}].value`)
+      };
+    });
+  })();
+  const filterNot = record.filterNot === undefined ? undefined : (() => {
+    const filter = requireConfigRecord(record.filterNot, `${label}.filterNot`);
+    assertKnownConfigKeys(filter, ['prefix', 'tag'], `${label}.filterNot`);
+    const tag = filter.tag === undefined ? undefined : (() => {
+      const row = requireConfigRecord(filter.tag, `${label}.filterNot.tag`);
+      assertKnownConfigKeys(row, ['key', 'value'], `${label}.filterNot.tag`);
+      return {
+        key: requireConfigString(row.key, `${label}.filterNot.tag.key`),
+        value: requireConfigString(row.value, `${label}.filterNot.tag.value`)
+      };
+    })();
+    const prefix = optionalConfigString(filter.prefix, `${label}.filterNot.prefix`);
+    if (!prefix && !tag) throw new Error(`${label}.filterNot 至少需要 prefix 或 tag`);
+    return { prefix, tag };
+  })();
+  const expiration = record.expiration === undefined
+    ? undefined
+    : normalizeLifecycleDateOrDays(record.expiration, `${label}.expiration`, { allowDeleteMarker: true });
+  const transitions = record.transitions === undefined ? [] : (() => {
+    if (!Array.isArray(record.transitions)) throw new Error(`${label}.transitions 必须是数组`);
+    return record.transitions.map((item, transitionIndex) => normalizeLifecycleTransition(item, `${label}.transitions[${transitionIndex}]`, false));
+  })();
+  const abortMultipartUpload = record.abortMultipartUpload === undefined
+    ? undefined
+    : normalizeLifecycleDateOrDays(record.abortMultipartUpload, `${label}.abortMultipartUpload`);
+  const noncurrentVersionExpiration = record.noncurrentVersionExpiration === undefined ? undefined : (() => {
+    const row = requireConfigRecord(record.noncurrentVersionExpiration, `${label}.noncurrentVersionExpiration`);
+    assertKnownConfigKeys(row, ['noncurrentDays'], `${label}.noncurrentVersionExpiration`);
+    return { noncurrentDays: optionalConfigInteger(row.noncurrentDays, `${label}.noncurrentVersionExpiration.noncurrentDays`, 1) };
+  })();
+  const noncurrentVersionTransitions = record.noncurrentVersionTransitions === undefined ? [] : (() => {
+    if (!Array.isArray(record.noncurrentVersionTransitions)) throw new Error(`${label}.noncurrentVersionTransitions 必须是数组`);
+    return record.noncurrentVersionTransitions.map((item, transitionIndex) => normalizeLifecycleTransition(item, `${label}.noncurrentVersionTransitions[${transitionIndex}]`, true));
+  })();
+  if (!expiration && transitions.length === 0 && !abortMultipartUpload && !noncurrentVersionExpiration && noncurrentVersionTransitions.length === 0) {
+    throw new Error(`${label} 至少需要 expiration、transitions、abortMultipartUpload 或 noncurrent version 动作之一`);
+  }
+  return {
+    id: requireConfigString(record.id, `${label}.id`),
+    status,
+    prefix: record.prefix === undefined
+      ? ''
+      : (() => {
+          if (typeof record.prefix !== 'string') {
+            throw new Error(`lifecycle.rules[${index}].prefix 必须是字符串`);
+          }
+          return record.prefix;
+        })(),
+    tags,
+    filterNot,
+    expiration,
+    transitions,
+    abortMultipartUpload: abortMultipartUpload
+      ? { createdBeforeDate: abortMultipartUpload.createdBeforeDate, days: abortMultipartUpload.days }
+      : undefined,
+    noncurrentVersionExpiration,
+    noncurrentVersionTransitions: noncurrentVersionTransitions.map(({ noncurrentDays, storageClass, isAccessTime, returnToStdWhenVisit, allowSmallFile }) => ({
+      noncurrentDays, storageClass, isAccessTime, returnToStdWhenVisit, allowSmallFile
+    }))
+  };
+}
+
+export function normalizeOssBucketConfigDesiredState(input: unknown): OssBucketConfigDesiredState {
+  const root = requireConfigRecord(input, 'OSS config desired state');
+  assertKnownConfigKeys(root, [...OSS_CONFIG_SECTIONS], 'OSS config desired state');
+  if (!OSS_CONFIG_SECTIONS.some((section) => Object.prototype.hasOwnProperty.call(root, section))) {
+    throw new Error('OSS config desired state 至少需要 lifecycle、cors 或 encryption 之一');
+  }
+  const desired: OssBucketConfigDesiredState = {};
+  if (Object.prototype.hasOwnProperty.call(root, 'lifecycle')) {
+    if (root.lifecycle === null) desired.lifecycle = null;
+    else {
+      const lifecycle = requireConfigRecord(root.lifecycle, 'lifecycle');
+      assertKnownConfigKeys(lifecycle, ['rules'], 'lifecycle');
+      if (!Array.isArray(lifecycle.rules) || lifecycle.rules.length < 1 || lifecycle.rules.length > 1000) {
+        throw new Error('lifecycle.rules 数量必须在 1-1000 之间');
+      }
+      desired.lifecycle = { rules: lifecycle.rules.map(normalizeLifecycleRule) };
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(root, 'cors')) {
+    if (root.cors === null) desired.cors = null;
+    else {
+      const cors = requireConfigRecord(root.cors, 'cors');
+      assertKnownConfigKeys(cors, ['responseVary', 'rules'], 'cors');
+      if (!Array.isArray(cors.rules) || cors.rules.length < 1 || cors.rules.length > 10) {
+        throw new Error('cors.rules 数量必须在 1-10 之间');
+      }
+      desired.cors = {
+        responseVary: optionalConfigBoolean(cors.responseVary, 'cors.responseVary'),
+        rules: cors.rules.map((item, index) => {
+          const label = `cors.rules[${index}]`;
+          const rule = requireConfigRecord(item, label);
+          assertKnownConfigKeys(rule, ['allowedOrigins', 'allowedMethods', 'allowedHeaders', 'exposeHeaders', 'maxAgeSeconds'], label);
+          const allowedMethods = requireConfigStringList(rule.allowedMethods, `${label}.allowedMethods`, { min: 1 });
+          const invalidMethods = allowedMethods.filter((method) => !['GET', 'PUT', 'POST', 'DELETE', 'HEAD'].includes(method));
+          if (invalidMethods.length > 0) throw new Error(`${label}.allowedMethods 包含不支持的方法: ${invalidMethods.join(', ')}`);
+          return {
+            allowedOrigins: requireConfigStringList(rule.allowedOrigins, `${label}.allowedOrigins`, { min: 1 }),
+            allowedMethods,
+            allowedHeaders: rule.allowedHeaders === undefined
+              ? []
+              : requireConfigStringList(rule.allowedHeaders, `${label}.allowedHeaders`, { max: 1 }),
+            exposeHeaders: rule.exposeHeaders === undefined
+              ? []
+              : requireConfigStringList(rule.exposeHeaders, `${label}.exposeHeaders`),
+            maxAgeSeconds: optionalConfigInteger(rule.maxAgeSeconds, `${label}.maxAgeSeconds`)
+          };
+        })
+      };
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(root, 'encryption')) {
+    if (root.encryption === null) desired.encryption = null;
+    else {
+      const encryption = requireConfigRecord(root.encryption, 'encryption');
+      assertKnownConfigKeys(encryption, ['algorithm', 'kmsMasterKeyId', 'kmsDataEncryption'], 'encryption');
+      const algorithm = requireConfigString(encryption.algorithm, 'encryption.algorithm').toUpperCase();
+      if (algorithm !== 'AES256' && algorithm !== 'KMS') throw new Error('encryption.algorithm 仅支持 AES256 / KMS');
+      const kmsMasterKeyId = optionalConfigString(encryption.kmsMasterKeyId, 'encryption.kmsMasterKeyId');
+      const kmsDataEncryption = optionalConfigString(encryption.kmsDataEncryption, 'encryption.kmsDataEncryption');
+      if (algorithm !== 'KMS' && (kmsMasterKeyId || kmsDataEncryption)) {
+        throw new Error('kmsMasterKeyId / kmsDataEncryption 仅适用于 KMS');
+      }
+      if (kmsDataEncryption && kmsDataEncryption.toUpperCase() !== 'SM4') {
+        throw new Error('encryption.kmsDataEncryption 仅支持 SM4');
+      }
+      desired.encryption = {
+        algorithm,
+        kmsMasterKeyId,
+        kmsDataEncryption: kmsDataEncryption ? 'SM4' : undefined
+      };
+    }
+  }
+  return desired;
+}
+
+function canonicalConfigValue(value: unknown): string {
+  const normalize = (input: unknown): unknown => {
+    if (Array.isArray(input)) return input.map(normalize);
+    if (typeof input !== 'object' || input === null) return input;
+    return Object.fromEntries(
+      Object.entries(input as Record<string, unknown>)
+        .filter(([, item]) => item !== undefined)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, item]) => [key, normalize(item)])
+    );
+  };
+  return JSON.stringify(normalize(value));
+}
+
+interface OssRawBucketConfigSnapshot {
+  lifecycle?: OssRawBody;
+  cors?: OssRawBody;
+  encryption?: OssRawBody;
+}
+
+function toRawObject(value: unknown): OssRawBody | undefined {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? value as OssRawBody
+    : undefined;
+}
+
+function unwrapOssXmlRoot(body: OssRawBody, rootName: string) {
+  return toRawObject(body[rootName]) || body;
+}
+
+function toRawArray(value: unknown): unknown[] {
+  if (value === undefined || value === null) return [];
+  return Array.isArray(value) ? value : [value];
+}
+
+function toOptionalNumberValue(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value !== 'string' || !value.trim()) return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function rawString(body: OssRawBody | undefined, ...keys: string[]) {
+  for (const key of keys) {
+    const value = toOptionalStringValue(body?.[key]);
+    if (value !== undefined) return value;
+  }
+  return undefined;
+}
+
+function rawNumber(body: OssRawBody | undefined, ...keys: string[]) {
+  for (const key of keys) {
+    const value = toOptionalNumberValue(body?.[key]);
+    if (value !== undefined) return value;
+  }
+  return undefined;
+}
+
+function rawBoolean(body: OssRawBody | undefined, ...keys: string[]) {
+  for (const key of keys) {
+    const value = toOptionalBooleanValue(body?.[key]);
+    if (value !== undefined) return value;
+  }
+  return undefined;
+}
+
+async function readRawOssBucketConfig(
+  client: InstanceType<typeof OssClientCtor>,
+  runtime: $Util.RuntimeOptions,
+  bucket: string
+): Promise<OssRawBucketConfigSnapshot> {
+  const [lifecycleBody, corsBody, encryptionBody] = await Promise.all([
+    readOptionalOssConfig(
+      () => executeOssXml(client, runtime, {
+        action: 'GetBucketLifecycle', bucket, pathname: '/?lifecycle', method: 'GET'
+      }),
+      'NoSuchLifecycle'
+    ),
+    readOptionalOssConfig(
+      () => executeOssXml(client, runtime, {
+        action: 'GetBucketCors', bucket, pathname: '/?cors', method: 'GET'
+      }),
+      'NoSuchCORSConfiguration'
+    ),
+    readOptionalOssConfig(
+      () => executeOssXml(client, runtime, {
+        action: 'GetBucketEncryption', bucket, pathname: '/?encryption', method: 'GET'
+      }),
+      'NoSuchServerSideEncryptionRule'
+    )
+  ]);
+  return {
+    lifecycle: lifecycleBody ? unwrapOssXmlRoot(lifecycleBody, 'LifecycleConfiguration') : undefined,
+    cors: corsBody ? unwrapOssXmlRoot(corsBody, 'CORSConfiguration') : undefined,
+    encryption: encryptionBody ? unwrapOssXmlRoot(encryptionBody, 'ServerSideEncryptionRule') : undefined
+  };
+}
+
+function projectOssBucketConfig(
+  bucket: string,
+  regionId: string,
+  snapshot: OssRawBucketConfigSnapshot
+): OssBucketConfigInspection {
+  const lifecycleRules = toRawArray(snapshot.lifecycle?.Rule ?? snapshot.lifecycle?.rules).map((value) => {
+    const rule = toRawObject(value) || {};
+    const tags = toRawArray(rule.Tag ?? rule.tag).map((item) => toRawObject(item) || {});
+    const filter = toRawObject(rule.Filter ?? rule.filter);
+    const filterNot = toRawObject(filter?.Not ?? filter?.not);
+    const filterTag = toRawObject(filterNot?.Tag ?? filterNot?.tag);
+    const expiration = toRawObject(rule.Expiration ?? rule.lifecycleExpiration);
+    const transitions = toRawArray(rule.Transition ?? rule.lifecycleTransition).map((item) => toRawObject(item) || {});
+    const abortMultipartUpload = toRawObject(rule.AbortMultipartUpload ?? rule.lifecycleAbortMultipartUpload);
+    const noncurrentVersionExpiration = toRawObject(rule.NoncurrentVersionExpiration ?? rule.noncurrentVersionExpiration);
+    const noncurrentVersionTransitions = toRawArray(rule.NoncurrentVersionTransition ?? rule.noncurrentVersionTransition)
+      .map((item) => toRawObject(item) || {});
+    return {
+      id: rawString(rule, 'ID', 'id'),
+      status: rawString(rule, 'Status', 'status'),
+      prefix: rawString(rule, 'Prefix', 'prefix'),
+      tags: tags.map((tag) => ({ key: rawString(tag, 'Key', 'key'), value: rawString(tag, 'Value', 'value') })),
+      filterNot: filterNot
+        ? {
+            prefix: rawString(filterNot, 'Prefix', 'prefix'),
+            tag: filterTag
+              ? { key: rawString(filterTag, 'Key', 'key'), value: rawString(filterTag, 'Value', 'value') }
+              : undefined
+          }
+        : undefined,
+      expiration: expiration
+        ? {
+            createdBeforeDate: rawString(expiration, 'CreatedBeforeDate', 'createdBeforeDate'),
+            days: rawNumber(expiration, 'Days', 'days'),
+            expiredObjectDeleteMarker: rawBoolean(expiration, 'ExpiredObjectDeleteMarker', 'expiredObjectDeleteMarker')
+          }
+        : undefined,
+      transitions: transitions.map((transition) => ({
+        createdBeforeDate: rawString(transition, 'CreatedBeforeDate', 'createdBeforeDate'),
+        days: rawNumber(transition, 'Days', 'days'),
+        storageClass: rawString(transition, 'StorageClass', 'storageClass'),
+        isAccessTime: rawBoolean(transition, 'IsAccessTime', 'isAccessTime'),
+        returnToStdWhenVisit: rawBoolean(transition, 'ReturnToStdWhenVisit', 'returnToStdWhenVisit'),
+        allowSmallFile: rawBoolean(transition, 'AllowSmallFile', 'allowSmallFile')
+      })),
+      abortMultipartUpload: abortMultipartUpload
+        ? {
+            createdBeforeDate: rawString(abortMultipartUpload, 'CreatedBeforeDate', 'createdBeforeDate'),
+            days: rawNumber(abortMultipartUpload, 'Days', 'days')
+          }
+        : undefined,
+      noncurrentVersionExpiration: noncurrentVersionExpiration
+        ? { noncurrentDays: rawNumber(noncurrentVersionExpiration, 'NoncurrentDays', 'noncurrentDays') }
+        : undefined,
+      noncurrentVersionTransitions: noncurrentVersionTransitions.map((transition) => ({
+        noncurrentDays: rawNumber(transition, 'NoncurrentDays', 'noncurrentDays'),
+        storageClass: rawString(transition, 'StorageClass', 'storageClass'),
+        isAccessTime: rawBoolean(transition, 'IsAccessTime', 'isAccessTime'),
+        returnToStdWhenVisit: rawBoolean(transition, 'ReturnToStdWhenVisit', 'returnToStdWhenVisit'),
+        allowSmallFile: rawBoolean(transition, 'AllowSmallFile', 'allowSmallFile')
+      }))
+    };
+  });
+  const corsRules = toRawArray(snapshot.cors?.CORSRule ?? snapshot.cors?.cORSRule).map((value) => {
+    const rule = toRawObject(value) || {};
+    return {
+      allowedOrigins: toStringList(rule.AllowedOrigin ?? rule.allowedOrigin),
+      allowedMethods: toStringList(rule.AllowedMethod ?? rule.allowedMethod),
+      allowedHeaders: toStringList(rule.AllowedHeader ?? rule.allowedHeader),
+      exposeHeaders: toStringList(rule.ExposeHeader ?? rule.exposeHeader),
+      maxAgeSeconds: rawNumber(rule, 'MaxAgeSeconds', 'maxAgeSeconds')
+    };
+  });
+  const encryption = toRawObject(
+    snapshot.encryption?.ApplyServerSideEncryptionByDefault
+      ?? snapshot.encryption?.applyServerSideEncryptionByDefault
+  );
+
+  return {
+    bucket,
+    regionId,
+    lifecycle: {
+      configured: snapshot.lifecycle !== undefined,
+      ruleCount: lifecycleRules.length,
+      rules: lifecycleRules
+    },
+    cors: {
+      configured: snapshot.cors !== undefined,
+      responseVary: rawBoolean(snapshot.cors, 'ResponseVary', 'responseVary'),
+      ruleCount: corsRules.length,
+      rules: corsRules
+    },
+    encryption: {
+      configured: encryption !== undefined,
+      algorithm: rawString(encryption, 'SSEAlgorithm', 'sSEAlgorithm'),
+      kmsMasterKeyId: rawString(encryption, 'KMSMasterKeyID', 'kMSMasterKeyID'),
+      kmsDataEncryption: rawString(encryption, 'KMSDataEncryption', 'kMSDataEncryption')
+    }
+  };
+}
+
+export async function inspectOssBucketConfig(
+  bucketName: string,
+  options: OssRegionOptions = {}
+): Promise<OssBucketConfigInspection> {
+  const { client, runtime, regionId } = createOssClient(options.regionId);
+  const bucket = normalizeBucketName(bucketName);
+  return projectOssBucketConfig(bucket, regionId, await readRawOssBucketConfig(client, runtime, bucket));
+}
+
+function desiredSectionInspection(
+  section: OssBucketConfigSection,
+  desired: OssBucketConfigDesiredState[OssBucketConfigSection]
+): OssBucketConfigInspection[OssBucketConfigSection] {
+  if (desired === null) {
+    if (section === 'lifecycle') return { configured: false, ruleCount: 0, rules: [] };
+    if (section === 'cors') return { configured: false, ruleCount: 0, rules: [] };
+    return { configured: false };
+  }
+  if (!desired) throw new Error(`缺少 ${section} desired state`);
+  if (section === 'lifecycle') {
+    const value = desired as NonNullable<OssBucketConfigDesiredState['lifecycle']>;
+    return { configured: true, ruleCount: value.rules.length, rules: value.rules };
+  }
+  if (section === 'cors') {
+    const value = desired as NonNullable<OssBucketConfigDesiredState['cors']>;
+    return { configured: true, responseVary: value.responseVary, ruleCount: value.rules.length, rules: value.rules };
+  }
+  const value = desired as NonNullable<OssBucketConfigDesiredState['encryption']>;
+  return {
+    configured: true,
+    algorithm: value.algorithm,
+    kmsMasterKeyId: value.kmsMasterKeyId,
+    kmsDataEncryption: value.kmsDataEncryption
+  };
+}
+
+function buildOssBucketConfigPlan(
+  current: OssBucketConfigInspection,
+  desiredState: OssBucketConfigDesiredState,
+  willExecute: boolean
+): OssBucketConfigPlan {
+  const changes: OssBucketConfigChange[] = [];
+  for (const section of OSS_CONFIG_SECTIONS) {
+    if (!Object.prototype.hasOwnProperty.call(desiredState, section)) continue;
+    const before = current[section];
+    const desired = desiredState[section];
+    const after = desiredSectionInspection(section, desired);
+    const changed = canonicalConfigValue(before) !== canonicalConfigValue(after);
+    changes.push({
+      section,
+      action: changed ? (desired === null ? 'delete' : 'set') : 'noop',
+      before,
+      after
+    });
+  }
+  const changeCount = changes.filter((change) => change.action !== 'noop').length;
+  return {
+    bucket: current.bucket,
+    regionId: current.regionId,
+    current,
+    desiredState,
+    changes,
+    changeCount,
+    requiresConfirmation: true,
+    willExecute: willExecute && changeCount > 0
+  };
+}
+
+export async function planOssBucketConfig(
+  bucketName: string,
+  desiredInput: unknown,
+  options: OssRegionOptions = {}
+): Promise<OssBucketConfigPlan> {
+  const desiredState = normalizeOssBucketConfigDesiredState(desiredInput);
+  const current = await inspectOssBucketConfig(bucketName, options);
+  return buildOssBucketConfigPlan(current, desiredState, false);
+}
+
+function toLifecycleRuleModel(rule: OssBucketLifecycleRuleSummary) {
+  return new $OSS.LifecycleRule({
+    ID: rule.id,
+    status: rule.status,
+    prefix: rule.prefix,
+    tag: rule.tags.length > 0 ? rule.tags.map((tag) => new $OSS.Tag(tag)) : undefined,
+    filter: rule.filterNot
+      ? new $OSS.LifecycleRuleFilter({
+          not: new $OSS.LifecycleRuleFilterNot({
+            prefix: rule.filterNot.prefix,
+            tag: rule.filterNot.tag ? new $OSS.Tag(rule.filterNot.tag) : undefined
+          })
+        })
+      : undefined,
+    lifecycleExpiration: rule.expiration
+      ? new $OSS.LifecycleRuleLifecycleExpiration(rule.expiration)
+      : undefined,
+    lifecycleTransition: rule.transitions.length > 0
+      ? rule.transitions.map((transition) => new $OSS.LifecycleRuleLifecycleTransition(transition))
+      : undefined,
+    lifecycleAbortMultipartUpload: rule.abortMultipartUpload
+      ? new $OSS.LifecycleRuleLifecycleAbortMultipartUpload(rule.abortMultipartUpload)
+      : undefined,
+    noncurrentVersionExpiration: rule.noncurrentVersionExpiration
+      ? new $OSS.LifecycleRuleNoncurrentVersionExpiration(rule.noncurrentVersionExpiration)
+      : undefined,
+    noncurrentVersionTransition: rule.noncurrentVersionTransitions.length > 0
+      ? rule.noncurrentVersionTransitions.map(
+          (transition) => new $OSS.LifecycleRuleNoncurrentVersionTransition(transition)
+        )
+      : undefined
+  });
+}
+
+async function executeOssConfigMutation(task: () => Promise<unknown>) {
+  try {
+    await task();
+  } catch (err: unknown) {
+    if (!isOssEmptyXmlResponseError(err)) throw err;
+  }
+}
+
+async function writeOssBucketConfigSection(
+  client: InstanceType<typeof OssClientCtor>,
+  runtime: $Util.RuntimeOptions,
+  bucket: string,
+  section: OssBucketConfigSection,
+  desired: OssBucketConfigDesiredState[OssBucketConfigSection]
+) {
+  if (desired === null) {
+    await executeOssConfigMutation(() => {
+      if (section === 'lifecycle') return client.deleteBucketLifecycleWithOptions(bucket, {}, runtime);
+      if (section === 'cors') return client.deleteBucketCorsWithOptions(bucket, {}, runtime);
+      return client.deleteBucketEncryptionWithOptions(bucket, {}, runtime);
+    });
+    return;
+  }
+  if (!desired) throw new Error(`缺少 ${section} desired state`);
+  await executeOssConfigMutation(() => {
+    if (section === 'lifecycle') {
+      const value = desired as NonNullable<OssBucketConfigDesiredState['lifecycle']>;
+      return executeOssXml(client, runtime, {
+        action: 'PutBucketLifecycle',
+        bucket,
+        pathname: '/?lifecycle',
+        method: 'PUT',
+        body: {
+          LifecycleConfiguration: openapiUtil.parseToMap(new $OSS.LifecycleConfiguration({
+            rule: value.rules.map(toLifecycleRuleModel)
+          }))
+        }
+      });
+    }
+    if (section === 'cors') {
+      const value = desired as NonNullable<OssBucketConfigDesiredState['cors']>;
+      return executeOssXml(client, runtime, {
+        action: 'PutBucketCors',
+        bucket,
+        pathname: '/?cors',
+        method: 'PUT',
+        body: {
+          CORSConfiguration: openapiUtil.parseToMap(new $OSS.CORSConfiguration({
+            responseVary: value.responseVary,
+            CORSRule: value.rules.map((rule) => new $OSS.CORSRule({
+              allowedOrigin: rule.allowedOrigins,
+              allowedMethod: rule.allowedMethods,
+              allowedHeader: rule.allowedHeaders[0],
+              exposeHeader: rule.exposeHeaders,
+              maxAgeSeconds: rule.maxAgeSeconds
+            }))
+          }))
+        }
+      });
+    }
+    const value = desired as NonNullable<OssBucketConfigDesiredState['encryption']>;
+    return executeOssXml(client, runtime, {
+      action: 'PutBucketEncryption',
+      bucket,
+      pathname: '/?encryption',
+      method: 'PUT',
+      body: {
+        ServerSideEncryptionRule: openapiUtil.parseToMap(new $OSS.ServerSideEncryptionRule({
+          applyServerSideEncryptionByDefault: new $OSS.ApplyServerSideEncryptionByDefault({
+            SSEAlgorithm: value.algorithm,
+            KMSMasterKeyID: value.kmsMasterKeyId,
+            KMSDataEncryption: value.kmsDataEncryption
+          })
+        }))
+      }
+    });
+  });
+}
+
+async function restoreOssBucketConfigSection(
+  client: InstanceType<typeof OssClientCtor>,
+  runtime: $Util.RuntimeOptions,
+  bucket: string,
+  section: OssBucketConfigSection,
+  snapshot: OssRawBucketConfigSnapshot
+) {
+  const raw = snapshot[section];
+  if (!raw) return writeOssBucketConfigSection(client, runtime, bucket, section, null);
+  await executeOssConfigMutation(() => {
+    if (section === 'lifecycle') {
+      return executeOssXml(client, runtime, {
+        action: 'PutBucketLifecycle',
+        bucket,
+        pathname: '/?lifecycle',
+        method: 'PUT',
+        body: { LifecycleConfiguration: raw }
+      });
+    }
+    if (section === 'cors') {
+      return executeOssXml(client, runtime, {
+        action: 'PutBucketCors',
+        bucket,
+        pathname: '/?cors',
+        method: 'PUT',
+        body: { CORSConfiguration: raw }
+      });
+    }
+    return executeOssXml(client, runtime, {
+      action: 'PutBucketEncryption',
+      bucket,
+      pathname: '/?encryption',
+      method: 'PUT',
+      body: { ServerSideEncryptionRule: raw }
+    });
+  });
+}
+
+function ossBucketConfigMatchesDesired(config: OssBucketConfigInspection, desired: OssBucketConfigDesiredState) {
+  return OSS_CONFIG_SECTIONS.every((section) => {
+    if (!Object.prototype.hasOwnProperty.call(desired, section)) return true;
+    return canonicalConfigValue(config[section]) === canonicalConfigValue(desiredSectionInspection(section, desired[section]));
+  });
+}
+
+export async function applyOssBucketConfig(
+  bucketName: string,
+  desiredInput: unknown,
+  options: OssRegionOptions = {}
+): Promise<OssBucketConfigApplyResult> {
+  const desiredState = normalizeOssBucketConfigDesiredState(desiredInput);
+  const { client, runtime, regionId } = createOssClient(options.regionId);
+  const bucket = normalizeBucketName(bucketName);
+  const snapshot = await readRawOssBucketConfig(client, runtime, bucket);
+  const current = projectOssBucketConfig(bucket, regionId, snapshot);
+  const plan = buildOssBucketConfigPlan(current, desiredState, true);
+  const appliedSections: OssBucketConfigSection[] = [];
+
+  try {
+    for (const change of plan.changes) {
+      if (change.action === 'noop') continue;
+      await writeOssBucketConfigSection(client, runtime, bucket, change.section, desiredState[change.section]);
+      appliedSections.push(change.section);
+    }
+    const config = await withRetry(
+      async () => {
+        const inspected = await inspectOssBucketConfig(bucket, { regionId });
+        if (!ossBucketConfigMatchesDesired(inspected, desiredState)) {
+          const pending = new Error('OSS config 写入后状态尚未收敛') as Error & { code?: string };
+          pending.code = 'OssConfigVerificationPending';
+          throw pending;
+        }
+        return inspected;
+      },
+      {
+        maxAttempts: 4,
+        baseDelayMs: 300,
+        shouldRetry: (err) => (err as { code?: unknown })?.code === 'OssConfigVerificationPending'
+      }
+    );
+    return {
+      plan,
+      execution: { appliedSections },
+      verify: { performed: true, matched: true, config }
+    };
+  } catch (err: unknown) {
+    const rollbackFailures: string[] = [];
+    for (const section of [...appliedSections].reverse()) {
+      try {
+        await restoreOssBucketConfigSection(client, runtime, bucket, section, snapshot);
+      } catch {
+        rollbackFailures.push(section);
+      }
+    }
+    const message = rollbackFailures.length === 0
+      ? `OSS config 应用失败；已回滚 ${appliedSections.length} 个已变更配置`
+      : `OSS config 应用失败；以下配置回滚失败: ${rollbackFailures.join(', ')}`;
+    const wrapped = new Error(`${message}。原因: ${String((err as Error)?.message || err)}`) as Error & { cause?: unknown };
+    wrapped.cause = err;
+    throw wrapped;
+  }
 }
 
 export async function listOssObjects(bucketName: string, prefix?: string, limit = 200, options: OssRegionOptions = {}): Promise<OssObjectSummary[]> {

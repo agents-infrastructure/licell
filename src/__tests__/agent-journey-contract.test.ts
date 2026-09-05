@@ -48,7 +48,8 @@ const JOURNEY_MATRIX: JourneyCase[] = [
   { name: 'ACR instances', product: 'cr', intent: '列出 ACR 企业版实例', expectedRef: 'cr.ListInstance', strategy: 'curated-command', commandKey: 'acr instances' },
   { name: 'ACR namespaces', product: 'cr', intent: '列出 ACR 命名空间', expectedRef: 'cr.ListNamespace', strategy: 'curated-command', commandKey: 'acr namespaces' },
   { name: 'ACR repositories', product: 'cr', intent: '列出 ACR 镜像仓库', expectedRef: 'cr.ListRepository', strategy: 'curated-command', commandKey: 'acr repositories' },
-  { name: 'ACR image tags', product: 'cr', intent: '列出 ACR 镜像标签', expectedRef: 'cr.ListRepoTag', strategy: 'curated-command', commandKey: 'acr tags' }
+  { name: 'ACR image tags', product: 'cr', intent: '列出 ACR 镜像标签', expectedRef: 'cr.ListRepoTag', strategy: 'curated-command', commandKey: 'acr tags' },
+  { name: 'ACR image scan', product: 'cr', intent: '查看 ACR 镜像扫描漏洞', expectedRef: 'cr.ListRepoTagScanResult', strategy: 'curated-command', commandKey: 'acr scan' }
 ];
 
 describe('Agent journey contract matrix', () => {

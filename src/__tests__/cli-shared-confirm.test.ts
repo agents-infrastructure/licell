@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ensureDestructiveActionConfirmed } from '../utils/cli-shared';
+import { ensureDestructiveActionConfirmed, ensureMutatingActionConfirmed } from '../utils/cli-shared';
 
 describe('ensureDestructiveActionConfirmed', () => {
   it('skips confirmation when --yes is provided', async () => {
@@ -49,5 +49,22 @@ describe('ensureDestructiveActionConfirmed', () => {
       confirmPrompt
     })).resolves.toBeUndefined();
     expect(confirmPrompt).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('ensureMutatingActionConfirmed', () => {
+  it('requires --yes in non-interactive mode', async () => {
+    await expect(ensureMutatingActionConfirmed('应用 OSS config', {
+      interactiveTTY: false
+    })).rejects.toThrow('会修改云端配置；非交互模式请添加 --yes');
+  });
+
+  it('uses one confirmation for a config mutation', async () => {
+    const confirmPrompt = vi.fn(async () => true);
+    await ensureMutatingActionConfirmed('应用 OSS config', {
+      interactiveTTY: true,
+      confirmPrompt
+    });
+    expect(confirmPrompt).toHaveBeenCalledTimes(1);
   });
 });

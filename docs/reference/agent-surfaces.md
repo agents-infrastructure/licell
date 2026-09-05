@@ -155,6 +155,7 @@
 | `licell acr instances` | 列出 ACR 企业版实例（只读） | `--region`, `--status`, `--limit` |
 | `licell acr namespaces <instanceId>` | 列出 ACR 企业版命名空间（只读） | `--region`, `--name`, `--status` |
 | `licell acr repositories <instanceId>` | 列出 ACR 企业版镜像仓库（只读） | `--region`, `--namespace`, `--name` |
+| `licell acr scan <instanceId> <repositoryId> <tag>` | 查看 ACR 企业版镜像的已有安全扫描结果（只读） | `--region`, `--digest`, `--task-id` |
 | `licell acr tags <instanceId> <repositoryId>` | 列出 ACR 企业版镜像标签（只读） | `--region`, `--limit` |
 | `licell cert list` | 列出阿里云证书摘要（只读） | `--region`, `--keyword`, `--status` |
 | `licell cdn domains` | 列出 CDN 加速域名（只读） | `--region`, `--domain`, `--status` |
@@ -192,6 +193,7 @@
 | `licell dns records list [domain]` | 查看域名解析记录 | `--limit` |
 | `licell dns records rm <recordId>` | 删除域名解析记录 | `--yes` |
 | `licell oss bucket [bucket]` | 上传本地目录到 OSS Bucket 指定目录（兼容命令，等同 oss upload） | `--region`, `--bucket`, `--source-dir` |
+| `licell oss config <bucket>` | 查看 OSS Bucket 生命周期、CORS 和服务端加密配置（只读） | `--region` |
 | `licell oss create <bucket>` | 创建 OSS Bucket | `--region`, `--acl`, `--storage-class` |
 | `licell oss info <bucket>` | 查看 OSS Bucket 详情（含 ACL / 公共访问阻止 / 域名） | `--region` |
 | `licell oss list` | 查看 OSS Bucket 列表 | `--region`, `--limit` |
@@ -199,6 +201,7 @@
 | `licell oss rm <bucket>` | 删除 OSS Bucket（默认仅删空 Bucket） | `--region`, `--recursive`, `--yes` |
 | `licell oss update <bucket>` | 更新 OSS Bucket 属性（ACL / 公共访问阻止） | `--region`, `--acl`, `--public-access-block` |
 | `licell oss upload [bucket]` | 上传本地目录到 OSS Bucket 指定目录 | `--region`, `--bucket`, `--source-dir` |
+| `licell oss config apply <bucket>` | 按 desired-state 设置或删除 OSS Bucket 高级配置 | `--region`, `--dry-run`, `--yes` |
 | `licell oss domain bind <bucket> <domain>` | 为 Bucket 绑定原生 OSS 自定义域名 | `--region` |
 | `licell oss domain list <bucket>` | 查看 Bucket 已绑定的原生 OSS 域名 | `--region` |
 | `licell oss domain token <bucket> <domain>` | 为 Bucket 自定义域名生成 TXT 验证 token | `--region` |

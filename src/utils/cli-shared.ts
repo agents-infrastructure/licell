@@ -219,6 +219,24 @@ export async function ensureDestructiveActionConfirmed(
   if (!secondConfirm) throw new Error('操作已取消');
 }
 
+export async function ensureMutatingActionConfirmed(
+  actionLabel: string,
+  options: DestructiveConfirmOptions = {}
+) {
+  if (options.yes) return;
+  const interactiveTTY = options.interactiveTTY ?? isInteractiveTTY();
+  if (!interactiveTTY) {
+    throw new Error(`${actionLabel} 会修改云端配置；非交互模式请添加 --yes 明确确认`);
+  }
+  const confirmPrompt = options.confirmPrompt || (async (message: string) => {
+    const answered = await confirm({ message });
+    if (isCancel(answered)) process.exit(0);
+    return Boolean(answered);
+  });
+  const confirmed = await confirmPrompt(`${actionLabel} 会修改云端配置，是否继续？`);
+  if (!confirmed) throw new Error('操作已取消');
+}
+
 export interface HighImpactConfirmOptions {
   yes?: boolean;
   interactiveTTY?: boolean;

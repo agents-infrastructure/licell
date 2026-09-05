@@ -3,6 +3,7 @@ import { defineCommandModule, commandInvocation, defineCliCommand, registerCliCo
 import { text } from '@clack/prompts';
 import pc from 'picocolors';
 import {
+  applyOssBucketConfig,
   bindOssBucketDomain,
   createOssBucket,
   createOssBucketDomainToken,
@@ -13,12 +14,14 @@ import {
   downloadOssObjectsToDirectory,
   getOssBucketInfo,
   getOssObjectInfo,
+  inspectOssBucketConfig,
   listOssBucketDomains,
   listOssBuckets,
   listOssObjects,
   normalizeOssBucketAcl,
   normalizeOssBucketDataRedundancyType,
   normalizeOssBucketStorageClass,
+  planOssBucketConfig,
   removeOssBucketDomain,
   resolveDefaultOssDownloadDir,
   resolveDefaultOssDownloadFilePath,
@@ -30,6 +33,7 @@ import {
   createSpinner,
   ensureAuthOrExit,
   ensureDestructiveActionConfirmed,
+  ensureMutatingActionConfirmed,
   isInteractiveTTY,
   normalizeCustomDomain,
   showOutro,
@@ -38,6 +42,7 @@ import {
   parseListLimit,
   withSpinner
 } from '../utils/cli-shared';
+import { resolveOptionalPayloadInput } from '../utils/payload-input';
 import { parseRootAndSubdomain } from '../utils/domain';
 import { emitCommandResult, isJsonOutput } from '../utils/output';
 import { DELIVERY_SECTION } from './sections';
@@ -70,6 +75,33 @@ function printBucketInfo(info: Awaited<ReturnType<typeof getOssBucketInfo>>) {
   console.log(`acl:       ${pc.cyan(info.acl || '-')}`);
   console.log(`public:    ${pc.cyan(info.publicAccessBlock === undefined ? '-' : info.publicAccessBlock ? 'blocked' : 'allowed')}`);
   renderBucketDomains(info.domains || []);
+}
+
+function printBucketConfig(config: Awaited<ReturnType<typeof inspectOssBucketConfig>>) {
+  const configuredLabel = (configured: boolean, count?: number) => configured
+    ? pc.cyan(count === undefined ? 'configured' : `configured (${count})`)
+    : pc.gray('not configured');
+  console.log(`\nbucket:     ${pc.cyan(config.bucket)}`);
+  console.log(`region:     ${pc.cyan(config.regionId)}`);
+  console.log(`lifecycle:  ${configuredLabel(config.lifecycle.configured, config.lifecycle.ruleCount)}`);
+  for (const rule of config.lifecycle.rules) {
+    console.log(`            ${pc.cyan(rule.id || '(unnamed)')}  status=${pc.gray(rule.status || '-')}  prefix=${pc.gray(rule.prefix || '(root)')}`);
+  }
+  console.log(`cors:       ${configuredLabel(config.cors.configured, config.cors.ruleCount)}`);
+  for (const rule of config.cors.rules) {
+    console.log(`            origins=${pc.cyan(rule.allowedOrigins.join(',') || '-')}  methods=${pc.gray(rule.allowedMethods.join(',') || '-')}`);
+  }
+  console.log(`encryption: ${config.encryption.configured ? pc.cyan(config.encryption.algorithm || 'configured') : pc.gray('not configured')}`);
+}
+
+function printBucketConfigPlan(plan: Awaited<ReturnType<typeof planOssBucketConfig>>) {
+  console.log(`\nbucket:     ${pc.cyan(plan.bucket)}`);
+  console.log(`region:     ${pc.cyan(plan.regionId)}`);
+  console.log(`changes:    ${pc.cyan(String(plan.changeCount))}`);
+  for (const change of plan.changes) {
+    console.log(`            ${pc.cyan(change.section)}  action=${pc.gray(change.action)}`);
+  }
+  console.log(`execute:    ${plan.willExecute ? pc.yellow('yes') : pc.gray('no')}`);
 }
 
 function printObjectInfo(info: Awaited<ReturnType<typeof getOssObjectInfo>>) {
@@ -141,6 +173,119 @@ const ossInfoCommand = defineCliCommand({
   descriptor: {
     summary: '查看 Bucket 基本信息，并补充 ACL、公共访问阻止、已绑定域名。',
     examples: ['licell oss info my-bucket', 'licell oss info my-bucket --output json']
+  }
+});
+
+const ossConfigCommand = defineCliCommand({
+  rawName: 'oss config <bucket>',
+  description: '查看 OSS Bucket 生命周期、CORS 和服务端加密配置（只读）',
+  region: { scope: 'auth' },
+  options: [ossRegionOption],
+  descriptor: {
+    title: 'Inspect OSS Bucket advanced configuration',
+    summary: '一次读取 Bucket 生命周期、跨域访问和服务端加密配置，并区分未配置与查询失败。',
+    examples: [
+      'licell oss config my-bucket --output json',
+      'licell oss config my-bucket --region cn-hangzhou --output json'
+    ],
+    argumentHints: {
+      bucket: 'OSS Bucket 名称；可先用 `oss list --output json` 获取。'
+    },
+    related: ['oss list', 'oss info', 'capability search'],
+    agentTips: [
+      '`configured=false` 表示 OSS 明确返回该配置不存在；权限不足、Bucket 不存在和网络错误会让命令失败，不会伪装成空配置。',
+      '先用 `oss info` 查看 ACL 和公共访问阻止，再用本命令检查生命周期、CORS 和默认加密。'
+    ],
+    automation: {
+      preferredOutput: 'json',
+      explicitInputs: ['bucket', '--region']
+    },
+    safety: {
+      level: 'safe',
+      reason: '只调用 OSS GetBucketLifecycle、GetBucketCors 和 GetBucketEncryption。',
+      confirmFlags: []
+    },
+    result: {
+      fields: [
+        { name: 'bucket', description: '目标 OSS Bucket 名称。', required: true },
+        { name: 'regionId', description: '实际查询地域。', required: true },
+        { name: 'lifecycle', description: '生命周期配置状态、规则数量与规则摘要。', required: true },
+        { name: 'cors', description: 'CORS 配置状态、ResponseVary 与规则摘要。', required: true },
+        { name: 'encryption', description: '服务端加密状态、算法与 KMS 配置摘要。', required: true }
+      ]
+    }
+  }
+});
+
+const ossConfigApplyCommand = defineCliCommand({
+  rawName: 'oss config apply <bucket>',
+  description: '按 desired-state 设置或删除 OSS Bucket 高级配置',
+  region: { scope: 'auth' },
+  options: [
+    ossRegionOption,
+    { rawName: '--dry-run', description: '只读取现状并生成差异计划，不写入云端' },
+    { rawName: '--yes', description: '确认执行配置变更' },
+    { rawName: '--payload <json>', description: '内联 JSON desired-state' },
+    { rawName: '--file <path>', description: '从当前工作目录内的文件读取 JSON desired-state' }
+  ],
+  descriptor: {
+    title: 'Apply OSS Bucket advanced configuration',
+    summary: '用一个 desired-state 计划、应用并验证生命周期、CORS 和服务端加密配置。',
+    examples: [
+      `licell oss config apply my-bucket --payload '{"encryption":{"algorithm":"AES256"}}' --dry-run --output json`,
+      `licell oss config apply my-bucket --payload '{"encryption":{"algorithm":"AES256"}}' --yes --output json`,
+      'licell oss config apply my-bucket --file ./oss-config.json --dry-run --output json'
+    ],
+    argumentHints: {
+      bucket: 'OSS Bucket 名称；先用 `oss config <bucket> --output json` 保存变更前状态。'
+    },
+    related: ['oss config', 'oss info'],
+    agentTips: [
+      'desired-state 顶层支持 lifecycle、cors、encryption；字段缺失表示保持不变，对应值为 null 表示删除该配置，对象表示完整替换。',
+      'lifecycle 格式为 {rules:[{id,status,prefix,expiration:{days},transitions:[]}]}; cors 格式为 {responseVary,rules:[{allowedOrigins,allowedMethods,allowedHeaders,exposeHeaders,maxAgeSeconds}]}; encryption 格式为 {algorithm:AES256|KMS,kmsMasterKeyId?,kmsDataEncryption?:SM4}。',
+      'Agent 必须先执行 --dry-run 检查 changes[].before/after；实际执行使用同一 payload 加 --yes，命令会读回验证并在部分失败时回滚已写入 section。'
+    ],
+    automation: {
+      preferredOutput: 'json',
+      explicitInputs: ['bucket', '--region', '--payload', '--file', '--dry-run', '--yes']
+    },
+    safety: {
+      level: 'mutating',
+      reason: '会完整替换或删除 OSS Bucket 生命周期、CORS、服务端加密配置；必须先 dry-run，并用 --yes 确认。',
+      confirmFlags: ['--yes']
+    },
+    optionInsights: {
+      '--payload': {
+        whenToUse: 'desired-state 较短、可安全内联时使用。',
+        cautions: ['不要同时传 --file；字段拼写错误会被拒绝。']
+      },
+      '--file': {
+        whenToUse: '生命周期或 CORS 规则较多时使用。',
+        cautions: ['文件必须位于当前工作目录内；该文件表示完整 desired-state，不是增量 patch。']
+      },
+      '--dry-run': {
+        whenToUse: '所有自动化和 Agent 调用都应先使用。',
+        cautions: ['只生成差异，不会执行写入。']
+      },
+      '--yes': {
+        whenToUse: '确认 dry-run 计划后执行。',
+        cautions: ['null 会删除对应配置；对象会完整替换已有规则。']
+      }
+    },
+    recommendedFlow: [
+      { title: '检查现状', command: 'licell oss config <bucket> --output json', reason: '记录变更前配置。' },
+      { title: '生成计划', command: 'licell oss config apply <bucket> --file <path> --dry-run --output json', reason: '检查 changes[].before/after 和 changeCount。' },
+      { title: '应用并验证', command: 'licell oss config apply <bucket> --file <path> --yes --output json', reason: '应用后自动读回验证。' }
+    ],
+    result: {
+      fields: [
+        { name: 'plan', description: '目标 Bucket、当前状态、desired-state、逐 section 差异和是否执行。', required: true },
+        { name: 'execution.appliedSections', description: '实际完成写入的 section；dry-run 时没有 execution。' },
+        { name: 'verify.performed', description: '是否执行了写入后读回验证；dry-run 固定为 false。', required: true },
+        { name: 'verify.matched', description: '执行读回验证后，状态是否与 desired-state 一致。' },
+        { name: 'verify.config', description: '读回的安全配置投影；dry-run 时为变更前配置。', required: true }
+      ]
+    }
   }
 });
 
@@ -502,6 +647,100 @@ export function registerOssCommands(cli: CAC) {
           printBucketInfo(info);
           console.log('');
           showOutro('Done.');
+        }
+      );
+    });
+
+  registerCliCommand(cli, ossConfigCommand)
+    .action(async (bucket: string, options: { region?: unknown }) => {
+      await executeWithAuthRecovery(
+        {
+          commandLabel: commandInvocation(ossConfigCommand),
+          interactiveTTY: isInteractiveTTY(),
+          requiredCapabilities: ['oss']
+        },
+        async () => {
+          ensureAuthOrExit();
+          const bucketName = toPromptValue(bucket, 'bucket');
+          const regionOptions = toOssRegionOptions(options.region);
+          const s = createSpinner();
+          const config = await withSpinner(
+            s,
+            `正在拉取 Bucket ${bucketName} 高级配置...`,
+            '❌ 获取 Bucket 高级配置失败',
+            () => inspectOssBucketConfig(bucketName, regionOptions)
+          );
+          if (!config) return;
+          if (!isJsonOutput()) {
+            s.stop(pc.green('✅ 获取成功'));
+            printBucketConfig(config);
+            console.log('');
+            showOutro('Done.');
+            return;
+          }
+          emitCommandResult(config);
+        }
+      );
+    });
+
+  registerCliCommand(cli, ossConfigApplyCommand)
+    .action(async (bucket: string, options: { region?: unknown; payload?: unknown; file?: unknown; dryRun?: unknown; yes?: unknown }) => {
+      await executeWithAuthRecovery(
+        {
+          commandLabel: commandInvocation(ossConfigApplyCommand),
+          interactiveTTY: isInteractiveTTY(),
+          requiredCapabilities: ['oss']
+        },
+        async () => {
+          ensureAuthOrExit();
+          const bucketName = toPromptValue(bucket, 'bucket');
+          const rawDesiredState = resolveOptionalPayloadInput({ payload: options.payload, file: options.file });
+          if (!rawDesiredState) throw new Error('oss config apply 需要 --payload 或 --file');
+          let desiredState: unknown;
+          try {
+            desiredState = JSON.parse(rawDesiredState);
+          } catch {
+            throw new Error('OSS config desired-state 不是有效 JSON');
+          }
+          const regionOptions = toOssRegionOptions(options.region);
+          const dryRun = Boolean(options.dryRun);
+          const s = createSpinner();
+          if (dryRun) {
+            const plan = await withSpinner(
+              s,
+              `正在规划 Bucket ${bucketName} 高级配置变更...`,
+              '❌ 生成 OSS config 计划失败',
+              () => planOssBucketConfig(bucketName, desiredState, regionOptions)
+            );
+            if (!plan) return;
+            const result = { plan, verify: { performed: false, config: plan.current } };
+            if (isJsonOutput()) emitCommandResult(result);
+            else {
+              s.stop(pc.green('✅ 计划生成成功'));
+              printBucketConfigPlan(plan);
+              console.log('');
+              showOutro('Done (dry-run).');
+            }
+            return;
+          }
+          await ensureMutatingActionConfirmed(`应用 Bucket ${bucketName} 高级配置`, {
+            yes: Boolean(options.yes),
+            interactiveTTY: isInteractiveTTY()
+          });
+          const result = await withSpinner(
+            s,
+            `正在应用并验证 Bucket ${bucketName} 高级配置...`,
+            '❌ 应用 OSS config 失败',
+            () => applyOssBucketConfig(bucketName, desiredState, regionOptions)
+          );
+          if (!result) return;
+          if (isJsonOutput()) emitCommandResult(result);
+          else {
+            s.stop(pc.green('✅ 配置已应用并通过读回验证'));
+            printBucketConfigPlan(result.plan);
+            console.log('');
+            showOutro('Done.');
+          }
         }
       );
     });
@@ -1159,24 +1398,30 @@ export const ossCommandModule = defineCommandModule({
       notes: [
         '`deploy static` 的生产域名默认走 CDN(sourceType=oss) + DNS；这里补充的是 OSS Bucket 原生管理能力。',
         '首次绑定 OSS 原生域名前，通常先执行 `licell oss domain token`，再添加 TXT 验证记录。',
+        '`oss config` 会并行读取生命周期、CORS 和服务端加密配置；未配置与无权限会被明确区分。',
+        '`oss config apply` 使用 desired-state 完整替换选中的配置 section；必须先 dry-run，再显式确认。',
         '所有 OSS 子命令都支持 `--region <regionId>` 覆盖当前调用的地域；未传时使用 licell 默认 region，且覆盖不会写回全局配置。'
       ],
       examples: [
         'licell oss list',
         'licell oss create my-bucket --acl private',
         'licell oss info my-bucket',
+        'licell oss config my-bucket --output json',
+        `licell oss config apply my-bucket --payload '{"encryption":{"algorithm":"AES256"}}' --dry-run --output json`,
         'licell oss object info my-bucket site/index.html',
         'licell oss object get my-bucket site/index.html ./index.html --region cn-hangzhou',
         'licell oss sync down my-bucket site --dest-dir ./downloads/site'
       ],
       agentTips: [
-        '自动化场景优先使用 `--output json`，尤其是 `oss info`、`oss object info`、`oss domain token`、`oss domain list`。',
+        '自动化场景优先使用 `--output json`，尤其是 `oss info`、`oss config`、`oss object info`、`oss domain token`、`oss domain list`。',
         '要删除 Bucket 或对象时，先确认是否需要 `--yes` / `--recursive`。'
       ],
       recommendedFlow: [
         { title: '先看现状', command: 'licell oss list --output json', reason: '先拿到当前账号下的 Bucket 清单。' },
         { title: '创建 Bucket', command: 'licell oss create <bucket>', reason: '按需指定 ACL、存储类型、冗余类型。' },
-        { title: '检查配置', command: 'licell oss info <bucket> --output json', reason: '确认 ACL、公共访问阻止与已绑定域名。' },
+        { title: '检查基础配置', command: 'licell oss info <bucket> --output json', reason: '确认 ACL、公共访问阻止与已绑定域名。' },
+        { title: '检查高级配置', command: 'licell oss config <bucket> --output json', reason: '确认生命周期、CORS 与默认服务端加密。' },
+        { title: '规划高级配置变更', command: 'licell oss config apply <bucket> --file <path> --dry-run --output json', reason: '执行前检查完整 desired-state 差异。' },
         { title: '上传内容', command: 'licell oss sync up <bucket> --source-dir dist', reason: '把本地构建产物上传到 Bucket。' },
         { title: '下载验证', command: 'licell oss object info <bucket> <key> --output json', reason: '确认对象元数据，必要时再执行下载。' }
       ]
@@ -1206,6 +1451,8 @@ export const ossCommandModule = defineCommandModule({
   commands: [
     ossListCommand,
     ossInfoCommand,
+    ossConfigCommand,
+    ossConfigApplyCommand,
     ossCreateCommand,
     ossUpdateCommand,
     ossRmCommand,

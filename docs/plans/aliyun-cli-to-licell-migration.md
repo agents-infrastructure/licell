@@ -3,7 +3,7 @@
 > 调研快照：2026-09-03。源码目录：`/Users/wyattfang/work/aliyun-cli`；Licell：`/Users/wyattfang/work/licell`。
 > aliyun-cli 当前 HEAD：`eadd68d9a13dd0734a2236e2c70e38f4888ae65f`（v3.4.11 代码线）；OpenAPI 子模块：`2563691c22229a0b493606e11166b95896707095`。
 > 统计基于本地子模块，不依赖网络实时产品目录。阿里云 API 与产品元数据会变化，发布前应重新生成统计。
-> 实施状态更新：2026-09-05。Phase 0 已完成；Phase 1 核心完成、共享增强待办；Phase 2 首批语义 overlay 已完成；Phase 3 已完成 FC advanced、RDS、Redis/Tair、ACR 的首批只读切片，写操作 workflow 尚未开始；Phase 4 尚未开始。本批能力随 v1.0.9 发布。
+> 实施状态更新：2026-09-05。Phase 0 已完成；Phase 1 核心完成、共享增强待办；Phase 2 首批语义 overlay 已完成；Phase 3 已完成 FC advanced、RDS、Redis/Tair、ACR、OSS 的首批只读切片，以及 v1.0.10 ACR scan / OSS config inspect+apply；OSS 首个配置写 workflow 已通过真实账号验证，Phase 4 尚未开始。
 
 本方案的协议源采用仓库内快照：将 `aliyun-openapi-meta` 的协议文件复制到
 `protocol/alicloud-openapi/`，由 Git 记录版本和变更。运行时、生成器和 Agent
@@ -135,7 +135,7 @@ API 级参考文件规则：
 `licell catalog --output json`（v1.0.9 开发树）返回：
 
 - 40 个 root commands；
-- 153 个 concrete command entries；
+- 156 个 concrete command entries；
 - 统一 `licell-help@1.0` / `licell-cli-record@1.0`；
 - 命令注册源：`src/commands/registry.ts`；描述器/区域/安全元数据：`src/commands/module.ts`。
 
@@ -158,7 +158,7 @@ API 级参考文件规则：
 | 服务/产品 | Licell 当前状态 | 主要实现 |
 |---|---|---|
 | FC / FC-Open | 部署、函数 CRUD/调用、版本/alias、异步任务、custom domain、VPC binding、部分配置 | `src/providers/fc/**` |
-| OSS | Bucket CRUD/属性、对象 list/get/rm、上传/同步、原生域名 | `src/providers/oss.ts`；命令 `src/commands/oss.ts` |
+| OSS | Bucket CRUD/属性、对象 list/get/rm、上传/同步、原生域名；生命周期/CORS/服务端加密 inspect+apply | `src/providers/oss.ts`；命令 `src/commands/oss.ts` |
 | Alidns | 记录 list/add/rm，域名工作流编排 | `src/providers/dns.ts` |
 | CDN | 静态域名接入、刷新等部署联动；无完整 CDN 资源命令组 | `src/providers/cdn.ts` |
 | ACR（cr） | 部署链路兼容企业版/个人版；新增企业版 `instances/namespaces/repositories/tags` 只读盘点 | `src/providers/cr.ts`、`src/providers/cr-inventory.ts`、`src/commands/acr.ts` |
@@ -183,7 +183,7 @@ API 级参考文件规则：
 | P0 | capability registry / Agent surface | aliyun 产品/API 列表 | 核心已完成；当前 46 个 operation 晋级 curated overlay，其余保持 raw | `openapi/commando_help.go`、`src/commands/module.ts`、`src/utils/command-metadata.ts` | `capability products/search/describe`；生成 schema 与人工 overlay 合并，`catalog.agentWorkflow` 声明 Agent 路由 |
 | P0 | `api invoke`（受控逃生口） | `aliyun <product> <ApiName>`、REST path | 已完成受控 fallback；仍不能替代 workflow | `openapi/commando.go`、`invoker.go`、`waiter.go`、`output_filter.go` | 低优先级命令，标记 `maturity=raw`；写操作默认 dry-run + yes，脱敏并提示无 workflow 语义 |
 | P0 | 认证 profile 兼容 | `configure --mode ...` | Licell 不支持多 profile/多种链式凭证 | `config/configure*.go`、`config/profile.go` | `src/utils/auth/**` 增加 profile 解析与显式 `--profile`；安全地映射到 SDK credential |
-| P1 | OSS 完整资源命令 | `ossutil` 47 命令 | set-meta、CORS、生命周期、版本、复制、WORM、加密、策略、QOS、符号链接、multipart 等缺失 | `oss/lib/<command>.go`；注册表 `oss/lib/command.go:867-918` | 扩展 `src/commands/oss.ts` + `src/providers/oss.ts`，按对象/桶配置分组 |
+| P1 | OSS 完整资源命令 | `ossutil` 47 命令 | 生命周期/CORS/服务端加密 inspect+apply 已完成；set-meta、版本、复制、WORM、策略、QOS、符号链接、multipart 等缺失 | `oss/lib/<command>.go`；注册表 `oss/lib/command.go:867-918` | `oss config apply` 已落地 desired-state plan/dry-run/confirm/verify/rollback；后续按对象/桶配置分组扩展 |
 | P1 | VPC 网络资源 | `aliyun vpc <ApiName>`（404 APIs） | 只读 `list/info/topology` 已完成；创建、修改、删除仍通过受控 raw fallback | `metadatas/vpc/*.json`、通用 invoker | `src/commands/vpc.ts`、`src/providers/vpc/**`；下一步补 plan -> mutate -> verify |
 | P1 | RAM/IAM | `aliyun ram <ApiName>`、`resourcemanager` | 仅权限 bootstrap | `metadatas/ram/*.json`、`src/providers/ram.ts` | `ram user/role/policy/attach`；所有写操作带 safety + dry-run |
 | P1 | CAS/证书 | `aliyun cas <ApiName>` | 只有 ACME，不支持证书订单、上传、部署、撤销 | `metadatas/cas/*.json`、`openapi/commando.go` | `cert list/import/issue/renew/revoke/deploy`；与现有 `ssl.ts` 分离 |
@@ -192,7 +192,7 @@ API 级参考文件规则：
 | P1 | FC 高级资源 | `aliyun fc <ApiName>`、`fc-open` | 已覆盖主线，但 layers、provision、concurrency、trigger/session/tag 等不完整 | `metadatas/fc/*.json`、`src/providers/fc/**` | `fn trigger/layer/provision/concurrency/tag`；优先补只读和回滚 |
 | P1 | RDS 全生命周期 | `aliyun rds <ApiName>`（364 APIs） | 只读 backup/policy/parameter/account/database 已完成；restore/readonly/maintain 待办 | `metadatas/rds/*.json`、`src/providers/infra/**` | `db backups/parameters/accounts/databases` 已落地；下一步先做 restore plan，再开放 mutate |
 | P1 | Redis/Tair 全生命周期 | `aliyun r-kvstore <ApiName>`（146 APIs） | 只读 backup/policy/parameter/account/topology 已完成；restore/replication/upgrade 待办 | `metadatas/r-kvstore/*.json`、`src/providers/redis/**` | `cache backups/parameters/accounts/topology` 已落地；参数查询自动兼容经典与云原生接口 |
-| P1 | ACR registry | `aliyun cr <ApiName>`（115 APIs） + `acrutil` | 企业版 instance/namespace/repository/tag 只读已完成；个人版统一查询、scan、sync 待办 | `metadatas/cr/*.json`、`cliext/acrutil/**` | `acr instances/namespaces/repositories/tags` 已落地；下一步补 scan inspect，个人版保持 deploy 兼容层 |
+| P1 | ACR registry | `aliyun cr <ApiName>`（115 APIs） + `acrutil` | 企业版 instance/namespace/repository/tag/scan inspect 已完成；个人版统一查询、scan task、sync 待办 | `metadatas/cr/*.json`、`cliext/acrutil/**` | `acr instances/namespaces/repositories/tags/scan` 已落地；个人版保持 deploy 兼容层，写操作先补 plan |
 | P2 | Tablestore | `otsutil` / `aliyun ots` | 完全缺失 | `cliext/otsutil/otsutil.go`、`metadatas/ots/*.json` | 先 wrapper，再原生 `table/row/index/backup` |
 | P2 | KMS | `kmscli`、`aliyun kms <ApiName>` | 完全缺失 | `cliext/kmscli/kmscli.go`、`metadatas/kms/*.json` | `kms secret/key/cert`；严禁把 secret 写入日志 |
 | P2 | MaxCompute | `maxc`、`aliyun maxcompute <ApiName>` | 完全缺失 | `cliext/maxc/main.go`、`maxc/maxc.go` | 独立 package；优先 query/job/meta |
@@ -295,7 +295,7 @@ Agent 主路径是 `catalog -> curated help/execute`；没有领域命令时进�
 | Phase 0 | 已完成 | protocol 快照、生成器、capability 索引、`api scaffold` | 维持人工同步与 CI 一致性校验 |
 | Phase 1 | 核心完成 | 固定 runner、RPC/REST invoke、Path 编译、脱敏、安全确认、Agent execution 决策 | pager、JMESPath query/table、waiter、profile、body-file、Windows runner |
 | Phase 2 | 首批完成 | 全局 curated-first Agent 路由；CS/K8s、VPC、RAM、CAS、CDN、SLS 首批只读领域 overlay | 维持 journey contract；VPC 写操作先进入 plan -> mutate -> verify |
-| Phase 3 | 进行中 | FC advanced、RDS、Redis/Tair、ACR 首批只读原生化 | OSS 高级配置、ACR scan，以及各产品写操作 plan/verify |
+| Phase 3 | 进行中 | FC advanced、RDS、Redis/Tair、ACR、OSS 首批原生化；ACR scan / OSS config inspect+apply | VPC/RDS/Redis 写操作 plan/verify |
 | Phase 4 | 未开始 | 无 | P2 专业服务与 P3 plugin runtime |
 
 ### Phase 0：能力编译基础（已完成）
@@ -383,14 +383,24 @@ Agent 主路径是 `catalog -> curated help/execute`；没有领域命令时进�
 
 - 为一个产品补齐资源模型、风险、幂等性、nextActions、结果投影和状态验证。
 - 通过 `api scaffold` 生成 transport；人工维护 overlay；命令进入 registry/catalog。
-- RAM、CAS、CDN、SLS、FC advanced、RDS、Redis/Tair、ACR 的首批只读切片已完成；后续优先补 ACR scan inspect 与写操作 plan，再做 mutate。
+- RAM、CAS、CDN、SLS、FC advanced、RDS、Redis/Tair、ACR、OSS 的首批只读切片及 ACR scan / OSS config inspect 已完成；OSS 已完成首个 config apply 写 workflow，后续优先推进 VPC/RDS/Redis 的 plan -> mutate -> verify。
 - pager、JMESPath query/table、waiter 和 profile 兼容作为 runtime 共享能力，不作为领域命令的公开复杂度。
 
 验收：Agent 能从 `capability search` 找到领域命令，并通过 `nextActions` 完成 inspect -> mutate -> verify；凭证不出现在日志/错误里。
 
 ### Phase 3：P1 高频资源原生化（未完成，每个产品 3-7 天）
 
-当前状态：RAM、CAS、CDN、SLS、FC advanced、RDS、Redis/Tair、ACR 已完成首批只读切片；VPC 只读拓扑已完成。下一顺序：ACR scan inspect -> OSS 高级配置 inspect -> VPC/RDS/Redis 写操作 plan -> mutate/verify。
+当前状态：RAM、CAS、CDN、SLS、FC advanced、RDS、Redis/Tair、ACR、OSS 已完成首批只读切片；VPC 只读拓扑已完成；ACR scan 与 OSS config inspect+apply 已进入 v1.0.10。下一顺序：VPC/RDS/Redis 写操作 plan -> 小范围 mutate/verify。
+
+#### v1.0.10：ACR scan 与 OSS config inspect+apply
+
+已完成：新增 `acr scan <instanceId> <repositoryId> <tag>`，按 `GetRepoTagScanStatus -> GetRepoTagScanSummary/ListRepoTagScanResult` 读取已有扫描状态、严重级别汇总和分页漏洞摘要。扫描尚未完成时不请求明细，也不自动创建或重跑扫描任务；输出只保留 CVE、严重级别、漏洞类型、软件包、当前版本和修复版本，移除 `FixCmd`、镜像文件路径、层 ID、漏洞描述与外链。
+
+`cr.GetRepoTagScanStatus`、`cr.GetRepoTagScanSummary`、`cr.ListRepoTagScanResult` 已进入人工维护 overlay，Agent 可从“查看 ACR 镜像扫描漏洞”进入 curated command；`CreateRepoTagScanTask` 仍保持 mutating raw fallback，后续必须先设计 plan/dry-run/confirm 才能晋级。
+
+已完成：新增 `oss config <bucket>`，并行读取 `GetBucketLifecycle`、`GetBucketCors` 和 `GetBucketEncryption`，统一投影生命周期规则、CORS 来源/方法与默认服务端加密摘要。只有 OSS 官方“配置不存在”错误码会返回 `configured=false`；无权限、Bucket 不存在和网络失败保持显式错误，避免 Agent 把不可见误判为未配置。该命令是 SDK 原生 curated surface；OSS protocol 快照当前没有可用于 overlay 的 API 条目，因此 Agent 通过 `catalog -> oss --help --output json` 自举发现，不虚构 capability metadata。
+
+已完成：新增 `oss config apply <bucket>` desired-state workflow。省略的 section 保持不变，object 完整替换，`null` 删除；支持 `--payload/--file`、`--dry-run` 和 `--yes`，应用后统一读回验证，任一 section 失败会按变更逆序恢复原始 XML 快照。真实账号在杭州 Bucket `licell-auth-1494910986361453-cn-hangzhou-5e2053` 已分别及组合验证 lifecycle、CORS、AES256 加密的写入、读取与删除，最终三项均恢复为未配置。
 
 每个产品统一模板：
 

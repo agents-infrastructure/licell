@@ -2,8 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cac } from 'cac';
 import { initOutputContext, LICELL_JSON_PREFIX } from '../utils/output';
 
-const { ensureDestructiveActionConfirmedMock, showOutroMock, spinnerStopMock } = vi.hoisted(() => ({
+const { ensureDestructiveActionConfirmedMock, ensureMutatingActionConfirmedMock, showOutroMock, spinnerStopMock } = vi.hoisted(() => ({
   ensureDestructiveActionConfirmedMock: vi.fn(async () => {}),
+  ensureMutatingActionConfirmedMock: vi.fn(async () => {}),
   showOutroMock: vi.fn(),
   spinnerStopMock: vi.fn()
 }));
@@ -21,6 +22,7 @@ vi.mock('@clack/prompts', () => ({
 vi.mock('../providers/oss', async () => {
   return {
     bindOssBucketDomain: vi.fn(),
+    applyOssBucketConfig: vi.fn(),
     createOssBucket: vi.fn(),
     createOssBucketDomainToken: vi.fn(),
     deleteOssBucket: vi.fn(),
@@ -30,12 +32,14 @@ vi.mock('../providers/oss', async () => {
     downloadOssObjectsToDirectory: vi.fn(),
     getOssBucketInfo: vi.fn(),
     getOssObjectInfo: vi.fn(),
+    inspectOssBucketConfig: vi.fn(),
     listOssBucketDomains: vi.fn(),
     listOssBuckets: vi.fn(),
     listOssObjects: vi.fn(),
     normalizeOssBucketAcl: vi.fn((value: string) => value),
     normalizeOssBucketDataRedundancyType: vi.fn((value: string) => value.toUpperCase()),
     normalizeOssBucketStorageClass: vi.fn((value: string) => value),
+    planOssBucketConfig: vi.fn(),
     removeOssBucketDomain: vi.fn(),
     resolveDefaultOssDownloadDir: vi.fn((bucket: string) => `oss-download/${bucket}`),
     resolveDefaultOssDownloadFilePath: vi.fn(() => 'index.html'),
@@ -58,6 +62,7 @@ vi.mock('../utils/cli-shared', () => {
   return {
     ensureAuthOrExit: vi.fn(),
     ensureDestructiveActionConfirmed: ensureDestructiveActionConfirmedMock,
+    ensureMutatingActionConfirmed: ensureMutatingActionConfirmedMock,
     normalizeCustomDomain: (value: string) => value.trim().toLowerCase(),
     createSpinner: () => ({
       start: vi.fn(),
@@ -74,6 +79,7 @@ vi.mock('../utils/cli-shared', () => {
 });
 
 import {
+  applyOssBucketConfig,
   bindOssBucketDomain,
   createOssBucket,
   createOssBucketDomainToken,
@@ -84,15 +90,18 @@ import {
   downloadOssObjectsToDirectory,
   getOssBucketInfo,
   getOssObjectInfo,
+  inspectOssBucketConfig,
   listOssBucketDomains,
   listOssBuckets,
   listOssObjects,
+  planOssBucketConfig,
   removeOssBucketDomain,
   updateOssBucket,
   uploadDirectoryToBucket
 } from '../providers/oss';
 
 const createOssBucketMock = createOssBucket as unknown as ReturnType<typeof vi.fn>;
+const applyOssBucketConfigMock = applyOssBucketConfig as unknown as ReturnType<typeof vi.fn>;
 const deleteOssBucketMock = deleteOssBucket as unknown as ReturnType<typeof vi.fn>;
 const updateOssBucketMock = updateOssBucket as unknown as ReturnType<typeof vi.fn>;
 const deleteOssBucketRecursivelyMock = deleteOssBucketRecursively as unknown as ReturnType<typeof vi.fn>;
@@ -101,6 +110,8 @@ const downloadOssObjectMock = downloadOssObject as unknown as ReturnType<typeof 
 const downloadOssObjectsToDirectoryMock = downloadOssObjectsToDirectory as unknown as ReturnType<typeof vi.fn>;
 const getOssBucketInfoMock = getOssBucketInfo as unknown as ReturnType<typeof vi.fn>;
 const getOssObjectInfoMock = getOssObjectInfo as unknown as ReturnType<typeof vi.fn>;
+const inspectOssBucketConfigMock = inspectOssBucketConfig as unknown as ReturnType<typeof vi.fn>;
+const planOssBucketConfigMock = planOssBucketConfig as unknown as ReturnType<typeof vi.fn>;
 const listOssBucketDomainsMock = listOssBucketDomains as unknown as ReturnType<typeof vi.fn>;
 const listOssBucketsMock = listOssBuckets as unknown as ReturnType<typeof vi.fn>;
 const listOssObjectsMock = listOssObjects as unknown as ReturnType<typeof vi.fn>;
@@ -122,6 +133,7 @@ describe('oss commands', () => {
   beforeEach(() => {
     consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     ensureDestructiveActionConfirmedMock.mockClear();
+    ensureMutatingActionConfirmedMock.mockClear();
     showOutroMock.mockClear();
     spinnerStopMock.mockClear();
 
@@ -152,6 +164,49 @@ describe('oss commands', () => {
       acl: 'private',
       publicAccessBlock: false,
       domains: []
+    });
+
+    inspectOssBucketConfigMock.mockReset();
+    inspectOssBucketConfigMock.mockResolvedValue({
+      bucket: 'demo-bucket',
+      regionId: 'cn-shanghai',
+      lifecycle: { configured: false, ruleCount: 0, rules: [] },
+      cors: { configured: false, ruleCount: 0, rules: [] },
+      encryption: { configured: false }
+    });
+
+    const configPlan = {
+      bucket: 'demo-bucket',
+      regionId: 'cn-shanghai',
+      current: {
+        bucket: 'demo-bucket',
+        regionId: 'cn-shanghai',
+        lifecycle: { configured: false, ruleCount: 0, rules: [] },
+        cors: { configured: false, ruleCount: 0, rules: [] },
+        encryption: { configured: false }
+      },
+      desiredState: { encryption: { algorithm: 'AES256' } },
+      changes: [{
+        section: 'encryption',
+        action: 'set',
+        before: { configured: false },
+        after: { configured: true, algorithm: 'AES256' }
+      }],
+      changeCount: 1,
+      requiresConfirmation: true,
+      willExecute: false
+    };
+    planOssBucketConfigMock.mockReset();
+    planOssBucketConfigMock.mockResolvedValue(configPlan);
+    applyOssBucketConfigMock.mockReset();
+    applyOssBucketConfigMock.mockResolvedValue({
+      plan: { ...configPlan, willExecute: true },
+      execution: { appliedSections: ['encryption'] },
+      verify: {
+        performed: true,
+        matched: true,
+        config: { ...configPlan.current, encryption: { configured: true, algorithm: 'AES256' } }
+      }
     });
 
     listOssBucketsMock.mockReset();
@@ -255,7 +310,7 @@ describe('oss commands', () => {
   it('declares a per-command region override on every OSS leaf command', async () => {
     const { ossCommandModule } = await import('../commands/oss');
 
-    expect(ossCommandModule.declaredCommands).toHaveLength(17);
+    expect(ossCommandModule.declaredCommands).toHaveLength(19);
     for (const command of ossCommandModule.declaredCommands || []) {
       expect(command.options, command.rawName).toContainEqual({
         rawName: '--region <regionId>',
@@ -293,6 +348,70 @@ describe('oss commands', () => {
     await cli.parse(['node', 'src/cli.ts', 'oss info', 'demo-bucket', '--region', 'cn-shanghai']);
 
     expect(getOssBucketInfoMock).toHaveBeenCalledWith('demo-bucket', { regionId: 'cn-shanghai' });
+  });
+
+  it('routes `oss config --region` to the provider and emits its structured inspection', async () => {
+    const argv = ['node', 'src/cli.ts', 'oss', 'config', 'demo-bucket', '--region', 'cn-shanghai'];
+    initOutputContext('json', argv);
+    const stdoutWriteSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    try {
+      const cli = await createCli();
+      await cli.parse(['node', 'src/cli.ts', 'oss config', 'demo-bucket', '--region', 'cn-shanghai']);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(inspectOssBucketConfigMock).toHaveBeenCalledWith('demo-bucket', { regionId: 'cn-shanghai' });
+      const result = stdoutWriteSpy.mock.calls
+        .flatMap(([chunk]) => String(chunk).split('\n'))
+        .filter((line) => line.startsWith(LICELL_JSON_PREFIX))
+        .map((line) => JSON.parse(line.slice(LICELL_JSON_PREFIX.length)) as Record<string, unknown>)
+        .find((record) => record.type === 'result');
+      expect(result).toMatchObject({
+        type: 'result',
+        bucket: 'demo-bucket',
+        regionId: 'cn-shanghai',
+        lifecycle: { configured: false },
+        cors: { configured: false },
+        encryption: { configured: false }
+      });
+    } finally {
+      stdoutWriteSpy.mockRestore();
+    }
+  });
+
+  it('routes `oss config apply --dry-run` to planning without mutation or confirmation', async () => {
+    const cli = await createCli();
+    await cli.parse([
+      'node', 'src/cli.ts', 'oss config apply', 'demo-bucket',
+      '--payload', '{"encryption":{"algorithm":"AES256"}}',
+      '--region', 'cn-shanghai', '--dry-run'
+    ]);
+
+    expect(planOssBucketConfigMock).toHaveBeenCalledWith(
+      'demo-bucket',
+      { encryption: { algorithm: 'AES256' } },
+      { regionId: 'cn-shanghai' }
+    );
+    expect(applyOssBucketConfigMock).not.toHaveBeenCalled();
+    expect(ensureMutatingActionConfirmedMock).not.toHaveBeenCalled();
+  });
+
+  it('confirms, applies and verifies `oss config apply --yes`', async () => {
+    const cli = await createCli();
+    await cli.parse([
+      'node', 'src/cli.ts', 'oss config apply', 'demo-bucket',
+      '--payload', '{"encryption":{"algorithm":"AES256"}}',
+      '--region', 'cn-shanghai', '--yes'
+    ]);
+
+    expect(ensureMutatingActionConfirmedMock).toHaveBeenCalledWith(
+      '应用 Bucket demo-bucket 高级配置',
+      expect.objectContaining({ yes: true })
+    );
+    expect(applyOssBucketConfigMock).toHaveBeenCalledWith(
+      'demo-bucket',
+      { encryption: { algorithm: 'AES256' } },
+      { regionId: 'cn-shanghai' }
+    );
   });
 
   it('passes `oss ls --region` to the provider', async () => {
