@@ -74,6 +74,7 @@ describe('ram bootstrap helpers', () => {
       'ecs:DeleteInstance',
       'kvstore:DescribeBackups',
       'kvstore:DescribeBackupPolicy',
+      'kvstore:ModifyBackupPolicy',
       'kvstore:DescribeParameters',
       'kvstore:DescribeInstanceConfig',
       'kvstore:DescribeClusterMemberInfo',
@@ -94,7 +95,10 @@ describe('ram bootstrap helpers', () => {
   });
 
   it('covers all auth capability action hints in licell policy actions', () => {
-    const capabilities: AuthCapability[] = ['fc', 'dns', 'oss', 'rds', 'redis', 'cdn', 'vpc', 'cr', 'logs', 'ecs'];
+    const capabilities: AuthCapability[] = [
+      'fc', 'dns', 'oss', 'rds', 'redis', 'redis-backup-read', 'redis-backup-write',
+      'cdn', 'vpc', 'cr', 'logs', 'ecs'
+    ];
     const hintedActions = resolveAuthCapabilityActions(capabilities);
     for (const action of hintedActions) {
       expect(LICELL_POLICY_ACTIONS).toContain(action);

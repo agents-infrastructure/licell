@@ -242,6 +242,7 @@
 | `licell cache rm <instanceId>` | 删除缓存实例 | `--region`, `--yes` |
 | `licell cache rotate-password` | 轮换 Redis 密码 | `--region`, `--instance` |
 | `licell cache topology <instanceId>` | 查看 Redis/Tair 集群节点拓扑（只读） | `--region`, `--limit` |
+| `licell cache backup-policy apply <instanceId>` | 按 desired-state 设置 Redis/Tair 自动备份策略 | `--region`, `--dry-run`, `--yes` |
 | `licell supa add` | 创建 RDS Supabase 实例 | `--region`, `--name`, `--vsw` |
 | `licell supa config <instanceName>` | 查看 Supabase 实例配置（auth/storage/rag） | `--region`, `--set-auth`, `--set-storage` |
 | `licell supa connect <instanceName>` | 查看 Supabase 连接信息和 API Keys | `--region` |

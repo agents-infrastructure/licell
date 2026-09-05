@@ -1245,6 +1245,16 @@ const CAPABILITY_PROBES: Record<AuthCapability, (auth: AuthConfig) => Promise<Do
     void auth;
     return probeRedisCapability();
   },
+  'redis-backup-read': async (auth) => {
+    void auth;
+    const probe = await probeRedisCapability();
+    return { ...probe, capability: 'redis-backup-read', label: AUTH_CAPABILITY_LABELS['redis-backup-read'] };
+  },
+  'redis-backup-write': async (auth) => {
+    void auth;
+    const probe = await probeRedisCapability();
+    return { ...probe, capability: 'redis-backup-write', label: AUTH_CAPABILITY_LABELS['redis-backup-write'] };
+  },
   logs: probeLogsCapability,
   ecs: async (auth) => {
     void auth;

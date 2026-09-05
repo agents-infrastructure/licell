@@ -3,7 +3,7 @@
 > 调研快照：2026-09-03。源码目录：`/Users/wyattfang/work/aliyun-cli`；Licell：`/Users/wyattfang/work/licell`。
 > aliyun-cli 当前 HEAD：`eadd68d9a13dd0734a2236e2c70e38f4888ae65f`（v3.4.11 代码线）；OpenAPI 子模块：`2563691c22229a0b493606e11166b95896707095`。
 > 统计基于本地子模块，不依赖网络实时产品目录。阿里云 API 与产品元数据会变化，发布前应重新生成统计。
-> 实施状态更新：2026-09-05。Phase 0 已完成；Phase 1 核心完成、共享增强待办；Phase 2 首批语义 overlay 已完成；Phase 3 已完成 FC advanced、RDS、Redis/Tair、ACR、OSS 的首批只读切片，以及 v1.0.10 ACR scan / OSS config inspect+apply；v1.0.11 的 VPC name/description desired-state workflow 已通过真实账号验证，Phase 4 尚未开始。
+> 实施状态更新：2026-09-05。Phase 0 已完成；Phase 1 核心完成、共享增强待办；Phase 2 首批语义 overlay 已完成；Phase 3 已完成 FC advanced、RDS、Redis/Tair、ACR、OSS 的首批只读切片，以及 v1.0.10 ACR scan / OSS config inspect+apply、v1.0.11 VPC config / RDS restore plan；v1.0.12 Redis/Tair 自动备份策略 desired-state workflow 已完成并待发布，Phase 4 尚未开始。
 
 本方案的协议源采用仓库内快照：将 `aliyun-openapi-meta` 的协议文件复制到
 `protocol/alicloud-openapi/`，由 Git 记录版本和变更。运行时、生成器和 Agent
@@ -132,10 +132,10 @@ API 级参考文件规则：
 
 ### 4.1 命令面
 
-`licell catalog --output json`（v1.0.11）返回：
+`licell catalog --output json`（v1.0.12 待发布）返回：
 
 - 40 个 root commands；
-- 158 个 concrete command entries；
+- 159 个 concrete command entries；
 - 统一 `licell-help@1.0` / `licell-cli-record@1.0`；
 - 命令注册源：`src/commands/registry.ts`；描述器/区域/安全元数据：`src/commands/module.ts`。
 
@@ -165,7 +165,7 @@ API 级参考文件规则：
 | ECS | list/info 与 start/reboot/stop/delete 生命周期 | `src/providers/ecs/**`、`src/commands/ecs*.ts` |
 | CS / ACK / ACS | 集群列表与集群内 deployment/daemonset/service 只读盘点；其他 CS API 走 raw fallback | `src/providers/k8s.ts`、`src/commands/k8s.ts` |
 | RDS | 创建/查询/连接/公网白名单/删除；只读覆盖备份与策略、参数、账号、逻辑数据库 | `src/providers/infra/**`、`src/commands/db.ts` |
-| Redis/Tair（R-kvstore） | classic/serverless 创建、查询、连接、密码轮换、公网白名单；只读覆盖备份与策略、参数、账号、集群拓扑 | `src/providers/redis/**`、`src/commands/cache.ts` |
+| Redis/Tair（R-kvstore） | classic/serverless 创建、查询、连接、密码轮换、公网白名单；只读覆盖备份、参数、账号、集群拓扑；自动备份策略支持 desired-state plan/apply/verify | `src/providers/redis/**`、`src/commands/cache.ts` |
 | RAM | 仅 bootstrap policy/权限修复与认证辅助，不是 RAM 管理 CLI | `src/providers/ram.ts`、`src/utils/auth-recovery.ts` |
 | SLS | 日志 query/tail 与 FC 日志桥接，无完整 project/logstore/仪表盘管理 | `src/providers/logs.ts`、`src/commands/logs.ts` |
 | VPC | `vpc list/info/topology` 只读盘点核心网络；`vpc config apply` 以 desired-state 管理名称和描述；部署链路还能发现/创建部分网络资源 | `src/providers/vpc.ts`、`src/providers/vpc/query.ts`、`src/providers/vpc/config.ts`、`src/commands/vpc.ts` |
@@ -180,7 +180,7 @@ API 级参考文件规则：
 |---|---|---|---|---|---|
 | P0 | OpenAPI runtime（内部 module） | `aliyun <product> <ApiName>`、REST path | 核心已完成；pager、query/table、waiter 等共享增强待办 | `openapi/commando.go`、`invoker.go`、`rpc.go`、`restful.go`、`http_context.go` | `src/providers/openapi/**`；以 `execute(operationRef, input, context)` 为小接口，隐藏 runner、凭证、RPC/REST 与 endpoint 复杂度 |
 | P0 | protocol snapshot + scaffold | `aliyun-openapi-meta`、`aliyun help <product> [ApiName]` | 已完成；当前固定 156 个产品、16,242 个 API | `meta/repository.go`、`meta/reader.go`、`openapi/commando_help.go`、`aliyun-openapi-meta/metadatas/**` | `protocol/alicloud-openapi/**`、`scripts/update-alicloud-protocol.ts`、`scripts/generate-alicloud-capabilities.ts`、`licell api scaffold`；人工升级快照，CI 只校验一致性 |
-| P0 | capability registry / Agent surface | aliyun 产品/API 列表 | 核心已完成；当前 47 个 operation 晋级 curated overlay，其余保持 raw | `openapi/commando_help.go`、`src/commands/module.ts`、`src/utils/command-metadata.ts` | `capability products/search/describe`；生成 schema 与人工 overlay 合并，`catalog.agentWorkflow` 声明 Agent 路由 |
+| P0 | capability registry / Agent surface | aliyun 产品/API 列表 | 核心已完成；当前 48 个 operation 晋级 curated overlay，其余保持 raw | `openapi/commando_help.go`、`src/commands/module.ts`、`src/utils/command-metadata.ts` | `capability products/search/describe`；生成 schema 与人工 overlay 合并，`catalog.agentWorkflow` 声明 Agent 路由 |
 | P0 | `api invoke`（受控逃生口） | `aliyun <product> <ApiName>`、REST path | 已完成受控 fallback；仍不能替代 workflow | `openapi/commando.go`、`invoker.go`、`waiter.go`、`output_filter.go` | 低优先级命令，标记 `maturity=raw`；写操作默认 dry-run + yes，脱敏并提示无 workflow 语义 |
 | P0 | 认证 profile 兼容 | `configure --mode ...` | Licell 不支持多 profile/多种链式凭证 | `config/configure*.go`、`config/profile.go` | `src/utils/auth/**` 增加 profile 解析与显式 `--profile`；安全地映射到 SDK credential |
 | P1 | OSS 完整资源命令 | `ossutil` 47 命令 | 生命周期/CORS/服务端加密 inspect+apply 已完成；set-meta、版本、复制、WORM、策略、QOS、符号链接、multipart 等缺失 | `oss/lib/<command>.go`；注册表 `oss/lib/command.go:867-918` | `oss config apply` 已落地 desired-state plan/dry-run/confirm/verify/rollback；后续按对象/桶配置分组扩展 |
@@ -191,7 +191,7 @@ API 级参考文件规则：
 | P1 | SLS 管理 | `aliyun sls <ApiName>`（221 APIs） | 只能查日志/跟随日志 | `metadatas/sls/*.json`、`src/providers/logs.ts` | `logs project/store/index/query/tail`；保留原始查询响应 |
 | P1 | FC 高级资源 | `aliyun fc <ApiName>`、`fc-open` | 已覆盖主线，但 layers、provision、concurrency、trigger/session/tag 等不完整 | `metadatas/fc/*.json`、`src/providers/fc/**` | `fn trigger/layer/provision/concurrency/tag`；优先补只读和回滚 |
 | P1 | RDS 全生命周期 | `aliyun rds <ApiName>`（364 APIs） | 只读 backup/policy/parameter/account/database 已完成；restore/readonly/maintain 待办 | `metadatas/rds/*.json`、`src/providers/infra/**` | `db backups/parameters/accounts/databases` 已落地；下一步先做 restore plan，再开放 mutate |
-| P1 | Redis/Tair 全生命周期 | `aliyun r-kvstore <ApiName>`（146 APIs） | 只读 backup/policy/parameter/account/topology 已完成；restore/replication/upgrade 待办 | `metadatas/r-kvstore/*.json`、`src/providers/redis/**` | `cache backups/parameters/accounts/topology` 已落地；参数查询自动兼容经典与云原生接口 |
+| P1 | Redis/Tair 全生命周期 | `aliyun r-kvstore <ApiName>`（146 APIs） | 只读 backup/policy/parameter/account/topology 已完成；自动备份策略 desired-state 正在开发；restore/replication/upgrade 待办 | `metadatas/r-kvstore/*.json`、`src/providers/redis/**` | `cache backups/parameters/accounts/topology` 与 `cache backup-policy apply` 已落地；参数查询自动兼容经典与云原生接口 |
 | P1 | ACR registry | `aliyun cr <ApiName>`（115 APIs） + `acrutil` | 企业版 instance/namespace/repository/tag/scan inspect 已完成；个人版统一查询、scan task、sync 待办 | `metadatas/cr/*.json`、`cliext/acrutil/**` | `acr instances/namespaces/repositories/tags/scan` 已落地；个人版保持 deploy 兼容层，写操作先补 plan |
 | P2 | Tablestore | `otsutil` / `aliyun ots` | 完全缺失 | `cliext/otsutil/otsutil.go`、`metadatas/ots/*.json` | 先 wrapper，再原生 `table/row/index/backup` |
 | P2 | KMS | `kmscli`、`aliyun kms <ApiName>` | 完全缺失 | `cliext/kmscli/kmscli.go`、`metadatas/kms/*.json` | `kms secret/key/cert`；严禁把 secret 写入日志 |
@@ -390,7 +390,7 @@ Agent 主路径是 `catalog -> curated help/execute`；没有领域命令时进�
 
 ### Phase 3：P1 高频资源原生化（未完成，每个产品 3-7 天）
 
-当前状态：RAM、CAS、CDN、SLS、FC advanced、RDS、Redis/Tair、ACR、OSS 已完成首批只读切片；ACR scan 与 OSS config inspect+apply 已进入 v1.0.10；VPC name/description desired-state workflow 已作为 v1.0.11 范围通过真实账号验证。下一顺序：推进 RDS/Redis plan -> 小范围 mutate/verify。
+当前状态：RAM、CAS、CDN、SLS、FC advanced、RDS、Redis/Tair、ACR、OSS 已完成首批只读切片；ACR scan 与 OSS config inspect+apply 已进入 v1.0.10；VPC config 与 RDS restore plan 已进入 v1.0.11；Redis/Tair 自动备份策略 desired-state workflow 已完成真实账号写入/恢复 smoke，作为 v1.0.12 范围待发布。下一顺序：评估小范围 RDS mutate/verify。
 
 #### v1.0.10：ACR scan 与 OSS config inspect+apply
 
@@ -413,6 +413,14 @@ Agent 主路径是 `catalog -> curated help/execute`；没有领域命令时进�
 已实现：新增 `db restore plan <instanceId>` 只读恢复计划。首次调用盘点最近成功备份和 `DescribeLocalAvailableRecoveryTime` PITR 窗口；显式传入 `--backup-id` 或 `--restore-time` 后校验恢复源，并生成非敏感 `CloneDBInstance` 请求草案。命令固定返回 `execution.performed=false`，不创建实例；表级、跨地域和 SQL Server 原地恢复继续留在 raw capability，等待后续独立 workflow。
 
 `rds.CloneDBInstance` 和 `rds.DescribeLocalAvailableRecoveryTime` 已进入人工 overlay，Agent 从“恢复 RDS 到新实例”的自然语言检索会先进入 `db restore plan`，而不是直接执行 raw 写 API。
+
+#### v1.0.12：Redis/Tair 自动备份策略（待发布）
+
+已实现：新增 `cache backup-policy apply <instanceId>`，以 `DescribeBackupPolicy -> ModifyBackupPolicy -> DescribeBackupPolicy` 管理自动备份周期、UTC 整点时段、7-730 天保留期和可选增量备份开关。省略字段保持现状；命令支持 `--payload/--file`、`--dry-run`、`--yes`、字段级 set/noop 计划、无变化幂等跳过和写后重试读回验证。
+
+`r-kvstore.ModifyBackupPolicy` 已进入人工 overlay，自然语言“设置 Redis 自动备份策略”优先进入 curated workflow。权限拆为 `redis-backup-read`（`DescribeBackupPolicy`）与 `redis-backup-write`（`DescribeBackupPolicy` + `ModifyBackupPolicy`）；增量备份开关只适用于支持数据闪回的 Tair 实例，并要求实例参数 `appendonly=yes`。
+
+真实账号已在上海 staging 实例 `r-uf6f828bde7ca604` 完成可恢复写入验收：先将备份周期从每天临时改为 Monday/Wednesday/Friday，命令内读回一致，requestId 为 `01A071AA-AD81-57D2-A124-CB053A8568B3`；随后恢复每天备份，命令内读回和独立 `cache backups` 均确认原策略完整恢复，requestId 为 `01A071AA-F191-5DB7-BF94-0F53697D6352`。备份时段仍为 `11:00Z-12:00Z`、保留期仍为 7 天、增量备份仍为关闭，未发生非目标字段漂移。
 
 每个产品统一模板：
 

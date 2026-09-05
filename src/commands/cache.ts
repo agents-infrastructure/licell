@@ -15,13 +15,16 @@ import {
   deleteCacheInstance,
   allocateCachePublicConnection,
   applyCachePublicWhitelist,
+  applyCacheBackupPolicy,
   listCacheBackups,
   listCacheParameters,
   listCacheAccounts,
-  listCacheTopology
+  listCacheTopology,
+  planCacheBackupPolicy
 } from '../providers/redis';
 import {
   ensureAuthOrExit,
+  ensureMutatingActionConfirmed,
   createSpinner,
   isInteractiveTTY,
   showIntro,
@@ -32,6 +35,7 @@ import {
   parseOptionalPositiveInt,
   withSpinner
 } from '../utils/cli-shared';
+import { resolveOptionalPayloadInput } from '../utils/payload-input';
 import { emitCommandResult, isJsonOutput } from '../utils/output';
 import { DATA_SECTION } from './sections';
 
@@ -141,6 +145,68 @@ const cacheBackupsCommand = defineCliCommand({
       { name: 'truncated', description: '结果是否截断。', required: true },
       { name: 'backups[]', description: '备份 ID、状态、类型、大小和时间摘要。', required: true }
     ] }
+  }
+});
+
+const cacheBackupPolicyApplyCommand = defineCliCommand({
+  rawName: 'cache backup-policy apply <instanceId>',
+  description: '按 desired-state 设置 Redis/Tair 自动备份策略',
+  region: { scope: 'binding', binding: 'cache', target: { argumentIndex: 0 } },
+  options: [
+    { rawName: '--dry-run', description: '只读取现状并生成差异计划，不修改备份策略' },
+    { rawName: '--yes', description: '确认执行备份策略修改' },
+    { rawName: '--payload <json>', description: '内联 JSON desired-state' },
+    { rawName: '--file <path>', description: '从当前工作目录内的文件读取 JSON desired-state' }
+  ],
+  descriptor: {
+    title: 'Apply Redis/Tair automatic backup policy',
+    summary: '用可验证的 desired-state workflow 管理备份周期、UTC 时段、保留天数和增量备份。',
+    examples: [
+      `licell cache backup-policy apply r-xxx --payload '{"preferredPeriod":["Monday","Friday"],"preferredTime":"02:00Z-03:00Z","retentionDays":30}' --dry-run --output json`,
+      'licell cache backup-policy apply r-xxx --file ./cache-backup-policy.json --yes --output json'
+    ],
+    argumentHints: { instanceId: 'Redis/Tair 实例 ID；先用 `licell cache list` 获取。' },
+    related: ['cache backups', 'cache info', 'capability search'],
+    agentTips: [
+      'preferredPeriod 支持 Monday 到 Sunday 的数组或逗号分隔字符串；preferredTime 必须是 UTC 整点一小时时段。',
+      'retentionDays 必须是 7 到 730；省略字段保持现状。',
+      'incrementalBackupEnabled 只适用于支持数据闪回的 Tair 实例，并要求实例参数 appendonly=yes。',
+      'Agent 必须先用 --dry-run 检查 changes[].before/after，再用相同 payload 加 --yes 执行。',
+      '命令只调用一次 ModifyBackupPolicy，随后用 DescribeBackupPolicy 重试读回验证。'
+    ],
+    automation: {
+      preferredOutput: 'json',
+      explicitInputs: ['instanceId', '--region', '--dry-run', '--yes', '--payload', '--file']
+    },
+    safety: {
+      level: 'mutating',
+      reason: '会修改 Redis/Tair 自动备份策略；要求先 dry-run，并用 --yes 明确确认。',
+      confirmFlags: ['--yes']
+    },
+    optionInsights: {
+      '--dry-run': { whenToUse: '所有 Agent 和自动化调用都应先使用。', cautions: ['只生成计划，不执行 ModifyBackupPolicy。'] },
+      '--yes': { whenToUse: '确认 dry-run 结果后执行。', cautions: ['必须与已审查的 payload 保持一致。'] },
+      '--payload': { whenToUse: '只修改少量策略字段时使用。', cautions: ['不要与 --file 同时使用。'] },
+      '--file': { whenToUse: '希望把备份策略纳入项目审查时使用。', cautions: ['文件必须位于当前工作目录内。'] }
+    },
+    recommendedFlow: [
+      { title: '查看现有策略', command: 'licell cache backups <instanceId> --output json', reason: '确认当前备份周期、时段和保留天数。' },
+      { title: '生成变更计划', command: 'licell cache backup-policy apply <instanceId> --file <path> --dry-run --output json', reason: '检查字段级 before/after。' },
+      { title: '应用并验证', command: 'licell cache backup-policy apply <instanceId> --file <path> --yes --output json', reason: '写入后自动读回验证。' }
+    ],
+    result: {
+      summary: '返回字段级计划、执行信息和读回验证结果。',
+      fields: [
+        { name: 'plan.instanceId', description: '目标 Redis/Tair 实例 ID。', required: true },
+        { name: 'plan.changes[]', description: '策略字段的 before、after 和 set/noop 动作。', required: true },
+        { name: 'plan.willExecute', description: '是否会实际写入；dry-run 固定为 false。', required: true },
+        { name: 'execution.performed', description: '是否实际调用 ModifyBackupPolicy。', required: true },
+        { name: 'execution.requestId', description: '阿里云写 API requestId，仅实际变更时存在。' },
+        { name: 'verify.performed', description: '是否执行写入后读回验证；dry-run 固定为 false。', required: true },
+        { name: 'verify.matched', description: '读回策略是否与 desired-state 一致。' },
+        { name: 'verify.policy', description: '读回的自动备份策略；dry-run 时为当前策略。', required: true }
+      ]
+    }
   }
 });
 
@@ -328,6 +394,24 @@ function normalizeCacheAddMode(input: string | undefined, instanceId: string | u
   throw new Error('cache add --mode 仅支持 classic / serverless');
 }
 
+function parseCacheBackupPolicyDesiredState(payload: unknown, file: unknown) {
+  const raw = resolveOptionalPayloadInput({ payload, file });
+  if (!raw) throw new Error('cache backup-policy apply 需要 --payload 或 --file');
+  try {
+    return JSON.parse(raw) as unknown;
+  } catch {
+    throw new Error('Redis/Tair backup policy desired-state 不是有效 JSON');
+  }
+}
+
+function printCacheBackupPolicyPlan(plan: Awaited<ReturnType<typeof planCacheBackupPolicy>>) {
+  console.log(pc.bold(`Redis/Tair ${plan.instanceId} backup policy plan`));
+  console.log(`region: ${pc.cyan(plan.regionId)}`);
+  for (const change of plan.changes) {
+    console.log(`- ${change.field}: ${String(change.before)} -> ${String(change.after)} [${change.action}]`);
+  }
+}
+
 function printCacheClassList(
   mode: CacheClassMode,
   catalog: Awaited<ReturnType<typeof listCacheClasses>>,
@@ -383,6 +467,47 @@ function clearProjectCacheBinding(instanceId: string) {
 }
 
 export function registerCacheCommands(cli: CAC) {
+  registerCliCommand(cli, cacheBackupPolicyApplyCommand)
+    .action(async (instanceId: string, options: {
+      dryRun?: unknown;
+      yes?: unknown;
+      payload?: unknown;
+      file?: unknown;
+    }) => {
+      const dryRun = Boolean(options.dryRun);
+      await executeWithAuthRecovery(
+        {
+          commandLabel: commandInvocation(cacheBackupPolicyApplyCommand),
+          interactiveTTY: isInteractiveTTY(),
+          requiredCapabilities: dryRun ? ['redis-backup-read'] : ['redis-backup-write']
+        },
+        async () => {
+          ensureAuthOrExit();
+          const id = toPromptValue(instanceId, 'instanceId');
+          const desiredState = parseCacheBackupPolicyDesiredState(options.payload, options.file);
+          if (dryRun) {
+            const plan = await planCacheBackupPolicy(id, desiredState);
+            const result = {
+              plan,
+              execution: { performed: false },
+              verify: { performed: false, policy: plan.current }
+            };
+            if (isJsonOutput()) emitCommandResult(result);
+            else printCacheBackupPolicyPlan(plan);
+            return result;
+          }
+          await ensureMutatingActionConfirmed(`修改 Redis/Tair ${id} 自动备份策略`, {
+            yes: Boolean(options.yes),
+            interactiveTTY: isInteractiveTTY()
+          });
+          const result = await applyCacheBackupPolicy(id, desiredState);
+          if (isJsonOutput()) emitCommandResult(result);
+          else printCacheBackupPolicyPlan(result.plan);
+          return result;
+        }
+      );
+    });
+
   registerCliCommand(cli, cacheBackupsCommand)
     .action(async (instanceId: string, options: { days?: unknown; limit?: unknown }) => {
       await executeWithAuthRecovery({ commandLabel: commandInvocation(cacheBackupsCommand), interactiveTTY: isInteractiveTTY(), requiredCapabilities: ['redis'] }, async () => {
@@ -887,9 +1012,16 @@ export const cacheCommandModule = defineCommandModule({
   register: registerCacheCommands,
   namespaces: {
     cache: {
-      summary: 'Redis 缓存实例的创建、查看、连接、密码轮换、公网访问与删除。',
-      examples: ['licell cache list', 'licell cache connect <instanceId>', 'licell cache rotate-password --output json'],
-      agentTips: ['执行公网访问、密码轮换、删除前，先向用户确认影响面。']
+      summary: 'Redis/Tair 实例的创建、盘点、备份策略、连接、安全配置与删除。',
+      examples: [
+        'licell cache list',
+        'licell cache backups <instanceId> --output json',
+        'licell cache backup-policy apply <instanceId> --file <path> --dry-run --output json'
+      ],
+      agentTips: [
+        '修改自动备份策略时，先执行 backup-policy apply --dry-run，再用 --yes 应用并读回验证。',
+        '执行公网访问、密码轮换、删除前，先向用户确认影响面。'
+      ]
     }
   },
   commands: [
@@ -898,6 +1030,7 @@ export const cacheCommandModule = defineCommandModule({
     cacheListCommand,
     cacheInfoCommand,
     cacheBackupsCommand,
+    cacheBackupPolicyApplyCommand,
     cacheParametersCommand,
     cacheAccountsCommand,
     cacheTopologyCommand,

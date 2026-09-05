@@ -216,6 +216,14 @@ describe('capability agent guidance', () => {
     expect(result.execution.preferred).toMatchObject({ kind: 'curated-command', commandKey });
   });
 
+  it('routes Redis/Tair backup policy updates through the desired-state command', async () => {
+    const result = await enrichDescribeForAgent(describeAlicloudCapability('r-kvstore.ModifyBackupPolicy'));
+    expect(result.execution.preferred).toMatchObject({
+      kind: 'curated-command',
+      commandKey: 'cache backup-policy apply'
+    });
+  });
+
   it.each([
     ['ListInstance', 'acr instances'],
     ['ListNamespace', 'acr namespaces'],

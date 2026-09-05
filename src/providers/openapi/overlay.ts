@@ -140,6 +140,13 @@ const OVERLAYS: AlicloudCapabilityOverlay[] = [
   },
   {
     product: 'r-kvstore',
+    operation: 'ModifyBackupPolicy',
+    commandKeys: ['cache backup-policy apply'],
+    confidence: 'curated',
+    notes: ['cache backup-policy apply plans, confirms, updates, and verifies the Redis/Tair automatic backup policy.']
+  },
+  {
+    product: 'r-kvstore',
     operation: 'DescribeParameters',
     commandKeys: ['cache parameters'],
     confidence: 'curated',

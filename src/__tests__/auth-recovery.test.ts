@@ -87,4 +87,15 @@ describe('resolveAuthCapabilityActions', () => {
       'vpc:ModifyVpcAttribute'
     ]);
   });
+
+  it('keeps Redis backup policy writes on a separate minimal capability', () => {
+    expect(AUTH_CAPABILITY_LABELS['redis-backup-write']).toBe('Redis/Tair 备份策略修改');
+    expect(resolveAuthCapabilityActions(['redis-backup-read'])).toEqual([
+      'kvstore:DescribeBackupPolicy'
+    ]);
+    expect(resolveAuthCapabilityActions(['redis-backup-write'])).toEqual([
+      'kvstore:DescribeBackupPolicy',
+      'kvstore:ModifyBackupPolicy'
+    ]);
+  });
 });

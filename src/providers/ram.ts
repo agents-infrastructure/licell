@@ -83,6 +83,7 @@ export const LICELL_POLICY_ACTIONS = [
   'kvstore:DescribeAccounts',
   'kvstore:DescribeBackups',
   'kvstore:DescribeBackupPolicy',
+  'kvstore:ModifyBackupPolicy',
   'kvstore:DescribeParameters',
   'kvstore:DescribeInstanceConfig',
   'kvstore:DescribeClusterMemberInfo',

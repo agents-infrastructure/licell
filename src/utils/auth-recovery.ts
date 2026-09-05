@@ -7,7 +7,7 @@ import { Config, DEFAULT_ALI_REGION, type AuthConfig } from './config';
 import { readEnvWithFallback } from './env';
 
 export type AuthIssueKind = 'missing_auth' | 'access_denied' | 'invalid_credentials' | 'unknown';
-export type AuthCapability = 'fc' | 'dns' | 'oss' | 'rds' | 'rdsai' | 'redis' | 'cdn' | 'vpc' | 'vpc-read' | 'vpc-write' | 'cr' | 'logs' | 'ecs';
+export type AuthCapability = 'fc' | 'dns' | 'oss' | 'rds' | 'rdsai' | 'redis' | 'redis-backup-read' | 'redis-backup-write' | 'cdn' | 'vpc' | 'vpc-read' | 'vpc-write' | 'cr' | 'logs' | 'ecs';
 
 export const AUTH_CAPABILITY_LABELS: Record<AuthCapability, string> = {
   fc: '函数计算',
@@ -16,6 +16,8 @@ export const AUTH_CAPABILITY_LABELS: Record<AuthCapability, string> = {
   rds: 'RDS',
   rdsai: 'RDS AI (Supabase)',
   redis: 'Redis/Tair',
+  'redis-backup-read': 'Redis/Tair 备份策略读取',
+  'redis-backup-write': 'Redis/Tair 备份策略修改',
   cdn: 'CDN',
   vpc: 'VPC',
   'vpc-read': 'VPC 只读查询',
@@ -75,6 +77,8 @@ const CAPABILITY_ACTIONS: Record<AuthCapability, string[]> = {
     'kvstore:CreateTairKVCacheVNode',
     'kvstore:ResetAccountPassword'
   ],
+  'redis-backup-read': ['kvstore:DescribeBackupPolicy'],
+  'redis-backup-write': ['kvstore:DescribeBackupPolicy', 'kvstore:ModifyBackupPolicy'],
   cdn: ['cdn:DescribeUserDomains', 'cdn:AddCdnDomain', 'cdn:BatchSetCdnDomainConfig'],
   vpc: ['vpc:DescribeVpcs', 'vpc:CreateVpc', 'vpc:CreateVSwitch'],
   'vpc-read': [

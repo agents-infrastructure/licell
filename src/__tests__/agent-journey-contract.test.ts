@@ -45,6 +45,7 @@ const JOURNEY_MATRIX: JourneyCase[] = [
   { name: 'RDS accounts', product: 'rds', intent: '查看 RDS 账号', expectedRef: 'rds.DescribeAccounts', strategy: 'curated-command', commandKey: 'db accounts' },
   { name: 'RDS databases', product: 'rds', intent: '查看 RDS 逻辑数据库', expectedRef: 'rds.DescribeDatabases', strategy: 'curated-command', commandKey: 'db databases' },
   { name: 'Redis backups', product: 'r-kvstore', intent: '查看 Redis 备份', expectedRef: 'r-kvstore.DescribeBackups', strategy: 'curated-command', commandKey: 'cache backups' },
+  { name: 'Redis backup policy update', product: 'r-kvstore', intent: '设置 Redis 自动备份策略', expectedRef: 'r-kvstore.ModifyBackupPolicy', strategy: 'curated-command', commandKey: 'cache backup-policy apply', action: 'update' },
   { name: 'Redis parameters', product: 'r-kvstore', intent: '查看 Redis 运行参数', expectedRef: 'r-kvstore.DescribeParameters', strategy: 'curated-command', commandKey: 'cache parameters' },
   { name: 'Redis accounts', product: 'r-kvstore', intent: '查看 Redis 账号', expectedRef: 'r-kvstore.DescribeAccounts', strategy: 'curated-command', commandKey: 'cache accounts' },
   { name: 'Redis topology', product: 'r-kvstore', intent: '查看 Redis 集群节点拓扑', expectedRef: 'r-kvstore.DescribeClusterMemberInfo', strategy: 'curated-command', commandKey: 'cache topology' },
