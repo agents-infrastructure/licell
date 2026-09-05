@@ -92,7 +92,7 @@ interface RawApi {
 
 const ACTION_PREFIXES: Array<[GeneratedCapabilityAction, string[]]> = [
   ['inspect', ['Describe', 'Get', 'List', 'Query', 'Search', 'Check', 'Read', 'Lookup']],
-  ['create', ['Create', 'Add', 'Allocate', 'Apply', 'Attach', 'Associate', 'Bind', 'Enable', 'Import', 'Open', 'Purchase', 'Register', 'Start']],
+  ['create', ['Create', 'Clone', 'Add', 'Allocate', 'Apply', 'Attach', 'Associate', 'Bind', 'Enable', 'Import', 'Open', 'Purchase', 'Register', 'Start']],
   ['update', ['Change', 'Modify', 'Move', 'Renew', 'Reset', 'Resize', 'Scale', 'Set', 'Update', 'Upgrade']],
   ['delete', ['Cancel', 'Close', 'Delete', 'Detach', 'Disable', 'Release', 'Remove', 'Revoke', 'Stop', 'Terminate', 'Unassociate', 'Unbind', 'Unregister']],
   ['execute', ['Execute', 'Invoke', 'Run', 'Send', 'Submit', 'Trigger']]

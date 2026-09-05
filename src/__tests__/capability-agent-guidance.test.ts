@@ -196,6 +196,14 @@ describe('capability agent guidance', () => {
     expect(result.execution.preferred).toMatchObject({ kind: 'curated-command', commandKey });
   });
 
+  it.each(['CloneDBInstance', 'DescribeLocalAvailableRecoveryTime'])(
+    'routes RDS restore capability %s through the read-only restore plan',
+    async (operation) => {
+      const result = await enrichDescribeForAgent(describeAlicloudCapability(`rds.${operation}`));
+      expect(result.execution.preferred).toMatchObject({ kind: 'curated-command', commandKey: 'db restore plan' });
+    }
+  );
+
   it.each([
     ['DescribeBackups', 'cache backups'],
     ['DescribeBackupPolicy', 'cache backups'],

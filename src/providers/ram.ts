@@ -47,6 +47,7 @@ export const LICELL_POLICY_ACTIONS = [
   'rds:DescribeAccounts',
   'rds:DescribeBackups',
   'rds:DescribeBackupPolicy',
+  'rds:DescribeLocalAvailableRecoveryTime',
   'rds:DescribeParameters',
   'rds:DescribeDBInstanceIPArrayList',
   'rds:DescribeSecurityGroupConfiguration',

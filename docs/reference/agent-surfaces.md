@@ -229,6 +229,7 @@
 | `licell db parameters <instanceId>` | 查看 RDS 运行与待生效参数（只读） | `--region`, `--prefix`, `--limit` |
 | `licell db public-access [instanceId]` | 开通数据库公网访问并添加当前 IP 到白名单 | `--region`, `--ip` |
 | `licell db rm <instanceId>` | 删除数据库实例 | `--region`, `--yes` |
+| `licell db restore plan <instanceId>` | 检查 RDS 恢复条件并生成新实例请求草案（只读） | `--region`, `--backup-id`, `--restore-time` |
 | `licell cache accounts <instanceId>` | 查看 Redis/Tair 账号和权限（只读） | `--region`, `--name`, `--limit` |
 | `licell cache add` | 分配 Redis 缓存 | `--region`, `--type`, `--mode` |
 | `licell cache backups <instanceId>` | 查看 Redis/Tair 备份集和备份策略（只读） | `--region`, `--days`, `--limit` |

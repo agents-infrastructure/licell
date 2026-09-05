@@ -133,6 +133,16 @@ try {
 
 ## Common Workflows
 
+Licell 中对 Agent 暴露的恢复入口优先使用只读计划：
+
+```bash
+licell db restore plan <instanceId> --output json
+licell db restore plan <instanceId> --backup-id <backupId> --output json
+licell db restore plan <instanceId> --restore-time <ISO-8601-UTC> --output json
+```
+
+该命令只读取实例、备份集和 PITR 窗口并生成 `CloneDBInstance` 草案，不执行恢复。不要绕过计划直接调用 raw API。
+
 ### 1. Create Instance with Account and Database
 
 ```

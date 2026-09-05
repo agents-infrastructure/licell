@@ -17,7 +17,8 @@ import {
   listDatabaseBackups,
   listDatabaseParameters,
   listDatabaseAccounts,
-  listDatabases
+  listDatabases,
+  planDatabaseRestore
 } from '../providers/infra';
 import {
   ensureAuthOrExit,
@@ -103,6 +104,63 @@ const dbBackupsCommand = defineCliCommand({
       { name: 'count', description: '返回备份数量。', required: true },
       { name: 'truncated', description: '结果是否截断。', required: true },
       { name: 'backups[]', description: '备份 ID、状态、类型、大小和时间摘要。', required: true }
+    ] }
+  }
+});
+
+const dbRestorePlanCommand = defineCliCommand({
+  rawName: 'db restore plan <instanceId>',
+  description: '检查 RDS 恢复条件并生成新实例请求草案（只读）',
+  region: { scope: 'binding', binding: 'database', target: { argumentIndex: 0 } },
+  options: [
+    { rawName: '--backup-id <backupId>', description: '使用指定成功备份集恢复' },
+    { rawName: '--restore-time <time>', description: '使用 ISO 8601 UTC 时间点恢复' },
+    { rawName: '--days <n>', description: '未选择恢复源时列出最近天数，默认 30，最大 365' },
+    { rawName: '--pay-type <type>', description: '目标实例计费方式：Postpaid 或 Prepaid，默认 Postpaid' }
+  ],
+  descriptor: {
+    title: 'Plan RDS restore to a new instance',
+    summary: '读取源实例、备份集和 PITR 时间窗口，生成 CloneDBInstance 请求草案，但不执行恢复。',
+    examples: [
+      'licell db restore plan rm-xxx --output json',
+      'licell db restore plan rm-xxx --backup-id b-xxx --output json',
+      'licell db restore plan rm-xxx --restore-time 2026-09-01T08:00:00Z --output json'
+    ],
+    argumentHints: { instanceId: 'RDS 源实例 ID；先用 `licell db list` 获取。' },
+    related: ['db backups', 'db info', 'db class', 'capability describe'],
+    agentTips: [
+      '先不传恢复源读取 `availability.backups[]` 和 `availability.pitr`，再显式选择 `--backup-id` 或 `--restore-time`。',
+      '`requestDraft` 仅是 CloneDBInstance 参数草案；本命令不调用写 API，也不建议直接 raw invoke。',
+      '表级恢复、跨地域恢复和 SQL Server 原地 recovery 不在当前范围。'
+    ],
+    automation: {
+      preferredOutput: 'json',
+      explicitInputs: ['instanceId', '--region', '--backup-id|--restore-time', '--days', '--pay-type']
+    },
+    safety: {
+      level: 'safe',
+      reason: '只调用 DescribeDBInstanceAttribute、DescribeBackups 和 DescribeLocalAvailableRecoveryTime，不调用 CloneDBInstance。',
+      confirmFlags: []
+    },
+    optionInsights: {
+      '--backup-id': { whenToUse: '从 `db backups` 或本命令的可用备份中选定一个恢复点。', conflictsWith: ['--restore-time'] },
+      '--restore-time': { whenToUse: '需要恢复到精确时间点时使用，必须落在 PITR 窗口内。', conflictsWith: ['--backup-id'] },
+      '--pay-type': { whenToUse: '生成目标计费参数；未传时使用 Postpaid 并输出告警。' }
+    },
+    recommendedFlow: [
+      { title: '盘点恢复源', command: 'licell db restore plan <instanceId> --output json', reason: '获取可用备份和 PITR 时间窗口。' },
+      { title: '选择恢复点', command: 'licell db restore plan <instanceId> --backup-id <backupId> --output json', reason: '校验备份状态并生成请求草案。' },
+      { title: '确认目标资源', command: 'licell db class --output json', reason: '在后续受控恢复命令中显式确认规格、存储、网络和费用。' }
+    ],
+    result: { outcomeKey: 'validation.valid', fields: [
+      { name: 'operation', description: '后续恢复对应的 RDS operation：`rds.CloneDBInstance`。', required: true },
+      { name: 'source', description: '源实例引擎、状态、规格和网络摘要。', required: true },
+      { name: 'availability.backups[]', description: '安全投影的备份集候选，不包含下载 URL。', required: true },
+      { name: 'availability.backupsTruncated', description: '备份候选是否因单页上限而截断。', required: true },
+      { name: 'availability.pitr', description: '本地时间点恢复支持状态和可用窗口。', required: true },
+      { name: 'requestDraft', description: '已选恢复源时生成的 CloneDBInstance 非敏感参数草案。', required: false },
+      { name: 'validation', description: '恢复源校验结果、阻断项和告警。', required: true },
+      { name: 'execution', description: '固定表明本命令未执行任何恢复写操作。', required: true }
     ] }
   }
 });
@@ -355,6 +413,30 @@ function clearProjectDatabaseBinding(instanceId: string) {
 }
 
 export function registerDbCommands(cli: CAC) {
+  registerCliCommand(cli, dbRestorePlanCommand)
+    .action(async (instanceId: string, options: { backupId?: unknown; restoreTime?: unknown; days?: unknown; payType?: unknown }) => {
+      await executeWithAuthRecovery({ commandLabel: commandInvocation(dbRestorePlanCommand), interactiveTTY: isInteractiveTTY(), requiredCapabilities: ['rds'] }, async () => {
+        ensureAuthOrExit();
+        const days = parseOptionalPositiveInt(options.days, 'days') || 30;
+        if (days > 365) throw new Error('days 无效：最大为 365');
+        const result = await planDatabaseRestore(instanceId, {
+          backupId: toOptionalString(options.backupId),
+          restoreTime: toOptionalString(options.restoreTime),
+          payType: toOptionalString(options.payType),
+          days
+        });
+        const response = { stage: 'db.restore.plan', ...result };
+        if (isJsonOutput()) emitCommandResult(response);
+        if (!isJsonOutput()) {
+          console.log(pc.bold(`RDS restore plan (${result.mode})`));
+          console.log(`source=${pc.cyan(result.source.instanceId)}  engine=${result.source.engine || '-'} ${result.source.engineVersion || ''}  status=${result.source.status || '-'}`);
+          console.log(`backups=${result.availability.backupCount}${result.availability.backupsTruncated ? '+' : ''}  pitr=${result.availability.pitr.available ? `${result.availability.pitr.beginTime} ~ ${result.availability.pitr.endTime}` : 'unavailable'}`);
+          console.log(`valid=${result.validation.valid ? pc.green('yes') : pc.yellow('no')}  execution=${pc.gray('not performed')}`);
+          for (const blocker of result.validation.blockers) console.log(pc.yellow(`- ${blocker.code}: ${blocker.message}`));
+        }
+      });
+    });
+
   registerCliCommand(cli, dbBackupsCommand)
     .action(async (instanceId: string, options: { days?: unknown; status?: unknown; limit?: unknown }) => {
       await executeWithAuthRecovery({ commandLabel: commandInvocation(dbBackupsCommand), interactiveTTY: isInteractiveTTY(), requiredCapabilities: ['rds'] }, async () => {
@@ -905,9 +987,9 @@ export const dbCommandModule = defineCommandModule({
     db: {
       summary: 'RDS 数据库实例的创建、查看、连接、公网访问与删除。',
       notes: ['公网访问与删除属于高影响操作，自动化执行前应先确认。'],
-      examples: ['licell db list', 'licell db info <instanceId>', 'licell db backups <instanceId> --output json', 'licell db parameters <instanceId> --output json', 'licell db accounts <instanceId> --output json', 'licell db databases <instanceId> --output json', 'licell db connect <instanceId> --output json'],
-      agentTips: ['优先从 `licell db list --output json` 获取实例，再执行 connect / public-access / rm。']
+      examples: ['licell db list', 'licell db info <instanceId>', 'licell db backups <instanceId> --output json', 'licell db restore plan <instanceId> --output json', 'licell db parameters <instanceId> --output json', 'licell db accounts <instanceId> --output json', 'licell db databases <instanceId> --output json', 'licell db connect <instanceId> --output json'],
+      agentTips: ['优先从 `licell db list --output json` 获取实例；恢复前必须先执行 `licell db restore plan`。']
     }
   },
-  commands: [dbAddCommand, dbClassCommand, dbListCommand, dbInfoCommand, dbBackupsCommand, dbParametersCommand, dbAccountsCommand, dbDatabasesCommand, dbConnectCommand, dbPublicAccessCommand, dbRmCommand]
+  commands: [dbAddCommand, dbClassCommand, dbListCommand, dbInfoCommand, dbBackupsCommand, dbRestorePlanCommand, dbParametersCommand, dbAccountsCommand, dbDatabasesCommand, dbConnectCommand, dbPublicAccessCommand, dbRmCommand]
 });

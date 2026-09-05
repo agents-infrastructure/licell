@@ -1,12 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { cac } from 'cac';
 
-const { emitCommandResultMock, listDatabaseBackupsMock, listDatabaseParametersMock, listDatabaseAccountsMock, listDatabasesMock } = vi.hoisted(() => ({
+const { emitCommandResultMock, listDatabaseBackupsMock, listDatabaseParametersMock, listDatabaseAccountsMock, listDatabasesMock, planDatabaseRestoreMock } = vi.hoisted(() => ({
   emitCommandResultMock: vi.fn(),
   listDatabaseBackupsMock: vi.fn(),
   listDatabaseParametersMock: vi.fn(),
   listDatabaseAccountsMock: vi.fn(),
-  listDatabasesMock: vi.fn()
+  listDatabasesMock: vi.fn(),
+  planDatabaseRestoreMock: vi.fn()
 }));
 
 vi.mock('../providers/infra', async (importOriginal) => ({
@@ -14,7 +15,8 @@ vi.mock('../providers/infra', async (importOriginal) => ({
   listDatabaseBackups: listDatabaseBackupsMock,
   listDatabaseParameters: listDatabaseParametersMock,
   listDatabaseAccounts: listDatabaseAccountsMock,
-  listDatabases: listDatabasesMock
+  listDatabases: listDatabasesMock,
+  planDatabaseRestore: planDatabaseRestoreMock
 }));
 vi.mock('../utils/auth-recovery', () => ({ executeWithAuthRecovery: vi.fn(async (_options: unknown, task: () => Promise<unknown>) => task()) }));
 vi.mock('../utils/cli-shared', async (importOriginal) => ({
@@ -32,6 +34,7 @@ describe('RDS inventory commands', () => {
     listDatabaseParametersMock.mockReset().mockResolvedValue({ instanceId: 'rm-1', regionId: 'cn-shanghai', engine: 'MySQL', parameterGroup: null, limit: 20, truncated: false, running: [{ name: 'max_connections', value: '100' }], configured: [] });
     listDatabaseAccountsMock.mockReset().mockResolvedValue({ instanceId: 'rm-1', regionId: 'cn-shanghai', limit: 20, totalCount: 1, truncated: false, accounts: [{ name: 'app' }] });
     listDatabasesMock.mockReset().mockResolvedValue({ instanceId: 'rm-1', regionId: 'cn-shanghai', limit: 20, totalCount: 1, truncated: false, databases: [{ name: 'appdb' }] });
+    planDatabaseRestoreMock.mockReset().mockResolvedValue({ instanceId: 'rm-1', regionId: 'cn-shanghai', mode: 'backup-set', source: { instanceId: 'rm-1' }, availability: { backupCount: 1, pitr: { available: true } }, validation: { valid: true, blockers: [], warnings: [] }, execution: { performed: false } });
   });
 
   it.each([
@@ -48,5 +51,18 @@ describe('RDS inventory commands', () => {
 
     expect(provider).toHaveBeenCalledWith('rm-1', expectedOptions);
     expect(emitCommandResultMock).toHaveBeenCalledWith(expect.objectContaining({ stage, instanceId: 'rm-1' }));
+  }, 20_000);
+
+  it('maps restore plan inputs without executing a mutation', async () => {
+    const cli = cac('licell');
+    const { registerDbCommands } = await import('../commands/db');
+    registerDbCommands(cli);
+    await cli.parse(['node', 'src/cli.ts', 'db restore plan', 'rm-1', '--backup-id', 'b-1', '--pay-type', 'Postpaid', '--days', '60']);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(planDatabaseRestoreMock).toHaveBeenCalledWith('rm-1', {
+      backupId: 'b-1', restoreTime: undefined, payType: 'Postpaid', days: 60
+    });
+    expect(emitCommandResultMock).toHaveBeenCalledWith(expect.objectContaining({ stage: 'db.restore.plan', instanceId: 'rm-1' }));
   }, 20_000);
 });

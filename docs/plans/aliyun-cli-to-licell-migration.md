@@ -402,13 +402,17 @@ Agent 主路径是 `catalog -> curated help/execute`；没有领域命令时进�
 
 已完成：新增 `oss config apply <bucket>` desired-state workflow。省略的 section 保持不变，object 完整替换，`null` 删除；支持 `--payload/--file`、`--dry-run` 和 `--yes`，应用后统一读回验证，任一 section 失败会按变更逆序恢复原始 XML 快照。真实账号在杭州 Bucket `licell-auth-1494910986361453-cn-hangzhou-5e2053` 已分别及组合验证 lifecycle、CORS、AES256 加密的写入、读取与删除，最终三项均恢复为未配置。
 
-#### v1.0.11：VPC config apply（开发中）
+#### v1.0.11：VPC config apply 与 RDS restore plan（开发中）
 
 已实现：新增 `vpc config apply <vpc>`，只管理可逆且低耦合的 `name` 与 `description`。命令支持 `--payload/--file`、强制先 `--dry-run` 的 Agent 流程、`--yes` 确认、字段级 set/clear/noop 计划和写后 `DescribeVpcs` 读回验证；CIDR、IPv6、路由、交换机和网关明确不在该 workflow 范围。
 
 `vpc.ModifyVpcAttribute` 已进入 curated overlay；capability 搜索同时识别名称/描述等属性意图，Agent 可从自然语言 update 请求稳定发现 `vpc config apply`。权限拆为 `vpc-read` 与最小 `vpc-write`（`DescribeVpcs` + `ModifyVpcAttribute`），dry-run 不请求写权限。
 
 阿里云明确限制短时间内重复调用 `ModifyVpcAttribute` 修改名称和描述，因此验证失败时不会立即发起第二次写入或自动回滚；错误会保留 requestId，并要求稍后用 `vpc info` 复查。真实账号已在杭州 VPC `vpc-bp1qgkmpf9tm466vwhxcj` 完成 `description: null -> Managed by Licell` 的 dry-run、写入、命令内读回和独立 `vpc info` 验证，requestId 为 `01A070BF-B21E-592C-AFA5-A7230E69CFFE`。
+
+已实现：新增 `db restore plan <instanceId>` 只读恢复计划。首次调用盘点最近成功备份和 `DescribeLocalAvailableRecoveryTime` PITR 窗口；显式传入 `--backup-id` 或 `--restore-time` 后校验恢复源，并生成非敏感 `CloneDBInstance` 请求草案。命令固定返回 `execution.performed=false`，不创建实例；表级、跨地域和 SQL Server 原地恢复继续留在 raw capability，等待后续独立 workflow。
+
+`rds.CloneDBInstance` 和 `rds.DescribeLocalAvailableRecoveryTime` 已进入人工 overlay，Agent 从“恢复 RDS 到新实例”的自然语言检索会先进入 `db restore plan`，而不是直接执行 raw 写 API。
 
 每个产品统一模板：
 

@@ -10,7 +10,7 @@ type JourneyCase = {
   expectedRef: string;
   strategy: 'curated-command' | 'raw-api-fallback';
   commandKey?: string;
-  action?: 'inspect' | 'update';
+  action?: 'inspect' | 'create' | 'update';
 };
 
 // This matrix tests the Agent decision chain, not every provider API. Add a
@@ -40,6 +40,7 @@ const JOURNEY_MATRIX: JourneyCase[] = [
   { name: 'FC VPC bindings', product: 'fc', intent: '查看函数 VPC 绑定', expectedRef: 'fc.ListVpcBindings', strategy: 'curated-command', commandKey: 'fn vpc-bindings' },
   { name: 'FC function tags', product: 'fc', intent: '查看函数资源标签', expectedRef: 'fc.ListTagResources', strategy: 'curated-command', commandKey: 'fn tags' },
   { name: 'RDS backups', product: 'rds', intent: '查看 RDS 备份', expectedRef: 'rds.DescribeBackups', strategy: 'curated-command', commandKey: 'db backups' },
+  { name: 'RDS restore plan', product: 'rds', intent: '恢复 RDS 到新实例', expectedRef: 'rds.CloneDBInstance', strategy: 'curated-command', commandKey: 'db restore plan', action: 'create' },
   { name: 'RDS parameters', product: 'rds', intent: '查看 RDS 运行参数', expectedRef: 'rds.DescribeParameters', strategy: 'curated-command', commandKey: 'db parameters' },
   { name: 'RDS accounts', product: 'rds', intent: '查看 RDS 账号', expectedRef: 'rds.DescribeAccounts', strategy: 'curated-command', commandKey: 'db accounts' },
   { name: 'RDS databases', product: 'rds', intent: '查看 RDS 逻辑数据库', expectedRef: 'rds.DescribeDatabases', strategy: 'curated-command', commandKey: 'db databases' },

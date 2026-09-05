@@ -55,6 +55,7 @@ const CAPABILITY_ACTIONS: Record<AuthCapability, string[]> = {
     'rds:DescribeAccounts',
     'rds:DescribeBackups',
     'rds:DescribeBackupPolicy',
+    'rds:DescribeLocalAvailableRecoveryTime',
     'rds:DescribeParameters',
     'rds:DescribeDBInstanceIPArrayList',
     'rds:DescribeSecurityGroupConfiguration',

@@ -46,6 +46,8 @@ const QUERY_STOP_WORDS = new Set(['我', '有', '的', '上', '台', '个', '服
 const PRODUCT_SEARCH_RESOURCE_WORDS = new Set(['实例', 'instance', 'instances', '集群', 'cluster', 'clusters', '节点', 'node', 'nodes']);
 
 const QUERY_EXPANSIONS: Array<[RegExp, string]> = [
+  [/(?:rds|RDS|数据库)(?:的)?(?:备份|时间点)?(?:恢复|克隆)(?:到)?(?:新)?实例/g, ' rds clone db instance create '],
+  [/(?:恢复|克隆)\s*(?:rds|RDS|数据库)(?:到)?(?:新)?实例?/g, ' rds clone db instance create '],
   [/\b(?:k8s|kubernetes|ack|acs)\b/gi, ' cs '],
   [/(?:云服务器|虚拟机)/g, ' ecs 实例 '],
   [/(?:日志项目)/g, ' 日志 project '],
@@ -126,6 +128,10 @@ const TERM_ALIASES: Record<string, string[]> = {
   '描述': ['描述', 'description'],
   '备份': ['备份', 'backup', 'backups'],
   backup: ['backup', 'backups', '备份'],
+  '恢复': ['恢复', 'restore', 'recovery', 'clone'],
+  restore: ['restore', 'recovery', 'clone', '恢复'],
+  '克隆': ['克隆', 'clone', 'restore'],
+  clone: ['clone', '克隆', 'restore'],
   '参数': ['参数', 'parameter', 'parameters', 'config'],
   parameter: ['parameter', 'parameters', 'config', '参数'],
   '账号': ['账号', 'account', 'accounts'],

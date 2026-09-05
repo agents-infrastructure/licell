@@ -104,6 +104,20 @@ const OVERLAYS: AlicloudCapabilityOverlay[] = [
     notes: ['db list and db info use the RDS instance query provider.']
   },
   {
+    product: 'rds',
+    operation: 'CloneDBInstance',
+    commandKeys: ['db restore plan'],
+    confidence: 'curated',
+    notes: ['db restore plan validates a backup set or PITR window and builds a request draft; it never calls CloneDBInstance.']
+  },
+  {
+    product: 'rds',
+    operation: 'DescribeLocalAvailableRecoveryTime',
+    commandKeys: ['db restore plan'],
+    confidence: 'curated',
+    notes: ['db restore plan reads the local PITR window for supported database engines.']
+  },
+  {
     product: 'r-kvstore',
     operation: 'DescribeInstances',
     commandKeys: ['cache list', 'cache info'],
