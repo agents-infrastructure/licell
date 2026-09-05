@@ -132,10 +132,10 @@ API 级参考文件规则：
 
 ### 4.1 命令面
 
-`licell catalog --output json`（v1.0.11 开发中）返回：
+`licell catalog --output json`（v1.0.11）返回：
 
 - 40 个 root commands；
-- 157 个 concrete command entries；
+- 158 个 concrete command entries；
 - 统一 `licell-help@1.0` / `licell-cli-record@1.0`；
 - 命令注册源：`src/commands/registry.ts`；描述器/区域/安全元数据：`src/commands/module.ts`。
 
@@ -402,7 +402,7 @@ Agent 主路径是 `catalog -> curated help/execute`；没有领域命令时进�
 
 已完成：新增 `oss config apply <bucket>` desired-state workflow。省略的 section 保持不变，object 完整替换，`null` 删除；支持 `--payload/--file`、`--dry-run` 和 `--yes`，应用后统一读回验证，任一 section 失败会按变更逆序恢复原始 XML 快照。真实账号在杭州 Bucket `licell-auth-1494910986361453-cn-hangzhou-5e2053` 已分别及组合验证 lifecycle、CORS、AES256 加密的写入、读取与删除，最终三项均恢复为未配置。
 
-#### v1.0.11：VPC config apply 与 RDS restore plan（开发中）
+#### v1.0.11：VPC config apply 与 RDS restore plan（已发布）
 
 已实现：新增 `vpc config apply <vpc>`，只管理可逆且低耦合的 `name` 与 `description`。命令支持 `--payload/--file`、强制先 `--dry-run` 的 Agent 流程、`--yes` 确认、字段级 set/clear/noop 计划和写后 `DescribeVpcs` 读回验证；CIDR、IPv6、路由、交换机和网关明确不在该 workflow 范围。
 
