@@ -42,6 +42,7 @@ describe('buildCommandReferenceSections', () => {
       'vpc info',
       'vpc list',
       'vpc topology',
+      'vpc config apply',
       'ram users'
     ]);
   });

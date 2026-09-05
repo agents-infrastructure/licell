@@ -790,6 +790,7 @@ licell e2e cleanup <runId>
 | `licell vpc info <vpc>` | 按 VPC ID 或唯一名称查看网络详情 | `--region` |
 | `licell vpc list` | 列出当前地域的 VPC 网络 | `--region`, `--name`, `--limit` |
 | `licell vpc topology <vpc>` | 聚合查看 VPC、交换机、路由表、NAT 网关和 EIP 拓扑 | `--region` |
+| `licell vpc config apply <vpc>` | 按 desired-state 设置 VPC 名称和描述 | `--region`, `--dry-run`, `--yes` |
 | `licell ram users` | 列出 RAM 用户（只读） | `--limit` |
 
 #### Automation & Tooling

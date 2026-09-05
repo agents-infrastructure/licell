@@ -122,6 +122,8 @@ const TERM_ALIASES: Record<string, string[]> = {
   binding: ['binding', 'bindings', '绑定'],
   '标签': ['标签', 'tag', 'tags'],
   tag: ['tag', 'tags', '标签'],
+  '名称': ['名称', 'name'],
+  '描述': ['描述', 'description'],
   '备份': ['备份', 'backup', 'backups'],
   backup: ['backup', 'backups', '备份'],
   '参数': ['参数', 'parameter', 'parameters', 'config'],
@@ -265,6 +267,12 @@ function scoreCapability(capability: GeneratedCapability, product: GeneratedCapa
   const operationWords = words(capability.operation);
   const productWords = words(productText(product));
   const resourceWords = words(capability.resource);
+  const attributeQueryWords = queryWords.filter((word) => termAlternatives(word).some((alternative) => (
+    ['name', 'description'].includes(alternative)
+  )));
+  const parameterWords = attributeQueryWords.length > 0
+    ? capability.parameters.flatMap((parameter) => words(parameter.name))
+    : [];
   const collection = capability.operation.startsWith('List')
     || Boolean(resourceWords.at(-1)?.endsWith('s'));
   const haystack = new Set([
@@ -354,6 +362,15 @@ function scoreCapability(capability: GeneratedCapability, product: GeneratedCapa
   score += resourceSignalWords.filter((word) => termAlternatives(word).some((alternative) => (
     resourceWords.some((candidate) => matchesSearchTerm(candidate, alternative))
   ))).length * 40;
+  score += attributeQueryWords.filter((word) => termAlternatives(word).some((alternative) => (
+    parameterWords.some((candidate) => matchesSearchTerm(candidate, alternative))
+  ))).length * 70;
+  if (attributeQueryWords.length > 0 && (
+    resourceWords.includes(capability.product.toLowerCase())
+    || resourceWords.includes(capability.productCode.toLowerCase())
+  )) {
+    score += 200;
+  }
   if (capability.product.toLowerCase() === capability.resource.toLowerCase()) score += 50;
   if (operationWords.join(' ') === queryWords.join(' ')) score += 200;
   return score - operationWords.length;

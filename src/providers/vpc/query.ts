@@ -46,6 +46,7 @@ export interface VpcLookupOptions {
 export interface VpcSummary {
   vpcId: string;
   vpcName?: string;
+  description?: string;
   regionId: string;
   status?: string;
   cidrBlock?: string;
@@ -99,6 +100,7 @@ function summarizeVpc(row: Row, fallbackRegionId: string): VpcSummary | undefine
   return {
     vpcId,
     vpcName: stringValue(row.vpcName),
+    description: stringValue(row.description),
     regionId: stringValue(row.regionId) || fallbackRegionId,
     status: stringValue(row.status),
     cidrBlock: stringValue(row.cidrBlock),

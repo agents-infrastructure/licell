@@ -231,6 +231,40 @@ describe('cli help json contract', () => {
     expect(record?.help?.renderedText).toContain('`relationships`');
   }, 10000);
 
+  it('locks VPC config apply help as a guarded desired-state contract', () => {
+    const result = runCliHelpJson(['vpc', 'config', 'apply']);
+    const records = extractJsonRecordsFromOutput(result.stdout) as Array<Record<string, any>>;
+
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(records).toHaveLength(1);
+
+    const record = records[0];
+    expect(record?.key).toBe('vpc config apply');
+    expect(record?.help?.kind).toBe('licell-help');
+    expect(record?.help?.scope).toBe('command');
+    expect(record?.help?.automation?.preferredOutput).toBe('json');
+    expect(record?.help?.safety).toMatchObject({ level: 'mutating', confirmFlags: ['--yes'] });
+    expect(record?.help?.options.map((option: { rawName?: string }) => option.rawName)).toEqual(expect.arrayContaining([
+      '--region <regionId>',
+      '--dry-run',
+      '--yes',
+      '--payload <json>',
+      '--file <path>'
+    ]));
+    expect(record?.help?.recommendedFlow.map((step: { command?: string }) => step.command)).toEqual(expect.arrayContaining([
+      'licell vpc config apply <vpc> --file <path> --dry-run --output json',
+      'licell vpc config apply <vpc> --file <path> --yes --output json'
+    ]));
+    expect(record?.help?.result?.fields.map((field: { name?: string }) => field.name)).toEqual(expect.arrayContaining([
+      'plan.changes[]',
+      'execution.performed',
+      'verify.performed',
+      'verify.attributes'
+    ]));
+  }, 10000);
+
   it('locks capability describe help as a local raw metadata contract', () => {
     const result = runCliHelpJson(['capability', 'describe']);
     const records = extractJsonRecordsFromOutput(result.stdout) as Array<Record<string, any>>;

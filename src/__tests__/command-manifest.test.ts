@@ -189,7 +189,7 @@ describe('command manifest invariants', () => {
     ]);
   });
 
-  it('places the VPC readonly module after Kubernetes and before doctor', () => {
+  it('places the VPC workflow module after Kubernetes and before doctor', () => {
     const roots = LICELL_COMMAND_MANIFEST.modules.map((module) => module.roots[0]);
     expect(roots.indexOf('vpc')).toBeGreaterThan(roots.indexOf('k8s'));
     expect(roots.indexOf('vpc')).toBeLessThan(roots.indexOf('doctor'));
@@ -199,7 +199,8 @@ describe('command manifest invariants', () => {
     expect(vpcModule?.declaredCommands?.map((command) => command.rawName)).toEqual([
       'vpc list',
       'vpc info <vpc>',
-      'vpc topology <vpc>'
+      'vpc topology <vpc>',
+      'vpc config apply <vpc>'
     ]);
   });
 });

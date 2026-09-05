@@ -33,6 +33,22 @@ describe('capability agent guidance', () => {
     expect(result.execution.preferred).toMatchObject({ kind: 'curated-command', commandKey });
   }, 20_000);
 
+  it('routes ModifyVpcAttribute to the guarded VPC config workflow', async () => {
+    const result = await enrichDescribeForAgent(describeAlicloudCapability('vpc.ModifyVpcAttribute'));
+
+    expect(result.curatedCommandCandidates[0]?.key).toBe('vpc config apply');
+    expect(result.execution).toMatchObject({
+      policy: 'curated-first',
+      strategy: 'curated-command',
+      preferred: {
+        kind: 'curated-command',
+        commandKey: 'vpc config apply',
+        helpCommand: 'licell vpc config apply --help --output json'
+      },
+      fallback: { kind: 'raw-api' }
+    });
+  }, 20_000);
+
   it('prefers the function list command for FC ListFunctions', async () => {
     const result = await enrichDescribeForAgent(describeAlicloudCapability('fc.ListFunctions'));
 

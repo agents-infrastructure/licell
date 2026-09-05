@@ -3,7 +3,7 @@
 > 调研快照：2026-09-03。源码目录：`/Users/wyattfang/work/aliyun-cli`；Licell：`/Users/wyattfang/work/licell`。
 > aliyun-cli 当前 HEAD：`eadd68d9a13dd0734a2236e2c70e38f4888ae65f`（v3.4.11 代码线）；OpenAPI 子模块：`2563691c22229a0b493606e11166b95896707095`。
 > 统计基于本地子模块，不依赖网络实时产品目录。阿里云 API 与产品元数据会变化，发布前应重新生成统计。
-> 实施状态更新：2026-09-05。Phase 0 已完成；Phase 1 核心完成、共享增强待办；Phase 2 首批语义 overlay 已完成；Phase 3 已完成 FC advanced、RDS、Redis/Tair、ACR、OSS 的首批只读切片，以及 v1.0.10 ACR scan / OSS config inspect+apply；OSS 首个配置写 workflow 已通过真实账号验证，Phase 4 尚未开始。
+> 实施状态更新：2026-09-05。Phase 0 已完成；Phase 1 核心完成、共享增强待办；Phase 2 首批语义 overlay 已完成；Phase 3 已完成 FC advanced、RDS、Redis/Tair、ACR、OSS 的首批只读切片，以及 v1.0.10 ACR scan / OSS config inspect+apply；v1.0.11 的 VPC name/description desired-state workflow 已通过真实账号验证，Phase 4 尚未开始。
 
 本方案的协议源采用仓库内快照：将 `aliyun-openapi-meta` 的协议文件复制到
 `protocol/alicloud-openapi/`，由 Git 记录版本和变更。运行时、生成器和 Agent
@@ -132,10 +132,10 @@ API 级参考文件规则：
 
 ### 4.1 命令面
 
-`licell catalog --output json`（v1.0.10）返回：
+`licell catalog --output json`（v1.0.11 开发中）返回：
 
 - 40 个 root commands；
-- 156 个 concrete command entries；
+- 157 个 concrete command entries；
 - 统一 `licell-help@1.0` / `licell-cli-record@1.0`；
 - 命令注册源：`src/commands/registry.ts`；描述器/区域/安全元数据：`src/commands/module.ts`。
 
@@ -168,7 +168,7 @@ API 级参考文件规则：
 | Redis/Tair（R-kvstore） | classic/serverless 创建、查询、连接、密码轮换、公网白名单；只读覆盖备份与策略、参数、账号、集群拓扑 | `src/providers/redis/**`、`src/commands/cache.ts` |
 | RAM | 仅 bootstrap policy/权限修复与认证辅助，不是 RAM 管理 CLI | `src/providers/ram.ts`、`src/utils/auth-recovery.ts` |
 | SLS | 日志 query/tail 与 FC 日志桥接，无完整 project/logstore/仪表盘管理 | `src/providers/logs.ts`、`src/commands/logs.ts` |
-| VPC | `vpc list/info/topology` 只读盘点 VPC、交换机、路由表、NAT 网关和 EIP；部署链路还能发现/创建部分网络资源 | `src/providers/vpc.ts`、`src/providers/vpc/query.ts`、`src/commands/vpc.ts` |
+| VPC | `vpc list/info/topology` 只读盘点核心网络；`vpc config apply` 以 desired-state 管理名称和描述；部署链路还能发现/创建部分网络资源 | `src/providers/vpc.ts`、`src/providers/vpc/query.ts`、`src/providers/vpc/config.ts`、`src/commands/vpc.ts` |
 | SSL | Let’s Encrypt ACME 证书签发/续签，非阿里云 CAS 全功能 | `src/providers/ssl.ts` |
 | CMS | 仅 doctor capability probe，不提供云监控资源管理命令 | `src/providers/doctor-cloud.ts` |
 
@@ -180,11 +180,11 @@ API 级参考文件规则：
 |---|---|---|---|---|---|
 | P0 | OpenAPI runtime（内部 module） | `aliyun <product> <ApiName>`、REST path | 核心已完成；pager、query/table、waiter 等共享增强待办 | `openapi/commando.go`、`invoker.go`、`rpc.go`、`restful.go`、`http_context.go` | `src/providers/openapi/**`；以 `execute(operationRef, input, context)` 为小接口，隐藏 runner、凭证、RPC/REST 与 endpoint 复杂度 |
 | P0 | protocol snapshot + scaffold | `aliyun-openapi-meta`、`aliyun help <product> [ApiName]` | 已完成；当前固定 156 个产品、16,242 个 API | `meta/repository.go`、`meta/reader.go`、`openapi/commando_help.go`、`aliyun-openapi-meta/metadatas/**` | `protocol/alicloud-openapi/**`、`scripts/update-alicloud-protocol.ts`、`scripts/generate-alicloud-capabilities.ts`、`licell api scaffold`；人工升级快照，CI 只校验一致性 |
-| P0 | capability registry / Agent surface | aliyun 产品/API 列表 | 核心已完成；当前 46 个 operation 晋级 curated overlay，其余保持 raw | `openapi/commando_help.go`、`src/commands/module.ts`、`src/utils/command-metadata.ts` | `capability products/search/describe`；生成 schema 与人工 overlay 合并，`catalog.agentWorkflow` 声明 Agent 路由 |
+| P0 | capability registry / Agent surface | aliyun 产品/API 列表 | 核心已完成；当前 47 个 operation 晋级 curated overlay，其余保持 raw | `openapi/commando_help.go`、`src/commands/module.ts`、`src/utils/command-metadata.ts` | `capability products/search/describe`；生成 schema 与人工 overlay 合并，`catalog.agentWorkflow` 声明 Agent 路由 |
 | P0 | `api invoke`（受控逃生口） | `aliyun <product> <ApiName>`、REST path | 已完成受控 fallback；仍不能替代 workflow | `openapi/commando.go`、`invoker.go`、`waiter.go`、`output_filter.go` | 低优先级命令，标记 `maturity=raw`；写操作默认 dry-run + yes，脱敏并提示无 workflow 语义 |
 | P0 | 认证 profile 兼容 | `configure --mode ...` | Licell 不支持多 profile/多种链式凭证 | `config/configure*.go`、`config/profile.go` | `src/utils/auth/**` 增加 profile 解析与显式 `--profile`；安全地映射到 SDK credential |
 | P1 | OSS 完整资源命令 | `ossutil` 47 命令 | 生命周期/CORS/服务端加密 inspect+apply 已完成；set-meta、版本、复制、WORM、策略、QOS、符号链接、multipart 等缺失 | `oss/lib/<command>.go`；注册表 `oss/lib/command.go:867-918` | `oss config apply` 已落地 desired-state plan/dry-run/confirm/verify/rollback；后续按对象/桶配置分组扩展 |
-| P1 | VPC 网络资源 | `aliyun vpc <ApiName>`（404 APIs） | 只读 `list/info/topology` 已完成；创建、修改、删除仍通过受控 raw fallback | `metadatas/vpc/*.json`、通用 invoker | `src/commands/vpc.ts`、`src/providers/vpc/**`；下一步补 plan -> mutate -> verify |
+| P1 | VPC 网络资源 | `aliyun vpc <ApiName>`（404 APIs） | `list/info/topology` 与 name/description desired-state 已完成；其他创建、修改、删除仍通过受控 raw fallback | `metadatas/vpc/*.json`、通用 invoker | `src/commands/vpc.ts`、`src/providers/vpc/**`；后续按资源类型补独立 plan -> mutate -> verify |
 | P1 | RAM/IAM | `aliyun ram <ApiName>`、`resourcemanager` | 仅权限 bootstrap | `metadatas/ram/*.json`、`src/providers/ram.ts` | `ram user/role/policy/attach`；所有写操作带 safety + dry-run |
 | P1 | CAS/证书 | `aliyun cas <ApiName>` | 只有 ACME，不支持证书订单、上传、部署、撤销 | `metadatas/cas/*.json`、`openapi/commando.go` | `cert list/import/issue/renew/revoke/deploy`；与现有 `ssl.ts` 分离 |
 | P1 | CDN 全生命周期 | `aliyun cdn <ApiName>`、`dcdn` | 只有域名 workflow/刷新联动 | `metadatas/cdn/*.json`、`src/providers/cdn.ts` | `cdn domain/cache/https/refresh/quota`；长任务用 waiter |
@@ -294,8 +294,8 @@ Agent 主路径是 `catalog -> curated help/execute`；没有领域命令时进�
 |---|---|---|---|
 | Phase 0 | 已完成 | protocol 快照、生成器、capability 索引、`api scaffold` | 维持人工同步与 CI 一致性校验 |
 | Phase 1 | 核心完成 | 固定 runner、RPC/REST invoke、Path 编译、脱敏、安全确认、Agent execution 决策 | pager、JMESPath query/table、waiter、profile、body-file、Windows runner |
-| Phase 2 | 首批完成 | 全局 curated-first Agent 路由；CS/K8s、VPC、RAM、CAS、CDN、SLS 首批只读领域 overlay | 维持 journey contract；VPC 写操作先进入 plan -> mutate -> verify |
-| Phase 3 | 进行中 | FC advanced、RDS、Redis/Tair、ACR、OSS 首批原生化；ACR scan / OSS config inspect+apply | VPC/RDS/Redis 写操作 plan/verify |
+| Phase 2 | 首批完成 | 全局 curated-first Agent 路由；CS/K8s、VPC、RAM、CAS、CDN、SLS 首批领域 overlay | 维持 inspect/update journey contract |
+| Phase 3 | 进行中 | FC advanced、RDS、Redis/Tair、ACR、OSS 首批原生化；ACR scan、OSS config、VPC config | 完成 VPC 写 smoke；再推进 RDS/Redis plan/verify |
 | Phase 4 | 未开始 | 无 | P2 专业服务与 P3 plugin runtime |
 
 ### Phase 0：能力编译基础（已完成）
@@ -390,7 +390,7 @@ Agent 主路径是 `catalog -> curated help/execute`；没有领域命令时进�
 
 ### Phase 3：P1 高频资源原生化（未完成，每个产品 3-7 天）
 
-当前状态：RAM、CAS、CDN、SLS、FC advanced、RDS、Redis/Tair、ACR、OSS 已完成首批只读切片；VPC 只读拓扑已完成；ACR scan 与 OSS config inspect+apply 已进入 v1.0.10。下一顺序：VPC/RDS/Redis 写操作 plan -> 小范围 mutate/verify。
+当前状态：RAM、CAS、CDN、SLS、FC advanced、RDS、Redis/Tair、ACR、OSS 已完成首批只读切片；ACR scan 与 OSS config inspect+apply 已进入 v1.0.10；VPC name/description desired-state workflow 已作为 v1.0.11 范围通过真实账号验证。下一顺序：推进 RDS/Redis plan -> 小范围 mutate/verify。
 
 #### v1.0.10：ACR scan 与 OSS config inspect+apply
 
@@ -401,6 +401,14 @@ Agent 主路径是 `catalog -> curated help/execute`；没有领域命令时进�
 已完成：新增 `oss config <bucket>`，并行读取 `GetBucketLifecycle`、`GetBucketCors` 和 `GetBucketEncryption`，统一投影生命周期规则、CORS 来源/方法与默认服务端加密摘要。只有 OSS 官方“配置不存在”错误码会返回 `configured=false`；无权限、Bucket 不存在和网络失败保持显式错误，避免 Agent 把不可见误判为未配置。该命令是 SDK 原生 curated surface；OSS protocol 快照当前没有可用于 overlay 的 API 条目，因此 Agent 通过 `catalog -> oss --help --output json` 自举发现，不虚构 capability metadata。
 
 已完成：新增 `oss config apply <bucket>` desired-state workflow。省略的 section 保持不变，object 完整替换，`null` 删除；支持 `--payload/--file`、`--dry-run` 和 `--yes`，应用后统一读回验证，任一 section 失败会按变更逆序恢复原始 XML 快照。真实账号在杭州 Bucket `licell-auth-1494910986361453-cn-hangzhou-5e2053` 已分别及组合验证 lifecycle、CORS、AES256 加密的写入、读取与删除，最终三项均恢复为未配置。
+
+#### v1.0.11：VPC config apply（开发中）
+
+已实现：新增 `vpc config apply <vpc>`，只管理可逆且低耦合的 `name` 与 `description`。命令支持 `--payload/--file`、强制先 `--dry-run` 的 Agent 流程、`--yes` 确认、字段级 set/clear/noop 计划和写后 `DescribeVpcs` 读回验证；CIDR、IPv6、路由、交换机和网关明确不在该 workflow 范围。
+
+`vpc.ModifyVpcAttribute` 已进入 curated overlay；capability 搜索同时识别名称/描述等属性意图，Agent 可从自然语言 update 请求稳定发现 `vpc config apply`。权限拆为 `vpc-read` 与最小 `vpc-write`（`DescribeVpcs` + `ModifyVpcAttribute`），dry-run 不请求写权限。
+
+阿里云明确限制短时间内重复调用 `ModifyVpcAttribute` 修改名称和描述，因此验证失败时不会立即发起第二次写入或自动回滚；错误会保留 requestId，并要求稍后用 `vpc info` 复查。真实账号已在杭州 VPC `vpc-bp1qgkmpf9tm466vwhxcj` 完成 `description: null -> Managed by Licell` 的 dry-run、写入、命令内读回和独立 `vpc info` 验证，requestId 为 `01A070BF-B21E-592C-AFA5-A7230E69CFFE`。
 
 每个产品统一模板：
 

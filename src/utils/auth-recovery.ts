@@ -7,7 +7,7 @@ import { Config, DEFAULT_ALI_REGION, type AuthConfig } from './config';
 import { readEnvWithFallback } from './env';
 
 export type AuthIssueKind = 'missing_auth' | 'access_denied' | 'invalid_credentials' | 'unknown';
-export type AuthCapability = 'fc' | 'dns' | 'oss' | 'rds' | 'rdsai' | 'redis' | 'cdn' | 'vpc' | 'vpc-read' | 'cr' | 'logs' | 'ecs';
+export type AuthCapability = 'fc' | 'dns' | 'oss' | 'rds' | 'rdsai' | 'redis' | 'cdn' | 'vpc' | 'vpc-read' | 'vpc-write' | 'cr' | 'logs' | 'ecs';
 
 export const AUTH_CAPABILITY_LABELS: Record<AuthCapability, string> = {
   fc: '函数计算',
@@ -19,6 +19,7 @@ export const AUTH_CAPABILITY_LABELS: Record<AuthCapability, string> = {
   cdn: 'CDN',
   vpc: 'VPC',
   'vpc-read': 'VPC 只读查询',
+  'vpc-write': 'VPC 属性修改',
   cr: '容器镜像仓库 CR',
   logs: '日志服务 SLS',
   ecs: 'ECS'
@@ -82,6 +83,7 @@ const CAPABILITY_ACTIONS: Record<AuthCapability, string[]> = {
     'vpc:DescribeNatGateways',
     'vpc:DescribeEipAddresses'
   ],
+  'vpc-write': ['vpc:DescribeVpcs', 'vpc:ModifyVpcAttribute'],
   cr: ['cr:ListInstance', 'cr:ListNamespace', 'cr:ListRepository', 'cr:ListRepoTag', 'cr:CreateNamespace', 'cr:CreateRepository'],
   logs: ['log:GetLogs', 'log:ListProject', 'log:ListLogStores', 'log:CreateProject', 'log:CreateLogStore', 'log:CreateIndex'],
   ecs: ['ecs:DescribeInstanceAttribute', 'ecs:DescribeInstances', 'ecs:DescribeDisks', 'ecs:StartInstance', 'ecs:RebootInstance', 'ecs:StopInstance', 'ecs:DeleteInstance']

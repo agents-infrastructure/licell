@@ -10,12 +10,14 @@ type JourneyCase = {
   expectedRef: string;
   strategy: 'curated-command' | 'raw-api-fallback';
   commandKey?: string;
+  action?: 'inspect' | 'update';
 };
 
 // This matrix tests the Agent decision chain, not every provider API. Add a
 // representative case when a new service or routing rule is promoted.
 const JOURNEY_MATRIX: JourneyCase[] = [
   { name: 'VPC inventory', product: 'vpc', intent: '列出 VPC 网络', expectedRef: 'vpc.DescribeVpcs', strategy: 'curated-command', commandKey: 'vpc list' },
+  { name: 'VPC attribute update', product: 'vpc', intent: '修改 VPC 名称和描述', expectedRef: 'vpc.ModifyVpcAttribute', strategy: 'curated-command', commandKey: 'vpc config apply', action: 'update' },
   { name: 'ECS inventory', product: 'ecs', intent: '查看云服务器实例', expectedRef: 'ecs.DescribeInstances', strategy: 'curated-command', commandKey: 'ecs list' },
   { name: 'Kubernetes clusters', product: 'cs', intent: '查看 k8s 集群', expectedRef: 'cs.DescribeClusters', strategy: 'curated-command', commandKey: 'k8s clusters' },
   { name: 'Function inventory', product: 'fc', intent: '列出函数', expectedRef: 'fc.ListFunctions', strategy: 'curated-command', commandKey: 'fn list' },
@@ -64,7 +66,7 @@ describe('Agent journey contract matrix', () => {
       const capabilities = searchAlicloudCapabilities({
         product: journey.product,
         intent: journey.intent,
-        action: 'inspect',
+        action: journey.action || 'inspect',
         limit: 5
       });
       expect(capabilities.capabilities[0]?.shorthand, journey.name).toBe(journey.expectedRef);

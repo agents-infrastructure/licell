@@ -34,6 +34,7 @@ describe('VPC readonly provider', () => {
             {
               vpcId: 'vpc-a',
               vpcName: 'prod',
+              description: 'production network',
               regionId: 'cn-shanghai',
               status: 'Available',
               cidrBlock: '10.0.0.0/8',
@@ -65,7 +66,7 @@ describe('VPC readonly provider', () => {
       count: 1,
       limit: 1,
       truncated: true,
-      vpcs: [{ vpcId: 'vpc-a', vpcName: 'prod', vSwitchIds: ['vsw-a'] }]
+      vpcs: [{ vpcId: 'vpc-a', vpcName: 'prod', description: 'production network', vSwitchIds: ['vsw-a'] }]
     });
   });
 

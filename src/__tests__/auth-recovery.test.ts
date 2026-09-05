@@ -79,4 +79,12 @@ describe('resolveAuthCapabilityActions', () => {
       'vpc:DescribeVpcs'
     ]);
   });
+
+  it('keeps VPC attribute writes on a separate minimal capability', () => {
+    expect(AUTH_CAPABILITY_LABELS['vpc-write']).toBe('VPC 属性修改');
+    expect(resolveAuthCapabilityActions(['vpc-write'])).toEqual([
+      'vpc:DescribeVpcs',
+      'vpc:ModifyVpcAttribute'
+    ]);
+  });
 });

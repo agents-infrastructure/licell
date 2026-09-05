@@ -48,6 +48,13 @@ const OVERLAYS: AlicloudCapabilityOverlay[] = [
     notes: ['vpc topology filters EIPs associated with the selected VPC or its NAT gateways.']
   },
   {
+    product: 'vpc',
+    operation: 'ModifyVpcAttribute',
+    commandKeys: ['vpc config apply'],
+    confidence: 'curated',
+    notes: ['vpc config apply manages VPC name and description through desired-state planning, confirmation, one mutation call, and read-back verification.']
+  },
+  {
     product: 'cs',
     operation: 'DescribeClusters',
     commandKeys: ['k8s clusters'],

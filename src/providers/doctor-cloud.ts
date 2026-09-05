@@ -1224,6 +1224,14 @@ const CAPABILITY_PROBES: Record<AuthCapability, (auth: AuthConfig) => Promise<Do
       label: AUTH_CAPABILITY_LABELS['vpc-read']
     };
   },
+  'vpc-write': async (auth) => {
+    const probe = await probeVpcCapability(auth);
+    return {
+      ...probe,
+      capability: 'vpc-write',
+      label: AUTH_CAPABILITY_LABELS['vpc-write']
+    };
+  },
   cr: probeCrCapability,
   rds: async (auth) => {
     void auth;
