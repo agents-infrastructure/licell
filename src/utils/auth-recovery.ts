@@ -52,6 +52,9 @@ const CAPABILITY_ACTIONS: Record<AuthCapability, string[]> = {
     'rds:DescribeDBInstanceNetInfo',
     'rds:DescribeDatabases',
     'rds:DescribeAccounts',
+    'rds:DescribeBackups',
+    'rds:DescribeBackupPolicy',
+    'rds:DescribeParameters',
     'rds:DescribeDBInstanceIPArrayList',
     'rds:DescribeSecurityGroupConfiguration',
     'rds:CreateDBInstance',
@@ -59,7 +62,17 @@ const CAPABILITY_ACTIONS: Record<AuthCapability, string[]> = {
     'rds:DeleteDBInstance'
   ],
   rdsai: ['rdsai:CreateAppInstance', 'rdsai:DescribeAppInstances', 'rdsai:DeleteAppInstance'],
-  redis: ['kvstore:DescribeInstances', 'kvstore:CreateTairKVCacheVNode', 'kvstore:ResetAccountPassword'],
+  redis: [
+    'kvstore:DescribeInstances',
+    'kvstore:DescribeAccounts',
+    'kvstore:DescribeBackups',
+    'kvstore:DescribeBackupPolicy',
+    'kvstore:DescribeParameters',
+    'kvstore:DescribeInstanceConfig',
+    'kvstore:DescribeClusterMemberInfo',
+    'kvstore:CreateTairKVCacheVNode',
+    'kvstore:ResetAccountPassword'
+  ],
   cdn: ['cdn:DescribeUserDomains', 'cdn:AddCdnDomain', 'cdn:BatchSetCdnDomainConfig'],
   vpc: ['vpc:DescribeVpcs', 'vpc:CreateVpc', 'vpc:CreateVSwitch'],
   'vpc-read': [
@@ -69,7 +82,7 @@ const CAPABILITY_ACTIONS: Record<AuthCapability, string[]> = {
     'vpc:DescribeNatGateways',
     'vpc:DescribeEipAddresses'
   ],
-  cr: ['cr:ListInstance', 'cr:CreateNamespace', 'cr:CreateRepository'],
+  cr: ['cr:ListInstance', 'cr:ListNamespace', 'cr:ListRepository', 'cr:ListRepoTag', 'cr:CreateNamespace', 'cr:CreateRepository'],
   logs: ['log:GetLogs', 'log:ListProject', 'log:ListLogStores', 'log:CreateProject', 'log:CreateLogStore', 'log:CreateIndex'],
   ecs: ['ecs:DescribeInstanceAttribute', 'ecs:DescribeInstances', 'ecs:DescribeDisks', 'ecs:StartInstance', 'ecs:RebootInstance', 'ecs:StopInstance', 'ecs:DeleteInstance']
 };

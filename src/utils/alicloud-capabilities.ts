@@ -47,7 +47,33 @@ const PRODUCT_SEARCH_RESOURCE_WORDS = new Set(['实例', 'instance', 'instances'
 
 const QUERY_EXPANSIONS: Array<[RegExp, string]> = [
   [/\b(?:k8s|kubernetes|ack|acs)\b/gi, ' cs '],
-  [/(?:云服务器|虚拟机)/g, ' ecs 实例 ']
+  [/(?:云服务器|虚拟机)/g, ' ecs 实例 '],
+  [/(?:日志项目)/g, ' 日志 project '],
+  [/(?:日志库|日志存储)(?:的)?索引/g, ' sls index '],
+  [/(?:日志库|日志存储|logstore)/gi, ' sls log store '],
+  [/(?:函数)?别名/g, ' fc alias collection '],
+  [/(?:函数)?触发器/g, ' fc trigger collection '],
+  [/(?:函数)?层/g, ' fc layer collection '],
+  [/(?:函数)?并发(?:配置)?/g, ' fc concurrency config collection '],
+  [/(?:预留实例|预留并发|预置实例)/g, ' fc provision config collection '],
+  [/(?:弹性伸缩(?:配置)?|伸缩配置|扩缩容)/g, ' fc scaling config collection '],
+  [/(?:函数)?执行实例/g, ' fc instance collection '],
+  [/(?:函数)?(?:显式)?会话/g, ' fc session collection '],
+  [/(?:函数)?(?:vpc|VPC)(?:访问)?绑定/g, ' fc vpc binding collection '],
+  [/(?:acr|容器镜像服务)\s*(?:企业版)?\s*(?:的)?\s*实例/gi, ' cr instance collection '],
+  [/(?:acr|容器镜像服务)\s*(?:企业版)?\s*(?:的)?\s*命名空间/gi, ' cr namespace collection '],
+  [/(?:acr|容器镜像服务)\s*(?:企业版)?\s*(?:的)?\s*(?:镜像)?仓库/gi, ' cr repository collection '],
+  [/(?:acr|容器镜像服务)\s*(?:企业版)?\s*(?:的)?\s*(?:镜像)?(?:标签|版本|tag)/gi, ' cr repo tag collection '],
+  [/(?:函数)?(?:资源)?标签/g, ' fc tag resource collection '],
+  [/(?:redis|Redis|tair|Tair|缓存)(?:的)?备份(?:集|策略)?/g, ' r-kvstore backup collection '],
+  [/(?:redis|Redis|tair|Tair|缓存)(?:的)?(?:运行|配置)?参数/g, ' r-kvstore parameter collection '],
+  [/(?:redis|Redis|tair|Tair|缓存)(?:的)?账号/g, ' r-kvstore account collection '],
+  [/(?:redis|Redis|tair|Tair|缓存)(?:的)?(?:集群)?(?:节点)?拓扑/g, ' r-kvstore cluster member info collection '],
+  [/(?:rds|RDS|数据库)(?:的)?备份(?:集|策略)?/g, ' rds backup collection '],
+  [/(?:rds|RDS|数据库)(?:的)?(?:运行)?参数/g, ' rds parameter collection '],
+  [/(?:rds|RDS|数据库)(?:的)?账号/g, ' rds account collection '],
+  [/(?:rds|RDS)(?:的)?(?:逻辑)?数据库/g, ' rds database collection '],
+  [/(?:索引|index)/gi, ' index ']
 ];
 
 // These are cloud vocabulary aliases, not per-operation routing rules. Product
@@ -67,7 +93,49 @@ const TERM_ALIASES: Record<string, string[]> = {
   '云服务器': ['云服务器', 'server', 'instance', 'ecs', 'vm'],
   '虚拟机': ['虚拟机', 'server', 'instance', 'ecs', 'vm'],
   '对象存储': ['对象存储', 'object', 'storage', 'oss', 'bucket'],
-  '数据库': ['数据库', 'database', 'db', 'rds'],
+  '网络': ['网络', 'network', 'vpc', 'vpcs', 'virtual', 'private'],
+  '专有网络': ['专有网络', '网络', 'vpc', 'vpcs', 'virtual', 'private'],
+  '用户': ['用户', 'user', 'users'],
+  '角色': ['角色', 'role', 'roles'],
+  '策略': ['策略', 'policy', 'policies'],
+  '证书': ['证书', 'cert', 'certificate', 'certificates'],
+  '域名': ['域名', 'domain', 'domains'],
+  '日志项目': ['日志项目', 'log project', 'project', 'projects'],
+  '日志库': ['日志库', 'logstore', 'logstores', 'log', 'store', 'stores'],
+  '索引': ['索引', 'index', 'indexes'],
+  '别名': ['别名', 'alias', 'aliases'],
+  alias: ['alias', 'aliases'],
+  '触发器': ['触发器', 'trigger', 'triggers', 'event'],
+  trigger: ['trigger', 'triggers', '触发器', 'event'],
+  '层': ['层', 'layer', 'layers'],
+  layer: ['layer', 'layers', '层'],
+  '并发': ['并发', 'concurrency'],
+  concurrency: ['concurrency', '并发'],
+  '预留实例': ['预留实例', 'provision', 'provisioned'],
+  provision: ['provision', 'provisioned', '预留实例'],
+  '伸缩': ['伸缩', 'scaling', 'scale'],
+  scaling: ['scaling', 'scale', '伸缩'],
+  '会话': ['会话', 'session', 'sessions'],
+  session: ['session', 'sessions', '会话'],
+  '绑定': ['绑定', 'binding', 'bindings'],
+  binding: ['binding', 'bindings', '绑定'],
+  '标签': ['标签', 'tag', 'tags'],
+  tag: ['tag', 'tags', '标签'],
+  '备份': ['备份', 'backup', 'backups'],
+  backup: ['backup', 'backups', '备份'],
+  '参数': ['参数', 'parameter', 'parameters', 'config'],
+  parameter: ['parameter', 'parameters', 'config', '参数'],
+  '账号': ['账号', 'account', 'accounts'],
+  account: ['account', 'accounts', '账号'],
+  '拓扑': ['拓扑', 'topology', 'member', 'members'],
+  topology: ['topology', 'member', 'members', '拓扑'],
+  '命名空间': ['命名空间', 'namespace', 'namespaces'],
+  namespace: ['namespace', 'namespaces', '命名空间'],
+  '镜像仓库': ['镜像仓库', 'repository', 'repositories', 'repo'],
+  repository: ['repository', 'repositories', 'repo', '镜像仓库'],
+  '镜像标签': ['镜像标签', 'tag', 'tags', 'repo tag'],
+  '数据库': ['数据库', 'database', 'databases', 'db', 'rds'],
+  database: ['database', 'databases', '数据库', 'db'],
   '缓存': ['缓存', 'cache', 'redis', 'tair'],
   '日志': ['日志', 'log', 'logs', 'sls']
 };
@@ -80,6 +148,7 @@ const PRODUCT_ALIASES: Record<string, string[]> = {
   oss: ['object-storage', '对象存储'],
   rds: ['database', 'db', '云数据库'],
   'r-kvstore': ['redis', 'tair', 'cache', '缓存'],
+  cr: ['acr', 'container registry', '容器镜像服务', '镜像仓库'],
   sls: ['log-service', '日志服务']
 };
 
@@ -238,6 +307,41 @@ function scoreCapability(capability: GeneratedCapability, product: GeneratedCapa
   if (resourceQueryWords.length > 0 && resourceQueryWords.every((word) => termAlternatives(word).some((alternative) => (
     resourceWords.some((candidate) => matchesSearchTerm(candidate, alternative))
   )))) score += 100;
+  const exactResourceMatches = resourceQueryWords.filter((word) => termAlternatives(word).some((alternative) => (
+    resourceWords.some((candidate) => candidate === alternative)
+  ))).length;
+  if (exactResourceMatches > 0) score += exactResourceMatches * 60;
+  if (resourceQueryWords.length > 0 && exactResourceMatches === resourceQueryWords.length) {
+    score += 80;
+  }
+  const collectionRequested = queryWords.includes('collection')
+    || /(?:列出|列表|所有|全部|几个|多少|list|all|count|how\s+many)/i.test(query);
+  if (collectionRequested
+    && capability.operation.startsWith('List')
+    && resourceWords.length === 1
+    && exactResourceMatches > 0) {
+    score += 300;
+  }
+  if (collectionRequested
+    && capability.operation.startsWith('Describe')
+    && resourceWords.length === 1
+    && exactResourceMatches === resourceQueryWords.length) {
+    score += 260;
+  }
+  if (collectionRequested
+    && resourceWords.length === 1
+    && exactResourceMatches > 0
+    && capability.operation.toLowerCase() === `list${capability.resource}`.toLowerCase()) {
+    score += 180;
+  }
+  if (resourceQueryWords.length > 0 && resourceWords.length > resourceQueryWords.length) {
+    score -= (resourceWords.length - resourceQueryWords.length) * 12;
+  }
+  if (queryWords.some((word) => termAlternatives(word).some((alternative) => ['instance', 'instances'].includes(alternative)))
+    && capability.operation === 'DescribeInstances'
+    && resourceWords.length === 1) {
+    score += 80;
+  }
   const resourceSignalWords = queryWords.filter((word) => ![
     'inspect', 'create', 'update', 'delete', 'execute', 'collection'
   ].includes(word)

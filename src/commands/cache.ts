@@ -14,7 +14,11 @@ import {
   rotateRedisPassword,
   deleteCacheInstance,
   allocateCachePublicConnection,
-  applyCachePublicWhitelist
+  applyCachePublicWhitelist,
+  listCacheBackups,
+  listCacheParameters,
+  listCacheAccounts,
+  listCacheTopology
 } from '../providers/redis';
 import {
   ensureAuthOrExit,
@@ -111,6 +115,106 @@ const cacheListCommand = defineCliCommand({
   options: [
     { rawName: '--limit <n>', description: '返回数量，默认 20' }
   ]
+});
+
+const cacheBackupsCommand = defineCliCommand({
+  rawName: 'cache backups <instanceId>',
+  description: '查看 Redis/Tair 备份集和备份策略（只读）',
+  region: { scope: 'binding', binding: 'cache', target: { argumentIndex: 0 } },
+  options: [
+    { rawName: '--days <n>', description: '查询最近天数，默认 7，最大 365' },
+    { rawName: '--limit <n>', description: '返回数量，默认 50，最大 300' }
+  ],
+  descriptor: {
+    title: 'Inspect Redis/Tair backups',
+    summary: '同时读取 DescribeBackups 和 DescribeBackupPolicy，用于恢复前盘点。',
+    examples: ['licell cache backups r-xxx --days 30 --output json'],
+    argumentHints: { instanceId: 'Redis/Tair 实例 ID；先用 `licell cache list` 获取。' },
+    related: ['cache info', 'cache parameters', 'capability search'],
+    agentTips: ['输出不包含公网或内网备份下载 URL。'],
+    automation: { preferredOutput: 'json', explicitInputs: ['instanceId', '--region', '--days', '--limit'] },
+    safety: { level: 'safe', reason: '只调用 Redis/Tair DescribeBackups 和 DescribeBackupPolicy。', confirmFlags: [] },
+    result: { outcomeKey: 'backups', fields: [
+      { name: 'instanceId', description: 'Redis/Tair 实例 ID。', required: true },
+      { name: 'policy', description: '备份周期、时段和保留策略。', required: true },
+      { name: 'count', description: '返回备份数量。', required: true },
+      { name: 'truncated', description: '结果是否截断。', required: true },
+      { name: 'backups[]', description: '备份 ID、状态、类型、大小和时间摘要。', required: true }
+    ] }
+  }
+});
+
+const cacheParametersCommand = defineCliCommand({
+  rawName: 'cache parameters <instanceId>',
+  description: '查看 Redis/Tair 运行与待生效参数（只读）',
+  region: { scope: 'binding', binding: 'cache', target: { argumentIndex: 0 } },
+  options: [
+    { rawName: '--node <nodeId>', description: '经典集群实例按节点查询' },
+    { rawName: '--prefix <prefix>', description: '按参数名前缀过滤' },
+    { rawName: '--limit <n>', description: '每类返回数量，默认 50，最大 300' }
+  ],
+  descriptor: {
+    title: 'Inspect Redis/Tair parameters',
+    summary: '自动兼容经典实例 DescribeParameters 与云原生实例 DescribeInstanceConfig。',
+    examples: ['licell cache parameters r-xxx --prefix max --output json'],
+    argumentHints: { instanceId: 'Redis/Tair 实例 ID。' },
+    related: ['cache info', 'cache topology', 'capability search'],
+    agentTips: ['读取 `source` 可判断实际使用的阿里云参数接口。'],
+    automation: { preferredOutput: 'json', explicitInputs: ['instanceId', '--region', '--node', '--prefix', '--limit'] },
+    safety: { level: 'safe', reason: '只调用参数 Describe API。', confirmFlags: [] },
+    result: { outcomeKey: 'parameters', fields: [
+      { name: 'instanceId', description: 'Redis/Tair 实例 ID。', required: true },
+      { name: 'source', description: '实际使用的参数查询 API。', required: true },
+      { name: 'running[]', description: '当前运行参数。', required: true },
+      { name: 'configured[]', description: '已配置的待生效参数。', required: true },
+      { name: 'truncated', description: '结果是否截断。', required: true }
+    ] }
+  }
+});
+
+const cacheAccountsCommand = defineCliCommand({
+  rawName: 'cache accounts <instanceId>',
+  description: '查看 Redis/Tair 账号和权限（只读）',
+  region: { scope: 'binding', binding: 'cache', target: { argumentIndex: 0 } },
+  options: [
+    { rawName: '--name <name>', description: '按账号名精确过滤' },
+    { rawName: '--limit <n>', description: '返回数量，默认 50，最大 300' }
+  ],
+  descriptor: {
+    title: 'List Redis/Tair accounts', summary: '读取 DescribeAccounts 的账号状态与权限摘要。',
+    examples: ['licell cache accounts r-xxx --output json'], argumentHints: { instanceId: 'Redis/Tair 实例 ID。' },
+    related: ['cache info', 'cache parameters', 'capability search'],
+    agentTips: ['本命令不读取或输出账号密码。'],
+    automation: { preferredOutput: 'json', explicitInputs: ['instanceId', '--region', '--name', '--limit'] },
+    safety: { level: 'safe', reason: '只调用 Redis/Tair DescribeAccounts。', confirmFlags: [] },
+    result: { outcomeKey: 'accounts', fields: [
+      { name: 'instanceId', description: 'Redis/Tair 实例 ID。', required: true },
+      { name: 'count', description: '返回账号数。', required: true },
+      { name: 'truncated', description: '结果是否截断。', required: true },
+      { name: 'accounts[]', description: '账号名、状态、类型与权限。', required: true }
+    ] }
+  }
+});
+
+const cacheTopologyCommand = defineCliCommand({
+  rawName: 'cache topology <instanceId>',
+  description: '查看 Redis/Tair 集群节点拓扑（只读）',
+  region: { scope: 'binding', binding: 'cache', target: { argumentIndex: 0 } },
+  options: [{ rawName: '--limit <n>', description: '返回节点数，默认 50，最大 300' }],
+  descriptor: {
+    title: 'Inspect Redis/Tair topology', summary: '读取云盘集群实例的数据节点与配置节点摘要。',
+    examples: ['licell cache topology r-xxx --output json'], argumentHints: { instanceId: 'Redis/Tair 云盘集群实例 ID。' },
+    related: ['cache info', 'cache parameters', 'capability search'],
+    agentTips: ['标准架构或非云盘实例可能不支持该 API；先用 `cache info` 确认实例。'],
+    automation: { preferredOutput: 'json', explicitInputs: ['instanceId', '--region', '--limit'] },
+    safety: { level: 'safe', reason: '只调用 Redis/Tair DescribeClusterMemberInfo。', confirmFlags: [] },
+    result: { outcomeKey: 'members', fields: [
+      { name: 'instanceId', description: 'Redis/Tair 实例 ID。', required: true },
+      { name: 'count', description: '返回节点数。', required: true },
+      { name: 'truncated', description: '结果是否截断。', required: true },
+      { name: 'members[]', description: '节点服务、版本、规格、容量和副本摘要。', required: true }
+    ] }
+  }
 });
 
 const cacheClassCommand = defineCliCommand({
@@ -279,6 +383,71 @@ function clearProjectCacheBinding(instanceId: string) {
 }
 
 export function registerCacheCommands(cli: CAC) {
+  registerCliCommand(cli, cacheBackupsCommand)
+    .action(async (instanceId: string, options: { days?: unknown; limit?: unknown }) => {
+      await executeWithAuthRecovery({ commandLabel: commandInvocation(cacheBackupsCommand), interactiveTTY: isInteractiveTTY(), requiredCapabilities: ['redis'] }, async () => {
+        ensureAuthOrExit();
+        const limit = parseListLimit(options.limit, 50, 300);
+        const days = parseOptionalPositiveInt(options.days, 'days') || 7;
+        if (days > 365) throw new Error('days 无效：最大为 365');
+        const response = await listCacheBackups(instanceId, { days, limit });
+        const result = { stage: 'cache.backups', ...response, count: response.backups.length, filters: { days } };
+        if (isJsonOutput()) emitCommandResult(result);
+        if (!isJsonOutput()) {
+          console.log(pc.bold(`Redis/Tair backups (${result.count})`));
+          for (const item of result.backups) console.log(`- ${pc.cyan(String(item.backupId || '-'))}  status=${item.status || '-'}  type=${item.type || '-'}  ended=${item.endTime || '-'}`);
+        }
+      });
+    });
+
+  registerCliCommand(cli, cacheParametersCommand)
+    .action(async (instanceId: string, options: { node?: unknown; prefix?: unknown; limit?: unknown }) => {
+      await executeWithAuthRecovery({ commandLabel: commandInvocation(cacheParametersCommand), interactiveTTY: isInteractiveTTY(), requiredCapabilities: ['redis'] }, async () => {
+        ensureAuthOrExit();
+        const limit = parseListLimit(options.limit, 50, 300);
+        const prefix = toOptionalString(options.prefix);
+        const nodeId = toOptionalString(options.node);
+        const response = await listCacheParameters(instanceId, { nodeId, prefix, limit });
+        const result = { stage: 'cache.parameters', ...response, filters: { ...(nodeId ? { nodeId } : {}), ...(prefix ? { prefix } : {}) }, counts: { running: response.running.length, configured: response.configured.length } };
+        if (isJsonOutput()) emitCommandResult(result);
+        if (!isJsonOutput()) {
+          console.log(pc.bold(`Redis/Tair parameters (running=${result.counts.running}, configured=${result.counts.configured})`));
+          for (const item of result.running) console.log(`- ${pc.cyan(item.name || '-')}=${item.value ?? ''}`);
+        }
+      });
+    });
+
+  registerCliCommand(cli, cacheAccountsCommand)
+    .action(async (instanceId: string, options: { name?: unknown; limit?: unknown }) => {
+      await executeWithAuthRecovery({ commandLabel: commandInvocation(cacheAccountsCommand), interactiveTTY: isInteractiveTTY(), requiredCapabilities: ['redis'] }, async () => {
+        ensureAuthOrExit();
+        const limit = parseListLimit(options.limit, 50, 300);
+        const name = toOptionalString(options.name);
+        const response = await listCacheAccounts(instanceId, { name, limit });
+        const result = { stage: 'cache.accounts', ...response, count: response.accounts.length, filters: name ? { name } : {} };
+        if (isJsonOutput()) emitCommandResult(result);
+        if (!isJsonOutput()) {
+          console.log(pc.bold(`Redis/Tair accounts (${result.count})`));
+          for (const item of result.accounts) console.log(`- ${pc.cyan(String(item.name || '-'))}  type=${item.type || '-'}  status=${item.status || '-'}`);
+        }
+      });
+    });
+
+  registerCliCommand(cli, cacheTopologyCommand)
+    .action(async (instanceId: string, options: { limit?: unknown }) => {
+      await executeWithAuthRecovery({ commandLabel: commandInvocation(cacheTopologyCommand), interactiveTTY: isInteractiveTTY(), requiredCapabilities: ['redis'] }, async () => {
+        ensureAuthOrExit();
+        const limit = parseListLimit(options.limit, 50, 300);
+        const response = await listCacheTopology(instanceId, { limit });
+        const result = { stage: 'cache.topology', ...response };
+        if (isJsonOutput()) emitCommandResult(result);
+        if (!isJsonOutput()) {
+          console.log(pc.bold(`Redis/Tair topology (${result.count})`));
+          for (const item of result.members) console.log(`- ${pc.cyan(String(item.name || '-'))}  service=${item.service || '-'}  class=${item.classCode || '-'}`);
+        }
+      });
+    });
+
   registerCliCommand(cli, cacheAddCommand)
     .action(async (options: {
       type?: unknown;
@@ -728,6 +897,10 @@ export const cacheCommandModule = defineCommandModule({
     cacheClassCommand,
     cacheListCommand,
     cacheInfoCommand,
+    cacheBackupsCommand,
+    cacheParametersCommand,
+    cacheAccountsCommand,
+    cacheTopologyCommand,
     cacheConnectCommand,
     cacheRotatePasswordCommand,
     cachePublicAccessCommand,

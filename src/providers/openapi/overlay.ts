@@ -102,6 +102,223 @@ const OVERLAYS: AlicloudCapabilityOverlay[] = [
     commandKeys: ['cache list', 'cache info'],
     confidence: 'curated',
     notes: ['cache list and cache info use the Redis/Tair query provider.']
+  },
+  {
+    product: 'r-kvstore',
+    operation: 'DescribeBackups',
+    commandKeys: ['cache backups'],
+    confidence: 'curated',
+    notes: ['cache backups reads backup metadata without exposing signed public or intranet download URLs.']
+  },
+  {
+    product: 'r-kvstore',
+    operation: 'DescribeBackupPolicy',
+    commandKeys: ['cache backups'],
+    confidence: 'curated',
+    notes: ['cache backups combines backup inventory with retention and schedule policy.']
+  },
+  {
+    product: 'r-kvstore',
+    operation: 'DescribeParameters',
+    commandKeys: ['cache parameters'],
+    confidence: 'curated',
+    notes: ['cache parameters reads classic Redis/Tair running and configured parameters.']
+  },
+  {
+    product: 'r-kvstore',
+    operation: 'DescribeInstanceConfig',
+    commandKeys: ['cache parameters'],
+    confidence: 'curated',
+    notes: ['cache parameters automatically falls back to the cloud-native instance configuration API.']
+  },
+  {
+    product: 'r-kvstore',
+    operation: 'DescribeAccounts',
+    commandKeys: ['cache accounts'],
+    confidence: 'curated',
+    notes: ['cache accounts reads account state and privilege summaries without credentials.']
+  },
+  {
+    product: 'r-kvstore',
+    operation: 'DescribeClusterMemberInfo',
+    commandKeys: ['cache topology'],
+    confidence: 'curated',
+    notes: ['cache topology reads cloud-disk cluster member capacity and topology without user identifiers.']
+  },
+  {
+    product: 'cr',
+    operation: 'ListInstance',
+    commandKeys: ['acr instances'],
+    confidence: 'curated',
+    notes: ['acr instances inventories Container Registry Enterprise Edition instances.']
+  },
+  {
+    product: 'cr',
+    operation: 'ListNamespace',
+    commandKeys: ['acr namespaces'],
+    confidence: 'curated',
+    notes: ['acr namespaces reads Enterprise Edition namespace state and repository defaults.']
+  },
+  {
+    product: 'cr',
+    operation: 'ListRepository',
+    commandKeys: ['acr repositories'],
+    confidence: 'curated',
+    notes: ['acr repositories exposes repository IDs required by downstream image inspection.']
+  },
+  {
+    product: 'cr',
+    operation: 'ListRepoTag',
+    commandKeys: ['acr tags'],
+    confidence: 'curated',
+    notes: ['acr tags reads image tag, digest, size, status, and timestamps.']
+  },
+  {
+    product: 'ram',
+    operation: 'ListUsers',
+    commandKeys: ['ram users'],
+    confidence: 'curated',
+    notes: ['ram users lists RAM user summaries without exposing credentials or contact fields.']
+  },
+  {
+    product: 'cas',
+    operation: 'ListCert',
+    commandKeys: ['cert list'],
+    confidence: 'curated',
+    notes: ['cert list reads CAS certificate summaries through the protocol-backed runner without exposing certificate material.']
+  },
+  {
+    product: 'cdn',
+    operation: 'DescribeUserDomains',
+    commandKeys: ['cdn domains'],
+    confidence: 'curated',
+    notes: ['cdn domains reads CDN domain, CNAME, status, certificate status and origin summaries through the protocol-backed runner.']
+  },
+  {
+    product: 'sls',
+    operation: 'ListProject',
+    commandKeys: ['logs projects'],
+    confidence: 'curated',
+    notes: ['logs projects reads SLS project summaries through the protocol-backed runner; logs query remains the content inspection command.']
+  },
+  {
+    product: 'sls',
+    operation: 'ListLogStores',
+    commandKeys: ['logs logstores'],
+    confidence: 'curated',
+    notes: ['logs logstores reads logstore summaries through the protocol-backed REST runner for a selected project.']
+  },
+  {
+    product: 'sls',
+    operation: 'GetIndex',
+    commandKeys: ['logs index'],
+    confidence: 'curated',
+    notes: ['logs index reads a selected SLS logstore index definition for Agent query planning.']
+  },
+  {
+    product: 'fc',
+    operation: 'ListAliases',
+    commandKeys: ['fn aliases'],
+    confidence: 'curated',
+    notes: ['fn aliases reads function alias to version routing summaries without mutating FC resources.']
+  },
+  {
+    product: 'fc',
+    operation: 'ListTriggers',
+    commandKeys: ['fn triggers'],
+    confidence: 'curated',
+    notes: ['fn triggers reads safe function trigger summaries without exposing raw trigger configuration.']
+  },
+  {
+    product: 'fc',
+    operation: 'ListLayers',
+    commandKeys: ['fn layers'],
+    confidence: 'curated',
+    notes: ['fn layers reads layer version and runtime compatibility summaries without downloading layer code.']
+  },
+  {
+    product: 'fc',
+    operation: 'ListConcurrencyConfigs',
+    commandKeys: ['fn capacity'],
+    confidence: 'curated',
+    notes: ['fn capacity combines concurrency, provisioned instance, and scaling configuration summaries.']
+  },
+  {
+    product: 'fc',
+    operation: 'ListProvisionConfigs',
+    commandKeys: ['fn capacity'],
+    confidence: 'curated',
+    notes: ['fn capacity combines concurrency, provisioned instance, and scaling configuration summaries.']
+  },
+  {
+    product: 'fc',
+    operation: 'ListScalingConfigs',
+    commandKeys: ['fn capacity'],
+    confidence: 'curated',
+    notes: ['fn capacity combines concurrency, provisioned instance, and scaling configuration summaries.']
+  },
+  {
+    product: 'fc',
+    operation: 'ListInstances',
+    commandKeys: ['fn instances'],
+    confidence: 'curated',
+    notes: ['fn instances reads function runtime instance status and lifecycle summaries.']
+  },
+  {
+    product: 'fc',
+    operation: 'ListSessions',
+    commandKeys: ['fn sessions'],
+    confidence: 'curated',
+    notes: ['fn sessions reads explicit session lifecycle summaries without exposing mounted storage configuration.']
+  },
+  {
+    product: 'fc',
+    operation: 'ListVpcBindings',
+    commandKeys: ['fn vpc-bindings'],
+    confidence: 'curated',
+    notes: ['fn vpc-bindings reads the VPC IDs accessible from a selected function.']
+  },
+  {
+    product: 'fc',
+    operation: 'ListTagResources',
+    commandKeys: ['fn tags'],
+    confidence: 'curated',
+    notes: ['fn tags reads paginated FC function resource tags with optional function-name and tag filters.']
+  },
+  {
+    product: 'rds',
+    operation: 'DescribeBackups',
+    commandKeys: ['db backups'],
+    confidence: 'curated',
+    notes: ['db backups reads backup set metadata without exposing signed download URLs or checksums.']
+  },
+  {
+    product: 'rds',
+    operation: 'DescribeBackupPolicy',
+    commandKeys: ['db backups'],
+    confidence: 'curated',
+    notes: ['db backups combines backup inventory with retention, log backup, and PITR policy summaries.']
+  },
+  {
+    product: 'rds',
+    operation: 'DescribeParameters',
+    commandKeys: ['db parameters'],
+    confidence: 'curated',
+    notes: ['db parameters separates running and configured RDS parameter values.']
+  },
+  {
+    product: 'rds',
+    operation: 'DescribeAccounts',
+    commandKeys: ['db accounts'],
+    confidence: 'curated',
+    notes: ['db accounts reads account status and database privilege summaries without credentials.']
+  },
+  {
+    product: 'rds',
+    operation: 'DescribeDatabases',
+    commandKeys: ['db databases'],
+    confidence: 'curated',
+    notes: ['db databases reads logical database metadata and grants without untyped advanced properties.']
   }
 ];
 

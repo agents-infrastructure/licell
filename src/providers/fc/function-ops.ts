@@ -105,7 +105,12 @@ export async function getFunctionInfo(functionName: string, qualifier?: string) 
   return fn;
 }
 
-async function listAllTriggers(functionName: string, client: ReturnType<typeof createFcClient>['client']) {
+async function listAllTriggers(
+  functionName: string,
+  client: ReturnType<typeof createFcClient>['client'],
+  limit = Number.MAX_SAFE_INTEGER,
+  prefix?: string
+) {
   const triggers: $FC.Trigger[] = [];
   let nextToken: string | undefined;
   const MAX_PAGES = 50;
@@ -125,12 +130,22 @@ async function listAllTriggers(functionName: string, client: ReturnType<typeof c
       }
     );
     const rows = response.body?.triggers || [];
-    triggers.push(...rows);
+    for (const row of rows) {
+      if (prefix && !(row.triggerName || '').toLowerCase().startsWith(prefix)) continue;
+      triggers.push(row);
+      if (triggers.length >= limit) break;
+    }
     nextToken = response.body?.nextToken;
-    if (!nextToken || rows.length === 0) break;
+    if (!nextToken || rows.length === 0 || triggers.length >= limit) break;
   }
 
   return triggers;
+}
+
+export async function listFunctionTriggers(appName: string, limit = 100, prefix?: string) {
+  const client = createFcClient().client;
+  const safeLimit = Math.max(1, Math.min(Math.floor(limit), 500));
+  return listAllTriggers(appName.trim(), client, safeLimit, prefix?.trim().toLowerCase() || undefined);
 }
 
 async function listAllAliases(functionName: string, client: ReturnType<typeof createFcClient>['client']) {

@@ -13,7 +13,11 @@ import {
   resolveDatabaseConnectInfo,
   deleteDatabaseInstance,
   allocateDbPublicConnection,
-  applyDbPublicWhitelist
+  applyDbPublicWhitelist,
+  listDatabaseBackups,
+  listDatabaseParameters,
+  listDatabaseAccounts,
+  listDatabases
 } from '../providers/infra';
 import {
   ensureAuthOrExit,
@@ -69,6 +73,100 @@ const dbListCommand = defineCliCommand({
   options: [
     { rawName: '--limit <n>', description: '返回数量，默认 20' }
   ]
+});
+
+const dbBackupsCommand = defineCliCommand({
+  rawName: 'db backups <instanceId>',
+  description: '查看 RDS 备份集和备份策略（只读）',
+  region: { scope: 'binding', binding: 'database', target: { argumentIndex: 0 } },
+  options: [
+    { rawName: '--days <n>', description: '查询最近天数，默认 7，最大 365' },
+    { rawName: '--status <status>', description: '按备份状态过滤，例如 Success' },
+    { rawName: '--limit <n>', description: '返回数量，默认 50，最大 200' }
+  ],
+  descriptor: {
+    title: 'Inspect RDS backups',
+    summary: '同时读取 RDS DescribeBackups 和 DescribeBackupPolicy，用于恢复前盘点。',
+    examples: ['licell db backups rm-xxx --days 30 --output json'],
+    argumentHints: { instanceId: 'RDS 实例 ID；先用 `licell db list` 获取。' },
+    related: ['db list', 'db info', 'capability search'],
+    agentTips: ['输出不包含带签名的备份下载 URL 和 checksum。', '执行恢复前先核对 `backupId/status/endTime` 及 `policy`。'],
+    automation: { preferredOutput: 'json', explicitInputs: ['instanceId', '--region', '--days', '--status', '--limit'] },
+    safety: { level: 'safe', reason: '只调用 RDS DescribeBackups 和 DescribeBackupPolicy。', confirmFlags: [] },
+    recommendedFlow: [
+      { title: '查看实例', command: 'licell db info <instanceId> --output json', reason: '确认引擎和状态。' },
+      { title: '盘点备份', command: 'licell db backups <instanceId> --days 30 --output json', reason: '确认可恢复备份集和保留策略。' }
+    ],
+    result: { outcomeKey: 'backups', fields: [
+      { name: 'instanceId', description: 'RDS 实例 ID。', required: true },
+      { name: 'policy', description: '备份时段、保留天数、日志备份和 PITR 摘要。', required: true },
+      { name: 'count', description: '返回备份数量。', required: true },
+      { name: 'truncated', description: '结果是否截断。', required: true },
+      { name: 'backups[]', description: '备份 ID、状态、类型、大小和时间摘要。', required: true }
+    ] }
+  }
+});
+
+const dbParametersCommand = defineCliCommand({
+  rawName: 'db parameters <instanceId>',
+  description: '查看 RDS 运行与待生效参数（只读）',
+  region: { scope: 'binding', binding: 'database', target: { argumentIndex: 0 } },
+  options: [
+    { rawName: '--prefix <prefix>', description: '按参数名前缀过滤' },
+    { rawName: '--limit <n>', description: '每类返回数量，默认 50，最大 200' }
+  ],
+  descriptor: {
+    title: 'Inspect RDS parameters', summary: '读取 RDS DescribeParameters，区分当前运行值和已配置值。',
+    examples: ['licell db parameters rm-xxx --prefix max_ --output json'],
+    argumentHints: { instanceId: 'RDS 实例 ID。' }, related: ['db info', 'db backups', 'capability search'],
+    agentTips: ['先比较 `running[]` 与 `configured[]`，再决定是否修改参数或重启。'],
+    automation: { preferredOutput: 'json', explicitInputs: ['instanceId', '--region', '--prefix', '--limit'] },
+    safety: { level: 'safe', reason: '只调用 RDS DescribeParameters。', confirmFlags: [] },
+    result: { outcomeKey: 'parameters', fields: [
+      { name: 'instanceId', description: 'RDS 实例 ID。', required: true },
+      { name: 'engine', description: '引擎和版本。', required: true },
+      { name: 'parameterGroup', description: '参数模板摘要。', required: true },
+      { name: 'running[]', description: '当前运行参数。', required: true },
+      { name: 'configured[]', description: '已配置的待生效参数。', required: true },
+      { name: 'truncated', description: '结果是否截断。', required: true }
+    ] }
+  }
+});
+
+const dbAccountsCommand = defineCliCommand({
+  rawName: 'db accounts <instanceId>', description: '查看 RDS 账号和数据库权限（只读）',
+  region: { scope: 'binding', binding: 'database', target: { argumentIndex: 0 } },
+  options: [{ rawName: '--name <name>', description: '按账号名过滤' }, { rawName: '--limit <n>', description: '返回数量，默认 50，最大 200' }],
+  descriptor: {
+    title: 'List RDS accounts', summary: '读取 RDS DescribeAccounts 的账号状态与数据库权限摘要。',
+    examples: ['licell db accounts rm-xxx --output json'], argumentHints: { instanceId: 'RDS 实例 ID。' },
+    related: ['db databases', 'db info', 'capability search'],
+    agentTips: ['本命令不读取或输出账号密码。'],
+    automation: { preferredOutput: 'json', explicitInputs: ['instanceId', '--region', '--name', '--limit'] },
+    safety: { level: 'safe', reason: '只调用 RDS DescribeAccounts。', confirmFlags: [] },
+    result: { outcomeKey: 'accounts', fields: [
+      { name: 'instanceId', description: 'RDS 实例 ID。', required: true }, { name: 'count', description: '返回账号数。', required: true },
+      { name: 'truncated', description: '结果是否截断。', required: true }, { name: 'accounts[]', description: '账号名、类型、状态和数据库权限。', required: true }
+    ] }
+  }
+});
+
+const dbDatabasesCommand = defineCliCommand({
+  rawName: 'db databases <instanceId>', description: '查看 RDS 逻辑数据库和授权（只读）',
+  region: { scope: 'binding', binding: 'database', target: { argumentIndex: 0 } },
+  options: [{ rawName: '--name <name>', description: '按数据库名过滤' }, { rawName: '--status <status>', description: '按数据库状态过滤' }, { rawName: '--limit <n>', description: '返回数量，默认 50，最大 200' }],
+  descriptor: {
+    title: 'List RDS databases', summary: '读取 RDS DescribeDatabases 的逻辑库、字符集及账号授权摘要。',
+    examples: ['licell db databases rm-xxx --output json'], argumentHints: { instanceId: 'RDS 实例 ID。' },
+    related: ['db accounts', 'db info', 'capability search'],
+    agentTips: ['不输出 SDK 中未定型的 advanced/runtime 属性。'],
+    automation: { preferredOutput: 'json', explicitInputs: ['instanceId', '--region', '--name', '--status', '--limit'] },
+    safety: { level: 'safe', reason: '只调用 RDS DescribeDatabases。', confirmFlags: [] },
+    result: { outcomeKey: 'databases', fields: [
+      { name: 'instanceId', description: 'RDS 实例 ID。', required: true }, { name: 'count', description: '返回数据库数。', required: true },
+      { name: 'truncated', description: '结果是否截断。', required: true }, { name: 'databases[]', description: '数据库名、状态、字符集和账号权限。', required: true }
+    ] }
+  }
 });
 
 const dbClassCommand = defineCliCommand({
@@ -257,6 +355,73 @@ function clearProjectDatabaseBinding(instanceId: string) {
 }
 
 export function registerDbCommands(cli: CAC) {
+  registerCliCommand(cli, dbBackupsCommand)
+    .action(async (instanceId: string, options: { days?: unknown; status?: unknown; limit?: unknown }) => {
+      await executeWithAuthRecovery({ commandLabel: commandInvocation(dbBackupsCommand), interactiveTTY: isInteractiveTTY(), requiredCapabilities: ['rds'] }, async () => {
+        ensureAuthOrExit();
+        const limit = parseListLimit(options.limit, 50, 200);
+        const days = parseOptionalPositiveInt(options.days, 'days') || 7;
+        if (days > 365) throw new Error('days 无效：最大为 365');
+        const status = toOptionalString(options.status);
+        const response = await listDatabaseBackups(instanceId, { days, status, limit });
+        const result = { stage: 'db.backups', ...response, count: response.backups.length, filters: { days, ...(status ? { status } : {}) } };
+        if (isJsonOutput()) emitCommandResult(result);
+        if (!isJsonOutput()) {
+          console.log(pc.bold(`RDS backups (${result.count})`));
+          for (const item of result.backups) console.log(`- ${pc.cyan(item.backupId || '-')}  status=${item.status || '-'}  type=${item.type || '-'}  ended=${item.endTime || '-'}`);
+        }
+      });
+    });
+
+  registerCliCommand(cli, dbParametersCommand)
+    .action(async (instanceId: string, options: { prefix?: unknown; limit?: unknown }) => {
+      await executeWithAuthRecovery({ commandLabel: commandInvocation(dbParametersCommand), interactiveTTY: isInteractiveTTY(), requiredCapabilities: ['rds'] }, async () => {
+        ensureAuthOrExit();
+        const limit = parseListLimit(options.limit, 50, 200);
+        const prefix = toOptionalString(options.prefix);
+        const response = await listDatabaseParameters(instanceId, { prefix, limit });
+        const result = { stage: 'db.parameters', ...response, filters: prefix ? { prefix } : {}, counts: { running: response.running.length, configured: response.configured.length } };
+        if (isJsonOutput()) emitCommandResult(result);
+        if (!isJsonOutput()) {
+          console.log(pc.bold(`RDS parameters (running=${result.counts.running}, configured=${result.counts.configured})`));
+          for (const item of result.running) console.log(`- ${pc.cyan(item.name || '-')}=${item.value ?? ''}`);
+        }
+      });
+    });
+
+  registerCliCommand(cli, dbAccountsCommand)
+    .action(async (instanceId: string, options: { name?: unknown; limit?: unknown }) => {
+      await executeWithAuthRecovery({ commandLabel: commandInvocation(dbAccountsCommand), interactiveTTY: isInteractiveTTY(), requiredCapabilities: ['rds'] }, async () => {
+        ensureAuthOrExit();
+        const limit = parseListLimit(options.limit, 50, 200);
+        const name = toOptionalString(options.name);
+        const response = await listDatabaseAccounts(instanceId, { name, limit });
+        const result = { stage: 'db.accounts', ...response, count: response.accounts.length, filters: name ? { name } : {} };
+        if (isJsonOutput()) emitCommandResult(result);
+        if (!isJsonOutput()) {
+          console.log(pc.bold(`RDS accounts (${result.count})`));
+          for (const item of result.accounts) console.log(`- ${pc.cyan(String(item.name || '-'))}  type=${item.type || '-'}  status=${item.status || '-'}`);
+        }
+      });
+    });
+
+  registerCliCommand(cli, dbDatabasesCommand)
+    .action(async (instanceId: string, options: { name?: unknown; status?: unknown; limit?: unknown }) => {
+      await executeWithAuthRecovery({ commandLabel: commandInvocation(dbDatabasesCommand), interactiveTTY: isInteractiveTTY(), requiredCapabilities: ['rds'] }, async () => {
+        ensureAuthOrExit();
+        const limit = parseListLimit(options.limit, 50, 200);
+        const name = toOptionalString(options.name);
+        const status = toOptionalString(options.status);
+        const response = await listDatabases(instanceId, { name, status, limit });
+        const result = { stage: 'db.databases', ...response, count: response.databases.length, filters: { ...(name ? { name } : {}), ...(status ? { status } : {}) } };
+        if (isJsonOutput()) emitCommandResult(result);
+        if (!isJsonOutput()) {
+          console.log(pc.bold(`RDS databases (${result.count})`));
+          for (const item of result.databases) console.log(`- ${pc.cyan(String(item.name || '-'))}  status=${item.status || '-'}  charset=${item.characterSet || '-'}`);
+        }
+      });
+    });
+
   registerCliCommand(cli, dbAddCommand)
     .action(async (options: {
       type?: unknown;
@@ -740,9 +905,9 @@ export const dbCommandModule = defineCommandModule({
     db: {
       summary: 'RDS 数据库实例的创建、查看、连接、公网访问与删除。',
       notes: ['公网访问与删除属于高影响操作，自动化执行前应先确认。'],
-      examples: ['licell db list', 'licell db info <instanceId>', 'licell db connect <instanceId> --output json'],
+      examples: ['licell db list', 'licell db info <instanceId>', 'licell db backups <instanceId> --output json', 'licell db parameters <instanceId> --output json', 'licell db accounts <instanceId> --output json', 'licell db databases <instanceId> --output json', 'licell db connect <instanceId> --output json'],
       agentTips: ['优先从 `licell db list --output json` 获取实例，再执行 connect / public-access / rm。']
     }
   },
-  commands: [dbAddCommand, dbClassCommand, dbListCommand, dbInfoCommand, dbConnectCommand, dbPublicAccessCommand, dbRmCommand]
+  commands: [dbAddCommand, dbClassCommand, dbListCommand, dbInfoCommand, dbBackupsCommand, dbParametersCommand, dbAccountsCommand, dbDatabasesCommand, dbConnectCommand, dbPublicAccessCommand, dbRmCommand]
 });

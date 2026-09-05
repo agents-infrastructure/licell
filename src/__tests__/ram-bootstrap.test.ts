@@ -57,6 +57,9 @@ describe('ram bootstrap helpers', () => {
       'rds:DescribeDBInstanceNetInfo',
       'rds:DescribeDatabases',
       'rds:DescribeAccounts',
+      'rds:DescribeBackups',
+      'rds:DescribeBackupPolicy',
+      'rds:DescribeParameters',
       'rds:DescribeDBInstanceIPArrayList',
       'rds:DescribeSecurityGroupConfiguration',
       'ecs:DescribeSecurityGroups',
@@ -67,7 +70,15 @@ describe('ram bootstrap helpers', () => {
       'ecs:StartInstance',
       'ecs:RebootInstance',
       'ecs:StopInstance',
-      'ecs:DeleteInstance'
+      'ecs:DeleteInstance',
+      'kvstore:DescribeBackups',
+      'kvstore:DescribeBackupPolicy',
+      'kvstore:DescribeParameters',
+      'kvstore:DescribeInstanceConfig',
+      'kvstore:DescribeClusterMemberInfo',
+      'cr:ListNamespace',
+      'cr:ListRepository',
+      'cr:ListRepoTag'
     ]));
     for (const action of ECS_LIFECYCLE_ALLOWED_ACTIONS) {
       expect(doc.Statement[0].Action).toContain(action);

@@ -3,7 +3,7 @@
 > 调研快照：2026-09-03。源码目录：`/Users/wyattfang/work/aliyun-cli`；Licell：`/Users/wyattfang/work/licell`。
 > aliyun-cli 当前 HEAD：`eadd68d9a13dd0734a2236e2c70e38f4888ae65f`（v3.4.11 代码线）；OpenAPI 子模块：`2563691c22229a0b493606e11166b95896707095`。
 > 统计基于本地子模块，不依赖网络实时产品目录。阿里云 API 与产品元数据会变化，发布前应重新生成统计。
-> 实施状态更新：2026-09-04。Phase 0 已完成；Phase 1 核心完成、共享增强待办；Phase 2 已完成 CS/K8s 与 VPC 只读垂直切片；Phase 3/4 尚未完成。当前开发目标为 v1.0.8。
+> 实施状态更新：2026-09-05。Phase 0 已完成；Phase 1 核心完成、共享增强待办；Phase 2 首批语义 overlay 已完成；Phase 3 已完成 FC advanced、RDS、Redis/Tair、ACR 的首批只读切片，写操作 workflow 尚未开始；Phase 4 尚未开始。本批能力随 v1.0.9 发布。
 
 本方案的协议源采用仓库内快照：将 `aliyun-openapi-meta` 的协议文件复制到
 `protocol/alicloud-openapi/`，由 Git 记录版本和变更。运行时、生成器和 Agent
@@ -132,10 +132,10 @@ API 级参考文件规则：
 
 ### 4.1 命令面
 
-`licell catalog --output json`（v1.0.8 预发布候选）返回：
+`licell catalog --output json`（v1.0.9 开发树）返回：
 
-- 36 个 root commands；
-- 126 个 concrete command entries；
+- 40 个 root commands；
+- 153 个 concrete command entries；
 - 统一 `licell-help@1.0` / `licell-cli-record@1.0`；
 - 命令注册源：`src/commands/registry.ts`；描述器/区域/安全元数据：`src/commands/module.ts`。
 
@@ -147,7 +147,7 @@ API 级参考文件规则：
 | Delivery/FC | `deploy task release logs fn env` | `src/commands/deploy.ts`、`task.ts`、`release.ts`、`logs.ts`、`fn.ts`、`env.ts` |
 | Domain/Network | `domain dns` | `src/commands/domain-app.ts`、`domain-static.ts`、`dns.ts` |
 | OSS | `oss`（19 entries） | `src/commands/oss.ts` |
-| Data | `db cache supa` | `src/commands/db.ts`、`cache.ts`、`supa.ts` |
+| Data | `db cache supa`；RDS/Redis inspect 命令已覆盖备份、参数、账号等 | `src/commands/db.ts`、`cache.ts`、`supa.ts` |
 | ECS | `ecs list/info/start/reboot/stop/delete/rm` | `src/commands/ecs.ts`、`ecs-lifecycle.ts` |
 | Kubernetes | `k8s clusters/workloads` | `src/commands/k8s.ts`、`src/providers/k8s.ts` |
 | Cloud Capability | `capability products/search/describe`、`api scaffold/invoke` | `src/commands/capability.ts`、`api.ts`；`src/providers/openapi/**` |
@@ -161,11 +161,11 @@ API 级参考文件规则：
 | OSS | Bucket CRUD/属性、对象 list/get/rm、上传/同步、原生域名 | `src/providers/oss.ts`；命令 `src/commands/oss.ts` |
 | Alidns | 记录 list/add/rm，域名工作流编排 | `src/providers/dns.ts` |
 | CDN | 静态域名接入、刷新等部署联动；无完整 CDN 资源命令组 | `src/providers/cdn.ts` |
-| ACR（cr） | 镜像部署/实例查询等部署链路能力；无完整 registry/repository 命令组 | `src/providers/cr.ts` |
+| ACR（cr） | 部署链路兼容企业版/个人版；新增企业版 `instances/namespaces/repositories/tags` 只读盘点 | `src/providers/cr.ts`、`src/providers/cr-inventory.ts`、`src/commands/acr.ts` |
 | ECS | list/info 与 start/reboot/stop/delete 生命周期 | `src/providers/ecs/**`、`src/commands/ecs*.ts` |
 | CS / ACK / ACS | 集群列表与集群内 deployment/daemonset/service 只读盘点；其他 CS API 走 raw fallback | `src/providers/k8s.ts`、`src/commands/k8s.ts` |
-| RDS | 数据库实例创建/查询/连接/公网白名单/删除；Supabase 依赖 RDS | `src/providers/infra/**`、`src/commands/db.ts` |
-| Redis/Tair（R-kvstore） | classic/serverless 创建、查询、连接、密码轮换、公网白名单 | `src/providers/redis/**`、`src/commands/cache.ts` |
+| RDS | 创建/查询/连接/公网白名单/删除；只读覆盖备份与策略、参数、账号、逻辑数据库 | `src/providers/infra/**`、`src/commands/db.ts` |
+| Redis/Tair（R-kvstore） | classic/serverless 创建、查询、连接、密码轮换、公网白名单；只读覆盖备份与策略、参数、账号、集群拓扑 | `src/providers/redis/**`、`src/commands/cache.ts` |
 | RAM | 仅 bootstrap policy/权限修复与认证辅助，不是 RAM 管理 CLI | `src/providers/ram.ts`、`src/utils/auth-recovery.ts` |
 | SLS | 日志 query/tail 与 FC 日志桥接，无完整 project/logstore/仪表盘管理 | `src/providers/logs.ts`、`src/commands/logs.ts` |
 | VPC | `vpc list/info/topology` 只读盘点 VPC、交换机、路由表、NAT 网关和 EIP；部署链路还能发现/创建部分网络资源 | `src/providers/vpc.ts`、`src/providers/vpc/query.ts`、`src/commands/vpc.ts` |
@@ -180,7 +180,7 @@ API 级参考文件规则：
 |---|---|---|---|---|---|
 | P0 | OpenAPI runtime（内部 module） | `aliyun <product> <ApiName>`、REST path | 核心已完成；pager、query/table、waiter 等共享增强待办 | `openapi/commando.go`、`invoker.go`、`rpc.go`、`restful.go`、`http_context.go` | `src/providers/openapi/**`；以 `execute(operationRef, input, context)` 为小接口，隐藏 runner、凭证、RPC/REST 与 endpoint 复杂度 |
 | P0 | protocol snapshot + scaffold | `aliyun-openapi-meta`、`aliyun help <product> [ApiName]` | 已完成；当前固定 156 个产品、16,242 个 API | `meta/repository.go`、`meta/reader.go`、`openapi/commando_help.go`、`aliyun-openapi-meta/metadatas/**` | `protocol/alicloud-openapi/**`、`scripts/update-alicloud-protocol.ts`、`scripts/generate-alicloud-capabilities.ts`、`licell api scaffold`；人工升级快照，CI 只校验一致性 |
-| P0 | capability registry / Agent surface | aliyun 产品/API 列表 | 核心已完成；当前 13 个 operation 晋级 curated overlay，其余保持 raw | `openapi/commando_help.go`、`src/commands/module.ts`、`src/utils/command-metadata.ts` | `capability products/search/describe`；生成 schema 与人工 overlay 合并，`catalog.agentWorkflow` 声明 Agent 路由 |
+| P0 | capability registry / Agent surface | aliyun 产品/API 列表 | 核心已完成；当前 46 个 operation 晋级 curated overlay，其余保持 raw | `openapi/commando_help.go`、`src/commands/module.ts`、`src/utils/command-metadata.ts` | `capability products/search/describe`；生成 schema 与人工 overlay 合并，`catalog.agentWorkflow` 声明 Agent 路由 |
 | P0 | `api invoke`（受控逃生口） | `aliyun <product> <ApiName>`、REST path | 已完成受控 fallback；仍不能替代 workflow | `openapi/commando.go`、`invoker.go`、`waiter.go`、`output_filter.go` | 低优先级命令，标记 `maturity=raw`；写操作默认 dry-run + yes，脱敏并提示无 workflow 语义 |
 | P0 | 认证 profile 兼容 | `configure --mode ...` | Licell 不支持多 profile/多种链式凭证 | `config/configure*.go`、`config/profile.go` | `src/utils/auth/**` 增加 profile 解析与显式 `--profile`；安全地映射到 SDK credential |
 | P1 | OSS 完整资源命令 | `ossutil` 47 命令 | set-meta、CORS、生命周期、版本、复制、WORM、加密、策略、QOS、符号链接、multipart 等缺失 | `oss/lib/<command>.go`；注册表 `oss/lib/command.go:867-918` | 扩展 `src/commands/oss.ts` + `src/providers/oss.ts`，按对象/桶配置分组 |
@@ -190,9 +190,9 @@ API 级参考文件规则：
 | P1 | CDN 全生命周期 | `aliyun cdn <ApiName>`、`dcdn` | 只有域名 workflow/刷新联动 | `metadatas/cdn/*.json`、`src/providers/cdn.ts` | `cdn domain/cache/https/refresh/quota`；长任务用 waiter |
 | P1 | SLS 管理 | `aliyun sls <ApiName>`（221 APIs） | 只能查日志/跟随日志 | `metadatas/sls/*.json`、`src/providers/logs.ts` | `logs project/store/index/query/tail`；保留原始查询响应 |
 | P1 | FC 高级资源 | `aliyun fc <ApiName>`、`fc-open` | 已覆盖主线，但 layers、provision、concurrency、trigger/session/tag 等不完整 | `metadatas/fc/*.json`、`src/providers/fc/**` | `fn trigger/layer/provision/concurrency/tag`；优先补只读和回滚 |
-| P1 | RDS 全生命周期 | `aliyun rds <ApiName>`（364 APIs） | Licell 只覆盖 serverless/连接/白名单等路径 | `metadatas/rds/*.json`、`src/providers/infra/**` | `db backup/restore/param/account/database/readonly/maintain` |
-| P1 | Redis/Tair 全生命周期 | `aliyun r-kvstore <ApiName>`（146 APIs） | 当前创建/查询/密码/公网白名单为主 | `metadatas/r-kvstore/*.json`、`src/providers/redis/**` | `cache backup/restore/parameter/replication/upgrade` |
-| P1 | ACR registry | `aliyun cr <ApiName>`（115 APIs） + `acrutil` | 只有镜像部署辅助，缺少实例/repository/image/tag/scan | `metadatas/cr/*.json`、`cliext/acrutil/**` | `acr instance/repo/image/tag/scan`；复用 CR SDK |
+| P1 | RDS 全生命周期 | `aliyun rds <ApiName>`（364 APIs） | 只读 backup/policy/parameter/account/database 已完成；restore/readonly/maintain 待办 | `metadatas/rds/*.json`、`src/providers/infra/**` | `db backups/parameters/accounts/databases` 已落地；下一步先做 restore plan，再开放 mutate |
+| P1 | Redis/Tair 全生命周期 | `aliyun r-kvstore <ApiName>`（146 APIs） | 只读 backup/policy/parameter/account/topology 已完成；restore/replication/upgrade 待办 | `metadatas/r-kvstore/*.json`、`src/providers/redis/**` | `cache backups/parameters/accounts/topology` 已落地；参数查询自动兼容经典与云原生接口 |
+| P1 | ACR registry | `aliyun cr <ApiName>`（115 APIs） + `acrutil` | 企业版 instance/namespace/repository/tag 只读已完成；个人版统一查询、scan、sync 待办 | `metadatas/cr/*.json`、`cliext/acrutil/**` | `acr instances/namespaces/repositories/tags` 已落地；下一步补 scan inspect，个人版保持 deploy 兼容层 |
 | P2 | Tablestore | `otsutil` / `aliyun ots` | 完全缺失 | `cliext/otsutil/otsutil.go`、`metadatas/ots/*.json` | 先 wrapper，再原生 `table/row/index/backup` |
 | P2 | KMS | `kmscli`、`aliyun kms <ApiName>` | 完全缺失 | `cliext/kmscli/kmscli.go`、`metadatas/kms/*.json` | `kms secret/key/cert`；严禁把 secret 写入日志 |
 | P2 | MaxCompute | `maxc`、`aliyun maxcompute <ApiName>` | 完全缺失 | `cliext/maxc/main.go`、`maxc/maxc.go` | 独立 package；优先 query/job/meta |
@@ -294,8 +294,8 @@ Agent 主路径是 `catalog -> curated help/execute`；没有领域命令时进�
 |---|---|---|---|
 | Phase 0 | 已完成 | protocol 快照、生成器、capability 索引、`api scaffold` | 维持人工同步与 CI 一致性校验 |
 | Phase 1 | 核心完成 | 固定 runner、RPC/REST invoke、Path 编译、脱敏、安全确认、Agent execution 决策 | pager、JMESPath query/table、waiter、profile、body-file、Windows runner |
-| Phase 2 | 进行中 | 全局 curated-first Agent 路由；CS/K8s 集群与 workloads；VPC `list/info/topology` 只读切片 | RAM、CAS、CDN、SLS 首批领域 overlay；VPC 再进入 plan -> mutate -> verify |
-| Phase 3 | 未完成 | 复用现有 OSS/FC/RDS/Redis 等部分工作流 | 按统一模板完成十个 P1 产品的原生化 |
+| Phase 2 | 首批完成 | 全局 curated-first Agent 路由；CS/K8s、VPC、RAM、CAS、CDN、SLS 首批只读领域 overlay | 维持 journey contract；VPC 写操作先进入 plan -> mutate -> verify |
+| Phase 3 | 进行中 | FC advanced、RDS、Redis/Tair、ACR 首批只读原生化 | OSS 高级配置、ACR scan，以及各产品写操作 plan/verify |
 | Phase 4 | 未开始 | 无 | P2 专业服务与 P3 plugin runtime |
 
 ### Phase 0：能力编译基础（已完成）
@@ -320,20 +320,77 @@ Agent 主路径是 `catalog -> curated help/execute`；没有领域命令时进�
 
 ### Phase 2：语义 overlay 与首批领域命令（进行中，每个产品 3-7 天）
 
+#### v1.0.9：Agent journey contract 与 RAM 只读首片
+
+已完成：建立 `src/__tests__/agent-journey-contract.test.ts` 代表性矩阵，覆盖 VPC、ECS、CS/K8s、FC、RDS、Redis/Tair、ACR、RAM、CAS、CDN、SLS 的自然语言 inspect 意图；每个案例验证
+`products -> capability search -> capability describe -> execution` 全链路，并同时覆盖 curated command 与 raw fallback。新增 `ram users` 只读领域命令，使用 RAM `ListUsers` 自动分页和非敏感用户摘要投影；`ram.ListUsers` 已进入人工维护 overlay。
+
+同时修正 capability 搜索的通用资源词别名和集合资源排序，避免“用户/域名/证书/网络/日志项目”等中文资源被同产品的无关 API 抢占。该矩阵是服务级路由契约，不替代每个 API 的 provider 集成测试。
+
+验收：`bun run test -- src/__tests__/agent-journey-contract.test.ts`、RAM provider/command tests、`typecheck`、`protocol:check` 与 docs checks 通过；真实 RAM 账号 smoke 作为后续独立验证，不在普通 CI 中依赖云端凭证。
+
 已完成：`catalog.agentWorkflow` 固化 Agent 的 curated-first 路由；CS 的 `DescribeClusters`、`DescribeClustersV1`、`DescribeClusterUserKubeconfig` 已晋级到 `k8s clusters/workloads`，并完成敏感 KubeConfig 脱敏、临时文件清理和只读 workloads 验证。VPC 的 `DescribeVpcs`、`DescribeVSwitches`、`DescribeRouteTables`、`DescribeNatGateways`、`DescribeEipAddresses` 已晋级到 `vpc list/info/topology`，提供统一资源关系投影。
 
 真实账号 smoke：`cn-hangzhou` 的 `vpc list` 与 `vpc topology` 已通过，验证了 VPC、交换机、路由表、NAT 网关、关联 EIP 的读取与关系投影；未执行写操作。
 
+#### CAS 只读首片（当前迭代）
+
+已完成：新增 `cert list`，以 CAS `ListCert` protocol 为唯一请求定义，通过共享 aliyun-cli runner 执行，不引入产品 SDK。命令支持地域、关键字、状态、证书类型、来源和数量上限过滤；provider 兼容嵌套 `CertList` / `Certificates` 响应，并只投影证书 ID、名称、域名、状态、类型、来源、签发者和有效期摘要，明确不返回 PEM、私钥或其他证书正文。
+
+`cas.ListCert` 已进入人工维护 overlay，Agent 通过 `capability describe` 会优先得到 `cert list`，仍保留 `api invoke cas.ListCert` 作为未满足需求时的 raw fallback；CAS 详情、续期、吊销、部署等其他操作暂不宣称已原生支持。
+
+#### CDN 只读首片（当前迭代）
+
+已完成：新增 `cdn domains`，以 CDN `DescribeUserDomains` protocol 为请求定义，通过共享 aliyun-cli runner 读取加速域名。命令支持地域、完整域名、状态、域名前缀、回源地址和数量上限过滤；provider 输出域名、CNAME、状态、HTTPS 状态和回源摘要，并显式返回 `totalCount/truncated`。
+
+`cdn.DescribeUserDomains` 已进入人工维护 overlay，Agent 会优先执行 `cdn domains`；CDN 配置变更仍回到 `domain` workflow，其他详情、刷新和配置 API 继续保留 `api invoke` fallback，不宣称已原生覆盖。
+
+#### SLS 只读首片（当前迭代）
+
+已完成：新增 `logs projects`，以 SLS `ListProject` protocol 为请求定义，通过共享 aliyun-cli runner 读取日志项目摘要。命令支持地域、项目名、资源组、配额摘要和数量上限过滤；provider 只输出项目名称、描述、地域、状态、时间和安全的配额标量，不读取日志内容或凭证字段，并返回 `totalCount/truncated`。
+
+`sls.ListProject` 已进入人工维护 overlay，Agent 会优先执行 `logs projects`；随后用 `logs query` 读取指定 project/logstore 的日志。logstore、索引和其他 SLS 管理 API 仍通过 capability search/describe 发现，并保留 `api invoke` fallback。
+
+已扩展：新增 `logs logstores <project>`，以 SLS `ListLogStores` REST protocol 为请求定义，验证 Host 参数 `project` 的编译路径，并输出 logstore 名称、模式、telemetry 类型和容量摘要。能力检索补充“日志库/日志存储/logstore”通用词展开，确保 Agent 能从自然语言进入第二跳。
+
+已扩展：新增 `logs index <project> <logstore>`，以 SLS `GetIndex` REST protocol 为请求定义，读取字段索引、分词器、索引模式、存储和 TTL 摘要，帮助 Agent 在进入 `logs query` 前判断字段检索是否可用。能力检索补充“日志库索引”短语展开，避免相近的 `GetStoreViewIndex` 抢占结果。
+
+通用 runner 修正：REST Path 参数在 URL 路径替换后仍保留为 aliyun-cli 参数，满足上游 metadata 校验；根路径 REST API（如 `sls.ListProject`）改用 operation 调用形式，避免 `GET /` 被 aliyun-cli 判定为过宽路径。查询 provider 对 runner 非零退出显式失败，不再把调用错误投影为空结果。
+
+真实账号 smoke：`cn-shanghai` 返回 21 个 SLS project；`aliyun-fc-cn-shanghai-1494910986361453` 下发现 `function-log`，读取到 v2 index 和 6 个字段，并用 `logs query '*' --since 3600 --lines 5` 成功返回 5 条日志。该链路未执行任何写操作。
+
+#### FC advanced 只读首片
+
+已完成：新增 `fn aliases <name>`，复用 FC `ListAliases` SDK 分页读取 alias、目标版本、描述、时间和灰度权重摘要；`fc.ListAliases` 已进入人工维护 overlay，Agent 可从“查看函数别名”进入 curated command。真实账号 smoke：`growth-capability-command-api` 返回 `prod -> version 2`，未执行写操作。
+
+已扩展：新增 `fn triggers <name>`，复用 FC `ListTriggers` SDK 分页读取触发器名称、类型、状态、绑定版本、来源和时间摘要；原始 `triggerConfig` 不进入 Agent 输出。`fc.ListTriggers` 已进入人工维护 overlay，后续写操作仍保留 `api invoke` fallback。真实账号 smoke：`growth-capability-command-api` 返回 1 个 HTTP trigger（`licell-http`，绑定 `LATEST`），未执行写操作。
+
+已扩展：新增 `fn layers`，复用 FC `ListLayers` SDK 分页读取层版本、ACL、兼容运行时、大小和时间摘要；不下载层代码。`fc.ListLayers` 已进入人工维护 overlay，完整层详情和层版本操作继续保留 `api invoke` fallback。真实账号 smoke：`cn-shanghai` 返回 18 个 layer version，未执行写操作。
+
+已扩展：新增 `fn capacity [name]`，并行读取 FC `ListConcurrencyConfigs`、`ListProvisionConfigs` 和 `ListScalingConfigs`，统一投影函数保留并发、预留实例当前/目标值和弹性伸缩状态；三个 operation 均进入人工维护 overlay，并由同一领域命令承接自然语言容量盘点。真实账号 smoke：`cn-shanghai` 返回并发配置 15 条、预留实例 11 条、伸缩配置 11 条，未执行写操作。
+
+已扩展：新增 `fn instances <name>` 和 `fn sessions <name>`，分别读取 FC `ListInstances` 与 `ListSessions`。实例输出保留状态、版本和生命周期摘要；会话输出保留状态、亲和类型和超时摘要，明确移除 NAS、OSS、PolarFS 挂载配置。两个 operation 均进入人工维护 overlay。真实账号 smoke：`growth-capability-command-api` 当前返回 0 个执行实例和 0 个显式会话，两条 API 均成功且未执行写操作。
+
+已扩展：新增 `fn vpc-bindings <name>` 和 `fn tags [name]`。前者通过 `ListVpcBindings` 返回函数可访问的 VPC ID，并指引 Agent 进入 `vpc info/topology`；后者通过 `ListTagResources` 分页读取函数资源标签，指定函数名时构建完整 FC 资源 ID 做服务端精确查询，未指定时要求至少一个 `key=value` 标签条件。两个 operation 均进入人工维护 overlay，只输出资源标识和标签键值。真实账号 smoke：`growth-capability-command-api` 在 `cn-shanghai` 返回 0 个 VPC binding 和 0 条标签；`env=prod` 标签查询成功返回 50 条并正确标记截断，全程未执行写操作。
+
+#### RDS、Redis/Tair、ACR 只读首片
+
+已完成 RDS `db backups/parameters/accounts/databases`：备份查询合并备份策略并移除签名下载 URL/checksum；参数区分运行值与配置值；账号和逻辑数据库只投影权限摘要。杭州真实实例四条命令均成功，验证了 RDS 分页下限和 UTC 分钟时间格式。
+
+已完成 Redis/Tair `cache backups/parameters/accounts/topology`：参数命令先调用经典实例 `DescribeParameters`，不支持时自动回退云原生 `DescribeInstanceConfig` 并解析结构化 Config；备份输出移除公网/内网下载 URL；拓扑输出移除 user/resource-group 标识。上海真实实例的备份、策略、参数、账号查询成功；现有分片实例不属于 `DescribeClusterMemberInfo` 的稳定支持范围，云端返回 `InternalFailure`，帮助中已明确该 API 仅适用于部分云盘集群。
+
+已完成 ACR 企业版 `acr instances/namespaces/repositories/tags`，建立 `instances -> namespaces/repositories -> tags` 的 Agent 发现链，并保留 repositoryId 作为下游稳定输入；个人版仍由现有 deploy 兼容流程管理。杭州和上海真实调用均成功返回企业版实例 0 个，因此下游调用由 SDK provider/command contract 覆盖，未宣称真实资源烟测成功。
+
 - 为一个产品补齐资源模型、风险、幂等性、nextActions、结果投影和状态验证。
 - 通过 `api scaffold` 生成 transport；人工维护 overlay；命令进入 registry/catalog。
-- 首批建议 RAM、CAS、CDN、SLS；VPC 只读已完成，后续优先 plan，再做 mutate。
+- RAM、CAS、CDN、SLS、FC advanced、RDS、Redis/Tair、ACR 的首批只读切片已完成；后续优先补 ACR scan inspect 与写操作 plan，再做 mutate。
 - pager、JMESPath query/table、waiter 和 profile 兼容作为 runtime 共享能力，不作为领域命令的公开复杂度。
 
 验收：Agent 能从 `capability search` 找到领域命令，并通过 `nextActions` 完成 inspect -> mutate -> verify；凭证不出现在日志/错误里。
 
 ### Phase 3：P1 高频资源原生化（未完成，每个产品 3-7 天）
 
-推荐顺序：OSS -> VPC -> RAM -> CAS -> CDN -> SLS -> FC advanced -> RDS -> Redis -> ACR。
+当前状态：RAM、CAS、CDN、SLS、FC advanced、RDS、Redis/Tair、ACR 已完成首批只读切片；VPC 只读拓扑已完成。下一顺序：ACR scan inspect -> OSS 高级配置 inspect -> VPC/RDS/Redis 写操作 plan -> mutate/verify。
 
 每个产品统一模板：
 

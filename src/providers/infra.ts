@@ -19,5 +19,6 @@ export type {
 export { normalizeDbUser, provisionDatabase } from './infra/provision';
 
 export { listDatabaseInstances, getDatabaseInstanceDetail, listDatabaseClasses, resolveDatabaseConnectInfo, deleteDatabaseInstance } from './infra/query';
+export { listDatabaseBackups, listDatabaseParameters, listDatabaseAccounts, listDatabases } from './infra/inventory';
 
 export { allocateDbPublicConnection, applyDbPublicWhitelist } from './infra/public-access';

@@ -43,7 +43,7 @@ export function normalizeAcrNamespace(input: string): string {
   return value;
 }
 
-function createCrClient(auth?: AuthConfig) {
+export function createCrClient(auth?: AuthConfig) {
   const resolved = auth ?? Config.requireAuth();
   return new CRClientCtor(new $OpenApi.Config({
     accessKeyId: resolved.ak,
@@ -63,7 +63,7 @@ export function setAcrRetrySleepForTest(fn: ((ms: number) => Promise<void>) | nu
   acrRetrySleep = fn || defaultSleep;
 }
 
-function callCrWithRetry<T>(task: () => Promise<T>): Promise<T> {
+export function callCrWithRetry<T>(task: () => Promise<T>): Promise<T> {
   return withRetry(task, {
     ...ACR_RETRY_OPTIONS,
     sleep: acrRetrySleep

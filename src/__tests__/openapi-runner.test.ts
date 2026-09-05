@@ -42,7 +42,8 @@ describe('aliyun cli OpenAPI runner adapter', () => {
     const spawnProcess = vi.fn(async (_command: string, args: string[]) => {
       expect(args.slice(0, 3)).toEqual(['fc', 'GET', '/2023-03-30/layers/shared/versions']);
       expect(args).not.toContain('--output');
-      expect(args).not.toContain('--layerName');
+      expect(args).toContain('--layerName');
+      expect(args).toContain('shared');
       expect(args).toContain('--header');
       expect(args).toContain('X-Test=value');
       return { exitCode: 0, signal: null, stdout: '{"RequestId":"rest-1"}', stderr: '' };
@@ -59,6 +60,23 @@ describe('aliyun cli OpenAPI runner adapter', () => {
     expect(result.requestId).toBe('rest-1');
   });
 
+  it('uses the operation invocation shape for REST APIs with a root path', async () => {
+    const spawnProcess = vi.fn(async (_command: string, args: string[]) => {
+      expect(args.slice(0, 2)).toEqual(['sls', 'ListProject']);
+      expect(args).not.toContain('GET');
+      expect(args).not.toContain('/');
+      return { exitCode: 0, signal: null, stdout: '{"count":0,"projects":[]}', stderr: '' };
+    });
+
+    const result = await executeAlicloudApi('sls.ListProject', { size: 20 }, {
+      auth: { accountId: 'account', ak: 'test-ak', sk: 'test-sk', region: 'cn-shanghai' },
+      runnerPath: process.execPath,
+      spawnProcess
+    });
+
+    expect(result.ok).toBe(true);
+  });
+
   it('compiles normalized aliases into encoded REST path segments', async () => {
     const result = await executeAlicloudApi('cs.DescribeClusterDetail', {
       cluster_id: 'cluster/with space'
@@ -66,7 +84,8 @@ describe('aliyun cli OpenAPI runner adapter', () => {
 
     expect(result.plan.requestPath).toBe('/clusters/cluster%2Fwith%20space');
     expect(result.plan.args.slice(0, 3)).toEqual(['cs', 'GET', '/clusters/cluster%2Fwith%20space']);
-    expect(result.plan.args).not.toContain('--ClusterId');
+    expect(result.plan.args).toContain('--ClusterId');
+    expect(result.plan.args).toContain('cluster/with space');
     expect(result.plan.args).not.toContain('--cluster_id');
   });
 
@@ -95,8 +114,9 @@ describe('aliyun cli OpenAPI runner adapter', () => {
     expect(result.plan.requestPath).toBe('/logstores/application/shards/0?type=log');
     expect(result.plan.args).toContain('--project');
     expect(result.plan.args).toContain('logs-project');
-    expect(result.plan.args).not.toContain('--logStore');
-    expect(result.plan.args).not.toContain('--shardId');
+    expect(result.plan.args).toContain('--logStore');
+    expect(result.plan.args).toContain('application');
+    expect(result.plan.args).toContain('--shardId');
   });
 
   it('validates required and unknown parameters before spawning the runner', async () => {

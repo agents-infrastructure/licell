@@ -41,7 +41,8 @@ describe('buildCommandReferenceSections', () => {
       'k8s workloads',
       'vpc info',
       'vpc list',
-      'vpc topology'
+      'vpc topology',
+      'ram users'
     ]);
   });
 });

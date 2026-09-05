@@ -2,6 +2,7 @@ import type { CAC } from 'cac';
 import { defineCommandModule, commandInvocation, defineCliCommand, registerCliCommand } from './module';
 import pc from 'picocolors';
 import { tailSlsLogs } from '../providers/logs';
+import { getSlsIndex, listSlsLogstores, listSlsProjects } from '../providers/sls-query';
 import { executeWithAuthRecovery } from '../utils/auth-recovery';
 import {
   ensureAuthOrExit,
@@ -33,6 +34,184 @@ interface LogsQueryCommandOptions extends LogsCommonCommandOptions {
 }
 
 interface LogsTailCommandOptions extends LogsCommonCommandOptions {}
+
+interface LogsProjectsCommandOptions {
+  region?: unknown;
+  project?: unknown;
+  resourceGroup?: unknown;
+  fetchQuota?: unknown;
+  limit?: unknown;
+}
+
+interface LogsLogstoresCommandOptions {
+  region?: unknown;
+  name?: unknown;
+  mode?: unknown;
+  telemetryType?: unknown;
+  limit?: unknown;
+}
+
+interface LogsIndexCommandOptions {
+  region?: unknown;
+}
+
+const logsIndexCommand = defineCliCommand({
+  rawName: 'logs index <project> <logstore>',
+  description: '查看 SLS logstore 索引（只读）',
+  region: { scope: 'auth' },
+  options: [{ rawName: '-r, --region <region>', description: 'SLS region，默认当前登录地域' }],
+  descriptor: {
+    title: 'Describe SLS index',
+    summary: '通过 SLS GetIndex 只读 API 查看指定 logstore 的字段索引定义。',
+    examples: [
+      'licell logs index <project> <logstore> --output json',
+      'licell logs index aliyun-fc-cn-shanghai-1494910986361453 function-log --region cn-shanghai --output json'
+    ],
+    argumentHints: {
+      project: 'SLS project 名称；先用 `licell logs projects` 获取。',
+      logstore: 'SLS logstore 名称；先用 `licell logs logstores <project>` 获取。'
+    },
+    related: ['logs projects', 'logs logstores', 'logs query', 'api invoke', 'capability search'],
+    agentTips: [
+      '先读取 `index.fields[]` 判断字段查询是否有索引，再构造 `logs query` 语句。',
+      '本命令只读取索引定义，不修改索引配置。'
+    ],
+    automation: { preferredOutput: 'json', explicitInputs: ['project', 'logstore', '--region'] },
+    safety: { level: 'safe', reason: '只调用 SLS GetIndex 读取 logstore 索引定义。', confirmFlags: [] },
+    recommendedFlow: [
+      { title: '列出日志项目', command: 'licell logs projects --output json', reason: '获取 SLS project。' },
+      { title: '列出日志库', command: 'licell logs logstores <project> --output json', reason: '获取 logstore。' },
+      { title: '读取索引定义', command: 'licell logs index <project> <logstore> --output json', reason: '确认可用于字段检索的索引。' },
+      { title: '查询日志', command: 'licell logs query -p <project> -s <logstore> \'*\' --output json', reason: '使用已确认的日志源和索引进行查询。' }
+    ],
+    result: {
+      summary: '返回指定 logstore 的索引模式、存储、生命周期和字段索引摘要。',
+      outcomeKey: 'index',
+      fields: [
+        { name: 'stage', description: '固定为 `logs.index`。', required: true },
+        { name: 'regionId', description: '实际查询地域。', required: true },
+        { name: 'project', description: '实际查询的 SLS project。', required: true },
+        { name: 'logstore', description: '实际查询的 SLS logstore。', required: true },
+        { name: 'requestId', description: 'SLS API requestId。', required: false },
+        { name: 'index', description: '索引模式、存储、生命周期、行索引和字段索引摘要。', required: true }
+      ]
+    }
+  }
+});
+
+const logsLogstoresCommand = defineCliCommand({
+  rawName: 'logs logstores <project>',
+  description: '列出 SLS 项目下的 logstore（只读）',
+  region: { scope: 'auth' },
+  options: [
+    { rawName: '-r, --region <region>', description: 'SLS region，默认当前登录地域' },
+    { rawName: '--name <logstore>', description: '按 logstore 名称过滤' },
+    { rawName: '--mode <mode>', description: '按采集模式过滤' },
+    { rawName: '--telemetry-type <type>', description: '按 telemetry 类型过滤' },
+    { rawName: '--limit <n>', description: '返回数量，默认 50，最大 200' }
+  ],
+  descriptor: {
+    title: 'List SLS logstores',
+    summary: '通过 SLS ListLogStores 只读 API 列出指定 project 下的 logstore 摘要。',
+    examples: [
+      'licell logs logstores <project> --output json',
+      'licell logs logstores app-logs --name access --output json'
+    ],
+    argumentHints: { project: 'SLS project 名称；先用 `licell logs projects` 获取。' },
+    related: ['logs projects', 'logs query', 'logs tail', 'api invoke', 'capability search'],
+    agentTips: [
+      '先从 `logs projects` 读取 project，再读取 `logstores[].logstoreName` 交给 `logs query -p <project> -s <logstore>`。',
+      '本命令只读取 logstore 元数据，不读取日志内容或索引正文。',
+      '结果带 `totalCount/truncated`；出现截断时先缩小名称过滤范围。'
+    ],
+    automation: {
+      preferredOutput: 'json',
+      explicitInputs: ['project', '--region', '--name', '--mode', '--telemetry-type', '--limit']
+    },
+    safety: {
+      level: 'safe',
+      reason: '只调用 SLS ListLogStores 读取 logstore 摘要，不创建或修改日志资源。',
+      confirmFlags: []
+    },
+    recommendedFlow: [
+      { title: '列出日志项目', command: 'licell logs projects --output json', reason: '获取可用的 SLS project。' },
+      { title: '列出项目下的 logstore', command: 'licell logs logstores <project> --output json', reason: '获取查询日志所需的 logstore 名称。' },
+      { title: '查询日志', command: 'licell logs query -p <project> -s <logstore> \'*\' --output json', reason: '读取指定 logstore 的日志内容。' }
+    ],
+    result: {
+      summary: '返回指定 SLS project 下的 logstore 摘要、过滤条件、总数和截断状态。',
+      outcomeKey: 'logstores',
+      fields: [
+        { name: 'stage', description: '固定为 `logs.logstores`。', required: true },
+        { name: 'regionId', description: '实际查询地域。', required: true },
+        { name: 'project', description: '实际查询的 SLS project。', required: true },
+        { name: 'count', description: '本次返回 logstore 数量。', required: true },
+        { name: 'totalCount', description: '云端匹配 logstore 总数。', required: true },
+        { name: 'limit', description: '本次查询使用的返回数量上限。', required: true },
+        { name: 'truncated', description: '结果是否因单页读取或 limit 截断。', required: true },
+        { name: 'filters', description: '实际使用的名称、模式和 telemetry 过滤条件。', required: true },
+        { name: 'requestId', description: 'SLS API requestId。', required: false },
+        { name: 'logstores[]', description: 'logstore 名称、模式、telemetry 类型和容量摘要。', required: true }
+      ]
+    }
+  }
+});
+
+const logsProjectsCommand = defineCliCommand({
+  rawName: 'logs projects',
+  description: '列出 SLS 日志项目（只读）',
+  region: { scope: 'auth' },
+  options: [
+    { rawName: '-r, --region <region>', description: 'SLS region，默认当前登录地域' },
+    { rawName: '-p, --project <project>', description: '按 projectName 过滤' },
+    { rawName: '--resource-group <resourceGroupId>', description: '按资源组 ID 过滤' },
+    { rawName: '--fetch-quota', description: '请求项目配额摘要' },
+    { rawName: '--limit <n>', description: '返回数量，默认 50，最大 200' }
+  ],
+  descriptor: {
+    title: 'List SLS projects',
+    summary: '通过 SLS ListProject 只读 API 列出日志项目摘要，不读取日志内容。',
+    examples: [
+      'licell logs projects --region cn-hangzhou --output json',
+      'licell logs projects --project app-logs --fetch-quota --output json'
+    ],
+    related: ['logs query', 'logs tail', 'api invoke', 'capability search'],
+    agentTips: [
+      '先读取 `projects[].projectName`，再将 project 传给 `logs query -p <project>` 查询日志。',
+      '这是 SLS 项目清单，不会自动列出每个项目下的 logstore；需要完整参数时继续用 `capability describe sls.ListProject`。',
+      '结果带 `totalCount/truncated`；出现截断时先缩小过滤范围。'
+    ],
+    automation: {
+      preferredOutput: 'json',
+      explicitInputs: ['--region', '--project', '--resource-group', '--fetch-quota', '--limit']
+    },
+    safety: {
+      level: 'safe',
+      reason: '只调用 SLS ListProject 读取项目摘要，不创建或修改日志资源。',
+      confirmFlags: []
+    },
+    recommendedFlow: [
+      { title: '列出日志项目', command: 'licell logs projects --output json', reason: '获取账号当前地域的 SLS project 清单。' },
+      { title: '查询项目日志', command: 'licell logs query -p <project> -s <logstore> \'*\' --output json', reason: '使用项目和 logstore 查询日志内容。' },
+      { title: '探索其他 SLS 能力', command: 'licell capability search --product sls --intent "查看日志项目下的资源" --action inspect --output json', reason: '发现 logstore、索引和日志查询等未封装的 protocol API。' }
+    ],
+    result: {
+      summary: '返回 SLS 项目摘要、过滤条件、总数和截断状态。',
+      outcomeKey: 'projects',
+      fields: [
+        { name: 'stage', description: '固定为 `logs.projects`。', required: true },
+        { name: 'regionId', description: '实际查询地域。', required: true },
+        { name: 'count', description: '本次返回项目数量。', required: true },
+        { name: 'totalCount', description: '云端匹配项目总数。', required: true },
+        { name: 'limit', description: '本次查询使用的返回数量上限。', required: true },
+        { name: 'truncated', description: '结果是否因单页读取或 limit 截断。', required: true },
+        { name: 'filters', description: '实际使用的项目名、资源组和配额选项。', required: true },
+        { name: 'requestId', description: 'SLS API requestId。', required: false },
+        { name: 'projects[]', description: '项目名称、描述、地域、状态、时间和可选配额摘要。', required: true }
+      ]
+    }
+  }
+});
 
 const logsQueryCommand = defineCliCommand({
   rawName: 'logs query [query]',
@@ -215,6 +394,83 @@ function resolveCommonTargetOptions(options: LogsCommonCommandOptions) {
 }
 
 export function registerLogsCommand(cli: CAC) {
+  registerCliCommand(cli, logsIndexCommand)
+    .action(async (project: string, logstore: string, options: LogsIndexCommandOptions) => {
+      await executeWithAuthRecovery(
+        {
+          commandLabel: commandInvocation(logsIndexCommand),
+          interactiveTTY: isInteractiveTTY(),
+          requiredCapabilities: ['logs']
+        },
+        async () => {
+          ensureAuthOrExit();
+          const result = await getSlsIndex({
+            project,
+            logstore,
+            regionId: toOptionalString(options.region) ? normalizeRegion(String(options.region)) : undefined
+          });
+          if (isJsonOutput()) emitCommandResult(result);
+          if (!isJsonOutput()) {
+            console.log(pc.bold(`SLS index: ${result.project}/${result.logstore}`));
+            console.log(`- mode: ${result.index.indexMode || '-'}  fields: ${result.index.fields.length}`);
+          }
+        }
+      );
+    });
+
+  registerCliCommand(cli, logsLogstoresCommand)
+    .action(async (project: string, options: LogsLogstoresCommandOptions) => {
+      await executeWithAuthRecovery(
+        {
+          commandLabel: commandInvocation(logsLogstoresCommand),
+          interactiveTTY: isInteractiveTTY(),
+          requiredCapabilities: ['logs']
+        },
+        async () => {
+          ensureAuthOrExit();
+          const result = await listSlsLogstores({
+            project,
+            regionId: toOptionalString(options.region) ? normalizeRegion(String(options.region)) : undefined,
+            logstoreName: toOptionalString(options.name),
+            mode: toOptionalString(options.mode),
+            telemetryType: toOptionalString(options.telemetryType),
+            limit: parseOptionalPositiveInt(options.limit, '--limit')
+          });
+          if (isJsonOutput()) emitCommandResult(result);
+          if (!isJsonOutput()) {
+            console.log(pc.bold(`SLS logstores (${result.count})`));
+            for (const logstore of result.logstores) console.log(`- ${pc.cyan(logstore.logstoreName)}  ${logstore.mode || '-'}`);
+          }
+        }
+      );
+    });
+
+  registerCliCommand(cli, logsProjectsCommand)
+    .action(async (options: LogsProjectsCommandOptions) => {
+      await executeWithAuthRecovery(
+        {
+          commandLabel: commandInvocation(logsProjectsCommand),
+          interactiveTTY: isInteractiveTTY(),
+          requiredCapabilities: ['logs']
+        },
+        async () => {
+          ensureAuthOrExit();
+          const result = await listSlsProjects({
+            regionId: toOptionalString(options.region) ? normalizeRegion(String(options.region)) : undefined,
+            projectName: toOptionalString(options.project),
+            resourceGroupId: toOptionalString(options.resourceGroup),
+            fetchQuota: Boolean(options.fetchQuota),
+            limit: parseOptionalPositiveInt(options.limit, '--limit')
+          });
+          if (isJsonOutput()) emitCommandResult(result);
+          if (!isJsonOutput()) {
+            console.log(pc.bold(`SLS projects (${result.count})`));
+            for (const project of result.projects) console.log(`- ${pc.cyan(project.projectName)}  ${project.region || '-'}  ${project.status || '-'}`);
+          }
+        }
+      );
+    });
+
   registerCliCommand(cli, logsQueryCommand)
     .action(async (query: string | undefined, options: LogsQueryCommandOptions) => {
       await executeWithAuthRecovery(
@@ -284,15 +540,20 @@ export function registerLogsCommand(cli: CAC) {
 export const logsCommandModule = defineCommandModule({
   section: DELIVERY_SECTION,
   register: registerLogsCommand,
-  commands: [logsQueryCommand, logsTailCommand],
+  commands: [logsIndexCommand, logsLogstoresCommand, logsProjectsCommand, logsQueryCommand, logsTailCommand],
   namespaces: {
     logs: {
       summary: '通用 SLS 日志入口，区分一次性 query 与持续跟随 tail。',
       examples: [
+        'licell logs logstores <project> --output json',
+        'licell logs index <project> <logstore> --output json',
+        'licell logs projects --output json',
         'licell logs query --output json',
         'licell logs tail \'*\''
       ],
       notes: [
+        '先用 `logs projects`、`logs logstores <project>` 和 `logs index <project> <logstore>` 定位日志源，再进入 `logs query` / `logs tail`。',
+        '需要先定位 SLS project 时使用 `logs projects`；需要读取日志内容时再进入 `logs query`。',
         '如果你只是要看某个 FC 函数的默认日志，优先使用 `licell fn logs`。',
         '若不确定 SLS 字段过滤是否有效，先用 `logs query \'*\' --output json` 看原始日志。'
       ],

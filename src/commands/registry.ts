@@ -1,7 +1,10 @@
 import { authCommandModule } from './auth';
 import { apiCommandModule } from './api';
+import { acrCommandModule } from './acr';
 import { bootstrapCommandModule } from './bootstrap';
 import { cacheCommandModule } from './cache';
+import { certCommandModule } from './cert';
+import { cdnCommandModule } from './cdn';
 import { capabilityCommandModule } from './capability';
 import { catalogCommandModule } from './catalog';
 import { ciCommandModule } from './ci';
@@ -21,6 +24,7 @@ import { logsCommandModule } from './logs';
 import { onboardCommandModule } from './onboard';
 import { ossCommandModule } from './oss';
 import { releaseCommandModule } from './release';
+import { ramCommandModule } from './ram';
 import { shellCommandModule } from './shell';
 import { setupCommandModule } from './setup';
 import { skillsCommandModule } from './skills';
@@ -92,6 +96,9 @@ export const LICELL_COMMAND_MANIFEST = defineCommandManifest({
     deployCommandModule,
     taskCommandModule,
     releaseCommandModule,
+    acrCommandModule,
+    certCommandModule,
+    cdnCommandModule,
     logsCommandModule,
     fnCommandModule,
     envCommandModule,
@@ -104,6 +111,7 @@ export const LICELL_COMMAND_MANIFEST = defineCommandManifest({
     ecsCommandModule,
     k8sCommandModule,
     vpcCommandModule,
+    ramCommandModule,
     doctorCommandModule,
     catalogCommandModule,
     apiCommandModule,

@@ -45,7 +45,7 @@ export {
   type FcApiDeployPrecheckErrorDetails
 } from './fc/deploy-spec';
 
-export { pullFunctionEnvs, listFunctions, getFunctionInfo, removeFunction, invokeFunction, setFunctionEnv, removeFunctionEnv } from './fc/function-ops';
+export { pullFunctionEnvs, listFunctions, listFunctionTriggers, getFunctionInfo, removeFunction, invokeFunction, setFunctionEnv, removeFunctionEnv } from './fc/function-ops';
 export {
   getAsyncInvokeConfig,
   removeAsyncInvokeConfig,
@@ -59,6 +59,20 @@ export {
 export { ensureFunctionHttpUrl } from './fc/http';
 
 export { listFunctionAliases, listFunctionVersions, publishFunctionVersion, promoteFunctionAlias, pruneFunctionVersions } from './fc/release';
+export { listFunctionLayers } from './fc/layers';
+export { listFunctionCapacity, type FunctionCapacityQueryOptions } from './fc/capacity';
+export {
+  listFunctionInstances,
+  listFunctionSessions,
+  type FunctionInstanceQueryOptions,
+  type FunctionSessionQueryOptions
+} from './fc/runtime-inventory';
+export {
+  listFunctionTags,
+  listFunctionVpcBindings,
+  type FunctionTagFilter,
+  type FunctionTagQueryOptions
+} from './fc/resource-inventory';
 
 export {
   createFnCustomDomain,

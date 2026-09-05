@@ -47,7 +47,7 @@ export function isInstanceClassError(err: unknown): boolean {
 
 export function isAccessDeniedError(err: unknown): boolean {
   return matchesAny(extractErrorText(err), [
-    'accessdenied', 'forbidden', 'no permission'
+    'accessdenied', 'forbidden', 'no permission', 'nopermission'
   ]);
 }
 

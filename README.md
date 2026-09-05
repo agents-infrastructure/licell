@@ -670,13 +670,30 @@ licell e2e cleanup <runId>
 | `licell release promote [versionId]` | 发布并切流到目标别名 | `--region`, `--component`, `--target` |
 | `licell release prune` | 清理历史函数版本（默认仅预览） | `--region`, `--component`, `--keep` |
 | `licell release rollback <versionId>` | 回滚到指定函数版本 | `--region`, `--component`, `--target` |
+| `licell acr instances` | 列出 ACR 企业版实例（只读） | `--region`, `--status`, `--limit` |
+| `licell acr namespaces <instanceId>` | 列出 ACR 企业版命名空间（只读） | `--region`, `--name`, `--status` |
+| `licell acr repositories <instanceId>` | 列出 ACR 企业版镜像仓库（只读） | `--region`, `--namespace`, `--name` |
+| `licell acr tags <instanceId> <repositoryId>` | 列出 ACR 企业版镜像标签（只读） | `--region`, `--limit` |
+| `licell cert list` | 列出阿里云证书摘要（只读） | `--region`, `--keyword`, `--status` |
+| `licell cdn domains` | 列出 CDN 加速域名（只读） | `--region`, `--domain`, `--status` |
+| `licell logs index <project> <logstore>` | 查看 SLS logstore 索引（只读） | `--region` |
+| `licell logs logstores <project>` | 列出 SLS 项目下的 logstore（只读） | `--region`, `--name`, `--mode` |
+| `licell logs projects` | 列出 SLS 日志项目（只读） | `--region`, `--project`, `--resource-group` |
 | `licell logs query [query]` | 按 SLS project/logstore/query 一次性检索日志 | `--region`, `--project`, `--store` |
 | `licell logs tail [query]` | 按 SLS project/logstore/query 持续跟随日志流 | `--region`, `--project`, `--store` |
+| `licell fn aliases <name>` | 查看函数别名和版本路由（只读） | `--region`, `--limit`, `--prefix` |
+| `licell fn capacity [name]` | 查看函数并发、预留实例和伸缩配置（只读） | `--region`, `--limit` |
 | `licell fn info [name]` | 查看函数详情 | `--region`, `--component`, `--target` |
+| `licell fn instances <name>` | 查看函数执行实例（只读） | `--region`, `--qualifier`, `--status` |
 | `licell fn invoke [name]` | 调用函数（同步） | `--region`, `--component`, `--target` |
+| `licell fn layers` | 查看 FC 层列表（只读） | `--region`, `--limit`, `--prefix` |
 | `licell fn list` | 查看函数列表 | `--region`, `--limit`, `--prefix` |
 | `licell fn logs [name]` | 查看函数日志（默认实时流式） | `--region`, `--component`, `--once` |
 | `licell fn rm [name]` | 删除函数 | `--region`, `--component`, `--force` |
+| `licell fn sessions <name>` | 查看函数显式会话（只读） | `--region`, `--qualifier`, `--status` |
+| `licell fn tags [name]` | 查看函数资源标签（只读） | `--region`, `--tag`, `--limit` |
+| `licell fn triggers <name>` | 查看函数触发器（只读） | `--region`, `--limit`, `--prefix` |
+| `licell fn vpc-bindings <name>` | 查看函数绑定的 VPC（只读） | `--region` |
 | `licell fn domain bind <domain>` | 绑定或更新 FC 自定义域名（资源级，不默认改 DNS） | `--region`, `--function`, `--component` |
 | `licell fn domain info <domain>` | 查看 FC 自定义域名详情 | `--region` |
 | `licell fn domain list` | 查看 FC 自定义域名列表 | `--region`, `--limit`, `--prefix` |
@@ -716,21 +733,29 @@ licell e2e cleanup <runId>
 
 | 命令 | 说明 | 关键选项 |
 |------|------|----------|
+| `licell db accounts <instanceId>` | 查看 RDS 账号和数据库权限（只读） | `--region`, `--name`, `--limit` |
 | `licell db add` | 分配数据库实例 | `--region`, `--type`, `--engine-version` |
+| `licell db backups <instanceId>` | 查看 RDS 备份集和备份策略（只读） | `--region`, `--days`, `--status` |
 | `licell db class [type]` | 查询数据库可用规格（给 Agent/开发者在 db add 前对照） | `--region`, `--engine-version`, `--category` |
 | `licell db connect [instanceId]` | 输出数据库连接信息 | `--region` |
+| `licell db databases <instanceId>` | 查看 RDS 逻辑数据库和授权（只读） | `--region`, `--name`, `--status` |
 | `licell db info <instanceId>` | 查看数据库实例详情 | `--region` |
 | `licell db list` | 查看数据库实例列表 | `--region`, `--limit` |
+| `licell db parameters <instanceId>` | 查看 RDS 运行与待生效参数（只读） | `--region`, `--prefix`, `--limit` |
 | `licell db public-access [instanceId]` | 开通数据库公网访问并添加当前 IP 到白名单 | `--region`, `--ip` |
 | `licell db rm <instanceId>` | 删除数据库实例 | `--region`, `--yes` |
+| `licell cache accounts <instanceId>` | 查看 Redis/Tair 账号和权限（只读） | `--region`, `--name`, `--limit` |
 | `licell cache add` | 分配 Redis 缓存 | `--region`, `--type`, `--mode` |
+| `licell cache backups <instanceId>` | 查看 Redis/Tair 备份集和备份策略（只读） | `--region`, `--days`, `--limit` |
 | `licell cache class [mode]` | 查询缓存可用规格（给 Agent/开发者在 cache add 前对照） | `--region`, `--zone`, `--limit` |
 | `licell cache connect [instanceId]` | 输出缓存连接信息 | `--region` |
 | `licell cache info <instanceId>` | 查看缓存实例详情 | `--region` |
 | `licell cache list` | 查看缓存实例列表 | `--region`, `--limit` |
+| `licell cache parameters <instanceId>` | 查看 Redis/Tair 运行与待生效参数（只读） | `--region`, `--node`, `--prefix` |
 | `licell cache public-access [instanceId]` | 开通 Redis 公网访问并添加当前 IP 到白名单 | `--region`, `--ip` |
 | `licell cache rm <instanceId>` | 删除缓存实例 | `--region`, `--yes` |
 | `licell cache rotate-password` | 轮换 Redis 密码 | `--region`, `--instance` |
+| `licell cache topology <instanceId>` | 查看 Redis/Tair 集群节点拓扑（只读） | `--region`, `--limit` |
 | `licell supa add` | 创建 RDS Supabase 实例 | `--region`, `--name`, `--vsw` |
 | `licell supa config <instanceName>` | 查看 Supabase 实例配置（auth/storage/rag） | `--region`, `--set-auth`, `--set-storage` |
 | `licell supa connect <instanceName>` | 查看 Supabase 连接信息和 API Keys | `--region` |
@@ -762,6 +787,7 @@ licell e2e cleanup <runId>
 | `licell vpc info <vpc>` | 按 VPC ID 或唯一名称查看网络详情 | `--region` |
 | `licell vpc list` | 列出当前地域的 VPC 网络 | `--region`, `--name`, `--limit` |
 | `licell vpc topology <vpc>` | 聚合查看 VPC、交换机、路由表、NAT 网关和 EIP 拓扑 | `--region` |
+| `licell ram users` | 列出 RAM 用户（只读） | `--limit` |
 
 #### Automation & Tooling
 

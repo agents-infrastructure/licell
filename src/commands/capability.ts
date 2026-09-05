@@ -38,9 +38,10 @@ const PRODUCT_COMMAND_ROOTS: Record<string, string[]> = {
   redis: ['cache'],
   sls: ['logs'],
   alidns: ['dns', 'domain'],
-  cdn: ['domain'],
-  cr: ['deploy'],
-  ram: ['auth'],
+  cdn: ['cdn', 'domain'],
+  cr: ['acr', 'deploy'],
+  ram: ['ram', 'auth'],
+  cas: ['cert'],
   vpc: ['vpc', 'deploy', 'db', 'cache']
 };
 
@@ -57,6 +58,10 @@ function capabilityWords(value: string) {
       instances: 'instance',
       users: 'user',
       buckets: 'bucket',
+      repositories: 'repository',
+      namespaces: 'namespace',
+      tags: 'tag',
+      images: 'image',
       regions: 'region'
     }[word] || word))
     .filter(Boolean);

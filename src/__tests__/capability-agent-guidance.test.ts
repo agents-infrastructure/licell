@@ -70,6 +70,153 @@ describe('capability agent guidance', () => {
     expect(result.nextActions[0]?.commandTemplate).toBe('licell catalog --root-command k8s --output json');
   }, 20_000);
 
+  it('prefers the curated RAM users inventory for ListUsers', async () => {
+    const result = await enrichDescribeForAgent(describeAlicloudCapability('ram.ListUsers'));
+
+    expect(result.curatedCommandCandidates[0]?.key).toBe('ram users');
+    expect(result.curatedCommandCandidates[0]?.match).toBe('curated-overlay');
+    expect(result.execution).toMatchObject({
+      strategy: 'curated-command',
+      preferred: {
+        kind: 'curated-command',
+        commandKey: 'ram users',
+        helpCommand: 'licell ram users --help --output json'
+      },
+      fallback: { kind: 'raw-api' }
+    });
+  }, 20_000);
+
+  it('prefers the curated CAS certificate inventory for ListCert', async () => {
+    const result = await enrichDescribeForAgent(describeAlicloudCapability('cas.ListCert'));
+
+    expect(result.curatedCommandCandidates[0]?.key).toBe('cert list');
+    expect(result.execution).toMatchObject({
+      strategy: 'curated-command',
+      preferred: {
+        kind: 'curated-command',
+        commandKey: 'cert list',
+        helpCommand: 'licell cert list --help --output json'
+      },
+      fallback: { kind: 'raw-api' }
+    });
+  }, 20_000);
+
+  it('prefers the curated CDN domain inventory for DescribeUserDomains', async () => {
+    const result = await enrichDescribeForAgent(describeAlicloudCapability('cdn.DescribeUserDomains'));
+
+    expect(result.curatedCommandCandidates[0]?.key).toBe('cdn domains');
+    expect(result.execution).toMatchObject({
+      strategy: 'curated-command',
+      preferred: {
+        kind: 'curated-command',
+        commandKey: 'cdn domains',
+        helpCommand: 'licell cdn domains --help --output json'
+      },
+      fallback: { kind: 'raw-api' }
+    });
+  }, 20_000);
+
+  it('prefers the curated SLS project inventory for ListProject', async () => {
+    const result = await enrichDescribeForAgent(describeAlicloudCapability('sls.ListProject'));
+
+    expect(result.curatedCommandCandidates[0]?.key).toBe('logs projects');
+    expect(result.execution).toMatchObject({
+      strategy: 'curated-command',
+      preferred: {
+        kind: 'curated-command',
+        commandKey: 'logs projects',
+        helpCommand: 'licell logs projects --help --output json'
+      },
+      fallback: { kind: 'raw-api' }
+    });
+  }, 20_000);
+
+  it('prefers the curated SLS index command for GetIndex', async () => {
+    const result = await enrichDescribeForAgent(describeAlicloudCapability('sls.GetIndex'));
+    expect(result.execution.preferred).toMatchObject({ kind: 'curated-command', commandKey: 'logs index' });
+  });
+
+  it('prefers the curated FC aliases command for ListAliases', async () => {
+    const result = await enrichDescribeForAgent(describeAlicloudCapability('fc.ListAliases'));
+    expect(result.execution.preferred).toMatchObject({ kind: 'curated-command', commandKey: 'fn aliases' });
+  });
+
+  it('prefers the curated FC triggers command for ListTriggers', async () => {
+    const result = await enrichDescribeForAgent(describeAlicloudCapability('fc.ListTriggers'));
+    expect(result.execution.preferred).toMatchObject({ kind: 'curated-command', commandKey: 'fn triggers' });
+  });
+
+  it('prefers the curated FC layers command for ListLayers', async () => {
+    const result = await enrichDescribeForAgent(describeAlicloudCapability('fc.ListLayers'));
+    expect(result.execution.preferred).toMatchObject({ kind: 'curated-command', commandKey: 'fn layers' });
+  });
+
+  it.each(['ListConcurrencyConfigs', 'ListProvisionConfigs', 'ListScalingConfigs'])(
+    'prefers the curated FC capacity command for %s',
+    async (operation) => {
+      const result = await enrichDescribeForAgent(describeAlicloudCapability(`fc.${operation}`));
+      expect(result.execution.preferred).toMatchObject({ kind: 'curated-command', commandKey: 'fn capacity' });
+    }
+  );
+
+  it.each([
+    ['ListInstances', 'fn instances'],
+    ['ListSessions', 'fn sessions'],
+    ['ListVpcBindings', 'fn vpc-bindings'],
+    ['ListTagResources', 'fn tags']
+  ])('prefers the curated FC runtime inventory command for %s', async (operation, commandKey) => {
+    const result = await enrichDescribeForAgent(describeAlicloudCapability(`fc.${operation}`));
+    expect(result.execution.preferred).toMatchObject({ kind: 'curated-command', commandKey });
+  });
+
+  it.each([
+    ['DescribeBackups', 'db backups'],
+    ['DescribeBackupPolicy', 'db backups'],
+    ['DescribeParameters', 'db parameters'],
+    ['DescribeAccounts', 'db accounts'],
+    ['DescribeDatabases', 'db databases']
+  ])('prefers the curated RDS inventory command for %s', async (operation, commandKey) => {
+    const result = await enrichDescribeForAgent(describeAlicloudCapability(`rds.${operation}`));
+    expect(result.execution.preferred).toMatchObject({ kind: 'curated-command', commandKey });
+  });
+
+  it.each([
+    ['DescribeBackups', 'cache backups'],
+    ['DescribeBackupPolicy', 'cache backups'],
+    ['DescribeParameters', 'cache parameters'],
+    ['DescribeInstanceConfig', 'cache parameters'],
+    ['DescribeAccounts', 'cache accounts'],
+    ['DescribeClusterMemberInfo', 'cache topology']
+  ])('prefers the curated Redis/Tair inventory command for %s', async (operation, commandKey) => {
+    const result = await enrichDescribeForAgent(describeAlicloudCapability(`r-kvstore.${operation}`));
+    expect(result.execution.preferred).toMatchObject({ kind: 'curated-command', commandKey });
+  });
+
+  it.each([
+    ['ListInstance', 'acr instances'],
+    ['ListNamespace', 'acr namespaces'],
+    ['ListRepository', 'acr repositories'],
+    ['ListRepoTag', 'acr tags']
+  ])('prefers the curated ACR inventory command for %s', async (operation, commandKey) => {
+    const result = await enrichDescribeForAgent(describeAlicloudCapability(`cr.${operation}`));
+    expect(result.execution.preferred).toMatchObject({ kind: 'curated-command', commandKey });
+  });
+
+  it('prefers the curated SLS logstore inventory for ListLogStores', async () => {
+    const result = await enrichDescribeForAgent(describeAlicloudCapability('sls.ListLogStores'));
+
+    expect(result.curatedCommandCandidates[0]?.key).toBe('logs logstores');
+    expect(result.execution).toMatchObject({
+      strategy: 'curated-command',
+      preferred: {
+        kind: 'curated-command',
+        commandKey: 'logs logstores',
+        helpCommand: 'licell logs logstores --help --output json'
+      },
+      fallback: { kind: 'raw-api' }
+    });
+  }, 20_000);
+
   it('preserves curated overlay priority when one API maps to multiple commands', async () => {
     const result = await enrichDescribeForAgent(describeAlicloudCapability('rds.DescribeDBInstances'));
 

@@ -98,6 +98,9 @@ describe('alicloud-error unified error classification', () => {
     it('detects Forbidden', () => {
       expect(isAccessDeniedError(makeError('', 'Forbidden'))).toBe(true);
     });
+    it('detects NoPermission', () => {
+      expect(isAccessDeniedError(makeError('NoPermission', ''))).toBe(true);
+    });
   });
 
   describe('isAuthCredentialInvalidError', () => {

@@ -203,7 +203,10 @@ function buildRunnerArgs(
     ? resolveRestPath(capability.pathPattern, normalizedInput.byNormalizedName, normalizedInput.values)
     : null;
   const requestPath = resolvedPath?.requestPath || null;
-  const args = isRestful
+  // aliyun-cli rejects a generic `GET /` request as too broad. Root-resource
+  // REST APIs such as SLS ListProject are dispatched by operation name.
+  const isRootRestOperation = isRestful && capability.pathPattern === '/';
+  const args = isRestful && !isRootRestOperation
     ? [capability.product.directory, capability.method.split('|')[0] || 'GET', requestPath!]
     : [capability.product.directory, capability.operation];
   const parameterByName = new Map(capability.parameters.map((parameter) => [parameter.name, parameter]));
@@ -212,7 +215,6 @@ function buildRunnerArgs(
 
   for (const [name, value] of normalizedInput.values) {
     const parameter = parameterByName.get(name);
-    if (resolvedPath?.consumedParameters.has(name)) continue;
     if (normalizedParameterName(name) === 'regionid' && !normalizedInput.explicitNames.has(name)) continue;
     if (parameter?.position.toLowerCase() === 'body') {
       if (name.toLowerCase() === 'body') rawBody = value;

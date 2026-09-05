@@ -11,9 +11,9 @@ function regionOptions(commandKey: string) {
 }
 
 describe('regional command surface contract', () => {
-  it('derives all 94 invocation overrides from shared registry metadata', () => {
+  it('derives all 119 invocation overrides from shared registry metadata', () => {
     const regionalCommands = catalog.commands.filter((command) => command.region);
-    expect(regionalCommands).toHaveLength(94);
+    expect(regionalCommands).toHaveLength(119);
 
     for (const command of regionalCommands) {
       expect(regionOptions(command.key), command.key).toHaveLength(1);
@@ -28,9 +28,9 @@ describe('regional command surface contract', () => {
     }
   });
 
-  it('classifies all 99 region options as invocation override or explicit default configuration', () => {
+  it('classifies all 124 region options as invocation override or explicit default configuration', () => {
     const commandsWithRegionOption = catalog.commands.filter((command) => regionOptions(command.key).length > 0);
-    expect(commandsWithRegionOption).toHaveLength(99);
+    expect(commandsWithRegionOption).toHaveLength(124);
     expect(commandsWithRegionOption.every((command) => Boolean(command.region) !== Boolean(command.regionOptionMode))).toBe(true);
 
     expect(Object.fromEntries(
@@ -46,9 +46,9 @@ describe('regional command surface contract', () => {
     });
   });
 
-  it('requires all 127 registered commands to declare exactly one region classification', () => {
-    expect(catalog.commands).toHaveLength(127);
-    expect(catalog.commands.filter((command) => command.regionExclusion)).toHaveLength(28);
+  it('requires all 153 registered commands to declare exactly one region classification', () => {
+    expect(catalog.commands).toHaveLength(153);
+    expect(catalog.commands.filter((command) => command.regionExclusion)).toHaveLength(29);
 
     for (const command of catalog.commands) {
       expect([
@@ -65,7 +65,7 @@ describe('regional command surface contract', () => {
     const logsCommands = catalog.commands.filter((command) => command.rootCommand === 'logs');
     expect(ossCommands).toHaveLength(17);
     expect(ecsCommands).toHaveLength(7);
-    expect(logsCommands).toHaveLength(2);
+    expect(logsCommands).toHaveLength(5);
     expect([...ossCommands, ...ecsCommands, ...logsCommands].every((command) => command.region?.scope === 'auth')).toBe(true);
     expect(catalog.commandsByKey['db info']?.region).toEqual({
       scope: 'binding',
