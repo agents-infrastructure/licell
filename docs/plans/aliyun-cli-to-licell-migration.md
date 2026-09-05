@@ -132,7 +132,7 @@ API 级参考文件规则：
 
 ### 4.1 命令面
 
-`licell catalog --output json`（v1.0.9 开发树）返回：
+`licell catalog --output json`（v1.0.10）返回：
 
 - 40 个 root commands；
 - 156 个 concrete command entries；
