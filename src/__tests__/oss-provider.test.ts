@@ -11,6 +11,7 @@ const mockGetBucketAclWithOptions = vi.fn();
 const mockDeleteBucketLifecycleWithOptions = vi.fn();
 const mockDeleteBucketCorsWithOptions = vi.fn();
 const mockDeleteBucketEncryptionWithOptions = vi.fn();
+const mockDeleteBucketWebsiteWithOptions = vi.fn();
 const mockPutObjectWithOptions = vi.fn();
 const mockHeadObjectWithOptions = vi.fn();
 const mockExecute = vi.fn();
@@ -48,6 +49,7 @@ vi.mock('@alicloud/oss20190517', () => ({
     deleteBucketLifecycleWithOptions = mockDeleteBucketLifecycleWithOptions;
     deleteBucketCorsWithOptions = mockDeleteBucketCorsWithOptions;
     deleteBucketEncryptionWithOptions = mockDeleteBucketEncryptionWithOptions;
+    deleteBucketWebsiteWithOptions = mockDeleteBucketWebsiteWithOptions;
     putObjectWithOptions = mockPutObjectWithOptions;
     headObjectWithOptions = mockHeadObjectWithOptions;
     execute = mockExecute;
@@ -140,6 +142,15 @@ vi.mock('@alicloud/oss20190517', () => ({
   ServerSideEncryptionRule: class ServerSideEncryptionRule {
     constructor(input: unknown) { Object.assign(this, input); }
   },
+  WebsiteConfiguration: class WebsiteConfiguration {
+    constructor(input: unknown) { Object.assign(this, input); }
+  },
+  IndexDocument: class IndexDocument {
+    constructor(input: unknown) { Object.assign(this, input); }
+  },
+  ErrorDocument: class ErrorDocument {
+    constructor(input: unknown) { Object.assign(this, input); }
+  },
   Tag: class Tag {
     constructor(input: unknown) { Object.assign(this, input); }
   }
@@ -203,6 +214,7 @@ describe('createOssBucket', () => {
     mockDeleteBucketLifecycleWithOptions.mockReset();
     mockDeleteBucketCorsWithOptions.mockReset();
     mockDeleteBucketEncryptionWithOptions.mockReset();
+    mockDeleteBucketWebsiteWithOptions.mockReset();
     mockPutObjectWithOptions.mockReset();
     mockHeadObjectWithOptions.mockReset();
     mockExecute.mockReset();
@@ -226,6 +238,7 @@ describe('createOssBucket', () => {
     mockDeleteBucketLifecycleWithOptions.mockResolvedValue({});
     mockDeleteBucketCorsWithOptions.mockResolvedValue({});
     mockDeleteBucketEncryptionWithOptions.mockResolvedValue({});
+    mockDeleteBucketWebsiteWithOptions.mockResolvedValue({});
     mockPutObjectWithOptions.mockResolvedValue({ headers: { etag: '"etag-demo"' } });
     mockHeadObjectWithOptions.mockResolvedValue({ headers: { etag: '"verified-etag"' } });
     mockExecute.mockImplementation(async (params: { action?: string }) => {
@@ -237,6 +250,9 @@ describe('createOssBucket', () => {
       }
       if (params.action === 'GetBucketEncryption') {
         return { body: { ServerSideEncryptionRule: {} } };
+      }
+      if (params.action === 'GetBucketWebsite') {
+        throw Object.assign(new Error('missing'), { code: 'NoSuchWebsiteConfiguration' });
       }
       return { body: {} };
     });
@@ -277,7 +293,7 @@ describe('createOssBucket', () => {
     }));
   });
 
-  it('projects lifecycle, CORS and encryption into the safe bucket config contract', async () => {
+  it('projects lifecycle, CORS, encryption and website into the safe bucket config contract', async () => {
     const { inspectOssBucketConfig } = await import('../providers/oss');
     mockExecute.mockImplementation(async (params: { action?: string }) => {
       if (params.action === 'GetBucketLifecycle') return { body: {
@@ -311,6 +327,14 @@ describe('createOssBucket', () => {
           KMSDataEncryption: 'SM4',
           InternalField: 'must-not-leak'
         } }
+      } };
+      if (params.action === 'GetBucketWebsite') return { body: {
+        WebsiteConfiguration: {
+          IndexDocument: { Suffix: 'index.html', SupportSubDir: false, Type: '1' },
+          ErrorDocument: { Key: 'index.html', HttpStatus: '200' },
+          RoutingRules: { RoutingRule: [{ RuleNumber: 1 }] },
+          InternalField: 'must-not-leak'
+        }
       } };
       return { body: {} };
     });
@@ -366,6 +390,12 @@ describe('createOssBucket', () => {
         algorithm: 'KMS',
         kmsMasterKeyId: 'kms-key-id',
         kmsDataEncryption: 'SM4'
+      },
+      website: {
+        configured: true,
+        indexDocument: { suffix: 'index.html', supportSubDir: false, type: 1 },
+        errorDocument: { key: 'index.html', httpStatus: 200 },
+        routingRuleCount: 1
       }
     });
   });
@@ -377,6 +407,9 @@ describe('createOssBucket', () => {
       if (params.action === 'GetBucketCors') throw Object.assign(new Error('missing'), { data: { Code: 'NoSuchCORSConfiguration' } });
       if (params.action === 'GetBucketEncryption') {
         throw Object.assign(new Error('missing'), { code: 'NoSuchServerSideEncryptionRule' });
+      }
+      if (params.action === 'GetBucketWebsite') {
+        throw Object.assign(new Error('missing'), { code: 'NoSuchWebsiteConfiguration' });
       }
       return { body: {} };
     });
@@ -390,6 +423,12 @@ describe('createOssBucket', () => {
       algorithm: undefined,
       kmsMasterKeyId: undefined,
       kmsDataEncryption: undefined
+    });
+    expect(result.website).toEqual({
+      configured: false,
+      indexDocument: undefined,
+      errorDocument: undefined,
+      routingRuleCount: 0
     });
   });
 
@@ -413,6 +452,155 @@ describe('createOssBucket', () => {
       .toThrow(/未知字段: encrypton/);
     expect(() => normalizeOssBucketConfigDesiredState({ lifecycle: { rules: [] } }))
       .toThrow(/数量必须在 1-1000/);
+    expect(normalizeOssBucketConfigDesiredState({
+      website: {
+        indexDocument: { suffix: 'index.html', supportSubDir: false, type: '1' },
+        errorDocument: { key: 'index.html', httpStatus: '200' }
+      }
+    })).toEqual({
+      website: {
+        indexDocument: { suffix: 'index.html', supportSubDir: false, type: 1 },
+        errorDocument: { key: 'index.html', httpStatus: 200 }
+      }
+    });
+    expect(() => normalizeOssBucketConfigDesiredState({ website: {} }))
+      .toThrow(/至少需要 indexDocument 或 errorDocument/);
+    expect(() => normalizeOssBucketConfigDesiredState({ website: { errorDocument: { key: 'index.html', httpStatus: 500 } } }))
+      .toThrow(/仅支持 200 \/ 404/);
+  });
+
+  it('applies SPA website fallback through XML and verifies the desired state after an empty-response parser error', async () => {
+    const { applyOssBucketConfig } = await import('../providers/oss');
+    let websiteReadCount = 0;
+    mockExecute.mockImplementation(async (params: { action?: string }) => {
+      if (params.action === 'GetBucketWebsite') {
+        websiteReadCount += 1;
+        if (websiteReadCount === 1) {
+          throw Object.assign(new Error('missing'), { code: 'NoSuchWebsiteConfiguration' });
+        }
+        return { body: { WebsiteConfiguration: {
+          IndexDocument: { Suffix: 'index.html', SupportSubDir: false },
+          ErrorDocument: { Key: 'index.html', HttpStatus: '200' }
+        } } };
+      }
+      if (params.action === 'PutBucketWebsite') {
+        throw new Error('not a valid value for parameter response');
+      }
+      if (params.action === 'GetBucketLifecycle') throw Object.assign(new Error('missing'), { code: 'NoSuchLifecycle' });
+      if (params.action === 'GetBucketCors') throw Object.assign(new Error('missing'), { code: 'NoSuchCORSConfiguration' });
+      if (params.action === 'GetBucketEncryption') {
+        throw Object.assign(new Error('missing'), { code: 'NoSuchServerSideEncryptionRule' });
+      }
+      return { body: {} };
+    });
+
+    const desired = {
+      website: {
+        indexDocument: { suffix: 'index.html', supportSubDir: false },
+        errorDocument: { key: 'index.html', httpStatus: 200 }
+      }
+    };
+    const result = await applyOssBucketConfig('demo-bucket', desired);
+
+    expect(mockExecute).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'PutBucketWebsite', pathname: '/?website', method: 'PUT' }),
+      expect.objectContaining({
+        body: {
+          WebsiteConfiguration: expect.objectContaining({
+            indexDocument: expect.objectContaining({ suffix: 'index.html', supportSubDir: false }),
+            errorDocument: expect.objectContaining({ key: 'index.html', httpStatus: '200' })
+          })
+        }
+      }),
+      expect.anything()
+    );
+    expect(result).toMatchObject({
+      plan: { changeCount: 1, willExecute: true },
+      execution: { appliedSections: ['website'] },
+      verify: {
+        matched: true,
+        config: { website: { configured: true, routingRuleCount: 0 } }
+      }
+    });
+  });
+
+  it('deletes website configuration when desired state is null', async () => {
+    const { applyOssBucketConfig } = await import('../providers/oss');
+    let websiteReadCount = 0;
+    mockExecute.mockImplementation(async (params: { action?: string }) => {
+      if (params.action === 'GetBucketWebsite') {
+        websiteReadCount += 1;
+        if (websiteReadCount === 1) {
+          return { body: { WebsiteConfiguration: { IndexDocument: { Suffix: 'index.html' } } } };
+        }
+        throw Object.assign(new Error('missing'), { code: 'NoSuchWebsiteConfiguration' });
+      }
+      if (params.action === 'GetBucketLifecycle') throw Object.assign(new Error('missing'), { code: 'NoSuchLifecycle' });
+      if (params.action === 'GetBucketCors') throw Object.assign(new Error('missing'), { code: 'NoSuchCORSConfiguration' });
+      if (params.action === 'GetBucketEncryption') {
+        throw Object.assign(new Error('missing'), { code: 'NoSuchServerSideEncryptionRule' });
+      }
+      return { body: {} };
+    });
+
+    const result = await applyOssBucketConfig('demo-bucket', { website: null });
+
+    expect(mockDeleteBucketWebsiteWithOptions).toHaveBeenCalledWith('demo-bucket', {}, expect.anything());
+    expect(result.execution.appliedSections).toEqual(['website']);
+    expect(result.verify.config.website.configured).toBe(false);
+  });
+
+  it('does not write website configuration when the desired state already matches', async () => {
+    const { applyOssBucketConfig } = await import('../providers/oss');
+    mockExecute.mockImplementation(async (params: { action?: string }) => {
+      if (params.action === 'GetBucketWebsite') return { body: { WebsiteConfiguration: {
+        IndexDocument: { Suffix: 'index.html', SupportSubDir: false, Type: '0' },
+        ErrorDocument: { Key: 'index.html', HttpStatus: '200' }
+      } } };
+      if (params.action === 'GetBucketLifecycle') throw Object.assign(new Error('missing'), { code: 'NoSuchLifecycle' });
+      if (params.action === 'GetBucketCors') throw Object.assign(new Error('missing'), { code: 'NoSuchCORSConfiguration' });
+      if (params.action === 'GetBucketEncryption') {
+        throw Object.assign(new Error('missing'), { code: 'NoSuchServerSideEncryptionRule' });
+      }
+      return { body: {} };
+    });
+
+    const result = await applyOssBucketConfig('demo-bucket', {
+      website: {
+        indexDocument: { suffix: 'index.html' },
+        errorDocument: { key: 'index.html', httpStatus: 200 }
+      }
+    });
+
+    expect(result.plan).toMatchObject({ changeCount: 0, willExecute: false });
+    expect(result.execution.appliedSections).toEqual([]);
+    expect(mockExecute.mock.calls.some(([params]) => params?.action === 'PutBucketWebsite')).toBe(false);
+    expect(mockDeleteBucketWebsiteWithOptions).not.toHaveBeenCalled();
+  });
+
+  it('restores the original website snapshot when read-back verification fails', async () => {
+    const { applyOssBucketConfig } = await import('../providers/oss');
+    mockExecute.mockImplementation(async (params: { action?: string }) => {
+      if (params.action === 'GetBucketWebsite') return { body: { WebsiteConfiguration: {
+        IndexDocument: { Suffix: 'old.html', SupportSubDir: false, Type: '0' }
+      } } };
+      if (params.action === 'GetBucketLifecycle') throw Object.assign(new Error('missing'), { code: 'NoSuchLifecycle' });
+      if (params.action === 'GetBucketCors') throw Object.assign(new Error('missing'), { code: 'NoSuchCORSConfiguration' });
+      if (params.action === 'GetBucketEncryption') {
+        throw Object.assign(new Error('missing'), { code: 'NoSuchServerSideEncryptionRule' });
+      }
+      return { body: {} };
+    });
+
+    await expect(applyOssBucketConfig('demo-bucket', {
+      website: { indexDocument: { suffix: 'index.html' } }
+    })).rejects.toThrow(/已回滚 1 个已变更配置/);
+
+    const websiteWrites = mockExecute.mock.calls.filter(([params]) => params?.action === 'PutBucketWebsite');
+    expect(websiteWrites).toHaveLength(2);
+    expect(websiteWrites[1]?.[1]).toMatchObject({
+      body: { WebsiteConfiguration: { IndexDocument: { Suffix: 'old.html' } } }
+    });
   });
 
   it('plans a config change without calling mutation APIs', async () => {

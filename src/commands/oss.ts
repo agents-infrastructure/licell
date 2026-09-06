@@ -92,6 +92,15 @@ function printBucketConfig(config: Awaited<ReturnType<typeof inspectOssBucketCon
     console.log(`            origins=${pc.cyan(rule.allowedOrigins.join(',') || '-')}  methods=${pc.gray(rule.allowedMethods.join(',') || '-')}`);
   }
   console.log(`encryption: ${config.encryption.configured ? pc.cyan(config.encryption.algorithm || 'configured') : pc.gray('not configured')}`);
+  if (config.website.configured) {
+    const index = config.website.indexDocument?.suffix || '-';
+    const error = config.website.errorDocument
+      ? `${config.website.errorDocument.key} (${config.website.errorDocument.httpStatus})`
+      : '-';
+    console.log(`website:    ${pc.cyan(`index=${index}  error=${error}  routingRules=${config.website.routingRuleCount}`)}`);
+  } else {
+    console.log(`website:    ${pc.gray('not configured')}`);
+  }
 }
 
 function printBucketConfigPlan(plan: Awaited<ReturnType<typeof planOssBucketConfig>>) {
@@ -178,12 +187,12 @@ const ossInfoCommand = defineCliCommand({
 
 const ossConfigCommand = defineCliCommand({
   rawName: 'oss config <bucket>',
-  description: '查看 OSS Bucket 生命周期、CORS 和服务端加密配置（只读）',
+  description: '查看 OSS Bucket 生命周期、CORS、服务端加密和静态网站配置（只读）',
   region: { scope: 'auth' },
   options: [ossRegionOption],
   descriptor: {
     title: 'Inspect OSS Bucket advanced configuration',
-    summary: '一次读取 Bucket 生命周期、跨域访问和服务端加密配置，并区分未配置与查询失败。',
+    summary: '一次读取 Bucket 生命周期、跨域访问、服务端加密和静态网站配置，并区分未配置与查询失败。',
     examples: [
       'licell oss config my-bucket --output json',
       'licell oss config my-bucket --region cn-hangzhou --output json'
@@ -194,7 +203,7 @@ const ossConfigCommand = defineCliCommand({
     related: ['oss list', 'oss info', 'capability search'],
     agentTips: [
       '`configured=false` 表示 OSS 明确返回该配置不存在；权限不足、Bucket 不存在和网络错误会让命令失败，不会伪装成空配置。',
-      '先用 `oss info` 查看 ACL 和公共访问阻止，再用本命令检查生命周期、CORS 和默认加密。'
+      '先用 `oss info` 查看 ACL 和公共访问阻止，再用本命令检查生命周期、CORS、默认加密和静态网站托管。'
     ],
     automation: {
       preferredOutput: 'json',
@@ -202,7 +211,7 @@ const ossConfigCommand = defineCliCommand({
     },
     safety: {
       level: 'safe',
-      reason: '只调用 OSS GetBucketLifecycle、GetBucketCors 和 GetBucketEncryption。',
+      reason: '只调用 OSS GetBucketLifecycle、GetBucketCors、GetBucketEncryption 和 GetBucketWebsite。',
       confirmFlags: []
     },
     result: {
@@ -211,7 +220,8 @@ const ossConfigCommand = defineCliCommand({
         { name: 'regionId', description: '实际查询地域。', required: true },
         { name: 'lifecycle', description: '生命周期配置状态、规则数量与规则摘要。', required: true },
         { name: 'cors', description: 'CORS 配置状态、ResponseVary 与规则摘要。', required: true },
-        { name: 'encryption', description: '服务端加密状态、算法与 KMS 配置摘要。', required: true }
+        { name: 'encryption', description: '服务端加密状态、算法与 KMS 配置摘要。', required: true },
+        { name: 'website', description: '静态网站状态、默认首页、错误页和 routing rule 数量。', required: true }
       ]
     }
   }
@@ -230,10 +240,11 @@ const ossConfigApplyCommand = defineCliCommand({
   ],
   descriptor: {
     title: 'Apply OSS Bucket advanced configuration',
-    summary: '用一个 desired-state 计划、应用并验证生命周期、CORS 和服务端加密配置。',
+    summary: '用一个 desired-state 计划、应用并验证生命周期、CORS、服务端加密和静态网站配置。',
     examples: [
       `licell oss config apply my-bucket --payload '{"encryption":{"algorithm":"AES256"}}' --dry-run --output json`,
       `licell oss config apply my-bucket --payload '{"encryption":{"algorithm":"AES256"}}' --yes --output json`,
+      `licell oss config apply my-bucket --payload '{"website":{"indexDocument":{"suffix":"index.html","supportSubDir":false},"errorDocument":{"key":"index.html","httpStatus":200}}}' --dry-run --output json`,
       'licell oss config apply my-bucket --file ./oss-config.json --dry-run --output json'
     ],
     argumentHints: {
@@ -241,7 +252,9 @@ const ossConfigApplyCommand = defineCliCommand({
     },
     related: ['oss config', 'oss info'],
     agentTips: [
-      'desired-state 顶层支持 lifecycle、cors、encryption；字段缺失表示保持不变，对应值为 null 表示删除该配置，对象表示完整替换。',
+      'desired-state 顶层支持 lifecycle、cors、encryption、website；字段缺失表示保持不变，对应值为 null 表示删除该配置，对象表示完整替换。',
+      'website 格式为 {indexDocument?:{suffix,supportSubDir?,type?:0|1|2},errorDocument?:{key,httpStatus?:200|404}}；SPA fallback 可把 indexDocument.suffix 和 errorDocument.key 都设为 index.html，并将 httpStatus 设为 200。',
+      'website 对象会完整替换现有静态网站配置，目前不接受 routingRules；执行前检查 changes[].before.routingRuleCount，避免误删已有跳转或回源规则。',
       'lifecycle 格式为 {rules:[{id,status,prefix,expiration:{days},transitions:[]}]}; cors 格式为 {responseVary,rules:[{allowedOrigins,allowedMethods,allowedHeaders,exposeHeaders,maxAgeSeconds}]}; encryption 格式为 {algorithm:AES256|KMS,kmsMasterKeyId?,kmsDataEncryption?:SM4}。',
       'Agent 必须先执行 --dry-run 检查 changes[].before/after；实际执行使用同一 payload 加 --yes，命令会读回验证并在部分失败时回滚已写入 section。'
     ],
@@ -251,7 +264,7 @@ const ossConfigApplyCommand = defineCliCommand({
     },
     safety: {
       level: 'mutating',
-      reason: '会完整替换或删除 OSS Bucket 生命周期、CORS、服务端加密配置；必须先 dry-run，并用 --yes 确认。',
+      reason: '会完整替换或删除 OSS Bucket 生命周期、CORS、服务端加密、静态网站配置；必须先 dry-run，并用 --yes 确认。',
       confirmFlags: ['--yes']
     },
     optionInsights: {
@@ -657,7 +670,7 @@ export function registerOssCommands(cli: CAC) {
         {
           commandLabel: commandInvocation(ossConfigCommand),
           interactiveTTY: isInteractiveTTY(),
-          requiredCapabilities: ['oss']
+          requiredCapabilities: ['oss-config-read']
         },
         async () => {
           ensureAuthOrExit();
@@ -685,11 +698,12 @@ export function registerOssCommands(cli: CAC) {
 
   registerCliCommand(cli, ossConfigApplyCommand)
     .action(async (bucket: string, options: { region?: unknown; payload?: unknown; file?: unknown; dryRun?: unknown; yes?: unknown }) => {
+      const dryRun = Boolean(options.dryRun);
       await executeWithAuthRecovery(
         {
           commandLabel: commandInvocation(ossConfigApplyCommand),
           interactiveTTY: isInteractiveTTY(),
-          requiredCapabilities: ['oss']
+          requiredCapabilities: [dryRun ? 'oss-config-read' : 'oss-config-write']
         },
         async () => {
           ensureAuthOrExit();
@@ -703,7 +717,6 @@ export function registerOssCommands(cli: CAC) {
             throw new Error('OSS config desired-state 不是有效 JSON');
           }
           const regionOptions = toOssRegionOptions(options.region);
-          const dryRun = Boolean(options.dryRun);
           const s = createSpinner();
           if (dryRun) {
             const plan = await withSpinner(
@@ -1398,7 +1411,7 @@ export const ossCommandModule = defineCommandModule({
       notes: [
         '`deploy static` 的生产域名默认走 CDN(sourceType=oss) + DNS；这里补充的是 OSS Bucket 原生管理能力。',
         '首次绑定 OSS 原生域名前，通常先执行 `licell oss domain token`，再添加 TXT 验证记录。',
-        '`oss config` 会并行读取生命周期、CORS 和服务端加密配置；未配置与无权限会被明确区分。',
+        '`oss config` 会并行读取生命周期、CORS、服务端加密和静态网站配置；未配置与无权限会被明确区分。',
         '`oss config apply` 使用 desired-state 完整替换选中的配置 section；必须先 dry-run，再显式确认。',
         '所有 OSS 子命令都支持 `--region <regionId>` 覆盖当前调用的地域；未传时使用 licell 默认 region，且覆盖不会写回全局配置。'
       ],
@@ -1408,6 +1421,7 @@ export const ossCommandModule = defineCommandModule({
         'licell oss info my-bucket',
         'licell oss config my-bucket --output json',
         `licell oss config apply my-bucket --payload '{"encryption":{"algorithm":"AES256"}}' --dry-run --output json`,
+        `licell oss config apply my-bucket --payload '{"website":{"indexDocument":{"suffix":"index.html"},"errorDocument":{"key":"index.html","httpStatus":200}}}' --dry-run --output json`,
         'licell oss object info my-bucket site/index.html',
         'licell oss object get my-bucket site/index.html ./index.html --region cn-hangzhou',
         'licell oss sync down my-bucket site --dest-dir ./downloads/site'
@@ -1420,7 +1434,7 @@ export const ossCommandModule = defineCommandModule({
         { title: '先看现状', command: 'licell oss list --output json', reason: '先拿到当前账号下的 Bucket 清单。' },
         { title: '创建 Bucket', command: 'licell oss create <bucket>', reason: '按需指定 ACL、存储类型、冗余类型。' },
         { title: '检查基础配置', command: 'licell oss info <bucket> --output json', reason: '确认 ACL、公共访问阻止与已绑定域名。' },
-        { title: '检查高级配置', command: 'licell oss config <bucket> --output json', reason: '确认生命周期、CORS 与默认服务端加密。' },
+        { title: '检查高级配置', command: 'licell oss config <bucket> --output json', reason: '确认生命周期、CORS、默认服务端加密与静态网站托管。' },
         { title: '规划高级配置变更', command: 'licell oss config apply <bucket> --file <path> --dry-run --output json', reason: '执行前检查完整 desired-state 差异。' },
         { title: '上传内容', command: 'licell oss sync up <bucket> --source-dir dist', reason: '把本地构建产物上传到 Bucket。' },
         { title: '下载验证', command: 'licell oss object info <bucket> <key> --output json', reason: '确认对象元数据，必要时再执行下载。' }

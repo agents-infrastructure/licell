@@ -402,6 +402,8 @@ Agent 主路径是 `catalog -> curated help/execute`；没有领域命令时进�
 
 已完成：新增 `oss config apply <bucket>` desired-state workflow。省略的 section 保持不变，object 完整替换，`null` 删除；支持 `--payload/--file`、`--dry-run` 和 `--yes`，应用后统一读回验证，任一 section 失败会按变更逆序恢复原始 XML 快照。真实账号在杭州 Bucket `licell-auth-1494910986361453-cn-hangzhou-5e2053` 已分别及组合验证 lifecycle、CORS、AES256 加密的写入、读取与删除，最终三项均恢复为未配置。
 
+已扩展：`oss config` 与 `oss config apply` 增加 `website` section，覆盖 `GetBucketWebsite`、`PutBucketWebsite` 和 `DeleteBucketWebsite`。支持默认首页、子目录首页策略、索引匹配类型、错误页和 `200/404` 响应码；SPA fallback 可将 index/error 都指向 `index.html` 并返回 200。Website 写入复用 XML 空响应兼容、no-op、dry-run、确认、读回验证与原始 XML 回滚链路；inspection 同时暴露 `routingRuleCount`，帮助 Agent 在完整替换前识别已有跳转或回源规则。RAM/auth recovery 已拆分 `oss-config-read` 与 `oss-config-write` 最小权限，Skill 明确禁止在 Licell-only 请求中通过读取凭证或临时 SDK 脚本绕过能力边界。
+
 #### v1.0.11：VPC config apply 与 RDS restore plan（已发布）
 
 已实现：新增 `vpc config apply <vpc>`，只管理可逆且低耦合的 `name` 与 `description`。命令支持 `--payload/--file`、强制先 `--dry-run` 的 Agent 流程、`--yes` 确认、字段级 set/clear/noop 计划和写后 `DescribeVpcs` 读回验证；CIDR、IPv6、路由、交换机和网关明确不在该 workflow 范围。

@@ -7,12 +7,14 @@ import { Config, DEFAULT_ALI_REGION, type AuthConfig } from './config';
 import { readEnvWithFallback } from './env';
 
 export type AuthIssueKind = 'missing_auth' | 'access_denied' | 'invalid_credentials' | 'unknown';
-export type AuthCapability = 'fc' | 'dns' | 'oss' | 'rds' | 'rds-config-read' | 'rdsai' | 'redis' | 'redis-backup-read' | 'redis-backup-write' | 'cdn' | 'vpc' | 'vpc-read' | 'vpc-write' | 'cr' | 'logs' | 'ecs';
+export type AuthCapability = 'fc' | 'dns' | 'oss' | 'oss-config-read' | 'oss-config-write' | 'rds' | 'rds-config-read' | 'rdsai' | 'redis' | 'redis-backup-read' | 'redis-backup-write' | 'cdn' | 'vpc' | 'vpc-read' | 'vpc-write' | 'cr' | 'logs' | 'ecs';
 
 export const AUTH_CAPABILITY_LABELS: Record<AuthCapability, string> = {
   fc: '函数计算',
   dns: '云解析 DNS',
   oss: 'OSS',
+  'oss-config-read': 'OSS 高级配置读取',
+  'oss-config-write': 'OSS 高级配置修改',
   rds: 'RDS',
   'rds-config-read': 'RDS 配置读取',
   rdsai: 'RDS AI (Supabase)',
@@ -49,6 +51,26 @@ const CAPABILITY_ACTIONS: Record<AuthCapability, string[]> = {
     'oss:CreateCnameToken',
     'oss:PutCname',
     'oss:DeleteCname'
+  ],
+  'oss-config-read': [
+    'oss:GetBucketLifecycle',
+    'oss:GetBucketCors',
+    'oss:GetBucketEncryption',
+    'oss:GetBucketWebsite'
+  ],
+  'oss-config-write': [
+    'oss:GetBucketLifecycle',
+    'oss:PutBucketLifecycle',
+    'oss:DeleteBucketLifecycle',
+    'oss:GetBucketCors',
+    'oss:PutBucketCors',
+    'oss:DeleteBucketCors',
+    'oss:GetBucketEncryption',
+    'oss:PutBucketEncryption',
+    'oss:DeleteBucketEncryption',
+    'oss:GetBucketWebsite',
+    'oss:PutBucketWebsite',
+    'oss:DeleteBucketWebsite'
   ],
   rds: [
     'rds:DescribeDBInstances',

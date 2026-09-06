@@ -1,8 +1,8 @@
 ---
 name: licell
 description: >-
-  Deploy and manage Alibaba Cloud Serverless applications using the licell CLI.
-  Covers deploy, release, functions, env vars, domains, DNS, logs, OSS, database, cache, Supabase, and ECS queries and lifecycle operations.
+  Query and manage Alibaba Cloud through curated workflows and all protocol-covered Alibaba Cloud APIs.
+  Routes natural-language intent through catalog/help first, then capability discovery and API invoke fallback.
 metadata:
   author: licell
   version: "1.0"
@@ -30,6 +30,8 @@ Use the `licell` CLI as a structured deployment and operations tool for Alibaba 
 - Verify `kind` before trusting a record shape, and then verify `schemaVersion`.
 - Do not scrape plain-text terminal output when `--output json` is available.
 - Do not assume one command's result shape applies to another; read the command's help contract first.
+- If the user requires Licell-only execution and both curated commands and protocol capabilities are missing, report the capability gap. Do not inspect Licell package internals or credential files, and do not write ad hoc SDK scripts to bypass Licell.
+- Never parse or pass `cs.DescribeClusterUserKubeconfig` output to an Agent or `kubectl`; `[REDACTED]` is an intentional security boundary. Use a curated `k8s` command, and report a capability gap when no safe command exists.
 
 ## Preconditions
 
@@ -47,12 +49,24 @@ licell <command> --output json
 
 Use the first command for discovery, the second for contract lookup, and the third for execution.
 
+## Natural-Language Intent Routing
+
+- The Agent owns natural-language understanding. Extract the service/product, action, resource, region, identifiers, and constraints; do not treat the full user sentence as CLI syntax.
+- Always inspect `licell catalog --output json` first. When a curated command covers the outcome, inspect its help contract and execute it.
+- If no curated command covers the outcome, run `licell capability products <service> --output json`, then `licell capability search --product <code> --intent "<action resource>" --action <action> --output json`.
+- Keep capability search input concise. Use `inspect|create|update|delete|execute` for `--action` and use the resource name for `--intent`.
+- Describe the selected candidate with `licell capability describe <ref> --output json`. Follow `execution.preferred`; do not infer execution from prose or API names.
+- Do not conclude that Licell cannot handle an Alibaba Cloud request until both the curated catalog and the matching raw protocol capability space have been searched.
+- Raw reads may execute after required inputs are resolved; raw write operations require `--dry-run` review and explicit `--yes`.
+- After a mutation, follow `nextActions[]` and perform a read-back verification before reporting success.
+
 ## Schema Contracts
 
 - Raw CLI JSON output is emitted line-by-line with the `@@LICELL_JSON@@` prefix. Each record currently conforms to `licell-cli-record@1.0`, then branches by `type=event|result|error`.
 - For `licell <command> --help --output json`, read `help.kind` and `help.schemaVersion`; the current contract is `licell-help@1.0`.
 - For `licell catalog --output json`, read `kind` and `schemaVersion`; the current catalog contract is `licell-agent-command-catalog@1.0`.
 - `licell catalog --output json` also declares the help schema and CLI record schema explicitly: `licell-help@1.0` / `licell-cli-record@1.0`.
+- Read `catalog.agentWorkflow` for the curated-first natural-language routing contract. Only conclude a request is unsupported after curated command discovery and raw capability search both fail.
 - Agents should prefer `nextActions[]` as the stable next-step surface; `recommendedFlow`, `decisionGuide`, and `remediation[]` are supporting guidance layers.
 - For command-specific business payloads, keep reading the command help/catalog `result` descriptor; the three sections below only describe the shared CLI record envelope.
 

@@ -90,6 +90,19 @@ export interface OssBucketConfigInspection {
     kmsMasterKeyId?: string;
     kmsDataEncryption?: string;
   };
+  website: {
+    configured: boolean;
+    indexDocument?: {
+      suffix: string;
+      supportSubDir: boolean;
+      type: 0 | 1 | 2;
+    };
+    errorDocument?: {
+      key: string;
+      httpStatus: 200 | 404;
+    };
+    routingRuleCount: number;
+  };
 }
 
 export interface OssBucketConfigDesiredState {
@@ -109,13 +122,24 @@ export interface OssBucketConfigDesiredState {
     kmsMasterKeyId?: string;
     kmsDataEncryption?: 'SM4';
   } | null;
+  website?: {
+    indexDocument?: {
+      suffix: string;
+      supportSubDir: boolean;
+      type: 0 | 1 | 2;
+    };
+    errorDocument?: {
+      key: string;
+      httpStatus: 200 | 404;
+    };
+  } | null;
 }
 
 export interface OssBucketConfigChange {
-  section: 'lifecycle' | 'cors' | 'encryption';
+  section: 'lifecycle' | 'cors' | 'encryption' | 'website';
   action: 'set' | 'delete' | 'noop';
-  before: OssBucketConfigInspection['lifecycle' | 'cors' | 'encryption'];
-  after: OssBucketConfigInspection['lifecycle' | 'cors' | 'encryption'];
+  before: OssBucketConfigInspection['lifecycle' | 'cors' | 'encryption' | 'website'];
+  after: OssBucketConfigInspection['lifecycle' | 'cors' | 'encryption' | 'website'];
 }
 
 export interface OssBucketConfigPlan {
@@ -132,7 +156,7 @@ export interface OssBucketConfigPlan {
 export interface OssBucketConfigApplyResult {
   plan: OssBucketConfigPlan;
   execution: {
-    appliedSections: Array<'lifecycle' | 'cors' | 'encryption'>;
+    appliedSections: Array<'lifecycle' | 'cors' | 'encryption' | 'website'>;
   };
   verify: {
     performed: true;
@@ -1557,7 +1581,7 @@ export async function getOssBucketInfo(bucketName: string, options: OssRegionOpt
   };
 }
 
-const OSS_CONFIG_SECTIONS = ['lifecycle', 'cors', 'encryption'] as const;
+const OSS_CONFIG_SECTIONS = ['lifecycle', 'cors', 'encryption', 'website'] as const;
 type OssBucketConfigSection = typeof OSS_CONFIG_SECTIONS[number];
 
 function requireConfigRecord(value: unknown, label: string): Record<string, unknown> {
@@ -1743,7 +1767,7 @@ export function normalizeOssBucketConfigDesiredState(input: unknown): OssBucketC
   const root = requireConfigRecord(input, 'OSS config desired state');
   assertKnownConfigKeys(root, [...OSS_CONFIG_SECTIONS], 'OSS config desired state');
   if (!OSS_CONFIG_SECTIONS.some((section) => Object.prototype.hasOwnProperty.call(root, section))) {
-    throw new Error('OSS config desired state 至少需要 lifecycle、cors 或 encryption 之一');
+    throw new Error('OSS config desired state 至少需要 lifecycle、cors、encryption 或 website 之一');
   }
   const desired: OssBucketConfigDesiredState = {};
   if (Object.prototype.hasOwnProperty.call(root, 'lifecycle')) {
@@ -1811,6 +1835,42 @@ export function normalizeOssBucketConfigDesiredState(input: unknown): OssBucketC
       };
     }
   }
+  if (Object.prototype.hasOwnProperty.call(root, 'website')) {
+    if (root.website === null) desired.website = null;
+    else {
+      const website = requireConfigRecord(root.website, 'website');
+      assertKnownConfigKeys(website, ['indexDocument', 'errorDocument'], 'website');
+      if (website.indexDocument === undefined && website.errorDocument === undefined) {
+        throw new Error('website 至少需要 indexDocument 或 errorDocument 之一');
+      }
+      const indexDocument = website.indexDocument === undefined ? undefined : (() => {
+        const index = requireConfigRecord(website.indexDocument, 'website.indexDocument');
+        assertKnownConfigKeys(index, ['suffix', 'supportSubDir', 'type'], 'website.indexDocument');
+        const rawType = index.type === undefined ? 0 : Number(index.type);
+        if (!Number.isInteger(rawType) || ![0, 1, 2].includes(rawType)) {
+          throw new Error('website.indexDocument.type 仅支持 0 / 1 / 2');
+        }
+        return {
+          suffix: requireConfigString(index.suffix, 'website.indexDocument.suffix'),
+          supportSubDir: optionalConfigBoolean(index.supportSubDir, 'website.indexDocument.supportSubDir') ?? false,
+          type: rawType as 0 | 1 | 2
+        };
+      })();
+      const errorDocument = website.errorDocument === undefined ? undefined : (() => {
+        const error = requireConfigRecord(website.errorDocument, 'website.errorDocument');
+        assertKnownConfigKeys(error, ['key', 'httpStatus'], 'website.errorDocument');
+        const rawStatus = error.httpStatus === undefined ? 404 : Number(error.httpStatus);
+        if (!Number.isInteger(rawStatus) || (rawStatus !== 200 && rawStatus !== 404)) {
+          throw new Error('website.errorDocument.httpStatus 仅支持 200 / 404');
+        }
+        return {
+          key: requireConfigString(error.key, 'website.errorDocument.key'),
+          httpStatus: rawStatus as 200 | 404
+        };
+      })();
+      desired.website = { indexDocument, errorDocument };
+    }
+  }
   return desired;
 }
 
@@ -1832,6 +1892,7 @@ interface OssRawBucketConfigSnapshot {
   lifecycle?: OssRawBody;
   cors?: OssRawBody;
   encryption?: OssRawBody;
+  website?: OssRawBody;
 }
 
 function toRawObject(value: unknown): OssRawBody | undefined {
@@ -1885,7 +1946,7 @@ async function readRawOssBucketConfig(
   runtime: $Util.RuntimeOptions,
   bucket: string
 ): Promise<OssRawBucketConfigSnapshot> {
-  const [lifecycleBody, corsBody, encryptionBody] = await Promise.all([
+  const [lifecycleBody, corsBody, encryptionBody, websiteBody] = await Promise.all([
     readOptionalOssConfig(
       () => executeOssXml(client, runtime, {
         action: 'GetBucketLifecycle', bucket, pathname: '/?lifecycle', method: 'GET'
@@ -1903,12 +1964,19 @@ async function readRawOssBucketConfig(
         action: 'GetBucketEncryption', bucket, pathname: '/?encryption', method: 'GET'
       }),
       'NoSuchServerSideEncryptionRule'
+    ),
+    readOptionalOssConfig(
+      () => executeOssXml(client, runtime, {
+        action: 'GetBucketWebsite', bucket, pathname: '/?website', method: 'GET'
+      }),
+      'NoSuchWebsiteConfiguration'
     )
   ]);
   return {
     lifecycle: lifecycleBody ? unwrapOssXmlRoot(lifecycleBody, 'LifecycleConfiguration') : undefined,
     cors: corsBody ? unwrapOssXmlRoot(corsBody, 'CORSConfiguration') : undefined,
-    encryption: encryptionBody ? unwrapOssXmlRoot(encryptionBody, 'ServerSideEncryptionRule') : undefined
+    encryption: encryptionBody ? unwrapOssXmlRoot(encryptionBody, 'ServerSideEncryptionRule') : undefined,
+    website: websiteBody ? unwrapOssXmlRoot(websiteBody, 'WebsiteConfiguration') : undefined
   };
 }
 
@@ -1989,6 +2057,9 @@ function projectOssBucketConfig(
     snapshot.encryption?.ApplyServerSideEncryptionByDefault
       ?? snapshot.encryption?.applyServerSideEncryptionByDefault
   );
+  const indexDocument = toRawObject(snapshot.website?.IndexDocument ?? snapshot.website?.indexDocument);
+  const errorDocument = toRawObject(snapshot.website?.ErrorDocument ?? snapshot.website?.errorDocument);
+  const routingRules = toRawObject(snapshot.website?.RoutingRules ?? snapshot.website?.routingRules);
 
   return {
     bucket,
@@ -2009,6 +2080,23 @@ function projectOssBucketConfig(
       algorithm: rawString(encryption, 'SSEAlgorithm', 'sSEAlgorithm'),
       kmsMasterKeyId: rawString(encryption, 'KMSMasterKeyID', 'kMSMasterKeyID'),
       kmsDataEncryption: rawString(encryption, 'KMSDataEncryption', 'kMSDataEncryption')
+    },
+    website: {
+      configured: snapshot.website !== undefined,
+      indexDocument: indexDocument
+        ? {
+            suffix: rawString(indexDocument, 'Suffix', 'suffix') || '',
+            supportSubDir: rawBoolean(indexDocument, 'SupportSubDir', 'supportSubDir') ?? false,
+            type: (rawNumber(indexDocument, 'Type', 'type') ?? 0) as 0 | 1 | 2
+          }
+        : undefined,
+      errorDocument: errorDocument
+        ? {
+            key: rawString(errorDocument, 'Key', 'key') || '',
+            httpStatus: (rawNumber(errorDocument, 'HttpStatus', 'httpStatus') ?? 404) as 200 | 404
+          }
+        : undefined,
+      routingRuleCount: toRawArray(routingRules?.RoutingRule ?? routingRules?.routingRule).length
     }
   };
 }
@@ -2029,6 +2117,9 @@ function desiredSectionInspection(
   if (desired === null) {
     if (section === 'lifecycle') return { configured: false, ruleCount: 0, rules: [] };
     if (section === 'cors') return { configured: false, ruleCount: 0, rules: [] };
+    if (section === 'website') {
+      return { configured: false, indexDocument: undefined, errorDocument: undefined, routingRuleCount: 0 };
+    }
     return { configured: false };
   }
   if (!desired) throw new Error(`缺少 ${section} desired state`);
@@ -2039,6 +2130,15 @@ function desiredSectionInspection(
   if (section === 'cors') {
     const value = desired as NonNullable<OssBucketConfigDesiredState['cors']>;
     return { configured: true, responseVary: value.responseVary, ruleCount: value.rules.length, rules: value.rules };
+  }
+  if (section === 'website') {
+    const value = desired as NonNullable<OssBucketConfigDesiredState['website']>;
+    return {
+      configured: true,
+      indexDocument: value.indexDocument,
+      errorDocument: value.errorDocument,
+      routingRuleCount: 0
+    };
   }
   const value = desired as NonNullable<OssBucketConfigDesiredState['encryption']>;
   return {
@@ -2144,6 +2244,7 @@ async function writeOssBucketConfigSection(
     await executeOssConfigMutation(() => {
       if (section === 'lifecycle') return client.deleteBucketLifecycleWithOptions(bucket, {}, runtime);
       if (section === 'cors') return client.deleteBucketCorsWithOptions(bucket, {}, runtime);
+      if (section === 'website') return client.deleteBucketWebsiteWithOptions(bucket, {}, runtime);
       return client.deleteBucketEncryptionWithOptions(bucket, {}, runtime);
     });
     return;
@@ -2181,6 +2282,32 @@ async function writeOssBucketConfigSection(
               exposeHeader: rule.exposeHeaders,
               maxAgeSeconds: rule.maxAgeSeconds
             }))
+          }))
+        }
+      });
+    }
+    if (section === 'website') {
+      const value = desired as NonNullable<OssBucketConfigDesiredState['website']>;
+      return executeOssXml(client, runtime, {
+        action: 'PutBucketWebsite',
+        bucket,
+        pathname: '/?website',
+        method: 'PUT',
+        body: {
+          WebsiteConfiguration: openapiUtil.parseToMap(new $OSS.WebsiteConfiguration({
+            indexDocument: value.indexDocument
+              ? new $OSS.IndexDocument({
+                  suffix: value.indexDocument.suffix,
+                  supportSubDir: value.indexDocument.supportSubDir,
+                  type: String(value.indexDocument.type)
+                })
+              : undefined,
+            errorDocument: value.errorDocument
+              ? new $OSS.ErrorDocument({
+                  key: value.errorDocument.key,
+                  httpStatus: String(value.errorDocument.httpStatus)
+                })
+              : undefined
           }))
         }
       });
@@ -2230,6 +2357,15 @@ async function restoreOssBucketConfigSection(
         pathname: '/?cors',
         method: 'PUT',
         body: { CORSConfiguration: raw }
+      });
+    }
+    if (section === 'website') {
+      return executeOssXml(client, runtime, {
+        action: 'PutBucketWebsite',
+        bucket,
+        pathname: '/?website',
+        method: 'PUT',
+        body: { WebsiteConfiguration: raw }
       });
     }
     return executeOssXml(client, runtime, {

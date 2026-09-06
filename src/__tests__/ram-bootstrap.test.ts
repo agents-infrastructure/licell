@@ -80,7 +80,10 @@ describe('ram bootstrap helpers', () => {
       'kvstore:DescribeClusterMemberInfo',
       'cr:ListNamespace',
       'cr:ListRepository',
-      'cr:ListRepoTag'
+      'cr:ListRepoTag',
+      'oss:GetBucketWebsite',
+      'oss:PutBucketWebsite',
+      'oss:DeleteBucketWebsite'
     ]));
     for (const action of ECS_LIFECYCLE_ALLOWED_ACTIONS) {
       expect(doc.Statement[0].Action).toContain(action);
@@ -96,7 +99,7 @@ describe('ram bootstrap helpers', () => {
 
   it('covers all auth capability action hints in licell policy actions', () => {
     const capabilities: AuthCapability[] = [
-      'fc', 'dns', 'oss', 'rds', 'redis', 'redis-backup-read', 'redis-backup-write',
+      'fc', 'dns', 'oss', 'oss-config-read', 'oss-config-write', 'rds', 'redis', 'redis-backup-read', 'redis-backup-write',
       'cdn', 'vpc', 'cr', 'logs', 'ecs'
     ];
     const hintedActions = resolveAuthCapabilityActions(capabilities);

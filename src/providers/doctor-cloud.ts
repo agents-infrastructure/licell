@@ -1213,6 +1213,24 @@ const CAPABILITY_PROBES: Record<AuthCapability, (auth: AuthConfig) => Promise<Do
     void auth;
     return probeOssCapability();
   },
+  'oss-config-read': async (auth) => {
+    void auth;
+    const probe = await probeOssCapability();
+    return {
+      ...probe,
+      capability: 'oss-config-read',
+      label: AUTH_CAPABILITY_LABELS['oss-config-read']
+    };
+  },
+  'oss-config-write': async (auth) => {
+    void auth;
+    const probe = await probeOssCapability();
+    return {
+      ...probe,
+      capability: 'oss-config-write',
+      label: AUTH_CAPABILITY_LABELS['oss-config-write']
+    };
+  },
   dns: probeDnsCapability,
   cdn: probeCdnCapability,
   vpc: probeVpcCapability,

@@ -172,7 +172,8 @@ describe('oss commands', () => {
       regionId: 'cn-shanghai',
       lifecycle: { configured: false, ruleCount: 0, rules: [] },
       cors: { configured: false, ruleCount: 0, rules: [] },
-      encryption: { configured: false }
+      encryption: { configured: false },
+      website: { configured: false, routingRuleCount: 0 }
     });
 
     const configPlan = {
@@ -183,7 +184,8 @@ describe('oss commands', () => {
         regionId: 'cn-shanghai',
         lifecycle: { configured: false, ruleCount: 0, rules: [] },
         cors: { configured: false, ruleCount: 0, rules: [] },
-        encryption: { configured: false }
+        encryption: { configured: false },
+        website: { configured: false, routingRuleCount: 0 }
       },
       desiredState: { encryption: { algorithm: 'AES256' } },
       changes: [{
@@ -371,7 +373,8 @@ describe('oss commands', () => {
         regionId: 'cn-shanghai',
         lifecycle: { configured: false },
         cors: { configured: false },
-        encryption: { configured: false }
+        encryption: { configured: false },
+        website: { configured: false, routingRuleCount: 0 }
       });
     } finally {
       stdoutWriteSpy.mockRestore();
@@ -393,6 +396,27 @@ describe('oss commands', () => {
     );
     expect(applyOssBucketConfigMock).not.toHaveBeenCalled();
     expect(ensureMutatingActionConfirmedMock).not.toHaveBeenCalled();
+  });
+
+  it('routes a SPA website desired-state through `oss config apply --dry-run`', async () => {
+    const cli = await createCli();
+    await cli.parse([
+      'node', 'src/cli.ts', 'oss config apply', 'demo-bucket',
+      '--payload', '{"website":{"indexDocument":{"suffix":"index.html"},"errorDocument":{"key":"index.html","httpStatus":200}}}',
+      '--region', 'cn-hangzhou', '--dry-run'
+    ]);
+
+    expect(planOssBucketConfigMock).toHaveBeenCalledWith(
+      'demo-bucket',
+      {
+        website: {
+          indexDocument: { suffix: 'index.html' },
+          errorDocument: { key: 'index.html', httpStatus: 200 }
+        }
+      },
+      { regionId: 'cn-hangzhou' }
+    );
+    expect(applyOssBucketConfigMock).not.toHaveBeenCalled();
   });
 
   it('confirms, applies and verifies `oss config apply --yes`', async () => {

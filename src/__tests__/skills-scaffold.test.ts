@@ -32,6 +32,8 @@ describe('getSkillFiles', () => {
     expect(file.content).toContain('## Operating Contract');
     expect(file.content).toContain('## Canonical Invocation Sequence');
     expect(file.content).toContain('Do not guess command names, flags, argument order, or result fields.');
+    expect(file.content).toContain('Do not inspect Licell package internals or credential files');
+    expect(file.content).toContain('do not write ad hoc SDK scripts to bypass Licell');
     expect(file.content).toContain('`licell catalog --output json`');
     expect(file.content).toContain('`licell <command> --help --output json`');
     expect(file.content).toContain('`licell <command> --output json`');

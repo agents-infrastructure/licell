@@ -46,6 +46,7 @@ Use the \`licell\` CLI as a structured deployment and operations tool for Alibab
 - Verify \`kind\` before trusting a record shape, and then verify \`schemaVersion\`.
 - Do not scrape plain-text terminal output when \`--output json\` is available.
 - Do not assume one command's result shape applies to another; read the command's help contract first.
+- If the user requires Licell-only execution and both curated commands and protocol capabilities are missing, report the capability gap. Do not inspect Licell package internals or credential files, and do not write ad hoc SDK scripts to bypass Licell.
 - Never parse or pass \`cs.DescribeClusterUserKubeconfig\` output to an Agent or \`kubectl\`; \`[REDACTED]\` is an intentional security boundary. Use a curated \`k8s\` command, and report a capability gap when no safe command exists.
 
 ## Preconditions

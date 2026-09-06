@@ -711,7 +711,7 @@ licell e2e cleanup <runId>
 | `licell dns records list [domain]` | 查看域名解析记录 | `--limit` |
 | `licell dns records rm <recordId>` | 删除域名解析记录 | `--yes` |
 | `licell oss bucket [bucket]` | 上传本地目录到 OSS Bucket 指定目录（兼容命令，等同 oss upload） | `--region`, `--bucket`, `--source-dir` |
-| `licell oss config <bucket>` | 查看 OSS Bucket 生命周期、CORS 和服务端加密配置（只读） | `--region` |
+| `licell oss config <bucket>` | 查看 OSS Bucket 生命周期、CORS、服务端加密和静态网站配置（只读） | `--region` |
 | `licell oss create <bucket>` | 创建 OSS Bucket | `--region`, `--acl`, `--storage-class` |
 | `licell oss info <bucket>` | 查看 OSS Bucket 详情（含 ACL / 公共访问阻止 / 域名） | `--region` |
 | `licell oss list` | 查看 OSS Bucket 列表 | `--region`, `--limit` |
