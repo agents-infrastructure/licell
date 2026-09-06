@@ -98,4 +98,11 @@ describe('resolveAuthCapabilityActions', () => {
       'kvstore:ModifyBackupPolicy'
     ]);
   });
+
+  it('keeps RDS config planning on a minimal read capability', () => {
+    expect(AUTH_CAPABILITY_LABELS['rds-config-read']).toBe('RDS 配置读取');
+    expect(resolveAuthCapabilityActions(['rds-config-read'])).toEqual([
+      'rds:DescribeDBInstanceAttribute'
+    ]);
+  });
 });

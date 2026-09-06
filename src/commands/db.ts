@@ -18,6 +18,7 @@ import {
   listDatabaseParameters,
   listDatabaseAccounts,
   listDatabases,
+  planDatabaseConfig,
   planDatabaseRestore
 } from '../providers/infra';
 import {
@@ -37,6 +38,7 @@ import {
   type DbTypeInput
 } from '../utils/cli-shared';
 import { emitCommandResult, isJsonOutput } from '../utils/output';
+import { resolveOptionalPayloadInput } from '../utils/payload-input';
 import { DATA_SECTION } from './sections';
 
 const DATABASE_PROJECT_ENV_KEYS = ['DATABASE_URL'] as const;
@@ -105,6 +107,63 @@ const dbBackupsCommand = defineCliCommand({
       { name: 'truncated', description: '结果是否截断。', required: true },
       { name: 'backups[]', description: '备份 ID、状态、类型、大小和时间摘要。', required: true }
     ] }
+  }
+});
+
+const dbConfigApplyCommand = defineCliCommand({
+  rawName: 'db config apply <instanceId>',
+  description: '预览 RDS 实例描述 desired-state 变更（当前仅支持 dry-run）',
+  region: { scope: 'binding', binding: 'database', target: { argumentIndex: 0 } },
+  options: [
+    { rawName: '--dry-run', description: '读取现状并生成差异计划，不修改 RDS 实例' },
+    { rawName: '--payload <json>', description: '内联 JSON desired-state，当前仅支持 description' },
+    { rawName: '--file <path>', description: '从当前工作目录内的文件读取 JSON desired-state' }
+  ],
+  descriptor: {
+    title: 'Preview RDS instance config changes',
+    summary: '读取 RDS 实例描述并生成字段级 desired-state 计划；当前版本只提供 dry-run。',
+    examples: [
+      `licell db config apply rm-xxx --payload '{"description":"managed-by-licell"}' --dry-run --output json`,
+      'licell db config apply rm-xxx --file ./rds-config.json --dry-run --output json'
+    ],
+    argumentHints: { instanceId: 'RDS 实例 ID；先用 `licell db list` 获取。' },
+    related: ['db info', 'db list', 'capability search'],
+    agentTips: [
+      'desired-state 当前仅支持非空 description；其他字段会被拒绝。',
+      '当前必须传 --dry-run，命令不会调用任何 RDS 写 API。',
+      '检查 plan.changes[].before/after 后，再决定是否需要后续写入能力。'
+    ],
+    automation: {
+      preferredOutput: 'json',
+      explicitInputs: ['instanceId', '--region', '--dry-run', '--payload|--file']
+    },
+    safety: {
+      level: 'safe',
+      reason: '当前只调用 DescribeDBInstanceAttribute，并固定返回 execution.performed=false。',
+      confirmFlags: []
+    },
+    optionInsights: {
+      '--dry-run': { whenToUse: '当前所有调用都必须使用。', cautions: ['只生成计划，不修改实例描述。'] },
+      '--payload': { whenToUse: '预览单个短 description 时使用。', cautions: ['不要与 --file 同时使用。'] },
+      '--file': { whenToUse: '希望审查或版本化 desired-state 时使用。', cautions: ['文件必须位于当前工作目录内。'] }
+    },
+    recommendedFlow: [
+      { title: '定位实例', command: 'licell db list --output json', reason: '获取准确实例 ID 和地域。' },
+      { title: '检查实例', command: 'licell db info <instanceId> --output json', reason: '确认当前状态和描述。' },
+      { title: '预览变更', command: 'licell db config apply <instanceId> --file <path> --dry-run --output json', reason: '检查字段级 before/after，不执行写入。' }
+    ],
+    result: {
+      summary: '返回实例描述的当前值、期望值、差异计划和未执行标记。',
+      outcomeKey: 'plan.changes',
+      fields: [
+        { name: 'plan.instanceId', description: '目标 RDS 实例 ID。', required: true },
+        { name: 'plan.changes[]', description: 'description 的 before、after 和 set/noop 动作。', required: true },
+        { name: 'plan.willExecute', description: '当前固定为 false。', required: true },
+        { name: 'execution.performed', description: '固定为 false，表示未调用写 API。', required: true },
+        { name: 'verify.performed', description: '固定为 false，表示未执行写后读回。', required: true },
+        { name: 'verify.attributes', description: '规划时读取到的当前实例配置。', required: true }
+      ]
+    }
   }
 });
 
@@ -412,7 +471,51 @@ function clearProjectDatabaseBinding(instanceId: string) {
   }, { replaceEnvs: true });
 }
 
+function parseDatabaseConfigDesiredState(payload: unknown, file: unknown) {
+  const raw = resolveOptionalPayloadInput({ payload, file });
+  if (!raw) throw new Error('db config apply 需要 --payload 或 --file');
+  try {
+    return JSON.parse(raw) as unknown;
+  } catch {
+    throw new Error('RDS config desired-state 不是有效 JSON');
+  }
+}
+
+function printDatabaseConfigPlan(plan: Awaited<ReturnType<typeof planDatabaseConfig>>) {
+  console.log(pc.bold(`RDS ${plan.instanceId} config plan`));
+  console.log(`region: ${pc.cyan(plan.regionId)}`);
+  for (const change of plan.changes) {
+    console.log(`- ${change.field}: ${String(change.before ?? '(empty)')} -> ${String(change.after)} [${change.action}]`);
+  }
+}
+
 export function registerDbCommands(cli: CAC) {
+  registerCliCommand(cli, dbConfigApplyCommand)
+    .action(async (instanceId: string, options: { dryRun?: unknown; payload?: unknown; file?: unknown }) => {
+      await executeWithAuthRecovery({
+        commandLabel: commandInvocation(dbConfigApplyCommand),
+        interactiveTTY: isInteractiveTTY(),
+        requiredCapabilities: ['rds-config-read']
+      }, async () => {
+        ensureAuthOrExit();
+        if (!Boolean(options.dryRun)) {
+          throw new Error('db config apply 当前仅支持 --dry-run，不会执行 RDS 写操作');
+        }
+        const id = toPromptValue(instanceId, 'instanceId');
+        const desiredState = parseDatabaseConfigDesiredState(options.payload, options.file);
+        const plan = await planDatabaseConfig(id, desiredState);
+        const result = {
+          stage: `db.config.apply.${id}`,
+          plan,
+          execution: { performed: false },
+          verify: { performed: false, attributes: plan.current }
+        };
+        if (isJsonOutput()) emitCommandResult(result);
+        else printDatabaseConfigPlan(plan);
+        return result;
+      });
+    });
+
   registerCliCommand(cli, dbRestorePlanCommand)
     .action(async (instanceId: string, options: { backupId?: unknown; restoreTime?: unknown; days?: unknown; payType?: unknown }) => {
       await executeWithAuthRecovery({ commandLabel: commandInvocation(dbRestorePlanCommand), interactiveTTY: isInteractiveTTY(), requiredCapabilities: ['rds'] }, async () => {
@@ -985,11 +1088,11 @@ export const dbCommandModule = defineCommandModule({
   register: registerDbCommands,
   namespaces: {
     db: {
-      summary: 'RDS 数据库实例的创建、查看、连接、公网访问与删除。',
+      summary: 'RDS 数据库实例的创建、查看、配置预览、连接、公网访问与删除。',
       notes: ['公网访问与删除属于高影响操作，自动化执行前应先确认。'],
-      examples: ['licell db list', 'licell db info <instanceId>', 'licell db backups <instanceId> --output json', 'licell db restore plan <instanceId> --output json', 'licell db parameters <instanceId> --output json', 'licell db accounts <instanceId> --output json', 'licell db databases <instanceId> --output json', 'licell db connect <instanceId> --output json'],
-      agentTips: ['优先从 `licell db list --output json` 获取实例；恢复前必须先执行 `licell db restore plan`。']
+      examples: ['licell db list', 'licell db info <instanceId>', 'licell db config apply <instanceId> --file <path> --dry-run --output json', 'licell db backups <instanceId> --output json', 'licell db restore plan <instanceId> --output json', 'licell db parameters <instanceId> --output json', 'licell db accounts <instanceId> --output json', 'licell db databases <instanceId> --output json', 'licell db connect <instanceId> --output json'],
+      agentTips: ['优先从 `licell db list --output json` 获取实例；配置变更先执行 `db config apply --dry-run`；恢复前必须先执行 `licell db restore plan`。']
     }
   },
-  commands: [dbAddCommand, dbClassCommand, dbListCommand, dbInfoCommand, dbBackupsCommand, dbRestorePlanCommand, dbParametersCommand, dbAccountsCommand, dbDatabasesCommand, dbConnectCommand, dbPublicAccessCommand, dbRmCommand]
+  commands: [dbAddCommand, dbClassCommand, dbListCommand, dbInfoCommand, dbConfigApplyCommand, dbBackupsCommand, dbRestorePlanCommand, dbParametersCommand, dbAccountsCommand, dbDatabasesCommand, dbConnectCommand, dbPublicAccessCommand, dbRmCommand]
 });

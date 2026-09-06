@@ -1237,6 +1237,16 @@ const CAPABILITY_PROBES: Record<AuthCapability, (auth: AuthConfig) => Promise<Do
     void auth;
     return probeRdsCapability();
   },
+  'rds-config-read': async (auth) => {
+    return {
+      capability: 'rds-config-read',
+      label: AUTH_CAPABILITY_LABELS['rds-config-read'],
+      required: false,
+      status: 'warn',
+      summary: 'RDS 配置读取需在命令执行时针对具体实例验证。',
+      details: [`runtime probe: DescribeDBInstanceAttribute(instanceId), region=${auth.region}`]
+    };
+  },
   rdsai: async (auth) => {
     void auth;
     return probeRdsAiCapability();
